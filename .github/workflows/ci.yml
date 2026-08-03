@@ -181,14 +181,30 @@ jobs:
         # text to accompany a binary distribution. A release of bare .bin files
         # carries none, so the notices ship as their own asset.
         run: zip -r licenses-awtrix-ng.zip LICENSE.md THIRD-PARTY-NOTICES.md LICENSES/
-      - name: Publish GitHub release
+      - name: Stage the release as a draft
+        # Created as a draft on purpose. Publishing fires `release: published`,
+        # which is what notifies Discord -- do that before the assets are
+        # uploaded and the announcement points at a release with nothing to
+        # download for the next few minutes. A draft carries no such event, so
+        # the assets land first and the next step flips it live.
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
+          # The notes are written by hand into RELEASE_NOTES.md alongside the
+          # `version` bump. Without this the release ships an empty body and the
+          # Discord embed falls back to a bare link.
+          body_path: RELEASE_NOTES.md
           files: |
             firmware-awtrix-ng.bin
             firmware-awtrix-ng-s3.bin
             factory-awtrix-ng-*.bin
             licenses-awtrix-ng.zip
+      - name: Flip the release live, now that every asset is attached
+        # This is what fires `release: published`, and with it the Discord
+        # notification -- see .github/workflows/discord-release.yml.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
       - name: Rebuild the docs so the browser flasher serves this release
         # The flasher on getting-started/flashing.md writes whatever factory
         # images the documentation site carries, and those are copied out of the
