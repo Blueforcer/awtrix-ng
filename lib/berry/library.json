@@ -1,0 +1,14 @@
+{
+  "name": "berry",
+  "version": "1.1.0",
+  "description": "Berry scripting language (vendored, github.com/berry-lang/berry)",
+  "license": "MIT",
+  "build": {
+    "srcDir": ".",
+    "includeDir": "src",
+    "flags": ["-Isrc", "-I.", "-Idefault"],
+    "srcFilter": ["+<src/*.c>", "+<default/*.c>"]
+  },
+  "platforms": "*",
+  "frameworks": "*"
+}

@@ -1,0 +1,199 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "**"]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  native-tests:
+    name: Core host unit tests (native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Cache PlatformIO
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-native-${{ hashFiles('platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install -U platformio
+      - name: Run native unit tests
+        run: pio test -e native -v
+
+  webui-tests:
+    name: Web UI tests (jsdom)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webui/test/package-lock.json
+      # The harness loads webui/index.html from disk and drives it in jsdom, so
+      # these run against the shipped source rather than a build of it -- which
+      # is the point: the simulator serves that same file.
+      - name: Install test dependencies
+        run: npm ci
+        working-directory: webui/test
+      - name: Run web UI tests
+        run: npm test
+        working-directory: webui/test
+
+  device-build:
+    name: Firmware build (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [awtrix, awtrix_s3]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      # scripts/build_webui.py minifies the web UI through npx before it embeds it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Cache PlatformIO
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+      - name: Install PlatformIO
+        # esptool is not a PlatformIO dependency, but scripts/factory_image.py
+        # merges through it (`python -m esptool merge_bin`).
+        run: pip install -U platformio esptool
+      - name: Build firmware
+        run: pio run -e ${{ matrix.env }}
+      - name: Build factory images
+        # The full-flash artefact: bootloader, partition table, boot_app0 and the
+        # app, one image per flash variant this SoC ships in. Built on every run,
+        # not only on tags -- the merge depends on the generated partition table,
+        # so a table change that breaks it should fail the PR that made it, not
+        # the release three commits later.
+        run: python scripts/factory_image.py --env ${{ matrix.env }} --all -o dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: factory-${{ matrix.env }}
+          path: dist/factory-*.bin
+          if-no-files-found: error
+
+  docs:
+    name: API docs match the firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install the check's only dependency
+        run: pip install pyyaml
+      - name: Check the API docs against the firmware
+        # The Docs workflow already runs `mkdocs build --strict`, but that only
+        # validates markdown and links. This catches the other half: fields,
+        # error codes and removed keys drifting out of sync with the source.
+        # It lives here rather than in docs.yml because this workflow also runs
+        # on tags, so a release cannot publish with the docs out of sync.
+        run: python tools/check_docs_sync.py
+      - name: Check the downloadable agent skill against its sources
+        # The zip the docs offer is committed, so an edit to SKILL.md or to the
+        # AI system prompt it packs leaves a stale archive that nothing else
+        # notices -- the download keeps working and keeps handing out the old
+        # API.
+        run: python tools/gen_agent_skill.py --check
+      - name: Check the editor's Berry API table against the firmware
+        # Same class of drift, different consumer: the web UI editor highlights
+        # and completes from a table generated out of the binding registrations.
+        # A pattern that stops matching, or a stale checked-in table, both fail
+        # silently -- the editor just quietly stops knowing the API.
+        run: python tools/check_berry_api.py
+      - name: Check the solidified prelude against Prelude.h and the bindings
+        # The prelude is compiled to flash-resident const data by a generator no
+        # normal build runs, so a stale header is invisible: an edit to
+        # Prelude.h simply never reaches the device, and a renamed binding
+        # becomes a runtime failure inside the prelude instead of a build error.
+        # The fingerprint covers the EXPANDED prelude, so a spliced constant
+        # like AWTRIX_MAX_MQTT_SUBS counts even when Prelude.h is untouched.
+        run: python tools/check_prelude_solidified.py
+      - name: Check the generated panel font against the BDF sources
+        # Same shape again: the font header is produced by a generator no build
+        # step runs. A stale one keeps drawing the old glyphs, and because which
+        # source glyphs get imported is decided by comparing them against their
+        # Latin twins, one redrawn base glyph renumbers every index after it.
+        run: python tools/check_font_sync.py
+      - name: Check every partition table the generator can produce
+        # Partition arithmetic looks right in review and bricks a device: an
+        # overlap or a misaligned app offset only shows up once someone flashes
+        # it. Cheap to check here, expensive to discover in the field.
+        run: python tools/check_partitions.py
+
+  release:
+    name: Publish firmware release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [native-tests, webui-tests, device-build, docs]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # To dispatch the Docs workflow once the assets exist -- see the last step.
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install PlatformIO
+        run: pip install -U platformio esptool
+      - name: Build both firmware images
+        run: pio run -e awtrix -e awtrix_s3
+      - name: Stage OTA assets
+        # The file a user uploads to /update, one per SoC. These are app images
+        # only: OTA writes the app slot and never the partition table, so one
+        # file serves every flash size of its chip.
+        run: |
+          cp .pio/build/awtrix/firmware.bin firmware-awtrix-ng.bin
+          cp .pio/build/awtrix_s3/firmware.bin firmware-awtrix-ng-s3.bin
+      - name: Stage factory images
+        # What a user flashes over USB: bootloader, partition table, app. The
+        # table is the only part that varies with flash size, which is why one
+        # build yields several of these. Which sizes ship is stated once, in
+        # gen_partitions.FACTORY_FLASH_SIZES.
+        run: |
+          python scripts/factory_image.py --env awtrix    --all
+          python scripts/factory_image.py --env awtrix_s3 --all
+      - name: Stage license notices
+        # LGPL-2.1 section 6 and the Apache, MIT and BSD terms all require their
+        # text to accompany a binary distribution. A release of bare .bin files
+        # carries none, so the notices ship as their own asset.
+        run: zip -r licenses-awtrix-ng.zip LICENSE.md THIRD-PARTY-NOTICES.md LICENSES/
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            firmware-awtrix-ng.bin
+            firmware-awtrix-ng-s3.bin
+            factory-awtrix-ng-*.bin
+            licenses-awtrix-ng.zip
+      - name: Rebuild the docs so the browser flasher serves this release
+        # The flasher on getting-started/flashing.md writes whatever factory
+        # images the documentation site carries, and those are copied out of the
+        # newest release during the docs build. Without this the site keeps
+        # handing out the previous release until someone pushes to main.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run docs.yml --ref main

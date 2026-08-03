@@ -1,0 +1,13 @@
+{
+  "name": "awtrix-ng-webui-test",
+  "version": "1.0.0",
+  "private": true,
+  "description": "jsdom-based tests for the awtrix-ng web UI (webui/index.html)",
+  "scripts": {
+    "test": "node scripts-editor.test.js && node backup-restore.test.js && node apps-tab.test.js && node gif.test.js",
+    "test:sim": "node scripts-editor.test.js --sim && node backup-restore.test.js --sim && node apps-tab.test.js && node gif.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

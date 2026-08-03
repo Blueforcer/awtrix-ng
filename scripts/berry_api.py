@@ -1,0 +1,204 @@
+
+import os
+import re
+
+_REGFUNC = re.compile(
+    r'^\s*be_regfunc\(\s*\w+\s*,\s*"([A-Za-z_]\w*)"\s*,\s*\w+\s*\)\s*;'
+    r'[ \t]*(?://[ \t]*(\S.*?))?[ \t]*$'
+)
+_DEF = re.compile(
+    r"^\s*def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)"
+    r"[ \t]*(?:#[ \t]*(\S.*?))?[ \t]*$"
+)
+_MODULE = re.compile(r"^\s*([A-Za-z_]\w*)\s*=\s*module\(\s*'([A-Za-z_]\w*)'\s*\)")
+_MEMBER = re.compile(r"^\s*([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*$")
+_CONF_MODULE = re.compile(r"^\s*#define\s+BE_USE_([A-Z0-9_]+)_MODULE\s+(\d+)")
+_MAXBYTES = re.compile(r"kDefaultMaxSourceBytes\s*=\s*([0-9*\s]+?)\s*;")
+
+
+def _read(path):
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+def _public(name):
+    return not name.startswith("_")
+
+
+def _params(raw):
+    """Render a Berry parameter list the way a reader expects to see it.
+
+    A vararg (`*rest`) shows as `rest?`. Optionality that comes from Berry
+    nil-filling a parameter the caller left off has no marker in the source at
+    all, so a def that wants to advertise it carries a trailing `#` comment
+    holding the whole signature -- the same rule be_regfunc lines follow in
+    ScriptBindings.cpp. One convention, one place to look.
+    """
+    out = []
+    for p in (p.strip() for p in raw.split(",")):
+        if not p:
+            continue
+        out.append(p[1:] + "?" if p.startswith("*") else p)
+    return ", ".join(out)
+
+
+def _device_builtins(src):
+    """be_regfunc entries from ScriptBindings.cpp, public ones only."""
+    out = []
+    for line in src.splitlines():
+        m = _REGFUNC.match(line)
+        if not m:
+            continue
+        name, sig = m.group(1), m.group(2)
+        if not _public(name):
+            continue
+        out.append(sig if sig else name + "()")
+    return out
+
+
+def _prelude(src):
+    """The modules, module members and public functions the prelude defines."""
+    defs = {}
+    sigs = {}
+    modules = []
+    members = []
+    for line in src.splitlines():
+        m = _DEF.match(line)
+        if m:
+            defs[m.group(1)] = _params(m.group(2))
+            if m.group(3):
+                sigs[m.group(1)] = m.group(3)
+            continue
+        m = _MODULE.match(line)
+        if m:
+            modules.append(m.group(1))
+            continue
+        m = _MEMBER.match(line)
+        if m and m.group(1) in modules:
+            members.append((m.group(1) + "." + m.group(2), m.group(3)))
+
+    api = []
+    for dotted, impl in members:
+        api.append(sigs.get(impl) or "%s(%s)" % (dotted, defs.get(impl, "")))
+    for name, params in defs.items():
+        if _public(name):
+            api.append(sigs.get(name) or "%s(%s)" % (name, params))
+    return sorted(api), sorted(modules)
+
+
+def _berry_core(baselib_src, conf_src):
+    """Berry's own builtins, plus the stdlib modules this build turns on."""
+    names = []
+    for line in baselib_src.splitlines():
+        m = _REGFUNC.match(line)
+        if m and not m.group(1).startswith("__"):
+            names.append(m.group(1))
+    for line in conf_src.splitlines():
+        m = _CONF_MODULE.match(line)
+        if m and m.group(2) != "0":
+            names.append(m.group(1).lower())
+    return sorted(set(names))
+
+
+def extract(project_dir):
+    """Returns {'api': [...], 'mods': [...], 'core': [...]}.
+
+    Raises SystemExit when a source is missing or yields nothing -- see
+    render_js for why that has to be fatal rather than a warning.
+    """
+    p = lambda *a: os.path.join(project_dir, *a)
+    try:
+        bindings = _read(p("src", "core", "script", "ScriptBindings.cpp"))
+        prelude = _read(p("src", "core", "script", "Prelude.h"))
+        services = _read(p("src", "core", "script", "ScriptServices.h"))
+        baselib = _read(p("lib", "berry", "src", "be_baselib.c"))
+        conf = _read(p("lib", "berry", "berry_conf.h"))
+    except OSError as e:
+        raise SystemExit("berry api: cannot read a source: %s" % e)
+
+    m = _MAXBYTES.search(services)
+    if not m:
+        raise SystemExit("berry api: kDefaultMaxSourceBytes not found in ScriptServices.h")
+    max_bytes = 1
+    for part in m.group(1).split("*"):
+        max_bytes *= int(part.strip())
+
+    builtins = _device_builtins(bindings)
+    prelude_api, mods = _prelude(prelude)
+    return {
+        "api": sorted(builtins) + prelude_api,
+        "mods": mods,
+        "core": _berry_core(baselib, conf),
+        "max_bytes": max_bytes,
+    }
+
+
+def _js_array(names):
+    return "[" + ",".join('"%s"' % n for n in names) + "]"
+
+
+def render_js(project_dir):
+    """The generated JS block, ready to be spliced into webui/index.html."""
+    t = extract(project_dir)
+    for key in ("api", "mods", "core"):
+        if not t[key]:
+            raise SystemExit(
+                "berry api: extracted 0 entries for '%s'. The source moved or the "
+                "pattern in scripts/berry_api.py no longer matches it." % key
+            )
+    return "\n".join(
+        [
+            "/* GENERATED by scripts/berry_api.py - DO NOT EDIT BY HAND.",
+            "   Device API from ScriptBindings.cpp + Prelude.h; language builtins from",
+            "   Berry's be_baselib.c and the modules berry_conf.h enables. Regenerated on",
+            "   every build, so adding a binding is all it takes to teach the editor. */",
+            "const BERRY_API=%s;" % _js_array(t["api"]),
+            "const BERRY_MODS=%s;" % _js_array(t["mods"]),
+            "const BERRY_CORE=%s;" % _js_array(t["core"]),
+            "const BERRY_MAXBYTES=%d;" % t["max_bytes"],
+        ]
+    )
+
+
+BEGIN = "/* BERRY-API-START */"
+END = "/* BERRY-API-END */"
+
+
+def block(project_dir):
+    """The marker-delimited region, exactly as it should appear in the file."""
+    return BEGIN + "\n" + render_js(project_dir) + "\n" + END
+
+
+def inject(project_dir, path=None):
+    """Rewrites the generated region inside webui/index.html, in place.
+
+    Returns True when the file changed. The build calls this before gzipping;
+    writing it back rather than injecting into a throwaway copy is what lets the
+    SIMULATOR, which serves webui/index.html straight from disk, see the same
+    table the device does.
+    """
+    path = path or os.path.join(project_dir, "webui", "index.html")
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        html = f.read()
+    start, end = html.find(BEGIN), html.find(END)
+    if start < 0 or end < 0 or end < start:
+        raise SystemExit(
+            "berry api: the %s / %s markers are missing from %s" % (BEGIN, END, path)
+        )
+    updated = html[:start] + block(project_dir) + html[end + len(END):]
+    if updated == html:
+        return False
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(updated)
+    return True
+
+
+if __name__ == "__main__":
+    import sys
+
+    args = [a for a in sys.argv[1:] if a != "--inject"]
+    root = args[0] if args else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if "--inject" in sys.argv:
+        print("berry api: %s" % ("regenerated webui/index.html" if inject(root) else "already current"))
+    else:
+        print(render_js(root))

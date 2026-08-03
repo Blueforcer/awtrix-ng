@@ -1,0 +1,36 @@
+# @name    T-Probe
+# @desc    Reports sensor, settings and clock answers into shared
+# @author  devicetest
+# @version 1.0
+
+class TProbe
+  var ticks
+
+  def init()
+    self.ticks = 0
+  end
+
+  def loop()
+    if self.ticks > 0
+      self.ticks -= 1
+      return
+    end
+    self.ticks = 5
+    var t = sensor.temperature()
+    shared.set("temp", t == nil ? -999 : round(t, 1))
+    var b = sensor.battery()
+    shared.set("batt", b == nil ? -1 : b)
+    shared.set("bright", settings.get("brightness"))
+    shared.set("c24h", settings.get("time24h"))
+    shared.set("hhmm", hour() * 100 + minute())
+    shared.set("wh", width() * 100 + height())
+  end
+
+  def draw()
+    clear()
+    var s = str(hour()) + ":" + (minute() < 10 ? "0" : "") + str(minute())
+    text((width() - text_ink_width(s)) / 2, 6, s, settings.get("textColor"))
+  end
+end
+
+return TProbe()

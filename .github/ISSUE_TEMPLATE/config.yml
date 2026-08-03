@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://blueforcer.github.io/awtrix-ng/
+    about: Every endpoint, setting and payload field, verified against the source.
+  - name: Troubleshooting and FAQ
+    url: https://blueforcer.github.io/awtrix-ng/troubleshooting/troubleshooting/
+    about: Check here first — most first reports are already answered.
+  - name: Questions and ideas
+    url: https://github.com/Blueforcer/awtrix-ng/discussions
+    about: For "how do I…" and open-ended discussion, rather than a bug report.
+  - name: Report a security vulnerability
+    url: https://github.com/Blueforcer/awtrix-ng/security/advisories/new
+    about: Private disclosure, visible only to the maintainers. Never open a public issue for this.

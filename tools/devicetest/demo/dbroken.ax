@@ -1,0 +1,13 @@
+# @name    Broken
+# @desc    Deliberately broken, so the sidebar has a red row
+# @author  devicetest
+# @version 1.0
+
+class DBroken
+  def draw()
+    clear()
+    text(0, 6, "oops", 0xFF0000
+  end
+end
+
+return DBroken()

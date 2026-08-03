@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AWTRIX icon editor - protocol stub</title>
+<!--
+  Minimal, dependency-free test double for the AWTRIX <-> Piskel embed protocol.
+  It is NOT Piskel; it is a tiny grid painter that speaks the same postMessage
+  contract so the AWTRIX web UI (parent) can be verified end-to-end before the
+  real fork is deployed. Point the editor URL field in the AWTRIX "Icon Editor"
+  tab at wherever you serve this file (e.g. `python -m http.server 8090` then
+  http://localhost:8090/piskel-fork/stub/).
+
+  It saves as JPEG via the browser's native canvas encoder (the device accepts
+  GIF or JPEG) purely to stay codec-free - the real fork exports GIF via gif.js.
+-->
+<style>
+  :root[data-theme=dark]{--bg:#0d1117;--card:#161b22;--card2:#1c2129;--border:#2d333b;--fg:#e6edf3;--dim:#8b949e;--acc:#58a6ff;--pri:#1f6feb;color-scheme:dark}
+  :root[data-theme=light]{--bg:#fff;--card:#f6f8fa;--card2:#eaeef2;--border:#d0d7de;--fg:#1f2328;--dim:#59636e;--acc:#0969da;--pri:#0969da;color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;height:100vh;display:flex;flex-direction:column;gap:12px;padding:14px;
+    font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  input,select,button{font:inherit;color:var(--fg);background:var(--card2);border:1px solid var(--border);border-radius:7px;padding:6px 10px}
+  input[type=color]{padding:2px;width:44px;height:32px}
+  #name{width:150px}
+  button{cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+  .stage{flex:1;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:auto}
+  canvas{background:#000;image-rendering:pixelated;box-shadow:0 0 0 1px #ffffff20;cursor:crosshair;touch-action:none}
+  .hint{color:var(--dim);font-size:12px}
+</style>
+</head>
+<body>
+  <div class="bar">
+    <strong>Icon editor (stub)</strong>
+    <span class="hint">left-click paint · right-click erase</span>
+  </div>
+  <div class="bar">
+    <label>Size
+      <select id="size">
+        <option value="8x8">8 × 8</option>
+        <option value="32x8">32 × 8</option>
+      </select>
+    </label>
+    <input type="color" id="color" value="#58a6ff" title="Colour">
+    <button id="clear">Clear</button>
+    <button id="live">Live: off</button>
+    <span style="flex:1"></span>
+    <input type="text" id="name" placeholder="icon name" spellcheck="false">
+    <button id="open">Open…</button>
+    <select id="openlist" style="display:none"></select>
+    <button id="save" class="pri">Save to AWTRIX</button>
+  </div>
+  <div class="stage"><canvas id="cv" width="512" height="512"></canvas></div>
+
+<script>
+'use strict';
+var AWTRIX_NS = 'awtrix';
+var parentOrigin = '*';
+var W = 8, H = 8, BG = '#000000';
+var px = [];                       // px[y][x] = '#rrggbb'
+var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+var painting = false, eraser = false;
+
+function q(n){ var m = new RegExp('[?&]'+n+'=([^&]*)').exec(location.search); return m ? decodeURIComponent(m[1]) : null; }
+function send(msg){ msg.ns = AWTRIX_NS; try{ parent.postMessage(msg, parentOrigin); }catch(e){} }
+function applyTheme(t){ document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark'); }
+
+function initGrid(w, h){
+  W = w; H = h; px = [];
+  for (var y = 0; y < H; y++){ px[y] = []; for (var x = 0; x < W; x++){ px[y][x] = BG; } }
+  // keep the display canvas roughly square-ish and crisp
+  var cell = Math.max(6, Math.floor(Math.min(512 / W, 384 / H)));
+  cv.width = W * cell; cv.height = H * cell;
+  draw();
+  sendLive();
+}
+function draw(){
+  var cw = cv.width / W, ch = cv.height / H;
+  for (var y = 0; y < H; y++){ for (var x = 0; x < W; x++){
+    ctx.fillStyle = px[y][x]; ctx.fillRect(x*cw, y*ch, cw, ch);
+  }}
+  // faint grid
+  ctx.strokeStyle = '#ffffff14';
+  for (var i = 0; i <= W; i++){ ctx.beginPath(); ctx.moveTo(i*cw, 0); ctx.lineTo(i*cw, cv.height); ctx.stroke(); }
+  for (var j = 0; j <= H; j++){ ctx.beginPath(); ctx.moveTo(0, j*ch); ctx.lineTo(cv.width, j*ch); ctx.stroke(); }
+}
+function paintAt(ev){
+  var r = cv.getBoundingClientRect();
+  var x = Math.floor((ev.clientX - r.left) / (cv.width / W));
+  var y = Math.floor((ev.clientY - r.top) / (cv.height / H));
+  if (x < 0 || y < 0 || x >= W || y >= H) return;
+  px[y][x] = eraser ? BG : document.getElementById('color').value;
+  draw();
+  sendLive();
+}
+
+// Pointer events cover mouse, touch and pen with one code path; touch-action
+// is set inline on the canvas so touch draws instead of scrolling the page.
+cv.style.touchAction = 'none';
+cv.addEventListener('pointerdown', function(e){
+  painting = true; eraser = (e.button === 2);
+  if (cv.setPointerCapture) { try { cv.setPointerCapture(e.pointerId); } catch (err) {} }
+  e.preventDefault(); paintAt(e);
+});
+cv.addEventListener('pointermove', function(e){ if (painting) paintAt(e); });
+window.addEventListener('pointerup', function(){ painting = false; });
+window.addEventListener('pointercancel', function(){ painting = false; });
+cv.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+document.getElementById('size').addEventListener('change', function(){
+  var p = this.value.split('x'); initGrid(+p[0], +p[1]);
+});
+document.getElementById('clear').addEventListener('click', function(){ initGrid(W, H); });
+
+// ---- save: render native-size, encode JPEG, hand bytes to AWTRIX ------------
+document.getElementById('save').addEventListener('click', function(){
+  var off = document.createElement('canvas'); off.width = W; off.height = H;
+  var octx = off.getContext('2d');
+  for (var y = 0; y < H; y++){ for (var x = 0; x < W; x++){ octx.fillStyle = px[y][x]; octx.fillRect(x, y, 1, 1); } }
+  off.toBlob(function(blob){
+    var fr = new FileReader();
+    fr.onload = function(){
+      send({ type:'save', name: (document.getElementById('name').value.trim() || 'icon'),
+             mime:'image/jpeg', dataBase64: String(fr.result).split(',')[1] || '' });
+    };
+    fr.readAsDataURL(blob);
+  }, 'image/jpeg', 0.95);
+});
+
+// ---- open: ask AWTRIX for the list, then load the chosen icon ---------------
+document.getElementById('open').addEventListener('click', function(){ send({ type:'list' }); });
+var openlist = document.getElementById('openlist');
+openlist.addEventListener('change', function(){
+  if (openlist.value){ document.getElementById('name').value = openlist.value.replace(/\.[^.]+$/, '');
+    send({ type:'load', name: openlist.value }); openlist.style.display = 'none'; }
+});
+function showList(files){
+  openlist.innerHTML = '';
+  var o0 = document.createElement('option'); o0.value = '';
+  o0.textContent = (files && files.length) ? 'Pick an icon…' : 'No icons on the clock';
+  openlist.appendChild(o0);
+  (files || []).forEach(function(f){ var o = document.createElement('option'); o.value = f.name; o.textContent = f.name; openlist.appendChild(o); });
+  openlist.style.display = '';
+}
+
+// ---- load: decode returned bytes (native <img>) back into the grid ----------
+function loadImage(mime, b64){
+  var img = new Image();
+  img.onload = function(){
+    var w = img.width || W, h = img.height || H;
+    if (w !== W || h !== H){ document.getElementById('size').value = w + 'x' + h; initGrid(w, h); }
+    var off = document.createElement('canvas'); off.width = W; off.height = H;
+    var octx = off.getContext('2d'); octx.drawImage(img, 0, 0, W, H);
+    var d = octx.getImageData(0, 0, W, H).data;
+    for (var y = 0; y < H; y++){ for (var x = 0; x < W; x++){
+      var i = (y*W + x) * 4;
+      px[y][x] = '#' + [d[i],d[i+1],d[i+2]].map(function(v){ return ('0'+v.toString(16)).slice(-2); }).join('');
+    }}
+    draw();
+  };
+  img.src = 'data:' + (mime || 'image/gif') + ';base64,' + b64;
+}
+
+// ---- inbound messages from AWTRIX ------------------------------------------
+window.addEventListener('message', function(e){
+  if (e.source !== window.parent) return;
+  var m = e.data; if (!m || m.ns !== AWTRIX_NS) return;
+  if (parentOrigin === '*') parentOrigin = e.origin;
+  if (m.type === 'theme') applyTheme(m.theme);
+  else if (m.type === 'list-result') showList(m.files);
+  else if (m.type === 'load-result') loadImage(m.mime, m.dataBase64);
+  else if (m.type === 'save-result') { /* could flash the button; left minimal */ }
+});
+
+// ---- live mirror to the matrix (stub is single-frame -> always pixels mode) --
+var liveOn = false;
+function packPixels(){ var out = []; for (var y = 0; y < H; y++){ for (var x = 0; x < W; x++){ out.push(parseInt(px[y][x].slice(1), 16)); } } return out; }
+function sendLive(){ if (liveOn) send({ type:'live', mode:'pixels', w: W, h: H, pixels: packPixels() }); }
+var liveBtn = document.getElementById('live');
+liveBtn.addEventListener('click', function(){
+  liveOn = !liveOn;
+  liveBtn.textContent = 'Live: ' + (liveOn ? 'on' : 'off');
+  liveBtn.classList.toggle('pri', liveOn);
+  if (liveOn) sendLive(); else send({ type:'live-off' });
+});
+
+// ---- boot ------------------------------------------------------------------
+applyTheme(q('theme') || 'dark');
+var sizes = (q('sizes') || '8x8,32x8').split(',');
+document.getElementById('size').value = (sizes.indexOf('8x8') >= 0 ? '8x8' : sizes[0]);
+var first = document.getElementById('size').value.split('x');
+initGrid(+first[0], +first[1]);
+send({ type:'ready' });
+</script>
+</body>
+</html>

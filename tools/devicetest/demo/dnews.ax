@@ -1,0 +1,26 @@
+# @name    Ticker
+# @desc    Scrolling line, dwell matched to exactly one pass
+# @author  devicetest
+# @version 1.0
+# @config  msg text "Message" default="AWTRIX NG sidebar demo ticker" maxlen=64
+
+class DNews
+  var s
+
+  def init()
+    self.s = store.get("msg", "AWTRIX NG")
+  end
+
+  def duration()
+    var px = text_width(self.s) + 8
+    if px <= width() return 0 end
+    return 1000 * px / 28
+  end
+
+  def draw()
+    clear()
+    scroll_text(6, self.s, 0xFFAA00, 28)
+  end
+end
+
+return DNews()

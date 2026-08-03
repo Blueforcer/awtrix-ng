@@ -1,0 +1,8 @@
+# @module  fmtlong
+# @desc    Long file name, short import name
+# @author  devicetest
+# @version 1.0
+
+var fmtlong = module("fmtlong")
+fmtlong.pad2 = def (n) return n < 10 ? "0" + str(n) : str(n) end
+return fmtlong

@@ -1,0 +1,40 @@
+# @name    T-Skip
+# @desc    should_show() and duration() driven by its own settings
+# @author  devicetest
+# @version 1.0
+# @config  show bool   "Take a turn" default=true
+# @config  secs number "Dwell"       default=3 min=1 max=30 unit=s
+
+class TSkip
+  var on, ms, turns
+
+  def init()
+    self.on = store.get("show", true)
+    self.ms = store.get("secs", 3) * 1000
+    self.turns = 0
+    shared.set("on", self.on)
+    shared.set("ms", self.ms)
+    shared.set("turns", 0)
+  end
+
+  def should_show()
+    return self.on
+  end
+
+  def duration()
+    return self.ms
+  end
+
+  def on_show()
+    self.turns += 1
+    shared.set("turns", self.turns)
+    shared.set("shown", now_ms())
+  end
+
+  def draw()
+    clear()
+    text(0, 6, "skip" + str(self.turns), 0x00FF88)
+  end
+end
+
+return TSkip()

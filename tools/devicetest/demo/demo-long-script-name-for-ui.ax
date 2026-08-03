@@ -1,0 +1,17 @@
+# @name    Battery
+# @desc    Battery percent in the module's accent colour
+# @author  devicetest
+# @version 1.0
+
+import dutil
+
+class DBatt
+  def draw()
+    clear()
+    var b = sensor.battery()
+    var s = b == nil ? "--" : dutil.pct(b)
+    text((width() - text_ink_width(s)) / 2, 6, s, dutil.accent)
+  end
+end
+
+return DBatt()

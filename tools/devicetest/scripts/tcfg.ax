@@ -1,0 +1,32 @@
+# @name    T-Config
+# @desc    All six config types, echoed into shared
+# @author  devicetest
+# @version 1.0
+# @config  flag  bool   "Flag"  default=true
+# @config  label text   "Label" default="cfg" maxlen=12
+# @config  every number "Every" default=15 min=1 max=60 unit=min
+# @config  level slider "Level" default=80 min=0 max=100 unit=%
+# @config  mode  select "Mode"  default=now options=now,today,week
+# @config  tint  color  "Tint"  default=#FF8800
+
+class TConfig
+  var line, tint
+
+  def init()
+    self.tint = store.get("tint", 0xFF8800)
+    self.line = store.get("label", "?") + str(store.get("every", 0))
+    shared.set("flag", store.get("flag", false))
+    shared.set("label", store.get("label", "?"))
+    shared.set("every", store.get("every", 0))
+    shared.set("level", store.get("level", 0))
+    shared.set("mode", store.get("mode", "?"))
+    shared.set("tint", self.tint)
+  end
+
+  def draw()
+    clear()
+    text(0, 6, self.line, self.tint)
+  end
+end
+
+return TConfig()

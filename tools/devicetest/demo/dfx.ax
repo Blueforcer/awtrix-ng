@@ -1,0 +1,22 @@
+# @name    Effect
+# @desc    One background effect, pick it in the settings
+# @author  devicetest
+# @version 1.0
+# @config  fx    select "Effect" default=Plasma options=Plasma,Matrix,Ripple,Pacifica,ColorWaves
+# @config  speed slider "Speed"  default=40 min=0 max=200 unit=%
+
+class DFx
+  var name, opts
+
+  def init()
+    self.name = store.get("fx", "Plasma")
+    self.opts = {"speed": store.get("speed", 40) / 100.0}
+  end
+
+  def draw()
+    clear()
+    effect(self.name, self.opts)
+  end
+end
+
+return DFx()

@@ -1,0 +1,23 @@
+Adafruit BMP280 Library ships no separate license file. Its terms are the
+file header reproduced below, verbatim from Adafruit_BMP280.h:
+
+/*!
+ *  @file Adafruit_BMP280.h
+ *
+ *  This is a library for the Adafruit BMP280 Breakout.
+ *
+ *  Designed specifically to work with the Adafruit BMP280 Breakout.
+ *
+ *  Pick one up today in the adafruit shop!
+ *  ------> https://www.adafruit.com/product/2651
+ *
+ *  These sensors use I2C to communicate, 2 pins are required to interface.
+ *
+ *  Adafruit invests time and resources providing this open source code,
+ *  please support Adafruit andopen-source hardware by purchasing products
+ *  from Adafruit!
+ *
+ *  K.Townsend (Adafruit Industries)
+ *
+ *  BSD license, all text above must be included in any redistribution
+ */

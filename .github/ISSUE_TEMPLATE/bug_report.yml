@@ -1,0 +1,89 @@
+name: Bug report
+description: Something behaves differently than the documentation says it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The firmware is pre-release, so a precise report
+        is genuinely valuable.
+
+        **Security problem?** Do not file it here — use
+        [private reporting](https://github.com/Blueforcer/awtrix-ng/security/advisories/new).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what the device did instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: >
+        The smallest thing that triggers it. A `curl` command, an MQTT publish
+        or a Berry script beats a description — paste the actual payload.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Firmware version
+      description: "`curl http://<awtrix-ip>/api/v1/version`, or the System tab in the web UI."
+      placeholder: "1.0.7-dev"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Where it happens
+      options:
+        - Ulanzi TC001
+        - AWTRIX 2 mainboard conversion
+        - DIY ESP32 panel
+        - DIY ESP32-S3 panel
+        - Host simulator (native_sim)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Display / rendering
+        - HTTP API
+        - MQTT / Home Assistant
+        - Berry scripting
+        - Web UI
+        - Sound
+        - Wi-Fi / network / discovery
+        - Sensors / brightness / battery
+        - Flashing / OTA update
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: >
+        The Log tab in the web UI, or the serial monitor
+        (`pio device monitor -b 115200`). Optional, but usually decisive.
+      render: text
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: >
+        Broker and Home Assistant versions if MQTT is involved, your router or
+        VLAN setup if it is a network problem, when it started if it used to
+        work.
