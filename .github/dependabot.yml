@@ -1,0 +1,28 @@
+# PlatformIO library versions in platformio.ini are not a registry Dependabot
+# knows, so they stay pinned by hand -- the comments there record why each floor
+# is what it is. These two ecosystems it can see.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "docs"
+
+  - package-ecosystem: npm
+    directory: "/webui/test"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "test"

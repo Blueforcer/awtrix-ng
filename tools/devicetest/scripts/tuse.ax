@@ -1,0 +1,26 @@
+# @name    T-Consumer
+# @desc    Imports the tfmt module and reads tbg's shared ticks
+# @author  devicetest
+# @version 1.0
+
+import tfmt
+
+class TUse
+  var s
+
+  def init()
+    self.s = tfmt.tag + "--"
+  end
+
+  def loop()
+    self.s = tfmt.tag + tfmt.pad2(shared.get("tbg.ticks", 0) % 100)
+    shared.set("out", self.s)
+  end
+
+  def draw()
+    clear()
+    text(0, 6, self.s, tfmt.tint)
+  end
+end
+
+return TUse()

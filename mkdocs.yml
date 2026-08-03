@@ -1,0 +1,113 @@
+site_name: AWTRIX NG
+site_description: LED matrix clock firmware for the Ulanzi TC001 - user documentation
+site_url: https://blueforcer.github.io/awtrix-ng/
+repo_url: https://github.com/Blueforcer/awtrix-ng
+repo_name: Blueforcer/awtrix-ng
+edit_uri: edit/main/docs/
+copyright: PolyForm Noncommercial 1.0.0 - Stephan Mühl (Blueforcer)
+
+docs_dir: docs
+
+# The AI system prompt is not a page of its own -- guides/ai-prompt.md embeds it
+# as a snippet and links the raw file for download.
+exclude_docs: |
+  examples/berry-app-system-prompt.md
+
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/favicon.ico
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: red
+      toggle: { icon: material/weather-night, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: red
+      toggle: { icon: material/weather-sunny, name: Light mode }
+
+plugins:
+  - search
+  - swagger-ui-tag
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc: { permalink: true }
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.superfences
+  - pymdownx.tabbed: { alternate_style: true }
+  - pymdownx.highlight: { anchor_linenums: true }
+  - pymdownx.inlinehilite
+  - pymdownx.snippets: { base_path: [docs], check_paths: true }
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Flashing: getting-started/flashing.md
+      - First boot: getting-started/first-boot.md
+      - Finding AWTRIX: getting-started/discovery.md
+      - Web UI tour: getting-started/web-ui.md
+      - Build your own AWTRIX: advanced/diy-build.md
+      - Migrating from AWTRIX 3: guides/migrating-from-awtrix3.md
+  - Guides:
+      - Put content on the panel:
+          - Your first notification: guides/notifications.md
+          - Pushed apps: guides/pushed-apps.md
+          - Text & colors: guides/text.md
+          - Icons & assets: guides/icons.md
+          - Charts & drawing: guides/graphics.md
+          - Effects & overlays: guides/effects.md
+      - Run your own app:
+          - App scripting: guides/scripting.md
+          - Build an app with AI: guides/ai-prompt.md
+      - Web UI editors:
+          - Icon editor: guides/icon-editor.md
+          - Palette editor: guides/palette-editor.md
+      - Sound:
+          - Sounds & melodies: guides/sounds.md
+          - Internet radio: guides/radio.md
+      - Integrations:
+          - Home Assistant: guides/home-assistant.md
+          - MQTT automation: guides/mqtt.md
+          - Art-Net: guides/artnet.md
+      - Living with the device:
+          - Brightness & sensors: guides/brightness.md
+          - Power & battery: guides/power.md
+          - Updating firmware: guides/updating.md
+  - Reference:
+      - Conventions: reference/conventions.md
+      - API:
+          - HTTP API v1: reference/http.md
+          - MQTT topics: reference/mqtt.md
+          - App & notification payload: reference/payload.md
+          - Visual reference: reference/visuals.md
+          - Device state: reference/device.md
+      - Configuration:
+          - Settings: reference/settings.md
+          - System configuration: reference/system.md
+          - GPIO & boards: reference/gpio.md
+      - Errors & limits:
+          - Errors: reference/errors.md
+          - Limits: reference/limits.md
+  - Help:
+      - Troubleshooting: troubleshooting/troubleshooting.md
+      - FAQ: troubleshooting/faq.md
+  - Advanced:
+      - Simulator: advanced/simulator.md
+      - Building from source: advanced/building.md

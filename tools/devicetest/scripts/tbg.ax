@@ -1,0 +1,20 @@
+# @name    T-Background
+# @desc    Headless: counts loop() ticks into shared, never draws
+# @author  devicetest
+# @version 1.0
+# @headless true
+
+class TBg
+  var n
+
+  def init()
+    self.n = 0
+  end
+
+  def loop()
+    self.n += 1
+    shared.set("ticks", self.n)
+  end
+end
+
+return TBg()

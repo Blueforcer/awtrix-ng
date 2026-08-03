@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest something the firmware should be able to do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: >
+        Describe the goal rather than the implementation. Knowing what you are
+        actually building often reveals a better fit than the feature as asked.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: If you already have a shape for it — an endpoint, a payload field, a setting — sketch it here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: >
+        A Berry script, a pushed app, an automation in Home Assistant. Say why
+        it was not enough — that is the argument for putting it in the firmware.
+
+  - type: markdown
+    attributes:
+      value: |
+        Flash and RAM on an ESP32 are finite, and every feature costs some of
+        both. A feature that a Berry script can already do is unlikely to be
+        added to the firmware — but if the script is awkward, that awkwardness
+        is itself worth reporting.

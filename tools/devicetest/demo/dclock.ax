@@ -1,0 +1,17 @@
+# @name    Big Clock
+# @desc    The time in the large font
+# @author  devicetest
+# @version 1.0
+
+import fmtlong
+
+class DClock
+  def draw()
+    clear()
+    var s = str(hour()) + ":" + fmtlong.pad2(minute())
+    font("large")
+    text((width() - text_ink_width(s)) / 2, 7, s, settings.get("textColor"))
+  end
+end
+
+return DClock()

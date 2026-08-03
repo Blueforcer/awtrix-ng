@@ -1,0 +1,32 @@
+; Matches the existing tree. There is no formatter in CI -- this exists so an
+; editor does not silently reindent a file on save.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{c,cpp,h,hpp}]
+max_line_length = 100
+
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+[Makefile]
+indent_style = tab
+
+[platformio.ini]
+indent_style = tab
+
+[*.md]
+; Two trailing spaces are a hard line break in Markdown.
+trim_trailing_whitespace = false
+
+[*.bdf]
+trim_trailing_whitespace = false
+insert_final_newline = false

@@ -1,0 +1,69 @@
+#pragma once
+
+// Member, NVS key, secret flag. The string is the on-flash key: max 15 characters, and renaming
+// one silently drops the stored value on every device already in the field.
+#define AWTRIX_CFG_FIELDS(X)          \
+  X(wifiSsid, "ssid", 0)              \
+  X(wifiPass, "wpass", 1)             \
+  X(netStatic, "netstatic", 0)        \
+  X(ip, "ip", 0)                      \
+  X(gateway, "gw", 0)                 \
+  X(subnet, "sn", 0)                  \
+  X(dns1, "dns1", 0)                  \
+  X(dns2, "dns2", 0)                  \
+  X(wifiConnectTimeout, "wifitmo", 0) \
+  X(wifiRoamRssi, "wifiroam", 0)      \
+  X(mqttEnabled, "menable", 0)        \
+  X(mqttHost, "mhost", 0)             \
+  X(mqttPort, "mport", 0)             \
+  X(mqttUser, "muser", 0)             \
+  X(mqttPass, "mpass", 1)             \
+  X(mqttPrefix, "mprefix", 0)         \
+  X(haDiscovery, "hadisc", 0)         \
+  X(haPrefix, "haprefix", 0)          \
+  X(ntpServer, "ntp", 0)              \
+  X(tz, "tz", 0)                      \
+  X(tzName, "tzname", 0)              \
+  X(hostname, "host", 0)              \
+  X(webPort, "webport", 0)            \
+  X(authEnabled, "aenable", 0)        \
+  X(authUser, "auser", 0)             \
+  X(authPass, "apass", 1)             \
+  X(tempOffset, "tempoff", 0)         \
+  X(humOffset, "humoff", 0)           \
+  X(batteryDividerRatio, "batdiv", 0) \
+  X(lowBatteryThreshold, "lowbat", 0) \
+  X(minBrightness, "minbri", 0)       \
+  X(maxBrightness, "maxbri", 0)       \
+  X(ldrFactor, "ldrfac", 0)           \
+  X(ldrGamma, "ldrgam", 0)            \
+  X(ldrOnGround, "ldrgnd", 0)         \
+  X(brightnessSmoothing, "brismooth", 0) \
+  X(panelWidth, "pw", 0)              \
+  X(panels, "pnc", 0)                 \
+  X(panelStart, "pstart", 0)          \
+  X(panelWiring, "pwire", 0)          \
+  X(panelSerpentine, "pserp", 0)      \
+  X(mirror, "mirror", 0)              \
+  X(rotate, "rotate", 0)              \
+  X(swapButtons, "swapbtn", 0)        \
+  X(dfplayer, "dfplayer", 0)          \
+  X(buttonCallback, "btncb", 0)       \
+  X(artnet, "artnet", 0)              \
+  X(statsInterval, "statsint", 0)     \
+  X(tempDecimals, "tempdec", 0)       \
+  X(debugMode, "dbg", 0)              \
+  X(scriptingEnabled, "scren", 0)     \
+  X(scriptLimit, "scrlimit", 0)       \
+  X(scriptMaxBytes, "scrmax", 0)      \
+  X(pinMatrix, "pmatrix", 0)          \
+  X(pinBtnLeft, "pbtnl", 0)           \
+  X(pinBtnSelect, "pbtns", 0)         \
+  X(pinBtnRight, "pbtnr", 0)          \
+  X(pinBattery, "pbat", 0)            \
+  X(pinLdr, "pldr", 0)                \
+  X(pinBuzzer, "pbuzz", 0)            \
+  X(pinI2cSda, "psda", 0)             \
+  X(pinI2cScl, "pscl", 0)             \
+  X(pinDfRx, "pdfrx", 0)              \
+  X(pinDfTx, "pdftx", 0)                X(pinI2sBclk, "pi2sbck", 0)           X(pinI2sLrclk, "pi2slrc", 0)          X(pinI2sDout, "pi2sdo", 0)

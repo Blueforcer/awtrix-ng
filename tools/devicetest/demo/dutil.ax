@@ -1,0 +1,10 @@
+# @module  dutil
+# @desc    Shared helpers and one accent colour for the demo apps
+# @author  devicetest
+# @version 1.0
+# @config  accent color "Accent" default=#00E5FF
+
+var dutil = module("dutil")
+dutil.accent = store.get("accent", 0x00E5FF)
+dutil.pct = def (v) return str(int(v)) + "%" end
+return dutil

@@ -1,0 +1,12 @@
+# @module  tfmt
+# @desc    Test module: shared settings and helpers
+# @author  devicetest
+# @version 1.0
+# @config  tag  text  "Tag"    default="ng" maxlen=8
+# @config  tint color "Colour" default=#FF8800
+
+var tfmt = module("tfmt")
+tfmt.tag = store.get("tag", "ng")
+tfmt.tint = store.get("tint", 0xFF8800)
+tfmt.pad2 = def (n) return n < 10 ? "0" + str(n) : str(n) end
+return tfmt

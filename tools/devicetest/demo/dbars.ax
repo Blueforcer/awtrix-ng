@@ -1,0 +1,25 @@
+# @name    Light Bars
+# @desc    Rolling chart of the ambient light sensor
+# @author  devicetest
+# @version 1.0
+
+class DBars
+  var v
+
+  def init()
+    self.v = []
+  end
+
+  def loop()
+    var l = sensor.light()
+    self.v.push(l == nil ? 0 : int(l))
+    if size(self.v) > 16 self.v.remove(0) end
+  end
+
+  def draw()
+    clear()
+    bar_chart(self.v, "Heat")
+  end
+end
+
+return DBars()

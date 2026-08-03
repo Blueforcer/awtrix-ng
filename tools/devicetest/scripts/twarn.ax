@@ -1,0 +1,21 @@
+# @name    T-Warnings
+# @desc    Deliberately broken @config lines, one per failure mode
+# @author  devicetest
+# @version 1.0
+# @config  ok    text   "Fine"        default="x"
+# @config  1bad  text   "Bad key"
+# @config  ok    bool   "Duplicate"
+# @config  typ   frobni "Unknown type"
+# @config  pick  select "No options"
+# @config  rng   number "Min above max" min=10 max=1
+# @config  attr  text   "Unknown attribute" wibble=3
+# @config  numd  number "Default not a number" default=abc
+
+class TWarn
+  def draw()
+    clear()
+    text(0, 6, "warn", 0xFFAA00)
+  end
+end
+
+return TWarn()

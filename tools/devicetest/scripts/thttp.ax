@@ -1,0 +1,56 @@
+# @name    T-Http
+# @desc    Fetches the device's own /api/v1/device with find/keep
+# @author  devicetest
+# @version 1.0
+# @config  host text   "Device host" default="127.0.0.1"
+# @config  secs number "Every"       default=10 min=2 max=600 unit=s
+
+class THttp
+  var url, ticks, every, in_flight, up, fails
+
+  def init()
+    self.url = "http://" + store.get("host", "127.0.0.1") + "/api/v1/device"
+    self.every = store.get("secs", 10)
+    self.ticks = 0
+    self.in_flight = false
+    self.up = -1
+    self.fails = 0
+    shared.set("up", -1)
+    shared.set("fails", 0)
+  end
+
+  def on_body(body, status)
+    self.in_flight = false
+    if body == nil
+      self.fails += 1
+      shared.set("fails", self.fails)
+      shared.set("status", status)
+      return
+    end
+    var m = re.search("(\\d+)", body)
+    if m == nil return end
+    self.up = num(m[1])
+    shared.set("up", self.up)
+    shared.set("status", status)
+  end
+
+  def loop()
+    if self.ticks <= 0
+      self.ticks = self.every
+      if !self.in_flight
+        self.in_flight = true
+        http.get(self.url, / b, st -> self.on_body(b, st),
+                 {'find': "\"uptimeSeconds\":", 'keep': 24})
+      end
+    end
+    self.ticks -= 1
+  end
+
+  def draw()
+    clear()
+    var s = self.up < 0 ? "..." : str(self.up) + "s"
+    text((width() - text_ink_width(s)) / 2, 6, s, self.up < 0 ? 0x666666 : 0x00AAFF)
+  end
+end
+
+return THttp()

@@ -1,0 +1,96 @@
+# Two separable things live here: *validating* the documentation, which runs on
+# every push and every pull request, and *publishing* it to GitHub Pages, which
+# only works on a repository that has Pages enabled.
+#
+# The upload and deploy are gated on `has_pages` so the validation half is
+# useful on a fork, or on any checkout where Pages is off: those runs skip
+# publishing instead of failing at it, and start publishing on their own if
+# Pages is later enabled, with no edit to this file.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+      - run: pip install -r requirements-docs.txt
+      # The browser flasher on getting-started/flashing.md fetches the firmware
+      # from this site, not from the releases page: release assets carry no
+      # Access-Control-Allow-Origin header, so a page on github.io cannot read
+      # them. They are copied in here instead, and never committed.
+      #
+      # This build is what publishes them, so a release only reaches the flasher
+      # once the docs are rebuilt -- which is why the release job in ci.yml
+      # triggers this workflow.
+      - name: Fetch the firmware the browser flasher serves
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          if [ -z "$tag" ]; then
+            echo "::warning::No published release -- the browser flasher will report that no firmware is available."
+            exit 0
+          fi
+          mkdir -p docs/firmware
+          # A release from before the factory images existed carries none of
+          # them, and that is not a reason to stop publishing documentation.
+          gh release download "$tag" --pattern 'factory-*.bin' --dir docs/firmware || true
+          if ! ls docs/firmware/factory-*.bin >/dev/null 2>&1; then
+            echo "::warning::Release $tag carries no factory-*.bin -- the browser flasher will report that no firmware is available."
+            exit 0
+          fi
+          python - "$tag" <<'PY'
+          import json, os, sys
+          names = sorted(f for f in os.listdir("docs/firmware") if f.endswith(".bin"))
+          with open("docs/firmware/index.json", "w") as f:
+              json.dump({"version": sys.argv[1], "assets": names}, f, indent=1)
+          print("web flasher serves %s: %s" % (sys.argv[1], ", ".join(names)))
+          PY
+      # A link to a heading that has been renamed is reported by mkdocs at INFO
+      # level, so --strict walks straight past it and the broken anchor ships.
+      # Fail on it explicitly.
+      - name: Build, and fail on broken anchors
+        run: |
+          mkdocs build --strict 2>&1 | tee build.log
+          if grep -q "does not contain an anchor" build.log; then
+            echo "::error::Broken in-page anchors (a linked heading was renamed):"
+            grep "does not contain an anchor" build.log
+            exit 1
+          fi
+      - name: Upload the Pages artifact
+        if: github.event.repository.has_pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event.repository.has_pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
