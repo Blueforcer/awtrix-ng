@@ -8,6 +8,6 @@
     "test:sim": "node scripts-editor.test.js --sim && node backup-restore.test.js --sim && node apps-tab.test.js && node gif.test.js"
   },
   "devDependencies": {
-    "jsdom": "^24.0.0"
+    "jsdom": "^30.0.1"
   }
 }
