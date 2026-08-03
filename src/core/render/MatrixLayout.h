@@ -41,6 +41,8 @@ struct MatrixLayout {
   PanelStart panelStart = PanelStart::TopLeft;
   Wiring panelWiring = Wiring::Rows;
   bool panelSerpentine = true;
+  bool panelChainReverse = false;
+  bool panelChainSerpentine = false;
   bool mirror = false;
   bool rotate180 = false;
 
@@ -54,6 +56,9 @@ struct MatrixLayout {
   bool rightStart() const {
     return panelStart == PanelStart::TopRight || panelStart == PanelStart::BottomRight;
   }
+  // Order the panels sit on the cable. A right-hand start already walks the chain backwards, so
+  // the flag XORs against it: the stock layouts keep the index they have always had.
+  bool chainReversed() const { return rightStart() != panelChainReverse; }
 
   // Maps a canvas pixel (origin top-left) to its position in the LED strip, following how the
   // panels are actually wired and chained.

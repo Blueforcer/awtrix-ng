@@ -2133,6 +2133,20 @@ components:
             Every second row or column runs backwards - the zigzag most panels
             are wired in. false = every run starts on the same side. Applies on
             the next frame.
+        panelChainReverse:
+          type: boolean
+          default: false
+          description: >
+            The data cable enters the chain of panels at the other end, without
+            changing how a single panel is wired inside. Applies on the next
+            frame.
+        panelChainSerpentine:
+          type: boolean
+          default: false
+          description: >
+            Every second panel along the cable is mounted rotated 180 degrees,
+            so one panel's output sits next to the next panel's input. Applies
+            on the next frame.
         mirror:
           type: boolean
           default: false

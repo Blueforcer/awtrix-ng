@@ -409,6 +409,26 @@ void test_wiring_booleans_must_be_booleans() {
   TEST_ASSERT_EQUAL_STRING("panelSerpentine", e.field.c_str());
   TEST_ASSERT_EQUAL_STRING("must be a boolean", e.message.c_str());
 
+  Body r;
+  r.set("panelChainReverse", true);
+  TEST_ASSERT_TRUE_MESSAGE(ok(r, e), e.field.c_str());
+
+  Body rb;
+  rb.set("panelChainReverse", "yes");
+  TEST_ASSERT_FALSE(ok(rb, e));
+  TEST_ASSERT_EQUAL_STRING("panelChainReverse", e.field.c_str());
+  TEST_ASSERT_EQUAL_STRING("must be a boolean", e.message.c_str());
+
+  Body s;
+  s.set("panelChainSerpentine", true);
+  TEST_ASSERT_TRUE_MESSAGE(ok(s, e), e.field.c_str());
+
+  Body sb;
+  sb.set("panelChainSerpentine", "yes");
+  TEST_ASSERT_FALSE(ok(sb, e));
+  TEST_ASSERT_EQUAL_STRING("panelChainSerpentine", e.field.c_str());
+  TEST_ASSERT_EQUAL_STRING("must be a boolean", e.message.c_str());
+
   Body c;
   c.set("rotate", 1);
   TEST_ASSERT_FALSE(ok(c, e));

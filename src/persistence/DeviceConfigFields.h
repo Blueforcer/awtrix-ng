@@ -44,6 +44,8 @@
   X(panelStart, "pstart", 0)          \
   X(panelWiring, "pwire", 0)          \
   X(panelSerpentine, "pserp", 0)      \
+  X(panelChainReverse, "pchrev", 0)   \
+  X(panelChainSerpentine, "pchserp", 0) \
   X(mirror, "mirror", 0)              \
   X(rotate, "rotate", 0)              \
   X(swapButtons, "swapbtn", 0)        \

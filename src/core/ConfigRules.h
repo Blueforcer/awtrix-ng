@@ -79,7 +79,8 @@ inline const EnumRule* findEnum(const std::string& key) {
 }
 
 inline bool isLayoutBoolKey(const std::string& key) {
-  return key == "panelSerpentine" || key == "mirror" || key == "rotate";
+  return key == "panelSerpentine" || key == "panelChainReverse" ||
+         key == "panelChainSerpentine" || key == "mirror" || key == "rotate";
 }
 
 struct ClearRoute {
