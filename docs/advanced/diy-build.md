@@ -479,7 +479,13 @@ The pixel height is fixed at 8. Everything else about your matrix is configurati
 | `panelStart` | `topLeft` `topRight` `bottomLeft` `bottomRight` | `topLeft` | Corner the first LED sits in. |
 | `panelWiring` | `rows` `columns` | `rows` | Whether the strip runs along rows or down columns. |
 | `panelSerpentine` | bool | `true` | Every second run comes back the other way - the usual zigzag. |
-| `mirror` / `rotate` | bool | `false` | How the picture is drawn, independent of the wiring. |
+| `panelChainReverse` | bool | `false` | The cable enters the chain at the other end. Does not change how a panel is wired inside. |
+| `panelChainSerpentine` | bool | `false` | Every second panel is mounted rotated 180°, so its output sits beside the next panel's input. |
+| `mirror` / `rotate` | bool | `false` | A convenience for a panel mounted the wrong way round; each is equivalent to picking a different `panelStart`. `rotate` additionally swaps the left and right button. |
+
+`panelStart`, `panelWiring` and `panelSerpentine` describe one panel; the two chain keys describe
+how the panels are joined to each other. On a single-panel build the chain keys cannot change
+anything.
 
 Common builds:
 
@@ -487,12 +493,16 @@ Common builds:
 |---|---|
 | Standard 32 x 8 panel | the defaults |
 | Four chained 8 x 8 tiles | `panelWidth` 8, `panels` 4, `panelSerpentine` false |
+| Four 8 x 8 tiles, each wired from its right edge | `panelWidth` 8, `panels` 4, `panelStart` `topRight`, `panelChainReverse` true |
+| Tiles mounted alternately, output next to input | `panelChainSerpentine` true |
 | 32 x 8 wired in columns | `panelWiring` `columns` |
 | 64 px wide panel | `panelWidth` 64 |
 
 If the picture comes out scrambled, try `panelSerpentine` first, then `panelStart`, then
-`panelWiring`. All three re-apply on the **next frame**, so you can watch the panel while you
-change them. Only a change to the total width needs a reboot.
+`panelWiring`. If each panel then looks right but the panels are in the wrong order, or every
+second one is upside down, that is `panelChainReverse` and `panelChainSerpentine`. All of them
+re-apply on the **next frame**, so you can watch the panel while you change them. Only a change
+to the total width needs a reboot.
 
 ---
 
@@ -578,6 +588,8 @@ Work down this list; each step isolates one part of the hardware.
 | First pixel wrong colour, rest fine | Missing series resistor or the 1000 uF cap; data edge too sharp |
 | Flicker, colours drift down the strip | 3.3 V data on 5 V pixels - add a level shifter or drop the panel supply to ~4.5 V |
 | Picture scrambled or mirrored | `panelSerpentine`, then `panelStart`, then `panelWiring` |
+| Panels each correct but in the wrong order | `panelChainReverse` - the cable enters the chain at the other end |
+| Every second panel upside down | `panelChainSerpentine` - the tiles are mounted alternately |
 | Board resets on bright frames | Supply too small, or panel current flowing through the dev board |
 | Buttons dead or inverted | Wired to 3V3 instead of GND - `INPUT_PULLUP` expects a pull to ground |
 | Left/right reversed | `swapButtons`, or `rotate` if the whole panel is upside down |

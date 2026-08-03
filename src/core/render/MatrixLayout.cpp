@@ -34,10 +34,17 @@ int MatrixLayout::xyToIndex(int x, int y) const {
     x = W - 1 - x;
     y = H - 1 - y;
   }
-  const int panel = rightStart() ? (panels - 1 - x / panelWidth) : (x / panelWidth);
-  const int local = runIndex(x % panelWidth, y, panelWidth, H,
-                             panelWiring == Wiring::Columns, panelSerpentine, bottomStart(),
-                             rightStart());
+  // The parity below is taken on the panel's place along the cable, not on the raw column, so
+  // reversing the chain does not also change which panels count as rotated.
+  const int panel = chainReversed() ? (panels - 1 - x / panelWidth) : (x / panelWidth);
+  int cx = x % panelWidth, cy = y;
+  // Every second panel along the cable is mounted upside down, so its own coordinates turn with it.
+  if (panelChainSerpentine && (panel & 1)) {
+    cx = panelWidth - 1 - cx;
+    cy = H - 1 - cy;
+  }
+  const int local = runIndex(cx, cy, panelWidth, H, panelWiring == Wiring::Columns,
+                             panelSerpentine, bottomStart(), rightStart());
   return panel * (panelWidth * H) + local;
 }
 

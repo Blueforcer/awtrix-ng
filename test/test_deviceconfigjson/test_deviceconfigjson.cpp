@@ -44,6 +44,8 @@ DeviceConfig seeded() {
   c.panelStart = PanelStart::BottomRight;
   c.panelWiring = Wiring::Columns;
   c.panelSerpentine = false;
+  c.panelChainReverse = true;
+  c.panelChainSerpentine = true;
   return c;
 }
 
@@ -71,8 +73,8 @@ static int members(const std::string& json) {
 }
 
 static void test_the_reply_carries_every_field() {
-  TEST_ASSERT_EQUAL_INT(64, members(written(seeded(), false)));
-  TEST_ASSERT_EQUAL_INT(67, members(written(seeded(), true)));
+  TEST_ASSERT_EQUAL_INT(66, members(written(seeded(), false)));
+  TEST_ASSERT_EQUAL_INT(69, members(written(seeded(), true)));
 }
 
 static void test_secrets_are_omitted_unless_asked_for() {

@@ -357,6 +357,13 @@ you switch **Serpentine** on and off. Changing `Panel width × Panels` needs a r
     Some 8×8 tiles are wired in a zigzag inside the tile, which AWTRIX 3 could not express. Turn
     **Serpentine** on and keep everything else - that combination is available here.
 
+!!! tip "If your matrix is none of the three rows above"
+    A self-built panel is often wired in a way no single `MATRIX_LAYOUT` value could describe, so
+    there was no row to copy. Two more switches cover those builds: **Reverse chain** if each
+    panel on its own looks right but the panels sit in the wrong order, and **Alternating panels**
+    if every second panel is upside down. Four 8×8 tiles each wired from their right edge, for
+    example, is **First LED** top right plus **Reverse chain** on.
+
 The same three, over the API:
 
 ```bash

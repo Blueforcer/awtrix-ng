@@ -15,6 +15,16 @@ int refUlanzi(int x, int y, int W) { return y * W + ((y % 2 == 0) ? x : (W - 1 -
 int refTiles(int x, int y) { return (x / 8) * 64 + y * 8 + (x % 8); }
 int refColumns(int x, int y, int H) { return x * H + ((x % 2 == 0) ? y : (H - 1 - y)); }
 
+// One serpentine 8x8 tile on its own, wired from the left and from the right corner. The chain
+// tests build the whole strip out of these, so a wrong chain order shows up as a wrong offset
+// rather than as a scrambled tile.
+int refTileFromLeft(int cx, int cy) {
+  return cy * 8 + ((cy & 1) ? (7 - cx) : cx);
+}
+int refTileFromRight(int cx, int cy) {
+  return cy * 8 + (7 - ((cy & 1) ? (7 - cx) : cx));
+}
+
 constexpr int kMaxLeds = kMatrixWidthMax * kMatrixHeight;
 
 struct Grid {
@@ -222,6 +232,152 @@ static void test_display_transforms_survive_every_wiring() {
   }
 }
 
+static void test_chain_flags_default_off() {
+  for (const Grid& g : kGrids) {
+    for (PanelStart start : kStarts) {
+      for (int wiring = 0; wiring < 2; ++wiring) {
+        for (int panelSerp = 0; panelSerp < 2; ++panelSerp) {
+          MatrixLayout base;
+          base.panelWidth = g.panelWidth;
+          base.panels = g.panels;
+          base.panelStart = start;
+          base.panelWiring = wiring ? Wiring::Columns : Wiring::Rows;
+          base.panelSerpentine = panelSerp != 0;
+          MatrixLayout flagged = base;
+          flagged.panelChainReverse = false;
+          flagged.panelChainSerpentine = false;
+          for (int y = 0; y < base.height(); ++y)
+            for (int x = 0; x < base.width(); ++x)
+              TEST_ASSERT_EQUAL_INT(base.xyToIndex(x, y), flagged.xyToIndex(x, y));
+        }
+      }
+    }
+  }
+}
+
+static void test_chain_flags_are_a_noop_for_a_single_panel() {
+  for (int w : {32, 64, 128}) {
+    for (PanelStart start : kStarts) {
+      for (int wiring = 0; wiring < 2; ++wiring) {
+        MatrixLayout base;
+        base.panelWidth = w;
+        base.panelStart = start;
+        base.panelWiring = wiring ? Wiring::Columns : Wiring::Rows;
+        for (int reverse = 0; reverse < 2; ++reverse) {
+          for (int chainSerp = 0; chainSerp < 2; ++chainSerp) {
+            MatrixLayout flagged = base;
+            flagged.panelChainReverse = reverse != 0;
+            flagged.panelChainSerpentine = chainSerp != 0;
+            for (int y = 0; y < 8; ++y)
+              for (int x = 0; x < w; ++x)
+                TEST_ASSERT_EQUAL_INT(base.xyToIndex(x, y), flagged.xyToIndex(x, y));
+          }
+        }
+      }
+    }
+  }
+}
+
+static void test_chain_reverse_is_independent_of_panel_start() {
+  int maps[4][256];
+  int n = 0;
+  for (PanelStart start : {PanelStart::TopLeft, PanelStart::TopRight}) {
+    for (int reverse = 0; reverse < 2; ++reverse) {
+      MatrixLayout layout;
+      layout.panelWidth = 8;
+      layout.panels = 4;
+      layout.panelStart = start;
+      layout.panelChainReverse = reverse != 0;
+      assertBijection(layout);
+      for (int y = 0; y < 8; ++y)
+        for (int x = 0; x < 32; ++x) maps[n][y * 32 + x] = layout.xyToIndex(x, y);
+      ++n;
+    }
+  }
+  for (int a = 0; a < 4; ++a) {
+    for (int b = a + 1; b < 4; ++b) {
+      bool identical = true;
+      for (int i = 0; i < 256 && identical; ++i) identical = maps[a][i] == maps[b][i];
+      TEST_ASSERT_FALSE(identical);
+    }
+  }
+}
+
+static void test_right_wired_panels_in_a_left_to_right_chain() {
+  MatrixLayout layout;
+  layout.panelWidth = 8;
+  layout.panels = 4;
+  layout.panelStart = PanelStart::TopRight;
+  layout.panelChainReverse = true;
+  TEST_ASSERT_EQUAL_INT(7, layout.xyToIndex(0, 0));
+  TEST_ASSERT_EQUAL_INT(0, layout.xyToIndex(7, 0));
+  TEST_ASSERT_EQUAL_INT(71, layout.xyToIndex(8, 0));
+  TEST_ASSERT_EQUAL_INT(255, layout.xyToIndex(31, 7));
+  for (int y = 0; y < 8; ++y)
+    for (int x = 0; x < 32; ++x)
+      TEST_ASSERT_EQUAL_INT((x / 8) * 64 + refTileFromRight(x % 8, y), layout.xyToIndex(x, y));
+  assertBijection(layout);
+}
+
+static void test_chain_serpentine_rotates_the_odd_panels() {
+  MatrixLayout layout;
+  layout.panelWidth = 8;
+  layout.panels = 4;
+  layout.panelChainSerpentine = true;
+  for (int y = 0; y < 8; ++y) {
+    for (int x = 0; x < 32; ++x) {
+      const int panel = x / 8;
+      const int cx = x % 8;
+      const int local = (panel & 1) ? refTileFromLeft(7 - cx, 7 - y) : refTileFromLeft(cx, y);
+      TEST_ASSERT_EQUAL_INT(panel * 64 + local, layout.xyToIndex(x, y));
+    }
+  }
+  assertBijection(layout);
+}
+
+static void test_chain_serpentine_parity_follows_the_cable() {
+  MatrixLayout layout;
+  layout.panelWidth = 8;
+  layout.panels = 4;
+  layout.panelChainReverse = true;
+  layout.panelChainSerpentine = true;
+  // Reversed, so the leftmost tile is the last on the cable: panel 3, odd, therefore rotated.
+  TEST_ASSERT_EQUAL_INT(248, layout.xyToIndex(0, 0));
+  for (int y = 0; y < 8; ++y) {
+    for (int x = 0; x < 32; ++x) {
+      const int panel = 3 - x / 8;
+      const int cx = x % 8;
+      const int local = (panel & 1) ? refTileFromLeft(7 - cx, 7 - y) : refTileFromLeft(cx, y);
+      TEST_ASSERT_EQUAL_INT(panel * 64 + local, layout.xyToIndex(x, y));
+    }
+  }
+  assertBijection(layout);
+}
+
+static void test_all_chain_combinations_are_bijections() {
+  for (const Grid& g : kGrids) {
+    for (PanelStart start : kStarts) {
+      for (int wiring = 0; wiring < 2; ++wiring) {
+        for (int panelSerp = 0; panelSerp < 2; ++panelSerp) {
+          for (int reverse = 0; reverse < 2; ++reverse) {
+            for (int chainSerp = 0; chainSerp < 2; ++chainSerp) {
+              MatrixLayout layout;
+              layout.panelWidth = g.panelWidth;
+              layout.panels = g.panels;
+              layout.panelStart = start;
+              layout.panelWiring = wiring ? Wiring::Columns : Wiring::Rows;
+              layout.panelSerpentine = panelSerp != 0;
+              layout.panelChainReverse = reverse != 0;
+              layout.panelChainSerpentine = chainSerp != 0;
+              assertBijection(layout);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 static void test_sanitize_keeps_a_valid_layout() {
   MatrixLayout in = tiles8x8();
   bool changed = true;
@@ -308,6 +464,13 @@ int main(int, char**) {
   RUN_TEST(test_rotate180_flips_both_axes);
   RUN_TEST(test_mirror_and_rotate_compose_to_vertical_flip);
   RUN_TEST(test_display_transforms_survive_every_wiring);
+  RUN_TEST(test_chain_flags_default_off);
+  RUN_TEST(test_chain_flags_are_a_noop_for_a_single_panel);
+  RUN_TEST(test_chain_reverse_is_independent_of_panel_start);
+  RUN_TEST(test_right_wired_panels_in_a_left_to_right_chain);
+  RUN_TEST(test_chain_serpentine_rotates_the_odd_panels);
+  RUN_TEST(test_chain_serpentine_parity_follows_the_cable);
+  RUN_TEST(test_all_chain_combinations_are_bijections);
   RUN_TEST(test_sanitize_keeps_a_valid_layout);
   RUN_TEST(test_height_is_always_eight);
   RUN_TEST(test_sanitize_rejects_a_width_outside_the_envelope);

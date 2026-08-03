@@ -321,13 +321,17 @@ width follows from the first two - `panelWidth × panels` - and the height is al
 | `panelStart` | enum | `topLeft` `topRight` `bottomLeft` `bottomRight` | `topLeft` | The corner the first LED sits in. Names are case-insensitive; anything else is `422`. | no |
 | `panelWiring` | enum | `rows` `columns` | `rows` | Whether the strip runs along the rows or down the columns inside a panel. | no |
 | `panelSerpentine` | bool | - | `true` | Every second row (or column) runs backwards - the zigzag most panels are wired in. `false` = every run starts on the same side. | no |
+| `panelChainReverse` | bool | - | `false` | The data cable enters the chain at the other end, without changing how a panel is wired inside. | no |
+| `panelChainSerpentine` | bool | - | `false` | Every second panel along the cable is mounted rotated 180°, so one panel's output sits beside the next panel's input. | no |
 | `mirror` | bool | - | `false` | Flips the picture left to right. | no |
 | `rotate` | bool | - | `false` | Turns the picture 180°. Also swaps the left and right button, which is correct for a physically upside-down panel. | no |
 
-`panelStart`, `panelWiring` and `panelSerpentine` describe how the panel is **wired**;
-`mirror` and `rotate` describe how the picture is **drawn** on it. They compose - the display
-transform is applied first, then the wiring map. Only `rotate` moves the buttons; a
-`panelStart` of `bottomRight` is a statement about the cable, not about the image.
+`panelStart`, `panelWiring` and `panelSerpentine` describe how a **panel** is wired;
+`panelChainReverse` and `panelChainSerpentine` describe how the **panels are chained**;
+`mirror` and `rotate` describe how the picture is **drawn** on the result. They compose - the
+display transform is applied first, then the chain order, then the wiring map inside a panel.
+Only `rotate` moves the buttons; a `panelStart` of `bottomRight` is a statement about the cable,
+not about the image. On a single-panel device the two chain keys cannot change anything.
 
 Wiring is re-applied on the next frame, so you can try a setting and look at the panel. The one
 exception is the total width, which is fixed at boot: a change to `panelWidth × panels` needs
@@ -339,6 +343,8 @@ exception is the total width, which is fixed at boot: a change to `panelWidth ×
 |---|---|
 | Most 32×8 panels | the defaults: `panelWidth` 32, `panels` 1, `topLeft`, `rows`, serpentine on |
 | Four chained 8×8 tiles | `panelWidth` 8, `panels` 4, serpentine off |
+| Four 8×8 tiles, each wired from its right edge | `panelWidth` 8, `panels` 4, `panelStart` `topRight`, `panelChainReverse` true |
+| Every second tile mounted upside down | `panelChainSerpentine` true |
 | A 32×8 panel wired in columns | `panelWiring` `columns` |
 | A 64-pixel-wide panel | `panelWidth` 64 |
 
@@ -347,7 +353,9 @@ curl -X PUT http://<awtrix-ip>/api/v1/system   -H "Content-Type: application/jso
 ```
 
 If the picture comes out scrambled, the wiring keys are what to try: `panelSerpentine` first,
-then `panelStart`, then `panelWiring`. The web UI's **Panel** section shows the resulting size
+then `panelStart`, then `panelWiring`. If those leave each panel correct but the panels in the
+wrong order, or every second panel upside down, reach for `panelChainReverse` and
+`panelChainSerpentine`. The web UI's **Panel** section shows the resulting size
 (`32 × 8 = 256 LEDs`) while you edit.
 
 ## Buttons

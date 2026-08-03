@@ -48,6 +48,7 @@ struct DeviceConfig {
   PanelStart panelStart = PanelStart::TopLeft;
   Wiring panelWiring = Wiring::Rows;
   bool panelSerpentine = true;
+  bool panelChainReverse = false, panelChainSerpentine = false;
   bool mirror = false, rotate = false, swapButtons = false;
   bool dfplayer = false;
   std::string buttonCallback;
@@ -89,6 +90,8 @@ struct DeviceConfig {
     l.panelStart = panelStart;
     l.panelWiring = panelWiring;
     l.panelSerpentine = panelSerpentine;
+    l.panelChainReverse = panelChainReverse;
+    l.panelChainSerpentine = panelChainSerpentine;
     l.mirror = mirror;
     l.rotate180 = rotate;
     return sanitizeMatrixLayout(l);
