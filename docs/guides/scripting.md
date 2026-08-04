@@ -87,6 +87,47 @@ next to your script; fix the line it names and save again. The full story is und
 
 ---
 
+## Everything a script can do, on one screen
+
+The rest of this page explains each of these properly. This is the map: find the
+row that sounds like the app you have in mind, and follow it.
+
+| For | The calls |
+|---|---|
+| [Being an app](#the-lifecycle) | `draw()` `setup()` `loop()` `on_show()` `on_hide()` `on_button()` `should_show()` `duration()` |
+| [Drawing](#panel-and-drawing) | `clear()` `pixel()` `line()` `rect()` `rect_fill()` `circle()` `circle_fill()` `icon()` `width()` `height()` `rgb()` `hsv()` |
+| [Writing text](#panel-and-drawing) | `text()` `text_width()` `text_ink_width()` `font()` |
+| [Text that moves or shades](#styled-and-scrolling-text) | `scroll_text()` `ramp_text()` |
+| [Charts and bars](#charts-and-progress) | `bar_chart()` `line_chart()` `progress()` |
+| [Animated backgrounds](#effects-and-overlays) | `effect()` `overlay()` |
+| [The clock and the calendar](#time) | `hour()` `minute()` `second()` `weekday()` `day()` `month()` `year()` `now_ms()` `epoch_ms()` |
+| [Working with numbers](#numbers) | `num()` `round()` `clamp()` `min()` `max()` |
+| [Remembering across a reboot](#storage) | `store.get()` `store.set()` |
+| [Letting the user change something](#settings-the-user-can-change) | a `# @config` line, then `store.get()` |
+| [Fetching from the internet](#http) | `http.get()` `http.post()` `http.put()` `http.patch()` `http.delete()` |
+| [Picking a value out of a reply](#regular-expressions) | `re.search()` `re.match()` `re.matchall()`, or `json.load()` |
+| [Home automation](#mqtt) | `mqtt.publish()` `mqtt.subscribe()` |
+| [Handing values to another app](#talking-to-other-apps) | `shared.set()` `shared.get()` `shared.age()` `shared.keys()` |
+| [Sharing code between apps](#sharing-code-between-scripts) | a `# @module` file, then `import` |
+| [Interrupting with an alert](#notifications) | `notify()` |
+| [Making a noise](#sound) | `sound.play()` `sound.rtttl()` `sound.stop()` |
+| [What the device measures](#reading-the-sensors) | `sensor.temperature()` `sensor.humidity()` `sensor.pressure()` `sensor.light()` `sensor.battery()` |
+| [What the owner configured](#device-settings) | `settings.get()` `settings.set()` `settings.apply_case()` |
+| [Moving the rotation along](#driving-the-rotation) | `rotation.show()` `rotation.next()` `rotation.previous()` `rotation.pause()` `rotation.resume()` |
+| [Working out what went wrong](#logging) | `log()` |
+
+None of it needs an `import`. Only `json`, `string` and `math` do, and one line at
+the top of the file is the whole ceremony.
+
+Three habits carry most of it: keep what you fetched in a member and let
+[`draw()`](#the-lifecycle) only paint it, ask [`width()`](#panel-and-drawing)
+instead of assuming 32 columns, and put anything the next person might want to
+change in a [`@config`](#settings-the-user-can-change) line rather than in the
+source. A [complete app doing exactly that](#a-real-one-weather) is at the end of
+the page.
+
+---
+
 ## Just enough Berry
 
 You do not need to know Berry to use this page - the examples are meant to be
