@@ -17,7 +17,7 @@
 
 #include "be_constobj.h"
 
-// input-sha256: 72e217f9be196eb74f1b39ed1c8a8fceb1174be465932ec661a7798d315c4b07
+// input-sha256: d1a50f3315577b1883223d7af228cf473fd358cff82bb96849e7706b3f717833
 
 
 /********************************************************************
@@ -2162,6 +2162,7 @@ static const bvalue awtrix_binding_name_anchor[]
   be_nested_str(text),
   be_nested_str(text_ink_width),
   be_nested_str(text_width),
+  be_nested_str(version),
   be_nested_str(weekday),
   be_nested_str(width),
   be_nested_str(year),

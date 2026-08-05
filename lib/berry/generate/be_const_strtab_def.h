@@ -217,7 +217,7 @@ be_define_const_str(main, "main", 3935363592u, 0, 4, NULL);
 be_define_const_str(map, "map", 3751997361u, 0, 3, &be_const_str_value_error);
 be_define_const_str(match, "match", 2116038550u, 0, 5, &be_const_str_store);
 be_define_const_str(matchall, "matchall", 1385990901u, 0, 8, NULL);
-be_define_const_str(max, "max", 3617776409u, 0, 3, NULL);
+be_define_const_str(max, "max", 3617776409u, 0, 3, &be_const_str_version);
 be_define_const_str(member, "member", 719708611u, 0, 6, NULL);
 be_define_const_str(min, "min", 3381609815u, 0, 3, NULL);
 be_define_const_str(minute, "minute", 954666857u, 0, 6, &be_const_str_rotation);
@@ -322,6 +322,7 @@ be_define_const_str(undef, "undef", 1964579665u, 0, 5, NULL);
 be_define_const_str(upper, "upper", 176974407u, 0, 5, NULL);
 be_define_const_str(value_error, "value_error", 773297791u, 0, 11, NULL);
 be_define_const_str(var, "var", 2317739966u, 66, 3, NULL);
+be_define_const_str(version, "version", 1181855383u, 0, 7, NULL);
 be_define_const_str(weekday, "weekday", 79360245u, 0, 7, NULL);
 be_define_const_str(while, "while", 231090382u, 55, 5, NULL);
 be_define_const_str(width, "width", 2508680735u, 0, 5, NULL);
@@ -489,6 +490,6 @@ static const bstring* const m_string_table[] = {
 
 static const struct bconststrtab m_const_string_table = {
     .size = 154,
-    .count = 328,
+    .count = 329,
     .table = m_string_table
 };

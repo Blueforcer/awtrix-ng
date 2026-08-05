@@ -322,6 +322,7 @@ extern const bcstring be_const_str_undef;
 extern const bcstring be_const_str_upper;
 extern const bcstring be_const_str_value_error;
 extern const bcstring be_const_str_var;
+extern const bcstring be_const_str_version;
 extern const bcstring be_const_str_weekday;
 extern const bcstring be_const_str_while;
 extern const bcstring be_const_str_width;
