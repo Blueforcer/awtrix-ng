@@ -48,7 +48,8 @@ class ScriptHost {
   void remove(const std::string& name);
   bool isModule(const std::string& name) const { return modules_.count(name) != 0; }
 
-  void tick(const RenderCtx& ctx, const std::string& currentAppId);
+  void tick(const RenderCtx& ctx, const std::string& currentAppId,
+            const std::string& incomingAppId = std::string());
   void staggerFirstLoops(int64_t stepMs);
   void handleButton(const std::string& currentAppId, const std::string& btn);
   bool wantsShow(const std::string& name);
@@ -125,7 +126,8 @@ class ScriptHost {
   void drainHttp(const RenderCtx* ctx);
   void sweepHttp(const RenderCtx* ctx);
   void drainMqtt(const RenderCtx* ctx);
-  void updateVisibility(const std::string& currentAppId, const RenderCtx* ctx);
+  void updateVisibility(const std::string& currentAppId, const std::string& incomingAppId,
+                        const RenderCtx* ctx);
   void forgetScript(const std::string& name);
   // Clock and sensor readings from the last tick, for VM entries that happen outside a
   // frame (http and mqtt callbacks, loop, install). Null until the first tick().
@@ -164,7 +166,6 @@ class ScriptHost {
   bool refusalTransient_ = false;
   bool refusalInvalid_ = false;
   int64_t lastLoopMs_ = 0;
-  std::string lastVisible_;
   RenderCtx lastCtx_;
   bool haveCtx_ = false;
 };

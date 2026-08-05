@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "core/RuntimeState.h"
 #include "core/apps/AppRegistry.h"
 #include "core/apps/IApp.h"
 #include "core/render/Canvas.h"
@@ -996,6 +997,31 @@ static void test_store_write_from_should_show_reaches_the_sink() {
   TEST_ASSERT_TRUE(sink.writes[0].find("\"asked\"") != std::string::npos);
 }
 
+// Only one store flush is pending at a time, so the app being shown must not be able to
+// overwrite what the app being hidden wrote in the same pass.
+static void test_both_sides_of_a_switch_reach_the_sink() {
+  FakeSink sink;
+  g_svc.storeSink = &sink;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.setLimit(6);
+  host.set("A", app("def draw() end\ndef on_hide() store.set('gone', 1) end"));
+  host.set("B", app("def draw() end\ndef on_show() store.set('here', 1) end"));
+
+  RenderCtx ctx;
+  host.tick(ctx, "A");
+  sink.writes.clear();
+  host.tick(ctx, "B");
+
+  bool gone = false, here = false;
+  for (const std::string& w : sink.writes) {
+    if (w.find("\"gone\"") != std::string::npos) gone = true;
+    if (w.find("\"here\"") != std::string::npos) here = true;
+  }
+  TEST_ASSERT_TRUE_MESSAGE(gone, "the hidden app's store write was lost");
+  TEST_ASSERT_TRUE_MESSAGE(here, "the shown app's store write was lost");
+}
+
 static void test_store_writes_routed_to_sink() {
   FakeSink sink;
   g_svc.storeSink = &sink;
@@ -1768,6 +1794,68 @@ static void test_changing_a_module_reloads_its_dependents() {
   TEST_ASSERT_EQUAL_STRING("two", check(reg, "clock").c_str());
 }
 
+static const FontGlyph kMeasureGlyphs[] = {{0, 3, 3, 4, 0, 0}};
+static const uint8_t kMeasureBitmap[] = {0xFF, 0x80};
+static const GfxFont kMeasureFont = {kMeasureBitmap, kMeasureGlyphs, 'A', 'A', 8};
+
+static std::string measuredByModule(script::ScriptServices& svc, AppRegistry& reg) {
+  script::ScriptHost host(reg, svc, nullptr, nullptr);
+  host.setLimit(6);
+  host.set("fmt", "# @module\nvar m = module('fmt')\nm.w = text_width('AAAA')\nreturn m");
+  host.set("clock", "import fmt\n" + app("def draw() end\ndef check() return str(fmt.w) end"));
+  return check(reg, "clock");
+}
+
+static void test_a_script_can_read_the_firmware_version() {
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.setLimit(6);
+  host.set("V", app("def draw() end\ndef check() return version() end"));
+  const std::string v = check(reg, "V");
+  TEST_ASSERT_FALSE(v.empty());
+  TEST_ASSERT_TRUE(v.find('.') != std::string::npos);
+}
+
+static void test_a_module_measures_text_while_it_loads() {
+  g_svc.fonts[0] = &kMeasureFont;
+  g_svc.fonts[1] = &kMeasureFont;
+  AppRegistry reg;
+  TEST_ASSERT_EQUAL_STRING("16", measuredByModule(g_svc, reg).c_str());
+}
+
+static void test_measuring_without_a_font_reports_unavailable() {
+  AppRegistry reg;
+  TEST_ASSERT_EQUAL_STRING("-1", measuredByModule(g_svc, reg).c_str());
+}
+
+static void test_the_panel_size_is_readable_outside_a_frame() {
+  static Canvas panel(32, 8);
+  g_svc.panel = &panel;
+
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.setLimit(6);
+  host.set("fmt", "# @module\nvar m = module('fmt')\nm.w = width()\nm.h = height()\nreturn m");
+  host.set("clock",
+           "import fmt\n" + app("def draw() end\ndef check() return str(fmt.w) + 'x' + str(fmt.h) end"));
+  TEST_ASSERT_EQUAL_STRING("32x8", check(reg, "clock").c_str());
+}
+
+static void test_sensors_are_readable_while_a_module_loads() {
+  static RuntimeState rt;
+  rt.hasTemperature = true;
+  rt.temperatureC = 21.5f;
+  g_svc.runtime = [] { return &rt; };
+
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.setLimit(6);
+  host.set("fmt", "# @module\nvar m = module('fmt')\nm.t = sensor.temperature()\nreturn m");
+  host.set("clock",
+           "import fmt\n" + app("def draw() end\ndef check() return str(int(fmt.t)) end"));
+  TEST_ASSERT_EQUAL_STRING("21", check(reg, "clock").c_str());
+}
+
 static void test_removing_a_module_breaks_its_dependents() {
   AppRegistry reg;
   FakeSources files;
@@ -2072,6 +2160,7 @@ int main(int, char**) {
   RUN_TEST(test_duration_reevaluates_on_each_show);
   RUN_TEST(test_duration_without_the_hook_or_non_positive_is_global);
   RUN_TEST(test_store_write_from_should_show_reaches_the_sink);
+  RUN_TEST(test_both_sides_of_a_switch_reach_the_sink);
   RUN_TEST(test_store_writes_routed_to_sink);
   RUN_TEST(test_store_write_from_draw_is_routed_on_next_tick);
   RUN_TEST(test_store_write_is_attributed_to_the_writing_script);
@@ -2124,6 +2213,11 @@ int main(int, char**) {
   RUN_TEST(test_two_modules_cannot_claim_the_same_import_name);
   RUN_TEST(test_module_without_a_return_latches_an_error);
   RUN_TEST(test_changing_a_module_reloads_its_dependents);
+  RUN_TEST(test_a_script_can_read_the_firmware_version);
+  RUN_TEST(test_a_module_measures_text_while_it_loads);
+  RUN_TEST(test_measuring_without_a_font_reports_unavailable);
+  RUN_TEST(test_the_panel_size_is_readable_outside_a_frame);
+  RUN_TEST(test_sensors_are_readable_while_a_module_loads);
   RUN_TEST(test_removing_a_module_breaks_its_dependents);
   RUN_TEST(test_a_module_can_import_another_module_installed_later);
   RUN_TEST(test_turning_an_app_into_a_module_takes_it_out_of_the_registry);

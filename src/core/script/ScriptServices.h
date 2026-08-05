@@ -5,11 +5,13 @@
 #include <functional>
 #include <string>
 
+#include "core/render/Font.h"
 #include "core/script/HttpHeaders.h"
 
 namespace awtrix {
 class Canvas;
 class EffectRegistry;
+struct RuntimeState;
 struct Settings;
 }
 
@@ -136,6 +138,8 @@ struct ScriptServices {
   SharedState* shared = nullptr;
   const EffectRegistry* effects = nullptr;
   const EffectRegistry* overlays = nullptr;
+  const GfxFont* fonts[kFontCount] = {nullptr, nullptr};
+  const Canvas* panel = nullptr;
   std::function<int64_t()> monotonicMs;
   std::function<void(const std::string&)> log;
   std::function<std::size_t()> freeHeap;
@@ -143,6 +147,7 @@ struct ScriptServices {
   std::function<void(const std::string&)> logDebug;
   std::function<bool(const std::string& json)> notify;
   std::function<const Settings*()> settings;
+  std::function<const RuntimeState*()> runtime;
   std::function<bool(const std::string& json)> setSettings;
   std::function<bool(SoundAction, const std::string&)> sound;
   std::function<void()> rotateNext;

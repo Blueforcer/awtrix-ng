@@ -32,6 +32,9 @@ class AppHost {
   const std::string& idAt(int index) const {
     return (index >= 0 && index < static_cast<int>(apps_.size())) ? apps_[index] : currentId();
   }
+  // The page sliding in, which renders for the whole transition while currentId() still names
+  // the one sliding out. Empty unless a transition is running.
+  const std::string& incomingId() const;
 
   void tick(int64_t nowMs, long appDurationMs, long transitionDurationMs, bool autoTransition);
 

@@ -102,6 +102,7 @@ class CoreEngine : public IAppService, public INotifyService, public IRadioStati
     return std::find(disabled_.begin(), disabled_.end(), name) == disabled_.end();
   }
   const std::string& currentAppId() const { return appHost_.currentId(); }
+  const std::string& incomingAppId() const { return appHost_.incomingId(); }
   bool hasNotification() const { return notifs_.hasCurrent(); }
   const AppSpec* pushedApp(const std::string& name) const;
   bool isScriptApp(const std::string& name) const {

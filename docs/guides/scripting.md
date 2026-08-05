@@ -115,6 +115,7 @@ row that sounds like the app you have in mind, and follow it.
 | [What the owner configured](#device-settings) | `settings.get()` `settings.set()` `settings.apply_case()` |
 | [Moving the rotation along](#driving-the-rotation) | `rotation.show()` `rotation.next()` `rotation.previous()` `rotation.pause()` `rotation.resume()` |
 | [Working out what went wrong](#logging) | `log()` |
+| [Which firmware is running](#which-firmware-is-running) | `version()` |
 
 None of it needs an `import`. Only `json`, `string` and `math` do, and one line at
 the top of the file is the whole ceremony.
@@ -236,7 +237,9 @@ The hooks are **methods on your class**. Only `draw()` is required; define the o
 
 After a reboot each app's first `loop()` starts a couple of seconds after the previous app's, so a device full of pollers does not fire every first fetch in the same second.
 
-`draw()` is the only place with a canvas. The drawing functions still exist everywhere else - they simply do nothing, so calling `pixel()` from `loop()` is harmless and invisible rather than an error.
+`draw()` is the only place with a canvas. The drawing functions still exist everywhere else - they simply do nothing, so calling `pixel()` from `loop()` is harmless and invisible rather than an error. Asking questions is fine anywhere: `width()`, `height()` and the text measurements answer the same in every hook.
+
+`on_show()` runs before the first `draw()` of that appearance, so it is the place to reset anything that should start over each time your app comes round - a scroll position, an animation step, a counter.
 
 State lives in **instance members** (`self.x`), declared with `var` at the top of the class. They persist between calls:
 
@@ -591,7 +594,7 @@ end
 
 The clock is attached to every hook: `draw()`, `loop()`, `on_show()`, `on_hide()`, `on_button()`, `should_show()` and every HTTP or MQTT callback all read the same wall-clock time.
 
-**One place has no clock: `init()` and `setup()` while AWTRIX is starting up.** Your app is loaded before the device has drawn its first frame, so every call in the table above answers `-1` there - not a wrong time, an impossible one. It costs nothing as long as you do not build something from it: give members their starting values in `init()` and read the clock in `loop()` or `draw()`, where it is always right. If `setup()` genuinely needs the date, check first:
+**One place has no clock: `init()` and `setup()` while AWTRIX is starting up.** Your app is loaded before the device has fetched the time, so every call in the table above answers `-1` there - not a wrong time, an impossible one. Only the clock is missing: `width()`, `height()`, `text_width()` and `text_ink_width()` all answer properly there, so measuring text and sizing to the panel in `init()` is safe. It costs nothing as long as you do not build something from the clock: give members their starting values in `init()` and read the time in `loop()` or `draw()`, where it is always right. If `setup()` genuinely needs the date, check first:
 
 ```berry
   def setup()
@@ -1384,6 +1387,24 @@ log("fetched " + str(n) + " rows")
 ```
 
 Goes to the AWTRIX log, tagged `[script:<name>]`, and shows up in the web UI console. It accepts any value, not just strings.
+
+### Which firmware is running
+
+```berry
+log("running on " + version())        # e.g. "1.0.14"
+```
+
+`version()` is the firmware version as a string, the same one the web UI shows. Use it when a script wants to say which build it ran on, or to skip something that only newer firmware can do:
+
+```berry
+  def setup()
+    if version() >= "1.0.14"
+      # ...
+    end
+  end
+```
+
+Berry compares strings character by character, so this only reads correctly while the parts stay one digit. Comparing for equality against a known release is the safer test.
 
 ---
 

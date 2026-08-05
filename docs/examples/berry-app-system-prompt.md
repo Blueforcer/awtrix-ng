@@ -407,11 +407,18 @@ hand-drawn glyph always works, needs nothing installed, and costs no memory.
 | `month()` | `1`–`12` |
 | `year()` | e.g. `2026` |
 | `now_ms()` | milliseconds since boot |
+| `version()` | firmware version as a string, e.g. `"1.0.14"` |
 | `epoch_ms()` | milliseconds since 1970-01-01 UTC, `-1` before the time is known |
 
 All eight wall-clock calls return **`-1`** in a `setup()` that runs at boot - the
-device reinstalls scripts before it has read the time. The measuring calls return
-`-1` there too. Guard with `if hour() >= 0` if `setup()` needs the clock.
+device reinstalls scripts before it has read the time. Guard with
+`if hour() >= 0` if `setup()` needs the clock, or do the work in `loop()`, which
+always runs with the time available.
+
+Everything that does not depend on the clock is ready before the first frame:
+`width()`, `height()`, `text_width()`, `text_ink_width()` and the `sensor.*`
+readings all answer correctly in `init()`, `setup()`, `on_show()` and
+`duration()`. Measuring text and sizing to the panel in a constructor is safe.
 
 `now_ms()` counts milliseconds from boot and restarts at 0 on every reboot. It is
 the base for animation: `(now_ms() % 2000) / 2000.0` is a 0→1 sweep every two

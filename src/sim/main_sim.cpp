@@ -375,6 +375,10 @@ int main(int argc, char** argv) {
            DispatchResult::Ok;
   };
   g_scriptSvc.settings = [] { return &g_engine->state().settings(); };
+  g_scriptSvc.runtime = [] { return &g_engine->state().runtime(); };
+  g_scriptSvc.fonts[0] = &awtrixFont(FontId::Small);
+  g_scriptSvc.fonts[1] = &awtrixFont(FontId::Large);
+  g_scriptSvc.panel = g_canvas;
   g_scriptSvc.setSettings = [](const std::string& json) {
     Command c(CommandType::SetSettings);
     c.payload = json;
@@ -498,10 +502,10 @@ int main(int argc, char** argv) {
       sctx.settings = &g_engine->state().settings();
       sctx.runtime = &g_engine->state().runtime();
       sctx.font = &awtrixFont(FontId::Small);
-    sctx.fonts[0] = &awtrixFont(FontId::Small);
-    sctx.fonts[1] = &awtrixFont(FontId::Large);
+      sctx.fonts[0] = &awtrixFont(FontId::Small);
+      sctx.fonts[1] = &awtrixFont(FontId::Large);
       g_pageClock.fill(sctx, now);
-      if (g_scripts) g_scripts->tick(sctx, g_engine->currentAppId());
+      if (g_scripts) g_scripts->tick(sctx, g_engine->currentAppId(), g_engine->incomingAppId());
     }
     g_scriptStore.tick(now);
 

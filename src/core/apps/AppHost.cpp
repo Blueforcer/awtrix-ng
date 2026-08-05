@@ -48,6 +48,12 @@ const std::string& AppHost::currentId() const {
   return kEmpty;
 }
 
+const std::string& AppHost::incomingId() const {
+  if (phase_ != AppPhase::InTransition) return kEmpty;
+  if (target_ < 0 || target_ >= static_cast<int>(apps_.size())) return kEmpty;
+  return apps_[target_];
+}
+
 // Next index in direction dir that the gate lets through, or -1 when nothing else can be shown.
 int AppHost::pick(int from, int dir) const {
   const int n = static_cast<int>(apps_.size());

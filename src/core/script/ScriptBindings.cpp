@@ -9,6 +9,7 @@
 
 #include <vector>
 
+#include "AppConfig.h"
 #include "berry.h"
 #include "core/Settings.h"
 #include "core/StrCase.h"
@@ -239,27 +240,41 @@ bool canDraw(bvm* vm, int argc) { return g_ctx.canvas != nullptr && be_top(vm) >
 
 const GfxFont* activeFont() {
   if (g_ctx.font) return g_ctx.font;
-  return g_ctx.rctx ? g_ctx.rctx->font : nullptr;
+  if (g_ctx.rctx && g_ctx.rctx->font) return g_ctx.rctx->font;
+  return g_svc ? g_svc->fonts[0] : nullptr;
+}
+
+const GfxFont* fontSlot(int slot) {
+  if (slot < 0 || slot >= kFontCount) return nullptr;
+  if (g_ctx.rctx && g_ctx.rctx->fonts[slot]) return g_ctx.rctx->fonts[slot];
+  return g_svc ? g_svc->fonts[slot] : nullptr;
 }
 
 // Selects the font for the rest of this VM entry only -- BindingScope resets it, so a draw()
 // that switches to "large" starts the next frame back on the rotation's font.
 int b_font(bvm* vm) {
-  if (!g_ctx.rctx || be_top(vm) < 1 || !be_isstring(vm, 1)) be_return_nil(vm);
+  if (be_top(vm) < 1 || !be_isstring(vm, 1)) be_return_nil(vm);
   const std::string name = be_tostring(vm, 1);
   const int slot = name == "large" ? 1 : (name == "small" ? 0 : -1);
-  if (slot >= 0 && g_ctx.rctx->fonts[slot]) g_ctx.font = g_ctx.rctx->fonts[slot];
+  if (const GfxFont* f = fontSlot(slot)) g_ctx.font = f;
   be_return_nil(vm);
 }
 
 
+const Canvas* panel() {
+  if (g_ctx.canvas) return g_ctx.canvas;
+  return g_svc ? g_svc->panel : nullptr;
+}
+
 int b_width(bvm* vm) {
-  be_pushint(vm, g_ctx.canvas ? g_ctx.canvas->width() : 0);
+  const Canvas* c = panel();
+  be_pushint(vm, c ? c->width() : 0);
   be_return(vm);
 }
 
 int b_height(bvm* vm) {
-  be_pushint(vm, g_ctx.canvas ? g_ctx.canvas->height() : 0);
+  const Canvas* c = panel();
+  be_pushint(vm, c ? c->height() : 0);
   be_return(vm);
 }
 
@@ -519,7 +534,8 @@ int b_overlay(bvm* vm) { return b_render_from(vm, g_svc ? g_svc->overlays : null
 
 
 const RuntimeState* runtime() {
-  return (g_ctx.rctx && g_ctx.rctx->runtime) ? g_ctx.rctx->runtime : nullptr;
+  if (g_ctx.rctx && g_ctx.rctx->runtime) return g_ctx.rctx->runtime;
+  return (g_svc && g_svc->runtime) ? g_svc->runtime() : nullptr;
 }
 
 void pushSensor(bvm* vm, bool present, float value) {
@@ -607,6 +623,11 @@ int b_year(bvm* vm) {
 int b_now_ms(bvm* vm) {
   int64_t ms = (g_svc && g_svc->monotonicMs) ? g_svc->monotonicMs() : 0;
   be_pushint(vm, static_cast<bint>(ms));
+  be_return(vm);
+}
+
+int b_version(bvm* vm) {
+  be_pushstring(vm, AWTRIX_NG_VERSION);
   be_return(vm);
 }
 
@@ -997,6 +1018,7 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "year", b_year);                    // year()
   be_regfunc(b, "now_ms", b_now_ms);                // now_ms()
 
+  be_regfunc(b, "version", b_version);              // version()
   be_regfunc(b, "log", b_log);                      // log(value)
 
   // Everything below is raw plumbing the prelude wraps into the documented modules. The

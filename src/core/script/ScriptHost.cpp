@@ -249,7 +249,6 @@ bool ScriptHost::set(const std::string& name, const std::string& source,
     if (wasApp) {
       registry_.remove(name);
       apps_.erase(name);
-      if (name == lastVisible_) lastVisible_.clear();
       if (onRemoved_) onRemoved_(name);
     }
     return installModule(name, meta, source, *store);
@@ -384,7 +383,6 @@ void ScriptHost::remove(const std::string& name) {
   apps_.erase(it);
   meta_.erase(name);
   imports_.erase(name);
-  if (name == lastVisible_) lastVisible_.clear();
   vm_.gcCollect();
   if (heapWarned_ && vm_.heapBytes() <= heap::info().budgetBytes) heapWarned_ = false;
   if (onRemoved_) onRemoved_(name);
@@ -478,22 +476,17 @@ void ScriptHost::drainMqtt(const RenderCtx* ctx) {
   }
 }
 
-void ScriptHost::updateVisibility(const std::string& currentAppId, const RenderCtx* ctx) {
-  if (currentAppId == lastVisible_) return;
-  auto prev = apps_.find(lastVisible_);
-  if (prev != apps_.end()) {
-    prev->second->notifyVisible(false, ctx);
+void ScriptHost::updateVisibility(const std::string& currentAppId,
+                                  const std::string& incomingAppId, const RenderCtx* ctx) {
+  for (auto& kv : apps_) {
+    const bool shown = kv.first == currentAppId || kv.first == incomingAppId;
+    kv.second->notifyVisible(shown, ctx);
     drainStoreFlush();
   }
-  auto next = apps_.find(currentAppId);
-  if (next != apps_.end()) {
-    next->second->notifyVisible(true, ctx);
-    drainStoreFlush();
-  }
-  lastVisible_ = currentAppId;
 }
 
-void ScriptHost::tick(const RenderCtx& ctx, const std::string& currentAppId) {
+void ScriptHost::tick(const RenderCtx& ctx, const std::string& currentAppId,
+                      const std::string& incomingAppId) {
   activate();
   lastCtx_ = ctx;
   haveCtx_ = true;
@@ -517,7 +510,7 @@ void ScriptHost::tick(const RenderCtx& ctx, const std::string& currentAppId) {
     reportFrameTimes();
   }
 
-  updateVisibility(currentAppId, &ctx);
+  updateVisibility(currentAppId, incomingAppId, &ctx);
 }
 
 void ScriptHost::staggerFirstLoops(int64_t stepMs) {
