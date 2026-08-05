@@ -1182,34 +1182,18 @@ const TZ_TABLE=[
 ['WIT-9','Asia/Jayapura'],
 ['WITA-8','Asia/Makassar']];
 /* TZ-DATA-END */
-const TZRULE=new Map(),TZFIRST=new Map(),TZKIN=new Map();
+const TZRULE=new Map(),TZFIRST=new Map();
 TZ_TABLE.forEach(([rule,zones])=>{
   const list=zones.split(' ');
   TZFIRST.set(rule,list[0]);
-  list.forEach(n=>{TZRULE.set(n,rule);TZKIN.set(n,list);});
+  list.forEach(n=>TZRULE.set(n,rule));
 });
 const TZNAMES=[...TZRULE.keys()].sort();
-const TZFMT=new Map(),TZOK=new Map();
-function tzKnown(zone){
-  if(TZOK.has(zone))return TZOK.get(zone);
-  let ok=null;
-  for(const n of [zone,...(TZKIN.get(zone)||[])]){
-    try{new Intl.DateTimeFormat('en',{timeZone:n});ok=n;break;}catch(e){}
-  }
-  TZOK.set(zone,ok);return ok;
-}
-function tzRuleOffset(zone){
-  const m=/^(?:<[^>]+>|[A-Za-z]+)([+-]?\d+)(?::(\d+))?/.exec(TZRULE.get(zone)||'');
-  return m?-(Number(m[1])<0?-1:1)*(Math.abs(Number(m[1]))*60+Number(m[2]||0)):0;
-}
+const TZFMT=new Map();
 function tzOffset(zone,at){
   let f=TZFMT.get(zone);
-  if(!f){
-    const known=tzKnown(zone);
-    if(!known)return tzRuleOffset(zone);
-    TZFMT.set(zone,f=new Intl.DateTimeFormat('en',{timeZone:known,timeZoneName:'longOffset'}));
-  }
-  const s=f.formatToParts(at).find(p=>p.type==='timeZoneName')?.value||'';
+  if(!f)TZFMT.set(zone,f=new Intl.DateTimeFormat('en',{timeZone:zone,timeZoneName:'longOffset'}));
+  const s=f.formatToParts(at).find(p=>p.type==='timeZoneName').value;
   const m=/GMT([+-])(\d+)(?::(\d+))?/.exec(s);
   return m?(m[1]==='-'?-1:1)*(Number(m[2])*60+Number(m[3]||0)):0;
 }
@@ -1567,9 +1551,8 @@ const WIDGETS={
       el('optgroup',{label:a},ns.map(n=>el('option',{value:n},label(n))))));
     sel.value=cur;
     function preview(){
-      const s=tzState(cur),loc=LANG==='de'?'de-DE':'en-GB',z=tzKnown(cur);
-      const at=new Intl.DateTimeFormat(loc,{timeZone:z||'UTC',dateStyle:'medium',timeStyle:'short'})
-        .format(z?new Date():new Date(Date.now()+s.off*6e4));
+      const s=tzState(cur),loc=LANG==='de'?'de-DE':'en-GB';
+      const at=new Intl.DateTimeFormat(loc,{timeZone:cur,dateStyle:'medium',timeStyle:'short'}).format(new Date());
       const dst=!s.changes?t('tzNoDst'):s.dst?t('tzDstOn'):t('tzDstOff');
       const nxt=s.changes&&s.next?' · '+t('tzNext')+' '+new Intl.DateTimeFormat(loc,{dateStyle:'medium'}).format(s.next):'';
       prev.replaceChildren(at+' · '+tzOffsetStr(s.off)+' · '+dst+nxt);

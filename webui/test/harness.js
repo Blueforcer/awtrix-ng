@@ -9,9 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
-// WEBUI_HTML points the suite at another copy of the page - an older revision,
-// say, to prove a regression test really catches the bug it was written for.
-const HTML_PATH = process.env.WEBUI_HTML || path.join(__dirname, '..', 'index.html');
+const HTML_PATH = path.join(__dirname, '..', 'index.html');
 
 const loadHtml = () => fs.readFileSync(HTML_PATH, 'utf8');
 
@@ -24,9 +22,8 @@ function makeVirtualConsole() {
   return vc;
 }
 
-// Shared beforeParse: give the page the globals jsdom omits. `extra` runs last,
-// so a test can bend a global (an older ICU, say) before the page's script sees it.
-function installGlobals(fetchImpl, extra) {
+// Shared beforeParse: give the page the globals jsdom omits.
+function installGlobals(fetchImpl) {
   return window => {
     window.fetch = fetchImpl(window);
     window.TextEncoder = TextEncoder;
@@ -37,7 +34,6 @@ function installGlobals(fetchImpl, extra) {
     // jsdom has no layout, so it ships no ResizeObserver. Without a stub the UI
     // throws on construction and every run prints a jsdomError that is not one.
     window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-    if (extra) extra(window);
   };
 }
 
@@ -53,9 +49,6 @@ function makeStore() {
     // the installed scripts; `order` holds the last PUT /api/v1/apps/order body.
     apps: null,
     order: null,
-    // Extra keys for GET /api/v1/system. The device answers with its whole
-    // config; a page only renders the fields whose keys are actually in it.
-    system: null,
     // name -> {fields, warnings}, what GET /api/v1/apps/{name}/config answers.
     // `configPatch` holds the last PATCH body so a test can see what was sent.
     configs: {},
@@ -80,7 +73,7 @@ function mockFetch(store, netlog) {
 
     if (p === '/api/v1/device') return resp({ ipAddress: '192.168.1.5', firmware: 'test' });
     if (p === '/api/v1/capabilities') return resp({ transitions: [] });
-    if (p === '/api/v1/system') return resp({ hostname: 'awtrix-ng', ...(store.system || {}) });
+    if (p === '/api/v1/system') return resp({ hostname: 'awtrix-ng' });
     if (p === '/api/v1/scripts/shared') return resp([]);
     if (p.startsWith('/api/v1/logs')) return resp({ lines: [], next: 0 });
     if (p === '/api/v1/apps') return resp(store.list());
@@ -123,15 +116,15 @@ function mockFetch(store, netlog) {
   };
 }
 
-async function boot(opts = {}) {
+async function boot() {
   const store = makeStore();
   const netlog = [];
   const dom = new JSDOM(loadHtml(), {
     runScripts: 'dangerously',
     pretendToBeVisual: true,
-    url: opts.url || 'http://localhost/',
+    url: 'http://localhost/',
     virtualConsole: makeVirtualConsole(),
-    beforeParse: installGlobals(() => mockFetch(store, netlog), opts.beforeParse),
+    beforeParse: installGlobals(() => mockFetch(store, netlog)),
   });
   await flush(60); // boot render() + device/capabilities/system fetches
   return { dom, window: dom.window, store, netlog };
