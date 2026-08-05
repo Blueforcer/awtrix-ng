@@ -15,7 +15,7 @@ or skip the middleman entirely and **run your app on the device itself.**
 [![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-lightgrey)](LICENSE.md)
 
 📖 **[Documentation](https://blueforcer.github.io/awtrix-ng/)** &nbsp;·&nbsp;
-🚀 [Quick start](#-quick-start) &nbsp;·&nbsp;
+🚀 [Discord](https://discord.gg/5pbmeCrs3a) &nbsp;·&nbsp;
 ⚡ [On-device scripting](#-run-your-app-on-the-device) &nbsp;·&nbsp;
 🔌 [Integrations](#-control-it-from-anything)
 
