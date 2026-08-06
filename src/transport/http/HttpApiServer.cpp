@@ -658,6 +658,22 @@ bool HttpApiServer::serveWebUi(const Request& req) {
   return true;
 }
 
+static String assetEtag(File& f) {
+  uint32_t h = 2166136261u;
+  uint8_t buf[256];
+  for (;;) {
+    const size_t n = f.read(buf, sizeof(buf));
+    if (n == 0) break;
+    for (size_t i = 0; i < n; ++i) {
+      h ^= buf[i];
+      h *= 16777619u;
+    }
+  }
+  f.seek(0);
+  return String("\"") + String(static_cast<unsigned long>(f.size()), 16) + "-" +
+         String(static_cast<unsigned long>(h), 16) + "\"";
+}
+
 bool HttpApiServer::serveAsset(const Request& req) {
   if (!req.get) return false;
   if (!assets::isServable(req.path) && (apMode_ || !assets::isBackupReadable(req.path)))
@@ -668,7 +684,14 @@ bool HttpApiServer::serveAsset(const Request& req) {
     sendError(404, "notFound", "file not found");
     return true;
   }
-  server_->sendHeader("Cache-Control", "max-age=3600");
+  const String etag = assetEtag(f);
+  server_->sendHeader("ETag", etag);
+  server_->sendHeader("Cache-Control", "no-cache");
+  if (server_->header("If-None-Match") == etag) {
+    f.close();
+    server_->send(304, "text/plain", "");
+    return true;
+  }
   server_->streamFile(f, mimeFor(req.path));
   f.close();
   return true;

@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <functional>
@@ -52,6 +53,17 @@ const char* mimeFor(const std::string& path) {
 
 bool isServableAsset(const std::string& path) {
   return assets::isServable(path);
+}
+
+std::string assetEtag(const std::string& bytes) {
+  uint32_t h = 2166136261u;
+  for (const char c : bytes) {
+    h ^= static_cast<uint8_t>(c);
+    h *= 16777619u;
+  }
+  char tag[40];
+  std::snprintf(tag, sizeof(tag), "\"%zx-%lx\"", bytes.size(), static_cast<unsigned long>(h));
+  return tag;
 }
 
 // Buffers each backup entry in memory and only writes it once complete, creating the parent
@@ -515,7 +527,13 @@ void SimHttpServer::Impl::route(const httplib::Request& req, httplib::Response& 
       sendError(res, 404, "notFound", "file not found");
       return;
     }
-    res.set_header("Cache-Control", "max-age=3600");
+    const std::string etag = assetEtag(bytes);
+    res.set_header("ETag", etag);
+    res.set_header("Cache-Control", "no-cache");
+    if (req.get_header_value("If-None-Match") == etag) {
+      res.status = 304;
+      return;
+    }
     res.set_content(bytes, mimeFor(path));
     return;
   }

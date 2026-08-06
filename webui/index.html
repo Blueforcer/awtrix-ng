@@ -762,7 +762,7 @@ const I18N={en:{
   bkCaptiveHint:'The Wi‑Fi sign‑in popup can’t upload files. To restore, open this page in a browser:',
   bkRestored:'Backup restored',bkWarnings:'warning(s)',bkRebootQ:'Restore applied. Reboot now to use it?',
   storage:'Storage',of:'of',free:'free',
-  iconshelp:'8×8 to 32×8 PNG, JPG or animated GIF. PNG and JPG are converted to GIF on upload. Drag & drop files here or click to choose.',
+  iconshelp:'8×8 to 32×8 PNG, JPG or animated GIF. Drag & drop files here or click to choose.',
   editorTab:'Icon Editor',
   edLoading:'Loading the editor…',
   edUnreachable:'The editor did not load.',
@@ -909,7 +909,7 @@ const I18N={en:{
   bkCaptiveHint:'Der WLAN-Anmelde-Dialog kann keine Dateien hochladen. Zum Wiederherstellen diese Seite im Browser öffnen:',
   bkRestored:'Sicherung wiederhergestellt',bkWarnings:'Warnung(en)',bkRebootQ:'Wiederhergestellt. Jetzt neu starten?',
   storage:'Speicher',of:'von',free:'frei',
-  iconshelp:'8×8 bis 32×8 PNG, JPG oder animiertes GIF. PNG und JPG werden beim Hochladen in GIF umgewandelt. Dateien hierher ziehen oder klicken zum Auswählen.',
+  iconshelp:'8×8 bis 32×8 PNG, JPG oder animiertes GIF. Dateien hierher ziehen oder klicken zum Auswählen.',
   editorTab:'Icon-Editor',
   edLoading:'Editor wird geladen…',
   edUnreachable:'Der Editor wurde nicht geladen.',
@@ -3225,19 +3225,22 @@ function uploadZone(dir,accept,hint,onDone,asGif){
   }
   return el('div',null,zone,fileIn);
 }
+let assetRev=0;
 async function uploadFile(file,dir,name,onProgress){
   const x=await xhrPost('/api/v1/files?dir='+encodeURIComponent(dir),'file',file,name,onProgress);
   if(x.status>=300)throw new Error('HTTP '+x.status);
+  assetRev++;
 }
 async function delFile(path){
   await api('/api/v1/files?path='+encodeURIComponent(path),{method:'DELETE'});
+  assetRev++;
 }
 function viewIcons(view){
   const iconsGrid=el('div',{class:'grid-icons'});
   const storSlot=el('div',{class:'wide'});
   async function reload(){
     try{
-      const{data}=await api('/api/v1/files?dir='+encodeURIComponent('/ICONS'));
+      const{data}=await api('/api/v1/files?dir='+encodeURIComponent('/ICONS'),{cache:'no-store'});
       const files=(data.files||[]).sort((a,b)=>a.name.localeCompare(b.name));
       storSlot.replaceChildren(storageCard(data));
       iconsGrid.replaceChildren(...files.map(f=>iconTile(f)));
@@ -3246,7 +3249,7 @@ function viewIcons(view){
   }
   function iconTile(f){
     const base=f.name.replace(/\.[^.]+$/,'');
-    const img=el('img',{src:'/ICONS/'+encodeURIComponent(f.name)+'?v='+f.size,alt:f.name,loading:'lazy'});
+    const img=el('img',{src:'/ICONS/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev,alt:f.name,loading:'lazy'});
     const pv=el('button',{title:t('preview'),'aria-label':t('preview')},icon('eye'));
     pv.addEventListener('click',async()=>{
       try{await post('/api/v1/notifications',{icon:base,text:' '+base,durationMs:3000});toast(t('shown'));}
@@ -3336,12 +3339,12 @@ function blobToB64(blob){return new Promise((res,rej)=>{
 });}
 function iconIdFrom(name){return(String(name||'').replace(/\.[^.]+$/,'').replace(/[^A-Za-z0-9_-]/g,'_').slice(0,32))||'icon';}
 async function piskelSendList(){
-  try{const{data}=await api('/api/v1/files?dir='+encodeURIComponent('/ICONS'));
+  try{const{data}=await api('/api/v1/files?dir='+encodeURIComponent('/ICONS'),{cache:'no-store'});
     postToPiskel({type:'list-result',files:data.files||[],usedBytes:data.usedBytes,totalBytes:data.totalBytes});
   }catch(e){postToPiskel({type:'list-result',files:[],error:e.message});}
 }
 async function piskelSendIcon(name){
-  try{const r=await fetch('/ICONS/'+encodeURIComponent(name));
+  try{const r=await fetch('/ICONS/'+encodeURIComponent(name),{cache:'no-store'});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const blob=await r.blob();
     postToPiskel({type:'load-result',name,mime:blob.type||'image/gif',dataBase64:await blobToB64(blob)});
