@@ -50,6 +50,9 @@ required everywhere.
 `curl -d` sends `application/x-www-form-urlencoded` unless you say otherwise, which is why
 `-H "Content-Type: application/json"` appears on every `curl` example in these docs.
 
+A `POST` carrying [`X-HTTP-Method-Override`](http.md#method-override) is checked as the method it
+names, so an overridden `PATCH` needs the header just like a real one.
+
 The one exemption is `PUT /api/v1/apps/script/{name}`, which carries Berry source rather than JSON
 and accepts any content type. Empty bodies, and the exact status code per route:
 [Content-Type: the empty-body trap](errors.md#content-type-the-empty-body-trap).

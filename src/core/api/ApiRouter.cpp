@@ -119,6 +119,34 @@ bool isRawBodyWrite(const std::string& method, const std::string& path) {
   return method == "PUT" && !tailAfter(path, "/api/v1/apps/script/").empty();
 }
 
+MethodResolution resolveHttpMethod(const std::string& method, const std::string& path,
+                                   const std::string& requested) {
+  MethodResolution out;
+  out.method = method;
+
+  const std::size_t first = requested.find_first_not_of(" \t");
+  if (first == std::string::npos) return out;
+  const std::size_t last = requested.find_last_not_of(" \t");
+  std::string want = requested.substr(first, last - first + 1);
+  for (char& c : want)
+    if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+
+  if (method != "POST") {
+    out.error = "X-HTTP-Method-Override is only accepted on POST";
+    return out;
+  }
+  if (want != "PUT" && want != "PATCH" && want != "DELETE") {
+    out.error = "X-HTTP-Method-Override must be PUT, PATCH or DELETE";
+    return out;
+  }
+  if (isRawBodyWrite(want, path)) {
+    out.error = "X-HTTP-Method-Override cannot be used to upload a script source";
+    return out;
+  }
+  out.method = std::move(want);
+  return out;
+}
+
 // Turns a request into a Command, or into an immediate error response. NoMatch means the path is
 // served elsewhere - notably every GET, since reads are answered directly, not as commands.
 RouteOutcome routeHttp(const std::string& method, const std::string& path,

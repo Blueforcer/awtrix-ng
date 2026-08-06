@@ -742,8 +742,73 @@ static void test_mqtt_dismiss_by_name() {
   TEST_ASSERT_EQUAL_STRING("", c2.name.c_str());
 }
 
+static void test_method_override_absent_leaves_the_method_alone() {
+  api::MethodResolution r = api::resolveHttpMethod("POST", "/api/v1/display", "");
+  TEST_ASSERT_NULL(r.error);
+  TEST_ASSERT_EQUAL_STRING("POST", r.method.c_str());
+
+  r = api::resolveHttpMethod("PATCH", "/api/v1/display", "   ");
+  TEST_ASSERT_NULL(r.error);
+  TEST_ASSERT_EQUAL_STRING("PATCH", r.method.c_str());
+}
+
+static void test_method_override_maps_post_onto_the_write_verbs() {
+  api::MethodResolution r = api::resolveHttpMethod("POST", "/api/v1/display", "PATCH");
+  TEST_ASSERT_NULL(r.error);
+  TEST_ASSERT_EQUAL_STRING("PATCH", r.method.c_str());
+
+  r = api::resolveHttpMethod("POST", "/api/v1/apps/pushed/test", " put ");
+  TEST_ASSERT_NULL(r.error);
+  TEST_ASSERT_EQUAL_STRING("PUT", r.method.c_str());
+
+  r = api::resolveHttpMethod("POST", "/api/v1/apps/test", "delete");
+  TEST_ASSERT_NULL(r.error);
+  TEST_ASSERT_EQUAL_STRING("DELETE", r.method.c_str());
+}
+
+static void test_method_override_is_post_only_and_verb_limited() {
+  api::MethodResolution r = api::resolveHttpMethod("GET", "/api/v1/display", "PATCH");
+  TEST_ASSERT_NOT_NULL(r.error);
+  TEST_ASSERT_EQUAL_STRING("GET", r.method.c_str());
+
+  r = api::resolveHttpMethod("PUT", "/api/v1/display", "PATCH");
+  TEST_ASSERT_NOT_NULL(r.error);
+
+  r = api::resolveHttpMethod("POST", "/api/v1/display", "GET");
+  TEST_ASSERT_NOT_NULL(r.error);
+
+  r = api::resolveHttpMethod("POST", "/api/v1/display", "POST");
+  TEST_ASSERT_NOT_NULL(r.error);
+
+  r = api::resolveHttpMethod("POST", "/api/v1/display", "TRACE");
+  TEST_ASSERT_NOT_NULL(r.error);
+}
+
+static void test_method_override_cannot_reach_the_raw_script_upload() {
+  const api::MethodResolution r =
+      api::resolveHttpMethod("POST", "/api/v1/apps/script/test", "PUT");
+  TEST_ASSERT_NOT_NULL(r.error);
+  TEST_ASSERT_EQUAL_STRING("POST", r.method.c_str());
+}
+
+static void test_method_override_routes_like_the_real_verb() {
+  const api::MethodResolution r = api::resolveHttpMethod("POST", "/api/v1/display", "patch");
+  Command c;
+  api::HttpResult imm;
+  TEST_ASSERT_EQUAL_INT(
+      ro(api::RouteOutcome::Routed),
+      ro(api::routeHttp(r.method, "/api/v1/display", "{\"power\":false}", c, imm)));
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::SetDisplay), ct(c.type));
+  TEST_ASSERT_EQUAL_STRING("{\"power\":false}", c.payload.c_str());
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_method_override_absent_leaves_the_method_alone);
+  RUN_TEST(test_method_override_maps_post_onto_the_write_verbs);
+  RUN_TEST(test_method_override_is_post_only_and_verb_limited);
+  RUN_TEST(test_method_override_cannot_reach_the_raw_script_upload);
+  RUN_TEST(test_method_override_routes_like_the_real_verb);
   RUN_TEST(test_delete_named_notification_routes_with_the_name);
   RUN_TEST(test_delete_active_notification_carries_no_name);
   RUN_TEST(test_named_notification_rejects_other_methods);

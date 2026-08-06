@@ -22,6 +22,11 @@ info:
       body-carrying `PUT`/`PATCH`/`POST` sent with any other content type is
       rejected with `415 unsupportedMediaType` - it is never treated as an
       empty "no payload" body.
+    - Clients that cannot send `PATCH`, `PUT` or `DELETE` may send a `POST`
+      carrying `X-HTTP-Method-Override: PATCH|PUT|DELETE`; the request is then
+      handled exactly as that method. The header is rejected with
+      `400 invalidMethodOverride` on any other carrier method, for any other
+      value, and for `PUT /api/v1/apps/script/{name}`.
     - On the writing `PUT` routes (`.../apps/pushed/{name}`,
       `.../display/moodlight`, `.../indicators/{id}`) an empty or `{}` body is
       rejected with `422`: a JSON body is required. Removing/turning off is
@@ -1703,6 +1708,7 @@ components:
                 - invalidPath           # 400, file routes only - outside the asset folders or contains ".."
                 - invalidPinConfig      # 400, PUT /api/v1/system only
                 - invalidName           # 400, any route naming an app - name outside [A-Za-z0-9_-]{1,32}
+                - invalidMethodOverride # 400, X-HTTP-Method-Override on a non-POST, naming anything but PUT/PATCH/DELETE, or aimed at the script upload
                 - wrongChip             # 400, POST /update only - image built for a different SoC, refused before anything was written
                 - unauthorized          # 401
                 - forbidden             # 403, disabled during provisioning

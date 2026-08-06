@@ -193,14 +193,14 @@ struct SimHttpServer::Impl {
   }
 
   void route(const httplib::Request& req, httplib::Response& res);
-  bool serveCommand(const httplib::Request& req, httplib::Response& res);
-  bool serveState(const httplib::Request& req, httplib::Response& res);
-  bool serveSystem(const httplib::Request& req, httplib::Response& res);
+  bool serveCommand(const httplib::Request& req, const std::string& method, httplib::Response& res);
+  bool serveState(const httplib::Request& req, const std::string& method, httplib::Response& res);
+  bool serveSystem(const httplib::Request& req, const std::string& method, httplib::Response& res);
   std::string systemJson(bool withSecrets = false) const;
-  void handleFiles(const httplib::Request& req, httplib::Response& res);
-  void handleSounds(const httplib::Request& req, httplib::Response& res);
-  void handleRestore(const httplib::Request& req, httplib::Response& res);
-  void handleSim(const httplib::Request& req, httplib::Response& res);
+  void handleFiles(const httplib::Request& req, const std::string& method, httplib::Response& res);
+  void handleSounds(const httplib::Request& req, const std::string& method, httplib::Response& res);
+  void handleRestore(const httplib::Request& req, const std::string& method, httplib::Response& res);
+  void handleSim(const httplib::Request& req, const std::string& method, httplib::Response& res);
 };
 
 std::string SimHttpServer::Impl::systemJson(bool withSecrets) const {
@@ -213,8 +213,9 @@ std::string SimHttpServer::Impl::systemJson(bool withSecrets) const {
   return out;
 }
 
-void SimHttpServer::Impl::handleRestore(const httplib::Request& req, httplib::Response& res) {
-  if (req.method != "POST") {
+void SimHttpServer::Impl::handleRestore(const httplib::Request& req, const std::string& method,
+                                        httplib::Response& res) {
+  if (method != "POST") {
     sendError(res, 405, "methodNotAllowed", "allowed method(s): POST");
     return;
   }
@@ -237,11 +238,12 @@ void SimHttpServer::Impl::handleRestore(const httplib::Request& req, httplib::Re
   sendJson(res, r.ok ? 200 : 400, r.toJson());
 }
 
-void SimHttpServer::Impl::handleSounds(const httplib::Request& req, httplib::Response& res) {
+void SimHttpServer::Impl::handleSounds(const httplib::Request& req, const std::string& method,
+                                       httplib::Response& res) {
   const std::string path = req.path;
 
   if (path == "/api/v1/sounds") {
-    if (req.method != "GET") {
+    if (method != "GET") {
       sendError(res, 405, "methodNotAllowed", "allowed method(s): GET");
       return;
     }
@@ -274,7 +276,7 @@ void SimHttpServer::Impl::handleSounds(const httplib::Request& req, httplib::Res
   const std::string name = path.substr(sizeof("/api/v1/sounds/") - 1);
   const std::string file = sim::hostPath(api::sounds::pathFor(name));
 
-  if (req.method == "PUT") {
+  if (method == "PUT") {
     const api::sounds::PutResult r = api::sounds::prepareWrite(name, req.body);
     if (!r.ok) {
       sendJson(res, r.status, api::errorJson(r.code.c_str(), r.message, r.field));
@@ -293,7 +295,7 @@ void SimHttpServer::Impl::handleSounds(const httplib::Request& req, httplib::Res
     return;
   }
 
-  if (req.method == "DELETE") {
+  if (method == "DELETE") {
     std::error_code ec;
     if (!api::sounds::nameFromFile(name + ".txt").empty() &&
         stdfs::remove(stdfs::u8path(file), ec)) {
@@ -308,8 +310,9 @@ void SimHttpServer::Impl::handleSounds(const httplib::Request& req, httplib::Res
   sendError(res, 405, "methodNotAllowed", "allowed method(s): PUT, DELETE");
 }
 
-void SimHttpServer::Impl::handleFiles(const httplib::Request& req, httplib::Response& res) {
-  if (req.method == "GET") {
+void SimHttpServer::Impl::handleFiles(const httplib::Request& req, const std::string& method,
+                                      httplib::Response& res) {
+  if (method == "GET") {
     std::string dir = req.has_param("dir") ? req.get_param_value("dir") : "/ICONS";
     if (dir.empty() || dir[0] != '/') dir = "/" + dir;
     if (dir.find("..") != std::string::npos) {
@@ -339,7 +342,7 @@ void SimHttpServer::Impl::handleFiles(const httplib::Request& req, httplib::Resp
     sendJson(res, 200, out);
     return;
   }
-  if (req.method == "POST") {
+  if (method == "POST") {
     std::string dir = req.has_param("dir") ? req.get_param_value("dir") : "/ICONS";
     if (dir.empty() || dir[0] != '/') dir = "/" + dir;
     if (dir.find("..") != std::string::npos) {
@@ -375,7 +378,7 @@ void SimHttpServer::Impl::handleFiles(const httplib::Request& req, httplib::Resp
     sendJson(res, 200, "{\"ok\":true}");
     return;
   }
-  if (req.method == "DELETE") {
+  if (method == "DELETE") {
     const std::string fn = req.has_param("path") ? req.get_param_value("path") : "";
     if (!assets::isWritable(fn)) {
       sendError(res, 400, "invalidPath",
@@ -397,9 +400,10 @@ void SimHttpServer::Impl::handleFiles(const httplib::Request& req, httplib::Resp
 
 // The /sim namespace has no counterpart on the device: it is how tests and the web UI press the
 // fake buttons and push sensor values into SimBoard. Unknown fields are rejected on purpose.
-void SimHttpServer::Impl::handleSim(const httplib::Request& req, httplib::Response& res) {
+void SimHttpServer::Impl::handleSim(const httplib::Request& req, const std::string& method,
+                                    httplib::Response& res) {
   const std::string& path = req.path;
-  if (req.method == "POST" && path.rfind("/sim/button/", 0) == 0) {
+  if (method == "POST" && path.rfind("/sim/button/", 0) == 0) {
     const std::string btn = path.substr(12);
     if (btn != "left" && btn != "select" && btn != "right") {
       sendError(res, 404, "notFound", "unknown button (left|select|right)");
@@ -430,7 +434,7 @@ void SimHttpServer::Impl::handleSim(const httplib::Request& req, httplib::Respon
     sendJson(res, 200, "{\"ok\":true}");
     return;
   }
-  if ((req.method == "PUT" || req.method == "PATCH") && path == "/sim/sensors") {
+  if ((method == "PUT" || method == "PATCH") && path == "/sim/sensors") {
     if (!bodyObject(res, req.body)) return;
     if (!onlyKnownFields(res, req.body,
                          {"temperature", "humidity", "ldrRaw", "batteryPinMillivolts"}))
@@ -450,7 +454,7 @@ void SimHttpServer::Impl::handleSim(const httplib::Request& req, httplib::Respon
     sendJson(res, 200, "{\"ok\":true}");
     return;
   }
-  if (req.method == "GET" && path == "/sim") {
+  if (method == "GET" && path == "/sim") {
     sendJson(res, 200,
              "{\"buttons\":\"POST /sim/button/{left|select|right} "
              "(optional body {\\\"durationMs\\\":80}, >= 40)\","
@@ -464,8 +468,17 @@ void SimHttpServer::Impl::handleSim(const httplib::Request& req, httplib::Respon
 }
 
 void SimHttpServer::Impl::route(const httplib::Request& req, httplib::Response& res) {
-  const std::string& method = req.method;
   const std::string& path = req.path;
+  const api::MethodResolution resolved = api::resolveHttpMethod(
+      req.method, path,
+      req.has_header(api::kMethodOverrideHeader)
+          ? req.get_header_value(api::kMethodOverrideHeader)
+          : std::string());
+  if (resolved.error) {
+    sendError(res, 400, "invalidMethodOverride", resolved.error);
+    return;
+  }
+  const std::string& method = resolved.method;
   const bool get = (method == "GET");
 
   // Mirrors the device's Content-Type gate so a client that works against the sim works there too.
@@ -492,7 +505,7 @@ void SimHttpServer::Impl::route(const httplib::Request& req, httplib::Response& 
   }
 
   if (path == "/sim" || path.rfind("/sim/", 0) == 0) {
-    handleSim(req, res);
+    handleSim(req, method, res);
     return;
   }
 
@@ -507,22 +520,22 @@ void SimHttpServer::Impl::route(const httplib::Request& req, httplib::Response& 
     return;
   }
 
-  if (serveCommand(req, res)) return;
-  if (serveState(req, res)) return;
-  if (serveSystem(req, res)) return;
+  if (serveCommand(req, method, res)) return;
+  if (serveState(req, method, res)) return;
+  if (serveSystem(req, method, res)) return;
 
   if (path == "/api/v1/sounds" || path.rfind("/api/v1/sounds/", 0) == 0) {
-    handleSounds(req, res);
+    handleSounds(req, method, res);
     return;
   }
 
   if (path == "/api/v1/files") {
-    handleFiles(req, res);
+    handleFiles(req, method, res);
     return;
   }
 
   if (path == "/api/v1/restore") {
-    handleRestore(req, res);
+    handleRestore(req, method, res);
     return;
   }
 
@@ -536,10 +549,11 @@ void SimHttpServer::Impl::route(const httplib::Request& req, httplib::Response& 
 
 // The command routes are shared with the device: api::routeHttp turns the request into a Command
 // and decides the response, so this only moves bytes. Divergence here would be a bug.
-bool SimHttpServer::Impl::serveCommand(const httplib::Request& req, httplib::Response& res) {
+bool SimHttpServer::Impl::serveCommand(const httplib::Request& req, const std::string& method,
+                                       httplib::Response& res) {
   Command cmd;
   api::HttpResult immediate;
-  switch (api::routeHttp(req.method, req.path, std::string(req.body), cmd, immediate)) {
+  switch (api::routeHttp(method, req.path, std::string(req.body), cmd, immediate)) {
     case api::RouteOutcome::Respond:
       sendJson(res, immediate.status, immediate.body);
       return true;
@@ -561,8 +575,9 @@ bool SimHttpServer::Impl::serveCommand(const httplib::Request& req, httplib::Res
   }
 }
 
-bool SimHttpServer::Impl::serveState(const httplib::Request& req, httplib::Response& res) {
-  if (req.method != "GET") return false;
+bool SimHttpServer::Impl::serveState(const httplib::Request& req, const std::string& method,
+                                     httplib::Response& res) {
+  if (method != "GET") return false;
   const std::string& path = req.path;
 
   if (path == "/api/v1/settings") {
@@ -661,13 +676,14 @@ bool SimHttpServer::Impl::serveState(const httplib::Request& req, httplib::Respo
   return false;
 }
 
-bool SimHttpServer::Impl::serveSystem(const httplib::Request& req, httplib::Response& res) {
+bool SimHttpServer::Impl::serveSystem(const httplib::Request& req, const std::string& method,
+                                      httplib::Response& res) {
   if (req.path != "/api/v1/system") return false;
-  if (req.method == "GET") {
+  if (method == "GET") {
     sendJson(res, 200, systemJson(req.has_param("secrets")));
     return true;
   }
-  if (req.method == "PUT") {
+  if (method == "PUT") {
     if (!api::isWellFormed(req.body)) {
       sendError(res, 400, "invalidJson", "request body is not valid JSON");
       return true;
@@ -734,7 +750,8 @@ bool SimHttpServer::begin(uint16_t port, CoreEngine& engine, SimBoard& board, Ca
   im->svr.Options(".*", [](const httplib::Request&, httplib::Response& res) {
     res.status = 204;
     res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.set_header("Access-Control-Allow-Headers",
+                   std::string("Content-Type, Authorization, ") + api::kMethodOverrideHeader);
     res.set_header("Access-Control-Allow-Private-Network", "true");
     res.set_header("Access-Control-Max-Age", "600");
   });

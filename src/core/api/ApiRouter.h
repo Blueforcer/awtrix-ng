@@ -23,6 +23,16 @@ enum class RouteOutcome : uint8_t {
 RouteOutcome routeHttp(const std::string& method, const std::string& path,
                        std::string&& body, Command& cmd, HttpResult& immediate);
 
+inline constexpr const char* kMethodOverrideHeader = "X-HTTP-Method-Override";
+
+struct MethodResolution {
+  std::string method;
+  const char* error = nullptr;
+};
+
+MethodResolution resolveHttpMethod(const std::string& method, const std::string& path,
+                                   const std::string& requested);
+
 bool isValidAppName(const std::string& name);
 
 std::string configAppName(const std::string& path);

@@ -60,6 +60,7 @@ counts for.
 | `invalidPinConfig` | 400 | `PUT /api/v1/system` only | The merged GPIO map is unusable. Nothing was saved. See [GPIO validation](#gpio-validation-invalidpinconfig). |
 | `invalidPath` | 400 | `POST` / `DELETE /api/v1/files` | The filename or path is outside `/ICONS`, `/MELODIES`, `/PALETTES`, or contains `..`. Nothing was written or removed. |
 | `invalidName` | 400 | every route that names an app in its path | The name does not match `[A-Za-z0-9_-]{1,32}`. Checked before the payload is parsed. Carries `field: "name"`. |
+| `invalidMethodOverride` | 400 | routing, when `X-HTTP-Method-Override` is present | The header sits on something other than a `POST`, names anything but `PUT`/`PATCH`/`DELETE`, or tries to reach the raw script upload. Nothing was routed. See [Method override](http.md#method-override). |
 | `badRequest` | 400 | `POST /api/v1/restore` only | The multipart upload finished without a backup file ever being received. See [Restore result](#restore-result). |
 | `wrongChip` | 400 | `POST /update` (firmware upload) | The uploaded firmware image was built for a different chip than the one running. |
 | `unauthorized` | 401 | every route, when auth is on | Missing or wrong HTTP Basic credentials. See [Authentication](#authentication-401). |
@@ -491,10 +492,10 @@ Success is `{"ok":true}`. Eight codes can appear over MQTT:
 | `internalError` | the command failed or was not understood | `command failed` |
 | `invalidName` | an app name in the topic is not `[A-Za-z0-9_-]{1,32}` - only `cmd/apps/pushed/{name}` can raise it | `name must match [A-Za-z0-9_-]{1,32}` |
 
-The other nine codes are HTTP-only. `methodNotAllowed`, `unauthorized`, `forbidden`,
-`unsupportedMediaType` and `payloadTooLarge` describe request framing, which MQTT has no
-equivalent for; `invalidPath`, `badRequest` and `wrongChip` belong to the upload routes, and
-`invalidPinConfig` to `PUT /api/v1/system` - none of which MQTT can reach.
+The other ten codes are HTTP-only. `methodNotAllowed`, `unauthorized`, `forbidden`,
+`unsupportedMediaType`, `payloadTooLarge` and `invalidMethodOverride` describe request framing,
+which MQTT has no equivalent for; `invalidPath`, `badRequest` and `wrongChip` belong to the upload
+routes, and `invalidPinConfig` to `PUT /api/v1/system` - none of which MQTT can reach.
 
 A published command over the [MQTT payload ceiling](limits.md#requests) is dropped before it is
 parsed, so it produces no `/result` reply at all rather than a `payloadTooLarge`.

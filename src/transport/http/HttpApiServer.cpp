@@ -186,8 +186,9 @@ void HttpApiServer::begin(uint16_t port, CoreEngine& engine, IBoard& board, Canv
   cfg_ = &cfg;
   apMode_ = apMode;
   server_ = new RawWebServer(port);
-  static const char* kCollectHeaders[] = {"If-None-Match", "Content-Type"};
-  server_->collectHeaders(kCollectHeaders, 2);
+  static const char* kCollectHeaders[] = {"If-None-Match", "Content-Type",
+                                          api::kMethodOverrideHeader};
+  server_->collectHeaders(kCollectHeaders, 3);
   // Each pair is (completion handler, per-chunk upload handler). The upload handler runs many times
   // while the body streams in and cannot answer the client; only the completion handler can.
   server_->on(
@@ -477,7 +478,8 @@ void HttpApiServer::addCorsHeaders(bool preflight) {
   server_->sendHeader("Access-Control-Allow-Origin", "*");
   if (preflight) {
     server_->sendHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    server_->sendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    server_->sendHeader("Access-Control-Allow-Headers",
+                        String("Content-Type, Authorization, ") + api::kMethodOverrideHeader);
     server_->sendHeader("Access-Control-Allow-Private-Network", "true");
     server_->sendHeader("Access-Control-Max-Age", "600");
   }
@@ -500,9 +502,19 @@ void HttpApiServer::dispatch() {
   }
 
   Request req;
-  req.method = methodName(server_->method());
   req.path = server_->uri().c_str();
-  req.get = (server_->method() == HTTP_GET);
+  std::string requested;
+  if (server_->hasHeader(api::kMethodOverrideHeader))
+    requested = server_->header(api::kMethodOverrideHeader).c_str();
+  const api::MethodResolution resolved =
+      api::resolveHttpMethod(methodName(server_->method()), req.path, requested);
+  if (resolved.error) {
+    dropRawBody();
+    sendError(400, "invalidMethodOverride", resolved.error);
+    return;
+  }
+  req.method = resolved.method;
+  req.get = (req.method == "GET");
 
   if (takeBody(req)) return;
   if (rejectedByPolicy(req)) return;
@@ -599,7 +611,7 @@ bool HttpApiServer::rejectedByPolicy(const Request& req) {
     sendError(403, "forbidden", "not available during provisioning");
     return true;
   }
-  if ((server_->method() == HTTP_PUT || server_->method() == HTTP_PATCH) &&
+  if ((req.method == "PUT" || req.method == "PATCH") &&
       server_->hasHeader("Content-Type") && !api::isRawBodyWrite(req.method, req.path)) {
     const String ct = server_->header("Content-Type");
     if (ct.length() && !ct.startsWith("application/json")) {
@@ -896,7 +908,7 @@ bool HttpApiServer::serveSounds(const Request& req) {
       return true;
     }
 
-    if (server_->method() == HTTP_DELETE) {
+    if (req.method == "DELETE") {
       if (!api::sounds::nameFromFile(name + ".txt").empty() && LittleFS.remove(file)) {
         if (onAssetsChanged_) onAssetsChanged_();
         sendJson(200, "{\"ok\":true}");
@@ -940,7 +952,7 @@ bool HttpApiServer::serveFiles(const Request& req) {
     return true;
   }
 
-  if (server_->method() == HTTP_DELETE) {
+  if (req.method == "DELETE") {
     const String fn = server_->hasArg("path") ? server_->arg("path") : String("");
     if (!assets::isWritable(std::string(fn.c_str()))) {
       sendError(400, "invalidPath",

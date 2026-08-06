@@ -77,6 +77,46 @@ explicit `DELETE` route (or the empty-payload clear idiom over MQTT). For a push
 is [`DELETE /api/v1/apps/{name}`](#delete-apiv1appsname) - the `pushed` path itself answers `405`
 to anything but `PUT`. See [Errors](errors.md#content-type-the-empty-body-trap).
 
+## Method override
+
+Some clients can only send a fixed set of verbs - the FRITZ!Box HTTP action, a few home-automation
+gateways and older shell environments have no `PATCH` at all. For those, AWTRIX accepts the
+de-facto standard header:
+
+```http
+X-HTTP-Method-Override: PATCH
+```
+
+The rules, and they are strict on purpose:
+
+| | |
+|---|---|
+| Carrier method | `POST` only. The header on any other method is `400 invalidMethodOverride`. |
+| Accepted values | `PUT`, `PATCH`, `DELETE`, any casing, surrounding spaces ignored. Anything else - including `GET` and `POST` - is `400 invalidMethodOverride`. |
+| Effect | The request is handled exactly as if it had arrived with the overridden method: same routing, same `405` lists, same `Content-Type` gate, same body and error handling. |
+| Exception | `PUT /api/v1/apps/script/{name}` (the raw Berry source upload) cannot be reached this way and answers `400 invalidMethodOverride`. Install scripts with a real `PUT`. |
+
+Nothing changes for clients that do not send the header. An absent or empty header is not an error.
+
+Because the request *is* the overridden method once the header is read, `X-HTTP-Method-Override:
+PATCH` also inherits the `PATCH` [`Content-Type` gate](#content-type) - send
+`Content-Type: application/json` or the request fails with `415`.
+
+Turning the display off from a client without `PATCH`:
+
+```bash
+curl -X POST http://<awtrix-ip>/api/v1/display \
+  -H "X-HTTP-Method-Override: PATCH" \
+  -H "Content-Type: application/json" \
+  -d '{"power":false}'
+```
+
+Two routes are not covered. `POST /update` and `POST /api/v1/files` are multipart uploads claimed by
+their own handlers before the override is ever read, so the header has no effect there. The
+consequence worth knowing: **`DELETE /api/v1/files?path=...` cannot be reached through the
+override** - a `POST` to that path is always taken as a file upload. Deleting an icon or a melody
+file needs a real `DELETE`. Every other route on this page can be driven with the override.
+
 ## Errors
 
 One body shape, every non-2xx status:
@@ -87,8 +127,9 @@ One body shape, every non-2xx status:
 
 `field` is omitted entirely when no specific input key is at fault.
 
-Seventeen codes exist, and that is the complete set - `invalidJson`, `invalidPinConfig`,
-`invalidPath`, `invalidName`, `badRequest`, `wrongChip`, `unauthorized`, `forbidden`, `notFound`,
+Eighteen codes exist, and that is the complete set - `invalidJson`, `invalidPinConfig`,
+`invalidPath`, `invalidName`, `invalidMethodOverride`, `badRequest`, `wrongChip`, `unauthorized`,
+`forbidden`, `notFound`,
 `methodNotAllowed`, `payloadTooLarge`, `unsupportedMediaType`, `validationFailed`, `internalError`,
 `unavailable`, `serviceBusy`, `insufficientStorage`. Which route raises each, the status it comes
 with, and the exact messages: **[Errors](errors.md#error-codes)**.
