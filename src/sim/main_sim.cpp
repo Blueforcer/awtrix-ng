@@ -23,6 +23,7 @@
 
 #include "AppConfig.h"
 #include "core/CoreEngine.h"
+#include "core/FrameClock.h"
 #include "core/SocProfileJson.h"
 #include "core/StrCase.h"
 #include "core/api/StateJson.h"
@@ -169,12 +170,17 @@ sim::SimScriptStore g_scriptStore;
 script::ScriptServices g_scriptSvc;
 script::ScriptHost* g_scripts = nullptr;
 
-// Caps the loop at ~40 fps. Without it the host would spin as fast as it can and peg a core, and
-// animations would run at a speed nobody will ever see on the device.
-void paceFrame(int64_t frameStartMs) {
-  constexpr int64_t kFrameBudgetMs = 25;
-  const int64_t spent = monotonicMs() - frameStartMs;
-  if (spent < kFrameBudgetMs) delay(static_cast<unsigned long>(kFrameBudgetMs - spent));
+// Without this the host would spin as fast as it can and peg a core, and animations would run at a
+// speed nobody will ever see on the device.
+void paceFrame() {
+  static int64_t nextMs = 0;
+  const int64_t now = monotonicMs();
+  if (nextMs <= now) {
+    nextMs = now + kFramePeriodMs;
+    return;
+  }
+  delay(static_cast<unsigned long>(nextMs - now));
+  nextMs += kFramePeriodMs;
 }
 
 }
@@ -534,6 +540,6 @@ int main(int argc, char** argv) {
         break;
     }
     g_board.show(*g_canvas);
-    paceFrame(now);
+    paceFrame();
   }
 }

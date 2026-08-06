@@ -76,7 +76,7 @@ static void test_wants_time_until_the_run_completes() {
   TEST_ASSERT_TRUE(c.wantsMoreTime(1));
   TEST_ASSERT_FALSE_MESSAGE(c.wantsMoreTime(0), "repeat 0 never holds");
 
-  run(c, 0, 40);
+  run(c, 0, 200);
   TEST_ASSERT_TRUE(c.cycles() >= 1);
   TEST_ASSERT_FALSE(c.wantsMoreTime(1));
   TEST_ASSERT_TRUE_MESSAGE(c.wantsMoreTime(c.cycles() + 1), "a higher repeat still holds");

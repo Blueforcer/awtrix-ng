@@ -1828,8 +1828,8 @@ function vitalDefs(st){
     V.push({ic:'hum',k:t('hum'),v:String(Math.round(st.humidity)),u:'%',
       bar:clamp(st.humidity,0,100),tone:'neutral'});
   if('fps'in st)
-    V.push({ic:'fps',k:'FPS',v:String(st.fps),u:'',bar:clamp(st.fps*100/40,0,100),
-      tone:st.fps>=38?'ok':st.fps>=30?'warn':'err',s:'/ 40'});
+    V.push({ic:'fps',k:'FPS',v:String(st.fps),u:'',bar:clamp(st.fps*100/42,0,100),
+      tone:st.fps>=40?'ok':st.fps>=32?'warn':'err',s:'/ 42'});
   return V;
 }
 function vitalTile(d){

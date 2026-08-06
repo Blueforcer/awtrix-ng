@@ -4,11 +4,7 @@ namespace awtrix {
 namespace render {
 
 namespace {
-// 100% speed is 21 px/s; speedPercent scales that linearly.
-constexpr float kBasePxPerSec = 21.0f;
-// Longest time step we integrate in one go. A stall (wifi, filesystem) would otherwise teleport
-// the text forward and skip whole passes.
-constexpr long kMaxStepMs = 100;
+constexpr float kBasePxPerFrame = 0.5f;
 }
 
 void ScrollModel::reset(const ResolvedScroll& scroll, int64_t nowMs) {
@@ -39,18 +35,12 @@ void ScrollModel::advance(int64_t nowMs) {
     lastMs_ = nowMs;
     return;
   }
-  const int64_t prevMs = lastMs_;
+  if (nowMs <= lastMs_) return;
   lastMs_ = nowMs;
   if (nowMs <= holdUntilMs_) return;
-
-  const int64_t from = prevMs > holdUntilMs_ ? prevMs : holdUntilMs_;
-  int64_t dt = nowMs - from;
-  if (dt <= 0) return;
-  if (dt > kMaxStepMs) dt = kMaxStepMs;
   moving_ = true;
 
-  const float delta =
-      kBasePxPerSec * (r_.speedPercent / 100.0f) * (static_cast<float>(dt) / 1000.0f);
+  const float delta = kBasePxPerFrame * (r_.speedPercent / 100.0f);
   const bool toLeft = r_.direction == ScrollDirection::Left;
 
   if (r_.mode == ScrollMode::Bounce) {

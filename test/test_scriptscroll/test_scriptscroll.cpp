@@ -126,7 +126,7 @@ static void test_a_long_line_holds_the_turn_until_it_has_run() {
   p.frame(c, 0);
   TEST_ASSERT_TRUE(p.bank.wantsMoreTime());
 
-  for (long ms = 100; ms <= 6000; ms += 100) p.frame(c, ms);
+  for (long ms = 100; ms <= 20000; ms += 100) p.frame(c, ms);
   TEST_ASSERT_FALSE(p.bank.wantsMoreTime());
 }
 
@@ -162,7 +162,7 @@ static void test_the_call_reports_completed_runs() {
   p.frame(c, 0);
   TEST_ASSERT_EQUAL_HEX32_MESSAGE(0u, c.getPixel(31, 0), "nothing has run through yet");
 
-  for (long ms = 100; ms <= 6000; ms += 100) p.frame(c, ms);
+  for (long ms = 100; ms <= 20000; ms += 100) p.frame(c, ms);
   TEST_ASSERT_EQUAL_HEX32_MESSAGE(0x0000FFu, c.getPixel(31, 0), "a completed pass must be reported");
 }
 

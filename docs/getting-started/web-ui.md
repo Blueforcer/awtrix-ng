@@ -93,7 +93,7 @@ board does not report its value - a build with no battery simply has no battery 
 | **Light** | `lightLevel` | raw sensor reading | always blue - a measurement, not a verdict |
 | **Temperature** | `temperature` | - | always blue |
 | **Humidity** | `humidity` | - | always blue |
-| **FPS** | `fps` | `/ 40` | green ≥ 38, amber ≥ 30, red below |
+| **FPS** | `fps` | `/ 42` | green ≥ 40, amber ≥ 32, red below |
 
 Colour is never the only signal: the WiFi tile also spells its verdict out - *excellent / good /
 fair / weak*. Temperature has no bar, because it has no natural 0–100 scale.

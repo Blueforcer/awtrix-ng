@@ -8,6 +8,7 @@
 
 #include "AppConfig.h"
 #include "core/CoreEngine.h"
+#include "core/FrameClock.h"
 #include "core/SocProfileJson.h"
 #include "core/StrCase.h"
 #include "core/Transitions.h"
@@ -591,12 +592,15 @@ void setup() {
 }
 
 namespace {
-// Caps the loop at ~40 fps. The panel cannot show more, and the leftover time is what the WiFi
-// and MQTT stacks get to run their own tasks in.
-void paceFrame(int64_t frameStartMs) {
-  constexpr int64_t kFrameBudgetMs = 25;
-  const int64_t spent = monotonicMs() - frameStartMs;
-  if (spent < kFrameBudgetMs) delay(static_cast<unsigned long>(kFrameBudgetMs - spent));
+void paceFrame() {
+  static int64_t nextMs = 0;
+  const int64_t now = monotonicMs();
+  if (nextMs <= now) {
+    nextMs = now + kFramePeriodMs;
+    return;
+  }
+  delay(static_cast<unsigned long>(nextMs - now));
+  nextMs += kFramePeriodMs;
 }
 }
 
@@ -703,6 +707,6 @@ void loop() {
   if (artnetFrame) {
     delay(5);
   } else {
-    paceFrame(now);
+    paceFrame();
   }
 }

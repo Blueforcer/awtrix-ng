@@ -223,7 +223,7 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
 
 `holdMs: 0` removes the hold entirely, which is the only way to get a `bounce` that reverses on the spot or a `wrap` that restarts without pausing.
 
-Motion is time-based, not frame-based. The base rate is **21 px/s at `speed: 100`**, so `pxPerSec = 21 × (speed / 100)`. `0` freezes the text where it starts, and there is no upper clamp. Every hold lasts `holdMs`, 1000 ms by default.
+The base rate is **21 px/s at `speed: 100`**, so `pxPerSec = 21 × (speed / 100)`. `0` freezes the text where it starts, and there is no upper clamp. `200` is the sharpest a scroll gets on an 8 px panel; above it legibility drops however smooth the motion is. Every hold lasts `holdMs`, 1000 ms by default.
 
 #### Anchors
 

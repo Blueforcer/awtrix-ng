@@ -51,9 +51,17 @@ static void test_long_stall_does_not_teleport_the_text() {
   const float before = m.x();
   m.advance(1020);
   const float step = before - m.x();
-  TEST_ASSERT_TRUE_MESSAGE(step > 0.f, "still moves after a stall");
-  TEST_ASSERT_TRUE_MESSAGE(step <= 21.f * 0.1f + 0.01f,
-                           "a stall advances at most 100ms worth of travel");
+  TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.001f, 0.5f, step,
+                                   "a stalled frame is still one frame of travel, not a catch-up");
+}
+
+static void test_a_second_draw_in_the_same_frame_does_not_move_the_text_twice() {
+  ScrollModel m;
+  m.reset(make(ScrollMode::Wrap, ScrollDirection::Left, ScrollEntry::Offscreen), 0);
+  m.advance(20);
+  const float once = m.x();
+  m.advance(20);
+  TEST_ASSERT_EQUAL_FLOAT(once, m.x());
 }
 
 static void test_inline_entry_starts_at_the_rest_anchor() {
@@ -87,12 +95,33 @@ static void test_offscreen_entry_skips_the_hold() {
   TEST_ASSERT_TRUE_MESSAGE(m.x() < 32.f, "a hold on an empty panel is a pause before nothing");
 }
 
-static void test_speed_is_time_based_at_21px_per_second() {
+static void test_speed_is_half_a_pixel_per_frame_at_100_percent() {
   ScrollModel m;
   m.reset(make(ScrollMode::Wrap), 0);
   m.advance(1000);
+  const float before = m.x();
   run(m, 1000, 2000);
-  TEST_ASSERT_FLOAT_WITHIN(0.5f, 21.f, 9.f - m.x());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.f, before - m.x());
+}
+
+static void test_200_percent_steps_exactly_one_pixel_per_frame() {
+  ScrollModel m;
+  m.reset(make(ScrollMode::Wrap, ScrollDirection::Left, ScrollEntry::Inline, 60, 200), 0);
+  m.advance(1000);
+  const float before = m.x();
+  m.advance(1020);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.f, before - m.x());
+}
+
+static void test_frame_length_does_not_change_the_step() {
+  ScrollModel m;
+  m.reset(make(ScrollMode::Wrap), 0);
+  m.advance(1000);
+  const float before = m.x();
+  m.advance(1005);
+  m.advance(1200);
+  m.advance(1224);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.5f, before - m.x());
 }
 
 static void test_zero_speed_freezes() {
@@ -248,11 +277,14 @@ static void test_loop_folds_without_holding_again() {
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_long_stall_does_not_teleport_the_text);
+  RUN_TEST(test_a_second_draw_in_the_same_frame_does_not_move_the_text_twice);
   RUN_TEST(test_inline_entry_starts_at_the_rest_anchor);
   RUN_TEST(test_offscreen_entry_starts_outside_the_panel);
   RUN_TEST(test_holds_before_moving);
   RUN_TEST(test_offscreen_entry_skips_the_hold);
-  RUN_TEST(test_speed_is_time_based_at_21px_per_second);
+  RUN_TEST(test_speed_is_half_a_pixel_per_frame_at_100_percent);
+  RUN_TEST(test_200_percent_steps_exactly_one_pixel_per_frame);
+  RUN_TEST(test_frame_length_does_not_change_the_step);
   RUN_TEST(test_zero_speed_freezes);
   RUN_TEST(test_static_mode_never_moves);
   RUN_TEST(test_fitting_text_never_moves);

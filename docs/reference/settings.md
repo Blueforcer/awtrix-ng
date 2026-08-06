@@ -145,7 +145,7 @@ Every field is concrete here - this is what a payload inherits when it leaves th
 | `direction` | string | `left` · `right` | `"left"` | - | Travel direction. `right` mirrors the whole geometry, not just the velocity. |
 | `entry` | string | `inline` · `offscreen` | `"inline"` | - | `offscreen` starts the text outside the panel and skips the initial hold. |
 | `whenFits` | string | `static` · `scroll` | `"static"` | - | Whether text that already fits the panel still animates. |
-| `speed` | integer | ≥ 0 | `100` | percent | Percentage of the 21 px/s base rate. `0` freezes the text, higher is faster, and there is no upper bound. |
+| `speed` | integer | ≥ 0 | `100` | percent | Percentage of the 21 px/s base rate. `0` freezes the text, higher is faster, and there is no upper bound. `200` is the sharpest a scroll gets on an 8 px panel; above it legibility drops. |
 | `gap` | integer | ≥ 0 | `8` | pixels | `loop` only - the space left between one repetition and the next. |
 | `holdMs` | integer | ≥ 0 | `1000` | ms | How long the text rests before it starts moving, and at each `bounce` turning point. `0` removes the pause. |
 

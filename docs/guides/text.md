@@ -214,7 +214,7 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
 | `direction` | `left` · `right` | `left` | Which way it travels |
 | `entry` | `inline` · `offscreen` | `inline` | Whether it starts on the panel or slides in from outside |
 | `whenFits` | `static` · `scroll` | `static` | Whether short text moves too |
-| `speed` | `0` and up, percent | `100` | Percentage of the base rate of **21 px/s**; `0` freezes it |
+| `speed` | `0` and up, percent | `100` | Percentage of the base rate of **21 px/s**; `0` freezes it, `200` is as sharp as a scroll gets |
 | `gap` | `0` and up, pixels | `8` | `loop` only - the space between repetitions |
 | `holdMs` | `0` and up, ms | `1000` | Pause before the text starts, and at each `bounce` turn |
 

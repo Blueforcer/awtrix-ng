@@ -1789,7 +1789,8 @@ components:
               default: 100
               description: >
                 Percent of the 21 px/s base rate. `0` freezes the text; there
-                is no upper clamp.
+                is no upper clamp. `200` is the sharpest a scroll gets on an
+                8 px panel.
             gap:
               type: integer
               minimum: 0
