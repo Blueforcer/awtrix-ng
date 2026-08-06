@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -15,6 +16,8 @@ struct ScrollRun {
   int y = 0;
   int width = 0;
   uint32_t color = 0xFFFFFFu;
+  const uint32_t* glyphColors = nullptr;
+  std::size_t glyphCount = 0;
   int repeat = 0;
   ScrollSpec spec;
 };

@@ -69,6 +69,8 @@ int ScrollBank::draw(Canvas& canvas, const GfxFont& font, const std::string& tex
 
   text::TextPaint paint;
   paint.flat = run.color;
+  paint.glyphColors = run.glyphColors;
+  paint.glyphCount = run.glyphCount;
   canvas.setClipX(run.x, run.x + run.width - 1);
   render::drawScrollRun(canvas, font, x, run.y, text, layout.text.advance, paint, &resolved);
   canvas.clearClipX();

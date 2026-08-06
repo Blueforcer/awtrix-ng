@@ -89,16 +89,22 @@ bool argBoolOr(bvm* vm, int i, bool fallback) {
 int absIndex(bvm* vm, int idx) { return idx < 0 ? be_top(vm) + idx + 1 : idx; }
 
 // A Berry list is an instance wrapping its storage in a member named ".p" -- there is no
-// public accessor, so every list-reading helper here goes through that member.
-std::vector<int> readIntList(bvm* vm, int idx, std::size_t cap) {
-  std::vector<int> out;
+// public accessor, so every list-reading helper here goes through that member. Answers the stack
+// index of that storage, left for the caller to pop, or 0 for anything that is not a list.
+int pushListStorage(bvm* vm, int idx) {
   const int at = absIndex(vm, idx);
-  if (at <= 0 || at > be_top(vm) || !be_isinstance(vm, at)) return out;
+  if (at <= 0 || at > be_top(vm) || !be_isinstance(vm, at)) return 0;
   if (!be_getmember(vm, at, ".p") || !be_islist(vm, -1)) {
     be_pop(vm, 1);
-    return out;
+    return 0;
   }
-  const int raw = be_top(vm);
+  return be_top(vm);
+}
+
+std::vector<int> readIntList(bvm* vm, int idx, std::size_t cap) {
+  std::vector<int> out;
+  const int raw = pushListStorage(vm, idx);
+  if (!raw) return out;
   const int n = be_data_size(vm, raw);
   for (int k = 0; k < n && out.size() < cap; ++k) {
     be_pushint(vm, k);
@@ -120,19 +126,85 @@ std::vector<int> argIntList(bvm* vm, int i) {
   return readIntList(vm, i, render::kMaxChartPoints);
 }
 
+std::string g_textRun;
+std::vector<uint32_t> g_textRunColors;
+
+bool isTextArg(bvm* vm, int i) {
+  if (be_top(vm) < i) return false;
+  if (be_isstring(vm, i)) return true;
+  const int raw = pushListStorage(vm, i);
+  if (raw) be_pop(vm, 1);
+  return raw != 0;
+}
+
+bool readTextFragment(bvm* vm, int idx, std::string& out, uint32_t& color) {
+  const int at = absIndex(vm, idx);
+  if (at <= 0 || at > be_top(vm)) return false;
+  if (be_isstring(vm, at)) {
+    out = be_tostring(vm, at);
+    return true;
+  }
+  const int raw = pushListStorage(vm, at);
+  if (!raw) return false;
+  const int n = be_data_size(vm, raw);
+  bool got = false;
+  if (n >= 1) {
+    be_pushint(vm, 0);
+    be_getindex(vm, raw);
+    if (be_isstring(vm, -1)) {
+      out = be_tostring(vm, -1);
+      got = true;
+    }
+    be_pop(vm, 2);
+  }
+  if (got && n >= 2) {
+    be_pushint(vm, 1);
+    be_getindex(vm, raw);
+    if (be_isint(vm, -1))
+      color = static_cast<uint32_t>(be_toint(vm, -1));
+    else if (be_isreal(vm, -1))
+      color = static_cast<uint32_t>(be_toreal(vm, -1));
+    be_pop(vm, 2);
+  }
+  be_pop(vm, 1);
+  return got;
+}
+
+bool readTextArg(bvm* vm, int i, const GfxFont& font, uint32_t flat, std::string& out,
+                 std::vector<uint32_t>* glyphColors) {
+  out.clear();
+  if (glyphColors) glyphColors->clear();
+  if (be_top(vm) < i) return false;
+  if (be_isstring(vm, i)) {
+    out = be_tostring(vm, i);
+    return true;
+  }
+  const int raw = pushListStorage(vm, i);
+  if (!raw) return false;
+  const int n = be_data_size(vm, raw);
+  for (int k = 0; k < n; ++k) {
+    be_pushint(vm, k);
+    be_getindex(vm, raw);
+    std::string part;
+    uint32_t color = flat;
+    const bool got = readTextFragment(vm, -1, part, color);
+    be_pop(vm, 2);
+    if (!got || part.empty()) continue;
+    if (glyphColors) glyphColors->insert(glyphColors->end(), text::glyphCount(font, part), color);
+    out += part;
+  }
+  be_pop(vm, 1);
+  return true;
+}
+
 // Reads either palette shape a script may write: bare colours spread evenly, or [colour, pos]
 // pairs with pos a percentage 0..100. Mixing them is refused; `placed` reports which it got.
 bool readStopList(bvm* vm, int idx, std::vector<render::PaletteStop>& out, bool& placed) {
   out.clear();
   placed = false;
   std::size_t bare = 0;
-  const int at = absIndex(vm, idx);
-  if (at <= 0 || at > be_top(vm) || !be_isinstance(vm, at)) return false;
-  if (!be_getmember(vm, at, ".p") || !be_islist(vm, -1)) {
-    be_pop(vm, 1);
-    return false;
-  }
-  const int raw = be_top(vm);
+  const int raw = pushListStorage(vm, idx);
+  if (!raw) return false;
   const int n = be_data_size(vm, raw);
   for (int k = 0; k < n && out.size() < 16; ++k) {
     be_pushint(vm, k);
@@ -238,6 +310,11 @@ int64_t scriptFrame() { return nowMs() / 24; }
 
 bool canDraw(bvm* vm, int argc) { return g_ctx.canvas != nullptr && be_top(vm) >= argc; }
 
+uint32_t deviceTextColor() {
+  const Settings* s = (g_svc && g_svc->settings) ? g_svc->settings() : nullptr;
+  return s ? s->textColor : 0xFFFFFFu;
+}
+
 const GfxFont* activeFont() {
   if (g_ctx.font) return g_ctx.font;
   if (g_ctx.rctx && g_ctx.rctx->font) return g_ctx.rctx->font;
@@ -325,32 +402,43 @@ int b_fill_circle(bvm* vm) {
 // Answers the pen advance in pixels so a script can chain runs; 0 when nothing was drawn.
 int b_text(bvm* vm) {
   int adv = 0;
-  if (canDraw(vm, 4) && activeFont() && be_isstring(vm, 3))
-    adv = text::drawText(*g_ctx.canvas, *activeFont(), argInt(vm, 1), argInt(vm, 2),
-                         be_tostring(vm, 3), argColor(vm, 4));
+  const GfxFont* font = activeFont();
+  if (canDraw(vm, 3) && font && isTextArg(vm, 3)) {
+    text::TextPaint paint;
+    paint.flat = argColorOr(vm, 4, deviceTextColor());
+    if (readTextArg(vm, 3, *font, paint.flat, g_textRun, &g_textRunColors)) {
+      if (!g_textRunColors.empty()) {
+        paint.glyphColors = g_textRunColors.data();
+        paint.glyphCount = g_textRunColors.size();
+      }
+      adv = text::drawRun(*g_ctx.canvas, *font, argInt(vm, 1), argInt(vm, 2), g_textRun, paint);
+    }
+  }
   be_pushint(vm, adv);
   be_return(vm);
 }
 
 int b_text_width(bvm* vm) {
-  if (!activeFont()) {
+  const GfxFont* font = activeFont();
+  if (!font) {
     be_pushint(vm, kNoClock);
     be_return(vm);
   }
   int w = 0;
-  if (be_top(vm) >= 1 && be_isstring(vm, 1)) w = text::width(*activeFont(), be_tostring(vm, 1));
+  if (readTextArg(vm, 1, *font, 0u, g_textRun, nullptr)) w = text::width(*font, g_textRun);
   be_pushint(vm, w);
   be_return(vm);
 }
 
 int b_text_ink_width(bvm* vm) {
-  if (!activeFont()) {
+  const GfxFont* font = activeFont();
+  if (!font) {
     be_pushint(vm, kNoClock);
     be_return(vm);
   }
   int w = 0;
-  if (be_top(vm) >= 1 && be_isstring(vm, 1))
-    w = text::measure(*activeFont(), be_tostring(vm, 1)).inkWidth();
+  if (readTextArg(vm, 1, *font, 0u, g_textRun, nullptr))
+    w = text::measure(*font, g_textRun).inkWidth();
   be_pushint(vm, w);
   be_return(vm);
 }
@@ -467,13 +555,13 @@ int b_scroll_text(bvm* vm) {
   ScrollRun run;
 
   if (g_ctx.canvas && g_ctx.scroll && font) {
-    if (argc >= 1 && be_isstring(vm, 1)) {
+    if (isTextArg(vm, 1)) {
       textArg = 1;
       run.y = render::kTextBaseline;
       run.width = g_ctx.canvas->width();
-      run.color = argColorOr(vm, 2, settings ? settings->textColor : 0xFFFFFFu);
+      run.color = argColorOr(vm, 2, deviceTextColor());
       run.spec = argScrollSpec(vm, 3, run.repeat);
-    } else if (argc >= 5 && be_isstring(vm, 4)) {
+    } else if (argc >= 5 && isTextArg(vm, 4)) {
       textArg = 4;
       run.x = argInt(vm, 1);
       run.y = argInt(vm, 2);
@@ -483,9 +571,14 @@ int b_scroll_text(bvm* vm) {
     }
   }
 
-  if (textArg && run.width > 0)
-    cycles = g_ctx.scroll->draw(*g_ctx.canvas, *font, be_tostring(vm, textArg), run, defaults,
-                                nowMs());
+  if (textArg && run.width > 0 &&
+      readTextArg(vm, textArg, *font, run.color, g_textRun, &g_textRunColors)) {
+    if (!g_textRunColors.empty()) {
+      run.glyphColors = g_textRunColors.data();
+      run.glyphCount = g_textRunColors.size();
+    }
+    cycles = g_ctx.scroll->draw(*g_ctx.canvas, *font, g_textRun, run, defaults, nowMs());
+  }
   be_pushint(vm, cycles);
   be_return(vm);
 }
@@ -991,16 +1084,16 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "rect_fill", b_fill_rect);          // rect_fill(x, y, w, h, color)
   be_regfunc(b, "circle", b_circle);                // circle(cx, cy, r, color)
   be_regfunc(b, "circle_fill", b_fill_circle);      // circle_fill(cx, cy, r, color)
-  be_regfunc(b, "text", b_text);                    // text(x, y, str, color)
-  be_regfunc(b, "text_width", b_text_width);        // text_width(str)
-  be_regfunc(b, "text_ink_width", b_text_ink_width);  // text_ink_width(str)
+  be_regfunc(b, "text", b_text);                    // text(x, y, txt, color?)
+  be_regfunc(b, "text_width", b_text_width);        // text_width(txt)
+  be_regfunc(b, "text_ink_width", b_text_ink_width);  // text_ink_width(txt)
   be_regfunc(b, "font", b_font);                    // font(name)
   be_regfunc(b, "icon", b_icon);                    // icon(name, x, y)
 
   be_regfunc(b, "rgb", b_rgb);                      // rgb(r, g, b)
   be_regfunc(b, "hsv", b_hsv);                      // hsv(h, s, v)
   be_regfunc(b, "ramp_text", b_ramp_text);          // ramp_text(x, y, str, palette, span?, speed?)
-  be_regfunc(b, "scroll_text", b_scroll_text);      // scroll_text(str, color?, opts?)
+  be_regfunc(b, "scroll_text", b_scroll_text);      // scroll_text(txt, color?, opts?)
   be_regfunc(b, "progress", b_progress);            // progress(pct, paint?, bg?)
   be_regfunc(b, "bar_chart", b_bar_chart);          // bar_chart(list, paint?, autoscale?)
   be_regfunc(b, "line_chart", b_line_chart);        // line_chart(list, paint?, autoscale?)

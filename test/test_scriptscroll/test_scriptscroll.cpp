@@ -16,6 +16,10 @@ static const FontGlyph kG[] = {{0, 3, 3, 4, 0, 0}};
 static const uint8_t kB[] = {0xFF, 0x80};
 static const GfxFont kFont = {kB, kG, 'A', 'A', 8};
 
+static const FontGlyph kLargeG[] = {{0, 5, 3, 6, 0, 0}};
+static const uint8_t kLargeB[] = {0xFF, 0xFF};
+static const GfxFont kLargeFont = {kLargeB, kLargeG, 'A', 'A', 8};
+
 static script::ScriptServices g_svc;
 static Settings g_settings;
 static long g_ms = 0;
@@ -45,7 +49,7 @@ struct Panel {
     }
     ctx.font = &kFont;
     ctx.fonts[0] = &kFont;
-    ctx.fonts[1] = &kFont;
+    ctx.fonts[1] = &kLargeFont;
     if (!vm.load(body)) {
       TEST_MESSAGE(vm.lastError().c_str());
       return false;
@@ -196,6 +200,71 @@ static void test_two_lines_scroll_independently() {
                                     "the static line must not move");
 }
 
+static void test_fragments_colour_each_run() {
+  Panel p;
+  TEST_ASSERT_TRUE(p.load("def draw() scroll_text([['A', 0xFF0000], ['A', 0x00FF00]]) end"));
+  Canvas c(32, 8);
+  p.frame(c, 0);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(12, 6));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(16, 6));
+}
+
+static void test_a_fragment_without_a_colour_takes_the_run_colour() {
+  Panel p;
+  TEST_ASSERT_TRUE(p.load("def draw() scroll_text([['A'], ['A', 0x00FF00]], 0xFF0000) end"));
+  Canvas c(32, 8);
+  p.frame(c, 0);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(12, 6));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(16, 6));
+}
+
+static void test_fragments_follow_the_large_font() {
+  Panel p;
+  TEST_ASSERT_TRUE(
+      p.load("def draw() font('large') scroll_text([['A', 0xFF0000], ['A', 0x00FF00]]) end"));
+  Canvas c(32, 8);
+  p.frame(c, 0);
+  TEST_ASSERT_EQUAL_HEX32_MESSAGE(0xFF0000u, c.getPixel(10, 6),
+                                  "the wider glyph must set where the first fragment starts");
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(16, 6));
+}
+
+static void test_the_box_form_takes_fragments_too() {
+  Panel p;
+  TEST_ASSERT_TRUE(p.load(
+      "def draw() scroll_text(9, 6, width() - 9, [['A', 0xFF0000], ['A', 0x00FF00]], 0xFFFFFF) "
+      "end"));
+  Canvas c(32, 8);
+  p.frame(c, 0);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(18, 6));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(22, 6));
+}
+
+static void test_two_fragment_lines_keep_their_own_colours() {
+  Panel p;
+  TEST_ASSERT_TRUE(p.load(
+      "def draw()\n"
+      "  scroll_text(0, 1, width(), [['A', 0xFF0000]], 0xFFFFFF, {'mode': 'static'})\n"
+      "  scroll_text(0, 7, width(), [['A', 0x00FF00]], 0xFFFFFF, {'mode': 'static'})\n"
+      "end"));
+  Canvas c(32, 8);
+  p.frame(c, 0);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(14, 1));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(14, 7));
+}
+
+static void test_a_fragment_list_scrolls_when_it_overflows() {
+  Panel p;
+  TEST_ASSERT_TRUE(p.load(
+      "def draw() scroll_text([['AAAAA', 0xFF0000], ['AAAAA', 0x00FF00]], 0xFFFFFF) end"));
+  Canvas a(32, 8);
+  p.frame(a, 0);
+  Canvas b(32, 8);
+  p.frame(b, 100);
+  TEST_ASSERT_TRUE(litCount(a) > 0);
+  TEST_ASSERT_TRUE(differ(a, b));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_short_form_centres_text_that_fits);
@@ -208,5 +277,11 @@ int main(int, char**) {
   RUN_TEST(test_the_call_reports_completed_runs);
   RUN_TEST(test_arguments_matching_neither_shape_draw_nothing);
   RUN_TEST(test_two_lines_scroll_independently);
+  RUN_TEST(test_fragments_colour_each_run);
+  RUN_TEST(test_a_fragment_without_a_colour_takes_the_run_colour);
+  RUN_TEST(test_fragments_follow_the_large_font);
+  RUN_TEST(test_the_box_form_takes_fragments_too);
+  RUN_TEST(test_two_fragment_lines_keep_their_own_colours);
+  RUN_TEST(test_a_fragment_list_scrolls_when_it_overflows);
   return UNITY_END();
 }

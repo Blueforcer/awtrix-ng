@@ -257,8 +257,62 @@ static void test_an_unknown_font_name_is_ignored() {
   TEST_ASSERT_EQUAL_HEX32(4u, c.getPixel(0, 7));
 }
 
+static void test_text_takes_a_fragment_list() {
+  Canvas c(32, 8);
+  draw("def draw() text(0, 6, [['A', 0xFF0000], ['A', 0x00FF00]]) end", c);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(0, 6));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(4, 6));
+}
+
+static void test_a_fragment_without_a_colour_takes_the_run_colour() {
+  Canvas c(32, 8);
+  draw("def draw() text(0, 6, ['A', ['A', 0x00FF00]], 0xFF0000) end", c);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(0, 6));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(4, 6));
+}
+
+static void test_text_without_a_colour_uses_the_device_colour() {
+  Canvas c(32, 8);
+  draw("def draw() text(0, 6, 'A') end", c);
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(0, 6));
+}
+
+static void test_fragment_colours_stay_with_their_glyphs() {
+  Canvas c(32, 8);
+  draw("def draw() text(0, 6, [['\xC2\xB0', 0xFF0000], ['A', 0x00FF00]], 0x0000FF) end", c);
+  TEST_ASSERT_EQUAL_HEX32_MESSAGE(0x00FF00u, c.getPixel(0, 6),
+                                  "a multi-byte character counts as one glyph, not as its bytes");
+}
+
+static void test_the_measuring_calls_take_a_fragment_list() {
+  Canvas c(32, 8);
+  drawWith(kFont, "def draw() pixel(0, 7, text_width([['A'], ['A']])) end", c);
+  TEST_ASSERT_EQUAL_HEX32(8u, c.getPixel(0, 7));
+
+  Canvas d(32, 8);
+  drawWith(kFont, "def draw() pixel(0, 7, text_ink_width([['A'], ['A']])) end", d);
+  TEST_ASSERT_EQUAL_HEX32(7u, d.getPixel(0, 7));
+}
+
+static void test_a_long_fragment_list_is_not_truncated() {
+  Canvas c(32, 8);
+  draw("def draw()\n"
+       "  var f = []\n"
+       "  for i : 0 .. 19 f.push(['A']) end\n"
+       "  pixel(0, 7, text(0, 0, f, 0xFFFFFF))\n"
+       "end",
+       c);
+  TEST_ASSERT_EQUAL_HEX32(80u, c.getPixel(0, 7));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_text_takes_a_fragment_list);
+  RUN_TEST(test_a_fragment_without_a_colour_takes_the_run_colour);
+  RUN_TEST(test_text_without_a_colour_uses_the_device_colour);
+  RUN_TEST(test_fragment_colours_stay_with_their_glyphs);
+  RUN_TEST(test_the_measuring_calls_take_a_fragment_list);
+  RUN_TEST(test_a_long_fragment_list_is_not_truncated);
   RUN_TEST(test_font_switches_drawing_and_measuring_together);
   RUN_TEST(test_an_unknown_font_name_is_ignored);
   RUN_TEST(test_utf8_text_folds_to_the_font_charset);

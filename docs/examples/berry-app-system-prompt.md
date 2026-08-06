@@ -213,7 +213,7 @@ and maps* around the drawing that cost, never the drawing itself.
 
 | Call | Does |
 |---|---|
-| `text(x, y, str, color)` | draw text; **returns the advance in pixels** |
+| `text(x, y, str, color?)` | draw text; **returns the advance in pixels** |
 | `text_width(str)` | how far the pen moves - for chaining runs and spacing repeats |
 | `text_ink_width(str)` | how wide the lit pixels are - for fitting and centring |
 | `font(name)` | `"small"` (default) or `"large"`, for the rest of the frame |
@@ -237,6 +237,20 @@ Centre by measuring, never by guessing:
     var w = text_ink_width(s)
     text((width() - w) / 2, 6, s, 0xFFFFFF)
 ```
+
+Leave the colour off and the text takes the device's `textColor`.
+
+**Several colours in one line.** Every call above, and `scroll_text()`, takes a list
+of pieces in place of the string - each piece `[text, color]`:
+
+```berry
+    text(1, 6, [["CPU ", 0x888888], ["42%", 0x00FF00]])
+```
+
+The pieces are one line: they measure, centre and scroll together, and `font("large")`
+covers all of them. A piece written as a plain string, or as `["text"]` without a
+colour, takes the colour of the call. Build the list in `init()` when it never
+changes; a list rebuilt in `draw()` is forty allocations a second.
 
 **Text is UTF-8.** Type accented letters and symbols directly: a temperature is
 `str(t) + "°"`. The measuring calls count glyphs, not bytes, so a `°` counts once.

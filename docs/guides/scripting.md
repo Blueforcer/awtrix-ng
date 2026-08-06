@@ -446,7 +446,7 @@ build the same number from plain channel values.
 | `rect_fill(x, y, w, h, color)` | filled rectangle | `rect_fill(0, 6, 10, 2, 0x0000FF)` |
 | `circle(cx, cy, r, color)` | circle outline | `circle(4, 4, 3, 0xFFFFFF)` |
 | `circle_fill(cx, cy, r, color)` | filled circle | `circle_fill(4, 4, 3, 0xFFD700)` |
-| `text(x, y, str, color)` | draw text, returns the advance in pixels | `var adv = text(1, 6, "hi", 0xFFFFFF)` |
+| `text(x, y, str, color?)` | draw text, returns the advance in pixels | `var adv = text(1, 6, "hi", 0xFFFFFF)` |
 | `text_width(str)` | how far the pen moves - use it to chain runs and to space repeats | `var w = text_width("hi")` |
 | `text_ink_width(str)` | how wide the lit pixels are - use it to fit and to centre | `var w = text_ink_width("hi")` |
 | `font(name)` | switch to `"small"` or `"large"` for the rest of the frame | `font("large")` |
@@ -463,6 +463,26 @@ def draw()
   text(1 + adv, 6, "42%", 0x00FF00)
 end
 ```
+
+Leave the colour off and the text takes the device's own `textColor`, the same one the built-in
+apps use.
+
+<a id="text-in-several-colours"></a>
+**Text in several colours** - anywhere a call takes a string it also takes a list of pieces,
+each one `[text, colour]`:
+
+```berry
+def draw()
+  clear()
+  text(1, 6, [["CPU ", 0x888888], ["42%", 0x00FF00]])
+end
+```
+
+The pieces are one line: they measure, centre and scroll together, so `scroll_text()` and the
+measuring calls take the same list. A piece written as a plain string, or as `["text"]` with no
+colour of its own, uses the colour of the call, and `font("large")` applies to all of them. It is
+the same thing a [pushed app](../reference/payload.md#colored-fragments) does when its `text` is
+an array rather than a string.
 
 `icon()` draws from the same `/ICONS` folder the rest of AWTRIX uses - see [Icons & assets](icons.md). Give it the bare name, no path and no extension. **An animated GIF animates** - draw the same icon each frame and it plays, on the same schedule a [pushed app](pushed-apps.md)'s icon uses. A handful of icons stay cached, so cycling through a small set is cheap while fanning out over many costs a read each time.
 
@@ -524,7 +544,8 @@ end
 ```
 
 Left out, the colour is the device's own `textColor`, and the line sits on the
-baseline every other app uses.
+baseline every other app uses. In place of the string you may pass a
+[list of coloured pieces](#text-in-several-colours); it travels as one line.
 
 **Give it columns of its own** when your app draws something beside it. The
 second form takes the box the text may travel in - nothing is painted outside it,
