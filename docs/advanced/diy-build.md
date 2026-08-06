@@ -22,7 +22,7 @@ Everything else follows from it. Both are supported first-class, with their own 
 
 | | ESP32 (classic) | **ESP32-S3** |
 |---|---|---|
-| Firmware image | `factory-awtrix-ng-4mb.bin` (or 8/16 MB) | `factory-awtrix-ng-s3-8mb.bin` / `-16mb.bin` |
+| Firmware image | `usb-awtrix-ng-4mb.bin` (or 8/16 MB) | `usb-awtrix-ng-s3-8mb.bin` / `-16mb.bin` |
 | Usable GPIO | 0-39, of which 34-39 are input-only | 0-48 except 22-25, **no input-only pins** |
 | ADC for battery + LDR | GPIO 32-39 | GPIO 1-10 |
 | Panel, apps, scripting, MQTT, Art-Net | yes | yes |

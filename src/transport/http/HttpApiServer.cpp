@@ -110,8 +110,9 @@ class HttpApiServer::BodyHandler : public RequestHandler {
 namespace {
 
 // ESP image header: byte 0 is the magic, bytes 12 and 13 hold the chip id, little endian. An app
-// image carries an esp_app_desc_t at offset 32; a factory image starts with the bootloader, which
-// has none - and on the ESP32, whose bootloader sits at 0x1000, with erased padding before it.
+// image carries an esp_app_desc_t at offset 32; a usb-*.bin install image starts with the
+// bootloader, which has none - and on the ESP32, whose bootloader sits at 0x1000, with erased
+// padding before it.
 constexpr size_t kEspImageHeaderBytes = 36;
 constexpr size_t kEspImageChipIdOffset = 12;
 constexpr size_t kEspAppDescOffset = 32;
@@ -395,8 +396,8 @@ void HttpApiServer::handleUpdateUpload() {
     if (uploadWriteOk_ && !uploadContentChecked_ && up.currentSize >= kEspImageHeaderBytes) {
       uploadContentChecked_ = true;
       if (up.buf[0] == kEspFlashErasedByte) {
-        updateImageError_ = std::string("this is a factory image for a first flash over USB, not "
-                                        "an update image - upload ") +
+        updateImageError_ = std::string("this is a usb-*.bin install image for a first flash "
+                                        "over USB, not an update image - upload ") +
                             kUpdateImageName + " instead";
       } else if (up.buf[0] != kEspImageMagic) {
         updateImageError_ = "not a firmware image (missing the 0xE9 header magic)";
@@ -412,8 +413,8 @@ void HttpApiServer::handleUpdateUpload() {
                               ", this device is an " + chipIdName(kExpectedChipId);
         else if (appDesc != kEspAppDescMagic)
           updateImageError_ =
-              std::string("this is a factory image for a first flash over USB, not an update "
-                          "image - upload ") +
+              std::string("this is a usb-*.bin install image for a first flash over USB, not an "
+                          "update image - upload ") +
               kUpdateImageName + " instead";
       }
       if (!updateImageError_.empty()) {

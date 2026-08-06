@@ -168,11 +168,13 @@ jobs:
         run: |
           cp .pio/build/awtrix/firmware.bin firmware-awtrix-ng.bin
           cp .pio/build/awtrix_s3/firmware.bin firmware-awtrix-ng-s3.bin
-      - name: Stage factory images
+      - name: Stage the USB install images
         # What a user flashes over USB: bootloader, partition table, app. The
         # table is the only part that varies with flash size, which is why one
         # build yields several of these. Which sizes ship is stated once, in
-        # gen_partitions.FACTORY_FLASH_SIZES.
+        # gen_partitions.FACTORY_FLASH_SIZES. They carry a usb- prefix because
+        # readers took factory-awtrix-ng-4mb.bin for the update file of a 4 MB
+        # board, which is the one asset name that names a flash size.
         run: |
           python scripts/factory_image.py --env awtrix    --all
           python scripts/factory_image.py --env awtrix_s3 --all
@@ -197,7 +199,7 @@ jobs:
           files: |
             firmware-awtrix-ng.bin
             firmware-awtrix-ng-s3.bin
-            factory-awtrix-ng-*.bin
+            usb-awtrix-ng-*.bin
             licenses-awtrix-ng.zip
       - name: Flip the release live, now that every asset is attached
         # This is what fires `release: published`, and with it the Discord

@@ -60,16 +60,17 @@ file per chip:
 One file covers every board of that chip, whatever its flash size - boards differ in their pin
 map, which you set on AWTRIX. See [Board presets](../reference/gpio.md#board-presets).
 
-!!! warning "Not the `factory-*.bin` files"
-    A TC001 has a 4 MB ESP32, but `factory-awtrix-ng-4mb.bin` is **not** the file you want here.
-    The `factory-*.bin` images are for a first flash over USB - see
+!!! warning "Not the `usb-*.bin` files"
+    A TC001 has a 4 MB ESP32, but `usb-awtrix-ng-4mb.bin` is **not** the file you want here.
+    The `usb-*.bin` images are for a first flash over USB - see
     [Flashing](../getting-started/flashing.md). To update a device that already runs AWTRIX NG,
     take `firmware-awtrix-ng.bin`.
 
-An image built for the other chip, and a factory image, are both refused with `400 wrongChip`
-before a single byte reaches flash, so uploading the wrong one costs you nothing but the upload. To upload a build of your own, `pio run -e awtrix`
-writes it to `.pio/build/awtrix/firmware.bin` - see
-[Building from source](../advanced/building.md).
+An image built for the other chip, and a USB install image, are both refused with `400 wrongChip`
+before a single byte reaches flash, so uploading the wrong one costs you nothing but the upload.
+
+To upload a build of your own, `pio run -e awtrix` writes it to `.pio/build/awtrix/firmware.bin` -
+see [Building from source](../advanced/building.md).
 
 ## An update that fails changes nothing
 
@@ -113,7 +114,7 @@ and `version` is also a field of [`GET /api/v1/device`](../reference/device.md#e
 
 If AWTRIX no longer answers on the network, reflash it over USB - see
 [Flashing](../getting-started/flashing.md). That path does not depend on the firmware currently on
-the chip, but flashing a `factory-*.bin` does erase your settings and Wi-Fi credentials, so you
+the chip, but flashing a `usb-*.bin` does erase your settings and Wi-Fi credentials, so you
 set AWTRIX up again from [First boot](../getting-started/first-boot.md).
 
 To start clean while AWTRIX still works, use **System → Maintenance → Erase everything** in the

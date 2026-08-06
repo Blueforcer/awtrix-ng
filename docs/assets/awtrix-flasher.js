@@ -2,7 +2,7 @@
 //
 // esptool-js speaks the ESP32 ROM bootloader protocol over Web Serial, which is
 // the same conversation `esptool write_flash 0x0` has over a USB port. The two
-// paths therefore write the identical factory image; this one just asks the chip
+// paths therefore write the identical USB install image; this one just asks the chip
 // which image it needs instead of asking the reader.
 //
 // The bundle is one self-contained ES module -- the flasher stubs are inlined in
@@ -10,7 +10,7 @@
 import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.js";
 
 // Written by the Docs workflow after it downloads the release assets:
-// {"version": "v1.0.8", "assets": ["factory-awtrix-ng-4mb.bin", ...]}.
+// {"version": "v1.0.15", "assets": ["usb-awtrix-ng-4mb.bin", ...]}.
 // Resolved against this module's own URL so the page works both under the
 // GitHub Pages sub-path and on a site served from the root.
 const FIRMWARE = new URL("../firmware/", import.meta.url);
@@ -26,12 +26,14 @@ const ROM_BAUD = 115200;
 
 // The release-asset naming from scripts/factory_image.py: the classic ESP32
 // image carries the project name, the S3 one carries it with an -s3 suffix.
+// Up to v1.0.14 the prefix was factory-, so both are tried and the first that
+// the published release actually carries wins.
 const ASSET_PREFIX = {
-  "ESP32": "factory-awtrix-ng-",
-  "ESP32-S3": "factory-awtrix-ng-s3-",
+  "ESP32": ["usb-awtrix-ng-", "factory-awtrix-ng-"],
+  "ESP32-S3": ["usb-awtrix-ng-s3-", "factory-awtrix-ng-s3-"],
 };
 
-// Where the partition table sits inside the factory image, and the type/subtype
+// Where the partition table sits inside the USB install image, and the type/subtype
 // pair naming the partition that holds the settings and the Wi-Fi credentials.
 const PARTITION_TABLE = 0x8000;
 const ENTRY = 32;
@@ -40,7 +42,7 @@ const TYPE_DATA = 0x01;
 const SUBTYPE_NVS = 0x02;
 const SECTOR = 0x1000;
 
-// The factory image is merged, so the gap between the partition table and
+// The install image is merged, so the gap between the partition table and
 // boot_app0 -- which is where nvs lives -- is 0xFF padding in it. Writing the
 // image as one piece therefore erases the settings. Reading the table out of
 // the image says which bytes to skip to keep them, and reading it from the
@@ -188,9 +190,10 @@ async function flash({ button, status, progress, log, terminal, index, eraseBox 
 
     const chip = loader.chip.CHIP_NAME;
     const flashSize = await loader.detectFlashSize();
-    const prefix = ASSET_PREFIX[chip];
-    const asset = prefix && `${prefix}${flashSize.toLowerCase()}.bin`;
-    if (!asset || !index.assets.includes(asset)) {
+    const candidates = (ASSET_PREFIX[chip] || []).map(
+      (prefix) => `${prefix}${flashSize.toLowerCase()}.bin`);
+    const asset = candidates.find((name) => index.assets.includes(name));
+    if (!asset) {
       status.textContent = `No image ships for a ${chip} with ${flashSize} of flash.`;
       return;
     }

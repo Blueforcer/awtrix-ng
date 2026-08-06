@@ -53,11 +53,14 @@ jobs:
             exit 0
           fi
           mkdir -p docs/firmware
-          # A release from before the factory images existed carries none of
+          # A release from before the USB install images existed carries none of
           # them, and that is not a reason to stop publishing documentation.
+          # They were named factory-*.bin up to v1.0.14, which is why both
+          # patterns are fetched -- the flasher knows either.
+          gh release download "$tag" --pattern 'usb-*.bin' --dir docs/firmware || true
           gh release download "$tag" --pattern 'factory-*.bin' --dir docs/firmware || true
-          if ! ls docs/firmware/factory-*.bin >/dev/null 2>&1; then
-            echo "::warning::Release $tag carries no factory-*.bin -- the browser flasher will report that no firmware is available."
+          if ! ls docs/firmware/*.bin >/dev/null 2>&1; then
+            echo "::warning::Release $tag carries no USB install image -- the browser flasher will report that no firmware is available."
             exit 0
           fi
           python - "$tag" <<'PY'

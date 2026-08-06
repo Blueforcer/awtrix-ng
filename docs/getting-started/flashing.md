@@ -71,9 +71,9 @@ Download from the [releases page](https://github.com/Blueforcer/awtrix-ng/releas
 
 | File | For |
 |---|---|
-| `factory-awtrix-ng-4mb.bin` | 4 MB ESP32 boards, the Ulanzi TC001 among them |
-| `factory-awtrix-ng-8mb.bin`, `factory-awtrix-ng-16mb.bin` | ESP32 boards with more flash |
-| `factory-awtrix-ng-s3-8mb.bin`, `factory-awtrix-ng-s3-16mb.bin` | ESP32-S3 boards |
+| `usb-awtrix-ng-4mb.bin` | 4 MB ESP32 boards, the Ulanzi TC001 among them |
+| `usb-awtrix-ng-8mb.bin`, `usb-awtrix-ng-16mb.bin` | ESP32 boards with more flash |
+| `usb-awtrix-ng-s3-8mb.bin`, `usb-awtrix-ng-s3-16mb.bin` | ESP32-S3 boards |
 
 Take the one matching your board's flash size. If you are unsure how much it has, ask the chip:
 
@@ -84,12 +84,15 @@ python -m esptool --port COM5 flash_id
 The `firmware-awtrix-ng.bin` and `firmware-awtrix-ng-s3.bin` assets on the same page are **not** for
 this - they are for [updating a device](../guides/updating.md) that already runs AWTRIX NG.
 
+Releases up to v1.0.14 named these images `factory-awtrix-ng-4mb.bin` and so on. Same file, older
+name.
+
 ---
 
 ## 4. Flash it with esptool
 
 ```bash
-python -m esptool --chip esp32 --port COM5 --baud 460800 write_flash 0x0 factory-awtrix-ng-4mb.bin
+python -m esptool --chip esp32 --port COM5 --baud 460800 write_flash 0x0 usb-awtrix-ng-4mb.bin
 ```
 
 Use `--chip esp32s3` for an S3 board. When it finishes it prints `Hash of data verified.`

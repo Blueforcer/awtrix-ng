@@ -161,17 +161,17 @@ To inspect or produce one by hand:
 python scripts/gen_partitions.py --soc esp32s3 --flash-size 16MB
 ```
 
-## Factory images
+## USB install images
 
 `pio run -t upload` writes the bootloader, the partition table, `boot_app0` and the
-app as separate transfers. A factory image is those merged into one file starting at
-offset 0, so it can be flashed with nothing but `esptool`. The release assets are
-factory images, and [Flashing](../getting-started/flashing.md) is the page that uses
-them.
+app as separate transfers. A USB install image is those merged into one file starting
+at offset 0, so it can be flashed with nothing but `esptool`. The `usb-*.bin` release
+assets are these images, and [Flashing](../getting-started/flashing.md) is the page
+that uses them.
 
 ```bash
 pio run -e awtrix
-python scripts/factory_image.py --env awtrix --flash-size 4MB -o dist/factory-awtrix-ng-4mb.bin
+python scripts/factory_image.py --env awtrix --flash-size 4MB -o dist/usb-awtrix-ng-4mb.bin
 ```
 
 Merging runs through `esptool`, which is not a PlatformIO dependency: `pip install
@@ -230,10 +230,10 @@ for the firmware builds and the web UI tests:
 |---|---|---|
 | Core host unit tests | `pio test -e native -v` | The portable `core/` layer |
 | Web UI tests (jsdom) | `npm test` (in `webui/test`) | The web UI JS logic, loaded from the shipped `webui/index.html` via jsdom |
-| Firmware build | `pio run -e <env>`, then `scripts/factory_image.py --all` | Both device images - the matrix is `awtrix`, `awtrix_s3` - and a factory image per flash size |
+| Firmware build | `pio run -e <env>`, then `scripts/factory_image.py --all` | Both device images - the matrix is `awtrix`, `awtrix_s3` - and a USB install image per flash size |
 | API docs match the firmware | `tools/check_docs_sync.py`, `tools/check_berry_api.py`, `tools/check_prelude_solidified.py`, `tools/check_font_sync.py`, `tools/check_partitions.py` | Documented fields and error codes, the editor's Berry table, the solidified prelude, the generated panel font, and every partition table |
 
-On a `v*` tag a release job additionally publishes both OTA images and the factory
+On a `v*` tag a release job additionally publishes both OTA images and the USB install
 images for each supported flash size.
 
 A second workflow, `.github/workflows/docs.yml`, builds this documentation with
