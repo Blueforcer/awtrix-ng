@@ -36,8 +36,8 @@ BASELINE = 6
 
 def cap_shift(path, glyphs):
     """How far this font is moved to put its capitals on the panel's cap line."""
-    for _name, filename, cap_top in gen.FONTS:
-        if os.path.basename(path) == filename:
+    for _name, base_file, fill_file, cap_top in gen.FONTS:
+        if os.path.basename(path) in (base_file, fill_file):
             return cap_top - glyphs[0x41].top
     return 0
 
