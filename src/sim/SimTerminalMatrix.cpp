@@ -87,12 +87,12 @@ BOOL WINAPI ctrlHandler(DWORD type) {
 }
 #endif
 
-// sgr is "38" for foreground or "48" for background; brightness is folded into the RGB the same
-// way the LED driver would, since a terminal has no brightness of its own.
-void appendColor(std::string& out, const char* sgr, uint32_t rgb, uint8_t bri) {
-  const unsigned r = (((rgb >> 16) & 0xFF) * bri) / 255;
-  const unsigned g = (((rgb >> 8) & 0xFF) * bri) / 255;
-  const unsigned b = ((rgb & 0xFF) * bri) / 255;
+// sgr is "38" for foreground or "48" for background. The frame arrives already dimmed - SimBoard
+// folds brightness into the grade - so scaling here would dim the preview twice.
+void appendColor(std::string& out, const char* sgr, uint32_t rgb) {
+  const unsigned r = (rgb >> 16) & 0xFF;
+  const unsigned g = (rgb >> 8) & 0xFF;
+  const unsigned b = rgb & 0xFF;
   char buf[32];
   std::snprintf(buf, sizeof(buf), "\x1b[%s;2;%u;%u;%um", sgr, r, g, b);
   out += buf;
@@ -230,8 +230,8 @@ void SimTerminalMatrix::render(const Canvas& canvas, uint8_t brightness) {
       for (int x = 0; x < panelW_; ++x) {
         const uint32_t top = canvas.getPixel(x, r * 2);
         const uint32_t bot = canvas.getPixel(x, r * 2 + 1);
-        if (top != lastFg) appendColor(frame, "38", top, brightness);
-        if (bot != lastBg) appendColor(frame, "48", bot, brightness);
+        if (top != lastFg) appendColor(frame, "38", top);
+        if (bot != lastBg) appendColor(frame, "48", bot);
         lastFg = top;
         lastBg = bot;
         frame += "▀";
@@ -245,7 +245,7 @@ void SimTerminalMatrix::render(const Canvas& canvas, uint8_t brightness) {
     for (int r = 0; r < pixelRows_; ++r) {
       std::snprintf(buf, sizeof(buf), "\x1b[%d;%dH", pixelRow0_ + r, panelCol_ + 1);
       frame += buf;
-      appendColor(frame, "38", 0, brightness);
+      appendColor(frame, "38", 0);
       const int y = r / ledCellRows;
       const bool lastRow = (r % ledCellRows) == ledCellRows - 1;
       uint32_t lastBg = 0xFFFFFFFFu;
@@ -253,14 +253,14 @@ void SimTerminalMatrix::render(const Canvas& canvas, uint8_t brightness) {
         const uint32_t c = canvas.getPixel(cx / scale, y);
         if (c == 0) {
           if (lastBg != 0) {
-            appendColor(frame, "48", 0, brightness);
+            appendColor(frame, "48", 0);
             lastBg = 0;
           }
           frame += ' ';
           continue;
         }
         if (c != lastBg) {
-          appendColor(frame, "48", c, brightness);
+          appendColor(frame, "48", c);
           lastBg = c;
         }
         const bool lastCol = (cx % scale) == scale - 1;

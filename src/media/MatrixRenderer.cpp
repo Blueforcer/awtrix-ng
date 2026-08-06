@@ -37,11 +37,17 @@ void MatrixRenderer::begin(int pin, const MatrixLayout& layout, uint8_t brightne
       addLedsOnPin<AWTRIX_MATRIX_FALLBACK_PIN>(layout_.ledCount());
       break;
   }
-  FastLED.setBrightness(brightness);
+  // Brightness lives in the colour grade, so the driver's own global scale stays wide open;
+  // applying it again here would dim the panel twice.
+  FastLED.setBrightness(255);
+  setBrightness(brightness);
   FastLED.clear(true);
 }
 
-void MatrixRenderer::setBrightness(uint8_t brightness) { FastLED.setBrightness(brightness); }
+void MatrixRenderer::setBrightness(uint8_t brightness) {
+  brightness_ = brightness;
+  applyGrade();
+}
 
 int MatrixRenderer::xyToIndex(int x, int y) const { return layout_.xyToIndex(x, y); }
 

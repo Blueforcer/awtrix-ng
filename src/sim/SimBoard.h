@@ -73,9 +73,23 @@ class SimBoard : public IBoard {
     grade_.apply(canvas, *graded_);
     onShow(*graded_, brightness_);
   }
-  void setBrightness(uint8_t brightness) override { brightness_ = brightness; }
+  void setBrightness(uint8_t brightness) override {
+    brightness_ = brightness;
+    applyGrade();
+  }
   void setMatrixLayout(const MatrixLayout& layout) override { layout_ = layout; }
-  void applyColorGrade(const render::GradeParams& grade) override { grade_.setParams(grade); }
+  void applyColorGrade(const render::GradeParams& grade) override {
+    baseGrade_ = grade;
+    applyGrade();
+  }
+
+  // Same as the LED driver: brightness is folded into the grade, so a consumer gets a finished
+  // frame rather than one it has to dim itself.
+  void applyGrade() {
+    render::GradeParams p = baseGrade_;
+    p.brightness = brightness_;
+    grade_.setParams(p);
+  }
 
   bool hasBattery() const override { return true; }
   bool hasLightSensor() const override { return true; }
@@ -111,6 +125,7 @@ class SimBoard : public IBoard {
 
  private:
   MatrixLayout layout_;
+  render::GradeParams baseGrade_;
   render::ColorGrade grade_;
   std::unique_ptr<Canvas> graded_;
   SimSound sound_;

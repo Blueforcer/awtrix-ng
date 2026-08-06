@@ -51,24 +51,70 @@ static void test_gamma_is_monotonic() {
   TEST_ASSERT_EQUAL_UINT8(255, prev);
 }
 
-static void test_gamma_keeps_a_lit_channel_lit() {
+// The 16-bit curve keeps a lit channel non-zero, but the step down to eight bits rounds anything
+// under 129 away. So the dim end of the picture ends where the curve drops it, not where the input
+// does - at the default gamma that edge sits at an input of 10.
+static void test_a_dim_channel_rounds_away() {
   ColorGrade g;
-  for (int i = 1; i < 256; ++i) {
-    const uint32_t c = g.applyPixel(color::pack(static_cast<uint8_t>(i), 0, 0));
-    TEST_ASSERT_TRUE(color::red(c) >= 1);
-  }
+  TEST_ASSERT_EQUAL_UINT8(0, color::red(g.applyPixel(color::pack(9, 0, 0))));
+  TEST_ASSERT_EQUAL_UINT8(1, color::red(g.applyPixel(color::pack(10, 0, 0))));
   TEST_ASSERT_EQUAL_HEX32(0x000000u, g.applyPixel(0x000000u));
 }
 
-static void test_steep_gamma_keeps_dim_channels_lit() {
-  ColorGrade g;
+static void test_a_steeper_gamma_moves_that_edge_up() {
+  ColorGrade shallow, steep;
   GradeParams p = neutral();
+  p.gamma = 1.5f;
+  shallow.setParams(p);
   p.gamma = 4.0f;
+  steep.setParams(p);
+  const uint32_t c = color::pack(40, 40, 40);
+  TEST_ASSERT_TRUE(color::red(steep.applyPixel(c)) < color::red(shallow.applyPixel(c)));
+  TEST_ASSERT_EQUAL_UINT8(0, color::red(steep.applyPixel(color::pack(1, 2, 3))));
+}
+
+// Brightness multiplies the curve's result, so it is linear in light and every setting is usable.
+// Scaling before the curve instead would make white at brightness 5 work out to a sixth of a PWM
+// step, leaving the first nine settings indistinguishable from off.
+static void test_brightness_scales_after_the_curve() {
+  ColorGrade g;
+  GradeParams p;
+  for (uint8_t bri : {uint8_t{1}, uint8_t{10}, uint8_t{69}, uint8_t{128}}) {
+    p.brightness = bri;
+    g.setParams(p);
+    TEST_ASSERT_EQUAL_UINT8(bri, color::red(g.applyPixel(0xFFFFFFu)));
+  }
+}
+
+// The whole point of the ordering: a colour keeps its share of white down to where the panel runs
+// out of steps, rather than the control range running out first.
+static void test_a_colour_keeps_its_weight_at_low_brightness() {
+  ColorGrade g;
+  GradeParams p;
+  p.brightness = 10;
   g.setParams(p);
-  const uint32_t c = g.applyPixel(color::pack(1, 2, 3));
-  TEST_ASSERT_EQUAL_UINT8(1, color::red(c));
-  TEST_ASSERT_EQUAL_UINT8(1, color::green(c));
-  TEST_ASSERT_EQUAL_UINT8(1, color::blue(c));
+  TEST_ASSERT_EQUAL_UINT8(2, color::red(g.applyPixel(0x666666u)));
+  p.brightness = 3;
+  g.setParams(p);
+  TEST_ASSERT_EQUAL_UINT8(1, color::red(g.applyPixel(0x666666u)));
+}
+
+static void test_full_brightness_leaves_white_alone() {
+  ColorGrade full, almost;
+  GradeParams p;
+  full.setParams(p);
+  p.brightness = 254;
+  almost.setParams(p);
+  TEST_ASSERT_EQUAL_UINT8(255, color::red(full.applyPixel(0xFFFFFFu)));
+  TEST_ASSERT_TRUE(color::red(almost.applyPixel(0xFFFFFFu)) < 255);
+}
+
+static void test_brightness_zero_blanks_the_panel() {
+  ColorGrade g;
+  GradeParams p;
+  p.brightness = 0;
+  g.setParams(p);
+  TEST_ASSERT_EQUAL_HEX32(0x000000u, g.applyPixel(0xFFFFFFu));
 }
 
 static void test_lit_channel_floor_does_not_override_correction() {
@@ -90,6 +136,19 @@ static void test_saturation_zero_is_grey() {
   TEST_ASSERT_FALSE(g.isIdentity());
   const uint32_t c = g.applyPixel(0xFF0000u);
   TEST_ASSERT_EQUAL_HEX32(0x4C4C4Cu, c);
+}
+
+// The channel balance compensates each die's efficiency, so it scales light and not the encoded
+// value - a half-strength correction has to stay half-strength whatever the gamma is.
+static void test_correction_is_independent_of_gamma() {
+  ColorGrade g;
+  GradeParams p = neutral();
+  p.correction = 0x808080u;
+  for (float gamma : {1.0f, 1.9f, 2.8f}) {
+    p.gamma = gamma;
+    g.setParams(p);
+    TEST_ASSERT_EQUAL_UINT8(128, color::red(g.applyPixel(0xFFFFFFu)));
+  }
 }
 
 static void test_correction_scales_channels() {
@@ -210,10 +269,15 @@ int main(int, char**) {
   RUN_TEST(test_neutral_params_are_identity);
   RUN_TEST(test_default_params_apply_gamma);
   RUN_TEST(test_gamma_is_monotonic);
-  RUN_TEST(test_gamma_keeps_a_lit_channel_lit);
-  RUN_TEST(test_steep_gamma_keeps_dim_channels_lit);
+  RUN_TEST(test_a_dim_channel_rounds_away);
+  RUN_TEST(test_a_steeper_gamma_moves_that_edge_up);
+  RUN_TEST(test_brightness_scales_after_the_curve);
+  RUN_TEST(test_a_colour_keeps_its_weight_at_low_brightness);
+  RUN_TEST(test_full_brightness_leaves_white_alone);
+  RUN_TEST(test_brightness_zero_blanks_the_panel);
   RUN_TEST(test_lit_channel_floor_does_not_override_correction);
   RUN_TEST(test_saturation_zero_is_grey);
+  RUN_TEST(test_correction_is_independent_of_gamma);
   RUN_TEST(test_correction_scales_channels);
   RUN_TEST(test_correction_and_tint_compose);
   RUN_TEST(test_saturation_runs_before_the_channel_stages);
