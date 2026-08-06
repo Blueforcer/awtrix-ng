@@ -101,6 +101,26 @@ void test_every_font_covers_the_new_blocks() {
   }
 }
 
+void test_overhead_marks_keep_the_base_baseline() {
+  const uint32_t pairs[][2] = {
+      {0x00C4, 'A'},   {0x00E4, 'a'},   {0x00DC, 'U'},   {0x00FC, 'u'},
+      {0x00D6, 'O'},   {0x00E9, 'e'},   {0x00C8, 'E'},   {0x010C, 'C'},
+      {0x0161, 's'},   {0x017C, 'z'},   {0x0144, 'n'},   {0x0170, 'U'},
+      {0x0401, 0x0415}, {0x0451, 0x0435},
+  };
+  for (FontId id : kIds) {
+    const GfxFont& f = awtrixFont(id);
+    for (const uint32_t* pair : pairs) {
+      const FontGlyph* marked = text::glyphFor(f, pair[0]);
+      const FontGlyph* bare = text::glyphFor(f, pair[1]);
+      TEST_ASSERT_NOT_NULL(marked);
+      TEST_ASSERT_NOT_NULL(bare);
+      TEST_ASSERT_EQUAL_INT_MESSAGE(bare->yOffset + bare->height, marked->yOffset + marked->height,
+                                    "accented letter does not sit on the base baseline");
+    }
+  }
+}
+
 void test_lookalikes_reuse_the_latin_glyph() {
   const GfxFont& f = awtrixFont(FontId::Large);
   TEST_ASSERT_EQUAL_PTR(text::glyphFor(f, 'A'), text::glyphFor(f, 0x0410));
@@ -171,6 +191,7 @@ int main(int, char**) {
   RUN_TEST(test_every_font_draws_ascii_and_latin1);
   RUN_TEST(test_control_codepoints_have_no_glyph);
   RUN_TEST(test_every_font_covers_the_new_blocks);
+  RUN_TEST(test_overhead_marks_keep_the_base_baseline);
   RUN_TEST(test_lookalikes_reuse_the_latin_glyph);
   RUN_TEST(test_the_no_break_space_spaces);
   RUN_TEST(test_no_covered_letter_falls_back_to_the_placeholder);

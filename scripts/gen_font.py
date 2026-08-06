@@ -22,6 +22,7 @@ import argparse
 import os
 import re
 import sys
+import unicodedata
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT_DIR = os.path.join(ROOT, "assets", "fonts")
@@ -44,6 +45,8 @@ BASE_EXCLUDE = {
 ALIASES = {
     0x00A0: 0x0020,
 }
+
+MARK_ABOVE = 230
 
 COVERAGE = [
     ("Latin1", 0x00A0, 0x00FF),
@@ -349,6 +352,32 @@ def aligned(filename, cap_top):
     return {cp: Glyph(g.rows, g.advance, g.top + shift) for cp, g in glyphs.items()}
 
 
+def base_letter(cp):
+    if not any(lo <= cp <= hi for _, lo, hi in COVERAGE):
+        return None
+    parts = unicodedata.normalize("NFD", chr(cp))
+    if len(parts) < 2 or any(unicodedata.combining(m) != MARK_ABOVE for m in parts[1:]):
+        return None
+    return ord(parts[0])
+
+
+def seat_on_baseline(glyphs):
+    moved = 0
+    for cp in sorted(glyphs):
+        letter = base_letter(cp)
+        if letter is None:
+            continue
+        base = glyphs.get(letter)
+        if base is None:
+            continue
+        glyph = glyphs[cp]
+        bottom = base.top - base.height
+        if glyph.top - glyph.height != bottom:
+            glyphs[cp] = Glyph(glyph.rows, glyph.advance, bottom + glyph.height)
+            moved += 1
+    return moved
+
+
 def generate():
     packer = Packer()
     fonts, stats = [], []
@@ -363,9 +392,12 @@ def generate():
                 if have is None:
                     glyphs[cp] = g
                     filled += 1
-                elif cp > DENSE_LAST and g.height > have.height:
+                elif (cp > DENSE_LAST and g.height > have.height
+                        and (base_letter(cp) is None
+                             or g.top - g.height == have.top - have.height)):
                     glyphs[cp] = g
                     filled += 1
+        seated = seat_on_baseline(glyphs)
         missing = [cp for cp in range(DENSE_FIRST, DENSE_LAST + 1) if cp not in glyphs]
         if missing:
             raise SystemExit(
@@ -374,7 +406,7 @@ def generate():
         y_advance = max(g.height for g in glyphs.values()) + 1
         table, indices, shared = build_font(glyphs, packer)
         fonts.append((name, table, indices, y_advance))
-        stats.append((name, len(table), shared, filled))
+        stats.append((name, len(table), shared, filled, seated))
     return emit(packer.blob, fonts), (stats, len(packer.blob))
 
 
@@ -397,8 +429,8 @@ def main():
             fh.write(text)
 
     verb = "in sync" if args.check else "wrote"
-    detail = "  ".join(f"{n}: {g} glyphs, {s} shared, {f} filled in"
-                       for n, g, s, f in stats)
+    detail = "  ".join(f"{n}: {g} glyphs, {s} shared, {f} filled in, {b} reseated"
+                       for n, g, s, f, b in stats)
     print(f"font {verb}: {detail}, {blob} bitmap bytes")
     return 0
 

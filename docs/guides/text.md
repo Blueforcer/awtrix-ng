@@ -336,11 +336,12 @@ What survives:
 
 One placeholder stands in for one character, so `{"text":"Party 🎉"}` renders as `PARTY ?`.
 
-In `small` an accented capital stands six rows where a bare one stands five: `Ä` and `Č` carry the
-mark on top and reach one row lower than `A`, into the row descenders like `g` and `y` use. The row
-above the text stays free either way, so a page drawing its own graphics along the top row does not
-have to avoid accented capitals. In `large` the mark is fitted into the same seven rows a bare
-capital uses, so nothing shifts there.
+In `small` an accented letter shares the baseline of its bare form, so `Ä` lines up with `A` and
+`ü` with `u`. The Latin-1 accents stay inside the five rows a bare capital uses - the letter body
+is a row shorter to leave room for the mark - and the row above the text stays free. `Č ő ż Ё` do
+take a row of their own and reach panel row 0, which a page drawing its own graphics along the top
+row has to keep clear. In `large` the mark is fitted into the same seven rows a bare capital uses,
+so nothing shifts there.
 
 The global `uppercase` setting and `"textCase":"upper"` work past ASCII: `čerstvý` becomes `ČERSTVÝ`,
 `привет` becomes `ПРИВЕТ` - the diacritics are kept, not stripped, for every range AWTRIX maps

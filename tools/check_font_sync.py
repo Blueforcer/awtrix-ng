@@ -54,8 +54,8 @@ def main():
                   "run python scripts/gen_font.py and commit the result", file=sys.stderr)
             return 1
 
-    detail = "  ".join(f"{n}: {g} glyphs, {s} shared, {f} filled in"
-                       for n, g, s, f in stats)
+    detail = "  ".join(f"{n}: {g} glyphs, {s} shared, {f} filled in, {b} reseated"
+                       for n, g, s, f, b in stats)
     print(f"font in sync: {detail}, {blob} bitmap bytes")
     return 0
 

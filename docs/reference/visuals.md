@@ -486,8 +486,10 @@ not one per byte. `"Hi 🎉"` renders as `"Hi ?"`.
 | Punctuation (`– — ‘ ’ “ ”`) and `€` | Its own glyph |
 | Everything else, including Greek | Replaced by a single `?` |
 
-An accented capital stands one row taller than a bare one - the mark takes a row of its own rather
-than eating into the letter. In `small` that reaches panel row 0.
+An accented letter sits on the same baseline as its bare form, with the mark above it. In `small`
+the Latin-1 accents keep to the five rows a bare letter uses, the letter body giving up a row to
+make room; Latin Extended-A and `Ё ё` take a row of their own and reach panel row 0. In `large` the
+mark fits into the same seven rows either way.
 
 ### Font
 
@@ -501,7 +503,7 @@ firmware source in `assets/fonts/MatrixFonts.LICENSE`.
 | | `small` (default) | `large` |
 |---|---|---|
 | Capital height | 5 px | 7 px |
-| Rows used | 1–5, or 0–5 accented | 0–6, plus row 7 for descenders |
+| Rows used | 1–5, or 0–5 for `č ő ż Ё` | 0–6, plus row 7 for descenders |
 | Character width | 4 px | 4 px |
 | Space width | 2 px | 2 px |
 
