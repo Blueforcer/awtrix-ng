@@ -100,7 +100,7 @@ const AppSpec* CoreEngine::pushedApp(const std::string& name) const {
 }
 
 // Apps that exist right now: the built-ins this hardware can actually fill, plus pushed and
-// script apps.
+// script apps. This is also the fallback loop order for anything the user has not arranged.
 std::vector<std::string> CoreEngine::knownApps() const {
   std::vector<std::string> k;
   k.push_back("Time");
@@ -109,7 +109,14 @@ std::vector<std::string> CoreEngine::knownApps() const {
   if (rt.hasTemperature) k.push_back("Temperature");
   if (rt.hasHumidity) k.push_back("Humidity");
   if (rt.hasBattery) k.push_back("Battery");
-  for (const auto& e : pushedApps_) k.push_back(e.name);
+  std::vector<const PushedAppEntry*> byArrival;
+  byArrival.reserve(pushedApps_.size());
+  for (const auto& e : pushedApps_) byArrival.push_back(&e);
+  std::sort(byArrival.begin(), byArrival.end(),
+            [](const PushedAppEntry* a, const PushedAppEntry* b) {
+              return a->arrival < b->arrival;
+            });
+  for (const PushedAppEntry* e : byArrival) k.push_back(e->name);
   for (const auto& n : scriptApps_) k.push_back(n);
   return k;
 }
@@ -274,7 +281,8 @@ DispatchResult CoreEngine::setPushedApp(const std::string& name, const std::stri
       it->receivedAtMs = now_;
       it->arrayBase = p.arrayBase;
     } else {
-      pushedApps_.insert(it, PushedAppEntry{p.key, std::move(p.spec), now_, p.arrayBase});
+      pushedApps_.insert(
+          it, PushedAppEntry{p.key, std::move(p.spec), now_, p.arrayBase, nextArrival_++});
     }
   }
   rebuildAppList();

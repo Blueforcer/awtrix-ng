@@ -194,8 +194,10 @@ show, so the app is not created: it appears neither in the loop nor in `GET /api
 naming it in an order call does nothing. See [Power & battery](power.md).
 
 When no explicit order has ever been set, the loop runs **Time, Date, Temperature, Humidity,
-Battery**, then your pushed apps in alphabetical order by name (uppercase before lowercase, so
-`Zebra` sorts before `apple`), then your scripts in the order they were installed. To keep the date
+Battery**, then your pushed apps in the order they first arrived, then your scripts in the order they
+were installed. Updating a pushed app leaves it where it is; deleting it and sending it again puts it
+at the end. Pushed apps are gone after a reboot, so the sequence you get then is the one your
+automation pushes in - arrange the loop once if it has to be the same every time. To keep the date
 out of the rotation, name it in `disabled`:
 
 ```bash

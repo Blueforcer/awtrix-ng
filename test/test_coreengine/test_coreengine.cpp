@@ -71,6 +71,67 @@ static void test_custom_app_add_and_delete() {
   TEST_ASSERT_EQUAL_UINT(5u, (unsigned)e.appHost().count());
 }
 
+static void test_pushed_apps_follow_the_order_they_arrived_in() {
+  FSound so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  e.execute(cmd(CommandType::SetPushedApp, "zulu", "{\"text\":\"x\"}"));
+  e.execute(cmd(CommandType::SetPushedApp, "alpha", "{\"text\":\"x\"}"));
+  e.execute(cmd(CommandType::SetPushedApp, "mike", "{\"text\":\"x\"}"));
+  const auto& ids = e.appHost().ids();
+  TEST_ASSERT_EQUAL_UINT(8u, (unsigned)ids.size());
+  TEST_ASSERT_EQUAL_STRING("zulu", ids[5].c_str());
+  TEST_ASSERT_EQUAL_STRING("alpha", ids[6].c_str());
+  TEST_ASSERT_EQUAL_STRING("mike", ids[7].c_str());
+}
+
+static void test_updating_a_pushed_app_leaves_its_place_alone() {
+  FSound so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  e.execute(cmd(CommandType::SetPushedApp, "zulu", "{\"text\":\"x\"}"));
+  e.execute(cmd(CommandType::SetPushedApp, "alpha", "{\"text\":\"x\"}"));
+  e.execute(cmd(CommandType::SetPushedApp, "zulu", "{\"text\":\"y\"}"));
+  const auto& ids = e.appHost().ids();
+  TEST_ASSERT_EQUAL_STRING("zulu", ids[5].c_str());
+  TEST_ASSERT_EQUAL_STRING("alpha", ids[6].c_str());
+}
+
+static void test_a_returning_pushed_app_lands_at_the_end() {
+  FSound so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  e.execute(cmd(CommandType::SetPushedApp, "zulu", "{\"text\":\"x\"}"));
+  e.execute(cmd(CommandType::SetPushedApp, "alpha", "{\"text\":\"x\"}"));
+  e.execute(cmd(CommandType::SetPushedApp, "zulu", "", 0, true));
+  e.execute(cmd(CommandType::SetPushedApp, "zulu", "{\"text\":\"x\"}"));
+  const auto& ids = e.appHost().ids();
+  TEST_ASSERT_EQUAL_STRING("alpha", ids[5].c_str());
+  TEST_ASSERT_EQUAL_STRING("zulu", ids[6].c_str());
+}
+
+static void test_an_array_push_keeps_its_element_order() {
+  FSound so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  e.execute(cmd(CommandType::SetPushedApp, "arr",
+                "[{\"text\":\"a\"},{\"text\":\"b\"},{\"text\":\"c\"}]"));
+  const auto& ids = e.appHost().ids();
+  TEST_ASSERT_EQUAL_STRING("arr0", ids[5].c_str());
+  TEST_ASSERT_EQUAL_STRING("arr1", ids[6].c_str());
+  TEST_ASSERT_EQUAL_STRING("arr2", ids[7].c_str());
+}
+
+static void test_an_arranged_app_keeps_its_slot_when_others_arrive() {
+  FSound so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  e.execute(cmd(CommandType::SetPushedApp, "zulu", "{\"text\":\"x\"}"));
+  e.execute(cmd(CommandType::SetAppOrder, "",
+                "{\"order\":[\"zulu\",\"Time\"],\"disabled\":[\"Date\",\"Temperature\",\"Humidity\",\"Battery\"]}"));
+  e.execute(cmd(CommandType::SetPushedApp, "alpha", "{\"text\":\"x\"}"));
+  const auto& ids = e.appHost().ids();
+  TEST_ASSERT_EQUAL_UINT(3u, (unsigned)ids.size());
+  TEST_ASSERT_EQUAL_STRING("zulu", ids[0].c_str());
+  TEST_ASSERT_EQUAL_STRING("Time", ids[1].c_str());
+  TEST_ASSERT_EQUAL_STRING("alpha", ids[2].c_str());
+}
+
 static void test_array_custom_apps_indexed() {
   FSound so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
@@ -873,6 +934,11 @@ int main(int, char**) {
   RUN_TEST(test_lifetime_mode1_marks_stale);
   RUN_TEST(test_custom_app_add_and_delete);
   RUN_TEST(test_array_custom_apps_indexed);
+  RUN_TEST(test_pushed_apps_follow_the_order_they_arrived_in);
+  RUN_TEST(test_updating_a_pushed_app_leaves_its_place_alone);
+  RUN_TEST(test_a_returning_pushed_app_lands_at_the_end);
+  RUN_TEST(test_an_array_push_keeps_its_element_order);
+  RUN_TEST(test_an_arranged_app_keeps_its_slot_when_others_arrive);
   RUN_TEST(test_custom_app_capacity_is_507);
   RUN_TEST(test_notification_capacity_is_507);
   RUN_TEST(test_per_app_duration_overrides_global);

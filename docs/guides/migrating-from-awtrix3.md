@@ -276,7 +276,8 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/order \
 
 A name in the order that does not exist yet simply waits, so your daily pushed app lands in its
 slot the moment the automation sends it. Switching off is its own `disabled` list beside `order`, and
-is required with it. Everything the order call can do - switching off, duplicates for extra screen
+is required with it. Send no order call at all and your apps rotate in the order they arrive, the way
+AWTRIX 3 sorted them in. Everything the order call can do - switching off, duplicates for extra screen
 time - is in [Pushed apps → Reordering](pushed-apps.md#reordering-switching-off-and-duplicating).
 
 ### `save` is gone - scripts took its place

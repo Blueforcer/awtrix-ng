@@ -140,6 +140,9 @@ class CoreEngine : public IAppService, public INotifyService, public IRadioStati
     AppSpec spec;
     int64_t receivedAtMs = 0;
     std::string arrayBase;
+    // Counts up once per newly created app and never on an update, so the loop can follow the
+    // order the apps first arrived in while the vector stays sorted by name.
+    uint32_t arrival = 0;
   };
   // pushedApps_ is kept sorted by name so lookups can binary-search it.
   std::vector<PushedAppEntry>::iterator pushedLowerBound(const std::string& name);
@@ -151,6 +154,7 @@ class CoreEngine : public IAppService, public INotifyService, public IRadioStati
   CommandBus bus_;
   Dispatcher dispatcher_;
   std::vector<PushedAppEntry> pushedApps_;
+  uint32_t nextArrival_ = 0;
   std::vector<std::string> scriptApps_;
   // The user's arrangement: order_ is the wanted sequence, disabled_ the apps kept out of the loop.
   // Both may name apps that do not exist at the moment, so a returning sender keeps its slot.
