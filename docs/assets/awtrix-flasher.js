@@ -142,20 +142,20 @@ async function start() {
     return;
   }
 
-  const eraseBox = el("input", { type: "checkbox", id: "awtrix-flasher-erase" });
-  const button = el("button", { className: "md-button md-button--primary", textContent: "Connect and flash" });
-  const status = el("p", { textContent: `Firmware ${index.version}. Put the board on USB and press the button.` });
+  const fresh = el("button", { className: "md-button md-button--primary", textContent: "Fresh install" });
+  const update = el("button", { className: "md-button", textContent: "Update AWTRIX NG", style: "margin-left:.6rem" });
+  const status = el("p", { textContent: `Firmware ${index.version}. Put the board on USB and pick one.` });
   const progress = el("progress", { max: 100, value: 0, hidden: true, style: "width:100%" });
   const log = el("pre", { hidden: true, style: "max-height:14em;overflow:auto" });
   const logText = el("code");
   log.append(logText);
 
   root.replaceChildren(
-    button,
-    el("p", {}, [
-      eraseBox,
-      el("label", { htmlFor: "awtrix-flasher-erase", textContent: " Erase the whole flash first (deletes settings, Wi-Fi, icons, melodies, palettes and scripts)" }),
-    ]),
+    el("p", {}, [fresh, update]),
+    el("p", { textContent:
+      "Fresh install clears settings, Wi-Fi credentials, icons, melodies, palettes and scripts, " +
+      "and the device comes up as its own access point. Update keeps all of it and brings the " +
+      "board back on your Wi-Fi on the new version." }),
     status,
     progress,
     log,
@@ -167,10 +167,12 @@ async function start() {
     writeLine: (data) => terminal.write(data + "\n"),
   };
 
-  button.addEventListener("click", () => flash({ button, status, progress, log, terminal, index, eraseBox }));
+  const buttons = [fresh, update];
+  fresh.addEventListener("click", () => flash({ erase: true, buttons, status, progress, log, terminal, index }));
+  update.addEventListener("click", () => flash({ erase: false, buttons, status, progress, log, terminal, index }));
 }
 
-async function flash({ button, status, progress, log, terminal, index, eraseBox }) {
+async function flash({ erase, buttons, status, progress, log, terminal, index }) {
   let port;
   try {
     port = await navigator.serial.requestPort();
@@ -178,8 +180,7 @@ async function flash({ button, status, progress, log, terminal, index, eraseBox 
     return; // The port picker was dismissed. Nothing was opened, nothing to undo.
   }
 
-  button.disabled = true;
-  eraseBox.disabled = true;
+  for (const button of buttons) button.disabled = true;
   log.hidden = false;
   terminal.clean();
 
@@ -203,7 +204,7 @@ async function flash({ button, status, progress, log, terminal, index, eraseBox 
     if (!response.ok) throw new Error(`${asset}: HTTP ${response.status}`);
     const image = new Uint8Array(await response.arrayBuffer());
 
-    const { fileArray, keptSettings } = partsFor(image, !eraseBox.checked);
+    const { fileArray, keptSettings } = partsFor(image, !erase);
     status.textContent = loader.baudrate === ROM_BAUD
       ? `Writing ${asset}… at ${ROM_BAUD} baud this takes several minutes.`
       : `Writing ${asset}…`;
@@ -218,7 +219,7 @@ async function flash({ button, status, progress, log, terminal, index, eraseBox 
       flashMode: "keep",
       flashFreq: "keep",
       flashSize: "keep",
-      eraseAll: eraseBox.checked,
+      eraseAll: erase,
       compress: true,
       reportProgress: (file, done) => {
         written[file] = done;
@@ -235,8 +236,7 @@ async function flash({ button, status, progress, log, terminal, index, eraseBox 
       `The chip stays unbootable until a write succeeds - retry it.`;
   } finally {
     progress.hidden = true;
-    button.disabled = false;
-    eraseBox.disabled = false;
+    for (const button of buttons) button.disabled = false;
     try { await transport.disconnect(); } catch { /* already gone */ }
   }
 }

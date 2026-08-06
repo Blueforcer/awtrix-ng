@@ -29,11 +29,11 @@ Chrome, Edge or Opera on a desktop. Nothing to install:
 Pick your board's port when the browser asks. It detects the chip and the flash size, then writes
 the newest release for it.
 
-**Erase the whole flash first**: tick it the first time you put AWTRIX NG on a board. It clears
-settings, Wi-Fi credentials, icons, melodies, palettes and scripts, and the device comes up as its
-own access point - that is [First boot](first-boot.md).
+**Fresh install** is the first time you put AWTRIX NG on a board. It clears settings, Wi-Fi
+credentials, icons, melodies, palettes and scripts, and the device comes up as its own access
+point - that is [First boot](first-boot.md).
 
-Leave it off to update a board that already runs AWTRIX NG. Everything on it stays, and it comes
+**Update AWTRIX NG** is for a board that already runs it. Everything on it stays, and it comes
 back on your Wi-Fi on the new version. Without a cable, the same update runs
 [over the web UI](../guides/updating.md).
 
