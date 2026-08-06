@@ -57,6 +57,22 @@ body is not valid JSON. Send `Content-Type: application/json`. This is the
 single most common pitfall: see
 [the Content-Type trap](troubleshooting.md#the-content-type-trap-read-this-first).
 
+## My client cannot send `PATCH` (or `PUT`, or `DELETE`)
+
+Send a `POST` and name the real method in a header:
+
+```bash
+curl -X POST http://<awtrix-ip>/api/v1/display \
+  -H "X-HTTP-Method-Override: PATCH" \
+  -H "Content-Type: application/json" \
+  -d '{"power":false}'
+```
+
+That covers the FRITZ!Box HTTP action and any other gateway with a fixed set of
+verbs. The header is accepted on `POST` only and may name `PUT`, `PATCH` or
+`DELETE`; everything else answers `400 invalidMethodOverride`. Details:
+[Method override](../reference/http.md#method-override).
+
 ## How do I change the brightness?
 
 `PATCH` `/api/v1/settings` with `brightness` (0–255). If it seems to have no

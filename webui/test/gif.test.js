@@ -126,6 +126,35 @@ const pattern = (W, H, off, span, distinct = 200) => {
       bad + ' wrong, first ' + JSON.stringify(first));
   }
 
+  console.log('gif: icon-sized frame at SC=1 (what a converted PNG/JPG becomes)');
+  {
+    const W = 8, H = 8, SC = 1;
+    const R = 0xf50017; // icon 4103: one saturated red on black, hard edges
+    const px = [];
+    for (let i = 0; i < W * H; i++) px.push([11, 12, 18, 19, 20, 21, 25, 26, 27, 28, 29, 30].includes(i) ? R : 0);
+    const gif = gifDecode(gifEncode([{ t: 0, px }], W, H, SC));
+    const f = gif.frames[0];
+    check('no LED grid at SC=1', f.w === W && f.h === H, f.w + 'x' + f.h);
+    check('palette holds only the colours used', f.palette.length <= 2, String(f.palette.length));
+    let bad = 0;
+    for (let i = 0; i < W * H; i++) if (f.px[i] !== px[i]) bad++;
+    check('every pixel survives exactly', bad === 0, bad + ' wrong');
+    check('smaller than the JPEG it replaces', gifEncode([{ t: 0, px }], W, H, SC).length < 200,
+      String(gifEncode([{ t: 0, px }], W, H, SC).length));
+  }
+
+  console.log('gif: a 32x8 icon at SC=1 keeps every colour');
+  {
+    const W = 32, H = 8, SC = 1;
+    const px = [];
+    for (let i = 0; i < W * H; i++) px.push((i * 0x010203) & 0xFFFFFF); // 256 distinct
+    const gif = gifDecode(gifEncode([{ t: 0, px }], W, H, SC));
+    const f = gif.frames[0];
+    let bad = 0;
+    for (let i = 0; i < W * H; i++) if (f.px[i] !== px[i]) bad++;
+    check('lossless up to a full 256-colour panel', bad === 0, bad + ' wrong');
+  }
+
   console.log('gif: a panel with more colours than GIF can hold');
   {
     const W = 128, H = 8, SC = 2;                    // 1024 pixels, all distinct

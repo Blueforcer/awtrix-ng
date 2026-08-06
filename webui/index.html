@@ -762,7 +762,7 @@ const I18N={en:{
   bkCaptiveHint:'The Wi‑Fi sign‑in popup can’t upload files. To restore, open this page in a browser:',
   bkRestored:'Backup restored',bkWarnings:'warning(s)',bkRebootQ:'Restore applied. Reboot now to use it?',
   storage:'Storage',of:'of',free:'free',
-  iconshelp:'8×8 JPG or animated GIF. Drag & drop files here or click to choose.',
+  iconshelp:'8×8 to 32×8 PNG, JPG or animated GIF. PNG and JPG are converted to GIF on upload. Drag & drop files here or click to choose.',
   editorTab:'Icon Editor',
   edLoading:'Loading the editor…',
   edUnreachable:'The editor did not load.',
@@ -909,7 +909,7 @@ const I18N={en:{
   bkCaptiveHint:'Der WLAN-Anmelde-Dialog kann keine Dateien hochladen. Zum Wiederherstellen diese Seite im Browser öffnen:',
   bkRestored:'Sicherung wiederhergestellt',bkWarnings:'Warnung(en)',bkRebootQ:'Wiederhergestellt. Jetzt neu starten?',
   storage:'Speicher',of:'von',free:'frei',
-  iconshelp:'8×8 JPG oder animiertes GIF. Dateien hierher ziehen oder klicken zum Auswählen.',
+  iconshelp:'8×8 bis 32×8 PNG, JPG oder animiertes GIF. PNG und JPG werden beim Hochladen in GIF umgewandelt. Dateien hierher ziehen oder klicken zum Auswählen.',
   editorTab:'Icon-Editor',
   edLoading:'Editor wird geladen…',
   edUnreachable:'Der Editor wurde nicht geladen.',
@@ -1761,7 +1761,38 @@ function gifEncode(frames,W,H,SC){
   b.push(0x3B);
   return new Uint8Array(b);
 }
-const gifGap=SC=>Math.max(1,Math.round(SC/10));
+const gifGap=SC=>SC>1?Math.max(1,Math.round(SC/10)):0;
+const ICON_MAX=32;
+async function imgToGif(src,tw,th){
+  const bmp=(typeof ImageBitmap!=='undefined'&&src instanceof ImageBitmap)?src:await createImageBitmap(src);
+  const w=tw||bmp.width,h=th||bmp.height;
+  const cv=el('canvas',{width:w,height:h}),g=cv.getContext('2d');
+  g.imageSmoothingEnabled=w!==bmp.width||h!==bmp.height;
+  g.drawImage(bmp,0,0,w,h);
+  if(bmp.close)bmp.close();
+  const d=g.getImageData(0,0,w,h).data,px=[];
+  for(let i=0;i<w*h;i++){
+    const a=d[i*4+3]/255;
+    px.push((Math.round(d[i*4]*a)<<16)|(Math.round(d[i*4+1]*a)<<8)|Math.round(d[i*4+2]*a));
+  }
+  return new Blob([gifEncode([{t:0,px}],w,h,1)],{type:'image/gif'});
+}
+async function iconAsGif(file,name){
+  if(!/^image\/(png|jpeg)$/.test(file.type||'')&&!/\.(png|jpe?g)$/i.test(name||''))return null;
+  try{
+    const bmp=await createImageBitmap(file);
+    const w=bmp.width,h=bmp.height;
+    if(bmp.close)bmp.close();
+    if(w>ICON_MAX||h>ICON_MAX)return null;
+    return{blob:await imgToGif(file),name:String(name).replace(/\.[^.]+$/,'')+'.gif'};
+  }catch(e){return null;}
+}
+async function dropStale(dir,from,to){
+  for(const n of new Set([from,to.replace(/\.gif$/i,'.jpg')])){
+    if(n===to)continue;
+    try{await delFile(dir+'/'+n);}catch(e){}
+  }
+}
 function paint(g,px,W,H,SC){
   const lit=SC-gifGap(SC);
   g.fillStyle='#000';g.fillRect(0,0,W*SC,H*SC);
@@ -3169,7 +3200,7 @@ function storageCard(listData){
     el('div',{class:'lbl'},el('span',null,fmtBytes(used)+' '+t('of')+' '+fmtBytes(total)),
       el('span',null,fmtBytes(total-used)+' '+t('free'))));
 }
-function uploadZone(dir,accept,hint,onDone){
+function uploadZone(dir,accept,hint,onDone,asGif){
   const fileIn=el('input',{type:'file',accept,multiple:''});
   const list=el('div',{class:'uplist'});
   const zone=el('div',{class:'drop'},hint,list);
@@ -3183,8 +3214,11 @@ function uploadZone(dir,accept,hint,onDone){
       const row=el('div',null,f.name+' - 0%');
       list.append(row);
       try{
-        await uploadFile(f,dir,f.name,p=>row.replaceChildren(f.name+' - '+(p*100).toFixed(0)+'%'));
-        row.replaceChildren(f.name+' ✓ '+t('uploaded'));
+        const conv=asGif?await iconAsGif(f,f.name):null;
+        const nm=conv?conv.name:f.name;
+        await uploadFile(conv?conv.blob:f,dir,nm,p=>row.replaceChildren(nm+' - '+(p*100).toFixed(0)+'%'));
+        if(conv)await dropStale(dir,f.name,nm);
+        row.replaceChildren(nm+' ✓ '+t('uploaded'));
       }catch(e){row.replaceChildren(f.name+' ✗ '+e.message);toast(f.name+': '+e.message,false);}
     }
     setTimeout(()=>list.replaceChildren(),4000);
@@ -3226,13 +3260,13 @@ function viewIcons(view){
     });
     return el('div',{class:'tile'},
       el('div',{class:'pw'},img,el('div',{class:'acts'},pv,ed,del)),
-      el('div',{class:'ft'},el('span',{class:'nm',title:f.name},f.name),
+      el('div',{class:'ft'},el('span',{class:'nm',title:f.name},base),
         el('span',{class:'sz'},fmtBytes(f.size))));
   }
   view.append(storSlot);
   view.append(el('div',{class:'card wide'},
     el('h2',null,t('icons')),el('div',{class:'ghelp'},t('iconshelp')),
-    uploadZone('/ICONS','.jpg,.jpeg,.gif','⬆ '+t('upload')+' (.jpg / .gif, 8×8)',reload),
+    uploadZone('/ICONS','.png,.jpg,.jpeg,.gif','⬆ '+t('upload')+' (.png / .jpg / .gif, 8×8)',reload,true),
     lametricCard(reload),
     iconsGrid));
   reload();
@@ -3252,13 +3286,12 @@ function lametricCard(onDone){
       const r=await fetch('https://developer.lametric.com/content/apps/icon_thumbs/'+encodeURIComponent(id));
       if(!r.ok)throw new Error('HTTP '+r.status);
       const raw=await r.blob();
-      if(raw.type==='image/gif'){blob=raw;ext='gif';}
+      ext='gif';
+      if(raw.type==='image/gif')blob=raw;
       else{
         const bmp=await createImageBitmap(raw);
-        const cv=el('canvas',{width:8,height:8});
-        cv.getContext('2d').drawImage(bmp,0,0,8,8);
-        blob=await new Promise(res=>cv.toBlob(res,'image/jpeg',0.92));
-        ext='jpg';
+        const big=bmp.width>ICON_MAX||bmp.height>ICON_MAX;
+        blob=await imgToGif(bmp,big?8:0,big?8:0);
       }
       prev.src=URL.createObjectURL(blob);prev.style.display='';
       saveBtn.disabled=false;
@@ -3270,6 +3303,7 @@ function lametricCard(onDone){
     saveBtn.disabled=true;
     try{
       await uploadFile(blob,'/ICONS',id+'.'+ext,null);
+      await dropStale('/ICONS',id+'.jpg',id+'.'+ext);
       toast(id+'.'+ext+' '+t('uploaded'));onDone();
     }catch(e){toast(e.message,false);saveBtn.disabled=false;}
   });
@@ -3315,9 +3349,12 @@ async function piskelSendIcon(name){
   }catch(e){toast(e.message,false);}
 }
 async function piskelSave(m){
-  const ext=m.mime==='image/jpeg'?'jpg':'gif',fn=iconIdFrom(m.name)+'.'+ext;
+  const id=iconIdFrom(m.name),fn=id+'.gif';
+  let blob=b64ToBlob(m.dataBase64,m.mime||'image/gif');
   try{
-    await uploadFile(b64ToBlob(m.dataBase64,m.mime||'image/gif'),'/ICONS',fn,null);
+    if(m.mime==='image/jpeg')blob=await imgToGif(blob);
+    await uploadFile(blob,'/ICONS',fn,null);
+    await dropStale('/ICONS',id+'.jpg',fn);
     postToPiskel({type:'save-result',ok:true,name:fn});
     toast(fn+' '+t('uploaded'));
   }catch(e){postToPiskel({type:'save-result',ok:false,name:fn,error:e.message});toast(e.message,false);}

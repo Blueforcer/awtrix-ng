@@ -27,7 +27,8 @@ when you upload to `/MELODIES` or `/PALETTES`. The multipart **field name is irr
 (`-F "file=@…"`, `-F "whatever=@…"` - both work); only the file name matters.
 
 The built-in web UI at `http://<awtrix-ip>/` has a file manager for `/ICONS`, `/MELODIES` and
-`/PALETTES` that drives the same endpoint, if you would rather drag and drop. Its **Icon Editor**
+`/PALETTES` that drives the same endpoint, if you would rather drag and drop. It takes PNG and JPG
+too and turns them into a GIF for you, so `mail.png` lands as `mail.gif`. Its **Icon Editor**
 tab can also draw an 8×8 or 32×8 icon from scratch (or edit an existing one) and save it straight to
 `/ICONS` - see [Icon editor](icon-editor.md).
 
@@ -49,10 +50,12 @@ Two formats are decodable, and an ID is resolved by trying both extensions in or
 **GIF wins.** `<id>.gif` is always tried first, and `<id>.jpg` only if that fails, so `mail.gif`
 and `mail.jpg` cannot coexist under the ID `mail` - the JPEG becomes unreachable.
 
-PNG is refused: uploading one is rejected with `415 unsupportedMediaType` and nothing is stored.
-Renaming `icon.png` to `icon.jpg` does not get it past, because the check reads the file's
-contents rather than its name. Convert to JPEG or GIF first - the web UI's LaMetric importer
-does that for you.
+Uploading a PNG straight to the API is refused with `415 unsupportedMediaType`, and renaming it to
+`.jpg` does not help - the check looks inside the file. Convert it to GIF first, or drop it into the
+web UI, which does that for you.
+
+**Use GIF.** At icon sizes a JPEG comes out both blurry and larger, so GIF is the better format for
+anything you make yourself; `.jpg` is there for icons that already exist.
 
 ### Size
 

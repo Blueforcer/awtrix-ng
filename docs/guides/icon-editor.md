@@ -29,9 +29,8 @@ display back to the normal app rotation.
 ## Good to know
 
 - The editor follows the header's **light/dark** theme.
-- Icons you draw are saved as **GIF**: pixel edges stay crisp, and animation and transparency are
-  kept. An icon you opened from a `.jpg` - a LaMetric import, or a JPEG you uploaded - is saved back
-  as a `.jpg`, which keeps neither.
+- Icons are always saved as **GIF**: pixel edges stay crisp, and animation and transparency are
+  kept. Open an old `.jpg` and it is saved as a `.gif`, replacing the `.jpg`.
 - The editor is a small web app your browser loads from the internet (an
   [AWTRIX fork](https://github.com/Blueforcer/awtrix-piskel) of the open-source
   [Piskel](https://github.com/piskelapp/piskel) editor). On a network with no internet access the tab

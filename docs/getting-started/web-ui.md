@@ -354,7 +354,9 @@ plain form. Keep it where you would keep the passwords themselves.
 A storage bar (used / total / free, turning red past 90 % full), a drag-and-drop upload zone, and a
 grid of every icon on AWTRIX.
 
-Icons are `.jpg`, `.jpeg` or `.gif`, 8×8 for a static icon. Animated GIFs stay animated, and a
+Icons are `.png`, `.jpg`, `.jpeg` or `.gif`, 8×8 for a static icon. PNG and JPG are turned into a
+GIF as they upload - sharper on the panel and smaller on AWTRIX - so `smiley.png` becomes
+`smiley.gif`, replacing an older `smiley.jpg` if you had one. Animated GIFs stay animated, and a
 full-width (32×8) animated GIF is also accepted - it renders as a background across the whole panel
 rather than a single icon tile; see [Payload → Icon](../reference/payload.md#icon). Each tile has
 three buttons: an **eye** shows the icon on the panel for three seconds, a **pencil** opens it in
@@ -370,8 +372,8 @@ curl -X POST 'http://<awtrix-ip>/api/v1/files?dir=/ICONS' \
 ```
 
 **LaMetric icon download** fetches an icon from the LaMetric gallery *in your browser* - AWTRIX
-never talks to the internet for this - then uploads it. Paste a numeric icon ID, hit **Fetch**,
-preview it, then **Save to AWTRIX**. It is disabled when your browser is offline, so it is unavailable
+never talks to the internet for this - converts it to GIF, then uploads it. Paste a numeric icon
+ID, hit **Fetch**, preview it, then **Save to AWTRIX**. It is disabled when your browser is offline, so it is unavailable
 in provisioning mode.
 
 More: [HTTP API → Files](../reference/http.md#files) · [Payload → Icon](../reference/payload.md#icon).

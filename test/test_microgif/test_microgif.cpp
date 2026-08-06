@@ -170,8 +170,41 @@ void test_oversize_frame_rejected() {
   TEST_ASSERT_TRUE(g.nextFrame(c, delayMs) == MicroGif::Step::kError);
 }
 
+// Byte-for-byte what the web UI's gifEncode() writes when it converts an uploaded
+// PNG/JPG icon (LaMetric 4103: one saturated red on black). The converter is only
+// worth having if the firmware decodes its output pixel-exactly.
+void test_webui_converted_icon_decodes_exactly() {
+  static const unsigned char kIcon[] = {
+      0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x08, 0x00, 0x08, 0x00, 0x70, 0x00, 0x00, 0x21, 0xff, 0x0b,
+      0x4e, 0x45, 0x54, 0x53, 0x43, 0x41, 0x50, 0x45, 0x32, 0x2e, 0x30, 0x03, 0x01, 0x00, 0x00, 0x00,
+      0x21, 0xf9, 0x04, 0x04, 0x0a, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x08,
+      0x00, 0x80, 0x00, 0x00, 0x00, 0xf5, 0x00, 0x17, 0x02, 0x0d, 0x84, 0x8f, 0x10, 0x91, 0xbb, 0xe7,
+      0x1c, 0x7a, 0x8d, 0xd5, 0xa4, 0x2c, 0x28, 0x00, 0x3b,
+  };
+  static const char* kRows[8] = {
+      "........", "...##...", "..####..", ".######.",
+      "...##...", "...##...", "...##...", "...##...",
+  };
+
+  MicroGif g;
+  TEST_ASSERT_TRUE(g.begin(kIcon, sizeof(kIcon)));
+  TEST_ASSERT_EQUAL_INT(8, g.width());
+  TEST_ASSERT_EQUAL_INT(8, g.height());
+
+  Canvas c(8, 8);
+  c.clear(0x000000u);
+  int delayMs = 0;
+  TEST_ASSERT_TRUE(g.nextFrame(c, delayMs) == MicroGif::Step::kFrame);
+  for (int y = 0; y < 8; ++y)
+    for (int x = 0; x < 8; ++x)
+      TEST_ASSERT_EQUAL_HEX32(kRows[y][x] == '#' ? 0xF50017u : 0x000000u, c.getPixel(x, y));
+
+  TEST_ASSERT_TRUE(g.nextFrame(c, delayMs) == MicroGif::Step::kEnd);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_webui_converted_icon_decodes_exactly);
   RUN_TEST(test_two_frames_delays_end_and_rewind);
   RUN_TEST(test_32x8_full_width);
   RUN_TEST(test_transparent_pixels_leave_canvas_untouched);
