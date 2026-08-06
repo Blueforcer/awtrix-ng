@@ -33,6 +33,24 @@ static int64_t run(render::ScrollController& c, int64_t fromMs, int steps) {
   return now;
 }
 
+static int64_t runRepeat(render::ScrollController& c, int64_t fromMs, int steps, int repeat) {
+  int64_t now = fromMs;
+  for (int i = 0; i < steps; ++i) {
+    now += 100;
+    c.advance(now, repeat);
+  }
+  return now;
+}
+
+static int64_t runUntilCycle(render::ScrollController& c, int64_t fromMs, int cycle, int repeat) {
+  int64_t now = fromMs;
+  for (int i = 0; i < 1000 && c.cycles() < cycle; ++i) {
+    now += 100;
+    c.advance(now, repeat);
+  }
+  return now;
+}
+
 static void test_identical_content_keeps_its_position() {
   render::ScrollController c;
   const ScrollDefaults defaults;
@@ -124,6 +142,40 @@ static void test_bounce_stays_inside_the_box() {
   }
 }
 
+static void test_last_pass_parks_the_text_offscreen() {
+  render::ScrollController c;
+  const ScrollDefaults defaults;
+  c.set(movingSpec(), defaults, layoutOf(50), 0);
+
+  const int64_t now = runUntilCycle(c, 0, 1, 1);
+  TEST_ASSERT_EQUAL_INT(1, c.cycles());
+  TEST_ASSERT_TRUE(c.passesDone(1));
+
+  const float parked = c.x();
+  TEST_ASSERT_TRUE_MESSAGE(parked < 0.0f, "the last pass must not rewind to the start");
+
+  runRepeat(c, now, 50, 1);
+  TEST_ASSERT_EQUAL_FLOAT(parked, c.x());
+}
+
+static void test_passes_before_the_last_still_rewind() {
+  render::ScrollController c;
+  const ScrollDefaults defaults;
+  c.set(movingSpec(), defaults, layoutOf(50), 0);
+
+  int64_t now = runUntilCycle(c, 0, 1, 2);
+  TEST_ASSERT_EQUAL_INT(1, c.cycles());
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, c.x());
+
+  now = runUntilCycle(c, now, 2, 2);
+  TEST_ASSERT_EQUAL_INT(2, c.cycles());
+  const float parked = c.x();
+  TEST_ASSERT_TRUE(parked < 0.0f);
+
+  runRepeat(c, now, 50, 2);
+  TEST_ASSERT_EQUAL_FLOAT(parked, c.x());
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_identical_content_keeps_its_position);
@@ -133,5 +185,7 @@ int main(int, char**) {
   RUN_TEST(test_text_that_fits_never_holds);
   RUN_TEST(test_static_mode_never_holds);
   RUN_TEST(test_bounce_stays_inside_the_box);
+  RUN_TEST(test_last_pass_parks_the_text_offscreen);
+  RUN_TEST(test_passes_before_the_last_still_rewind);
   return UNITY_END();
 }

@@ -85,7 +85,8 @@ class RenderPipeline {
   render::ScrollLayout scrollLayoutFor(const AppSpec* spec, int canvasWidth,
                                        bool iconReservesColumn) const;
   void applyScroll(PageSlot& slot, const AppSpec* spec, int64_t nowMs);
-  void advanceScroll(PageSlot& slot, const AppSpec* spec, int64_t nowMs);
+  void advanceScroll(PageSlot& slot, const AppSpec* spec, int64_t nowMs, int parkAfter);
+  int scrollParkAfter(const AppSpec* spec, bool isNotif) const;
   void loadIcon(PageSlot& slot, const std::string& pageId, const AppSpec* spec, int64_t nowMs);
   bool iconIsFullScreen(const PageSlot* slot, int canvasWidth) const;
   const AppSpec* pageSpec(const std::string& id, bool isNotif) const;

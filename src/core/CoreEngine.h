@@ -82,6 +82,11 @@ class CoreEngine : public IAppService, public INotifyService, public IRadioStati
   void setRotationPassesDone(const std::string& appId, bool done) {
     rotationPassesDonePage_ = done ? appId : std::string();
   }
+  bool endsOnScrollPasses(const AppSpec& spec, bool isNotification) const {
+    if (spec.repeat <= 0 || spec.durationMs > 0) return false;
+    if (isNotification) return !spec.hold;
+    return state_.settings().autoTransition && !scriptRotationPaused_ && appHost_.count() > 1;
+  }
   void setScriptRotationPaused(bool b) { scriptRotationPaused_ = b; }
   bool scriptRotationPaused() const { return scriptRotationPaused_; }
   void scriptNextApp() { appHost_.next(now_); }

@@ -16,7 +16,7 @@ class ScrollController {
 
   void restart(int64_t nowMs) { model_.reset(resolved_, nowMs); }
 
-  void advance(int64_t nowMs) { model_.advance(nowMs); }
+  void advance(int64_t nowMs, int repeat = 0) { model_.advance(nowMs, repeat); }
 
   void setStartX(int startX) { model_.setStartX(startX); }
 

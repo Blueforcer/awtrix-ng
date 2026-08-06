@@ -39,6 +39,21 @@ void run(ScrollModel& m, long fromMs, long untilMs) {
   for (long t = fromMs + 20; t <= untilMs; t += 20) m.advance(t);
 }
 
+long runUntilCycle(ScrollModel& m, long fromMs, int cycle, int repeat) {
+  long t = fromMs;
+  for (int i = 0; i < 20000 && m.cycles() < cycle; ++i) {
+    t += 20;
+    m.advance(t, repeat);
+  }
+  return t;
+}
+
+long runRepeat(ScrollModel& m, long fromMs, long untilMs, int repeat) {
+  long t = fromMs;
+  for (t = fromMs + 20; t <= untilMs; t += 20) m.advance(t, repeat);
+  return t;
+}
+
 }
 
 void setUp() {}
@@ -274,6 +289,53 @@ static void test_loop_folds_without_holding_again() {
   TEST_ASSERT_TRUE_MESSAGE(m.moving(), "a loop must not stop to hold when it folds");
 }
 
+static void test_wrap_parks_offscreen_after_its_last_pass() {
+  ScrollModel m;
+  const ResolvedScroll r = make(ScrollMode::Wrap);
+  m.reset(r, 0);
+
+  const long now = runUntilCycle(m, 0, 1, 1);
+  TEST_ASSERT_EQUAL_INT(1, m.cycles());
+  TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, static_cast<float>(r.xEnd), m.x(),
+                                   "the last pass must stop at the far end, not rewind");
+
+  runRepeat(m, now, now + 4000, 1);
+  TEST_ASSERT_EQUAL_INT(1, m.cycles());
+  TEST_ASSERT_FLOAT_WITHIN(0.5f, static_cast<float>(r.xEnd), m.x());
+}
+
+static void test_wrap_without_a_repeat_keeps_rewinding() {
+  ScrollModel m;
+  m.reset(make(ScrollMode::Wrap), 0);
+
+  const long now = runUntilCycle(m, 0, 1, 0);
+  TEST_ASSERT_EQUAL_FLOAT(9.f, m.x());
+  runRepeat(m, now, now + 20000, 0);
+  TEST_ASSERT_TRUE_MESSAGE(m.cycles() > 1, "repeat 0 must not park the text");
+}
+
+static void test_bounce_parks_on_its_last_round_trip() {
+  ScrollModel m;
+  m.reset(make(ScrollMode::Bounce), 0);
+
+  const long now = runUntilCycle(m, 0, 1, 1);
+  const float parked = m.x();
+  runRepeat(m, now, now + 6000, 1);
+  TEST_ASSERT_EQUAL_INT(1, m.cycles());
+  TEST_ASSERT_EQUAL_FLOAT(parked, m.x());
+}
+
+static void test_loop_parks_on_its_last_period() {
+  ScrollModel m;
+  m.reset(make(ScrollMode::Loop), 0);
+
+  const long now = runUntilCycle(m, 0, 2, 2);
+  const float parked = m.x();
+  runRepeat(m, now, now + 6000, 2);
+  TEST_ASSERT_EQUAL_INT(2, m.cycles());
+  TEST_ASSERT_EQUAL_FLOAT(parked, m.x());
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_long_stall_does_not_teleport_the_text);
@@ -298,5 +360,9 @@ int main(int, char**) {
   RUN_TEST(test_bounce_does_not_inherit_the_return_leg_across_a_reset);
   RUN_TEST(test_bounce_sweeps_short_text_towards_the_far_anchor);
   RUN_TEST(test_loop_folds_without_holding_again);
+  RUN_TEST(test_wrap_parks_offscreen_after_its_last_pass);
+  RUN_TEST(test_wrap_without_a_repeat_keeps_rewinding);
+  RUN_TEST(test_bounce_parks_on_its_last_round_trip);
+  RUN_TEST(test_loop_parks_on_its_last_period);
   return UNITY_END();
 }

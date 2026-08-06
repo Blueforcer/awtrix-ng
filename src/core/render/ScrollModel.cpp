@@ -30,9 +30,14 @@ void ScrollModel::setStartX(int startX) {
   r_.deriveAnchors();
 }
 
-void ScrollModel::advance(int64_t nowMs) {
+void ScrollModel::advance(int64_t nowMs, int repeat) {
   if (!r_.animates()) {
     lastMs_ = nowMs;
+    return;
+  }
+  if (finished(repeat)) {
+    lastMs_ = nowMs;
+    moving_ = false;
     return;
   }
   if (nowMs <= lastMs_) return;
@@ -83,6 +88,10 @@ void ScrollModel::advance(int64_t nowMs) {
 
   if (toLeft ? pos_ <= r_.xEnd : pos_ >= r_.xEnd) {
     ++cycles_;
+    if (finished(repeat)) {
+      moving_ = false;
+      return;
+    }
     restart(nowMs);
   }
 }
