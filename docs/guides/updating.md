@@ -54,17 +54,20 @@ file per chip:
 
 | File | For |
 |---|---|
-| `firmware-awtrix-ng.bin` | any classic ESP32 - 32×8 clocks, AWTRIX 2 conversions, DIY builds |
+| `firmware-awtrix-ng.bin` | Ulanzi TC001 and every other classic ESP32 - 32×8 clocks, AWTRIX 2 conversions, DIY builds |
 | `firmware-awtrix-ng-s3.bin` | ESP32-S3 boards |
 
 One file covers every board of that chip, whatever its flash size - boards differ in their pin
 map, which you set on AWTRIX. See [Board presets](../reference/gpio.md#board-presets).
 
-An image built for the other chip is refused with `400 wrongChip` before a single byte reaches
-flash, so uploading the wrong one of the two costs you nothing but the upload.
+!!! warning "Not the `factory-*.bin` files"
+    A TC001 has a 4 MB ESP32, but `factory-awtrix-ng-4mb.bin` is **not** the file you want here.
+    The `factory-*.bin` images are for a first flash over USB - see
+    [Flashing](../getting-started/flashing.md). To update a device that already runs AWTRIX NG,
+    take `firmware-awtrix-ng.bin`.
 
-The `factory-*.bin` files on the same page are for a first flash over USB, not for this - see
-[Flashing](../getting-started/flashing.md). To upload a build of your own, `pio run -e awtrix`
+An image built for the other chip, and a factory image, are both refused with `400 wrongChip`
+before a single byte reaches flash, so uploading the wrong one costs you nothing but the upload. To upload a build of your own, `pio run -e awtrix`
 writes it to `.pio/build/awtrix/firmware.bin` - see
 [Building from source](../advanced/building.md).
 

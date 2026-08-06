@@ -91,7 +91,7 @@ class HttpApiServer {
   bool uploadWriteOk_ = false;
   bool uploadContentOk_ = true;
   bool uploadContentChecked_ = false;
-  std::string updateChipError_;
+  std::string updateImageError_;
   std::string uploadPath_;
   File uploadFile_;
   BodyArena bodyArena_;

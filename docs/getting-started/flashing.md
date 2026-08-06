@@ -71,7 +71,7 @@ Download from the [releases page](https://github.com/Blueforcer/awtrix-ng/releas
 
 | File | For |
 |---|---|
-| `factory-awtrix-ng-4mb.bin` | 4 MB ESP32 boards |
+| `factory-awtrix-ng-4mb.bin` | 4 MB ESP32 boards, the Ulanzi TC001 among them |
 | `factory-awtrix-ng-8mb.bin`, `factory-awtrix-ng-16mb.bin` | ESP32 boards with more flash |
 | `factory-awtrix-ng-s3-8mb.bin`, `factory-awtrix-ng-s3-16mb.bin` | ESP32-S3 boards |
 

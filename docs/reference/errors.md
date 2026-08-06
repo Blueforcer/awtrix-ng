@@ -62,7 +62,7 @@ counts for.
 | `invalidName` | 400 | every route that names an app in its path | The name does not match `[A-Za-z0-9_-]{1,32}`. Checked before the payload is parsed. Carries `field: "name"`. |
 | `invalidMethodOverride` | 400 | routing, when `X-HTTP-Method-Override` is present | The header sits on something other than a `POST`, names anything but `PUT`/`PATCH`/`DELETE`, or tries to reach the raw script upload. Nothing was routed. See [Method override](http.md#method-override). |
 | `badRequest` | 400 | `POST /api/v1/restore` only | The multipart upload finished without a backup file ever being received. See [Restore result](#restore-result). |
-| `wrongChip` | 400 | `POST /update` (firmware upload) | The uploaded firmware image was built for a different chip than the one running. |
+| `wrongChip` | 400 | `POST /update` (firmware upload) | The upload is not an update image for this device: built for a different chip, a `factory-*.bin` meant for a first flash over USB, or not a firmware image at all. `message` says which. Nothing reached flash. |
 | `unauthorized` | 401 | every route, when auth is on | Missing or wrong HTTP Basic credentials. See [Authentication](#authentication-401). |
 | `forbidden` | 403 | uploads and write routes, AP mode only | The request is not permitted during provisioning - the setup AP exposes reads, Wi-Fi setup and a reboot only. See [Provisioning lockdown](#provisioning-lockdown-403). |
 | `notFound` | 404 | routing and several handlers | Unknown route, or a named app/sound/file that does not exist. |

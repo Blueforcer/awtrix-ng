@@ -1776,7 +1776,7 @@ network, and what the web UI uses. Auth is re-checked inside the upload handler.
 | Status | Condition |
 |---|---|
 | 200 | `{"ok":true}` - AWTRIX then reboots into the new image |
-| 400 | `wrongChip` - the image was built for the other chip (esp32 vs esp32s3), or carries no valid firmware header |
+| 400 | `wrongChip` - the image was built for the other chip (esp32 vs esp32s3), is a `factory-*.bin` for a first flash over USB, or carries no valid firmware header |
 | 401 | auth failed |
 | 403 | `forbidden` - firmware upload is disabled in AP/provisioning mode |
 | 500 | `internalError`, `firmware update failed (bad image or storage full)` - the OTA slot could not be written |

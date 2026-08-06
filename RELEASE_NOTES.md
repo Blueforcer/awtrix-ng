@@ -1,3 +1,7 @@
+**Which file do I download?**
+- Updating a device that already runs AWTRIX NG: `firmware-awtrix-ng.bin` for a Ulanzi TC001 or any other classic ESP32, `firmware-awtrix-ng-s3.bin` for an ESP32-S3 board. Upload it under System → Maintenance.
+- First install over USB: the `factory-*.bin` matching your board's chip and flash size - a TC001 takes `factory-awtrix-ng-4mb.bin`. These are **not** for the update route.
+
 **New**
 - Gateways that can only send POST, like the FRITZ!Box HTTP action, reach every route with an `X-HTTP-Method-Override` header.
 - Scripts can read the firmware version with `version()`.
