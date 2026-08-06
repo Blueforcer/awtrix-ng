@@ -19,6 +19,11 @@ const FIRMWARE = new URL("../firmware/", import.meta.url);
 // the chip is erased by then. Same ceiling as the esptool instructions.
 const BAUD = 460800;
 
+// esptool-js raises the port to BAUD once its stub runs, and some bridges never
+// come back from that switch -- every command after it fails. 115200 is the rate
+// the port is opened at anyway, so asking for it leaves no switch to survive.
+const ROM_BAUD = 115200;
+
 // The release-asset naming from scripts/factory_image.py: the classic ESP32
 // image carries the project name, the S3 one carries it with an -s3 suffix.
 const ASSET_PREFIX = {
@@ -68,6 +73,34 @@ function partsFor(image, keepSettings) {
     ],
     keptSettings: true,
   };
+}
+
+// The stub and the baud switch both happen before a byte of the image is
+// written, so a bridge that cannot follow gives up while the flash is still
+// intact. One retry at ROM_BAUD costs a reset and buys those bridges a flash.
+async function connect(transport, terminal, status) {
+  const rates = [BAUD, ROM_BAUD];
+  let failure;
+  for (const [attempt, baudrate] of rates.entries()) {
+    try {
+      // Constructing this clears the terminal, so what the failed attempt has
+      // to say about itself only survives when it is written afterwards.
+      const loader = new ESPLoader({ transport, baudrate, terminal });
+      if (failure) {
+        terminal.writeLine(`Connecting at ${rates[attempt - 1]} baud failed: ${failure}`);
+        terminal.writeLine(`Retrying at ${baudrate} baud, which skips the switch.\n`);
+      }
+      await loader.main();
+      return loader;
+    } catch (error) {
+      if (attempt === rates.length - 1) throw error;
+      failure = error.message || error;
+      status.textContent = `Retrying at ${rates[attempt + 1]} baud…`;
+      // The port has to be closed before the retry can open it again. It is
+      // open unless the failure was the opening itself.
+      try { await transport.disconnect(); } catch { /* never opened */ }
+    }
+  }
 }
 
 const root = document.getElementById("awtrix-flasher");
@@ -151,8 +184,7 @@ async function flash({ button, status, progress, log, terminal, index, eraseBox 
   const transport = new Transport(port, false);
   try {
     status.textContent = "Connecting…";
-    const loader = new ESPLoader({ transport, baudrate: BAUD, terminal });
-    await loader.main();
+    const loader = await connect(transport, terminal, status);
 
     const chip = loader.chip.CHIP_NAME;
     const flashSize = await loader.detectFlashSize();
@@ -169,7 +201,9 @@ async function flash({ button, status, progress, log, terminal, index, eraseBox 
     const image = new Uint8Array(await response.arrayBuffer());
 
     const { fileArray, keptSettings } = partsFor(image, !eraseBox.checked);
-    status.textContent = `Writing ${asset}…`;
+    status.textContent = loader.baudrate === ROM_BAUD
+      ? `Writing ${asset}… at ${ROM_BAUD} baud this takes several minutes.`
+      : `Writing ${asset}…`;
     progress.hidden = false;
     const total = fileArray.reduce((sum, part) => sum + part.data.length, 0);
     const written = fileArray.map(() => 0);
