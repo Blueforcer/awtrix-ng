@@ -28,7 +28,7 @@ class ScrollBank {
 
   void beginFrame();
   int draw(Canvas& canvas, const GfxFont& font, const std::string& text, const ScrollRun& run,
-           const ScrollDefaults& defaults, bool smoothScroll, int64_t nowMs);
+           const ScrollDefaults& defaults, int64_t nowMs);
   bool wantsMoreTime() const;
   void clear();
 

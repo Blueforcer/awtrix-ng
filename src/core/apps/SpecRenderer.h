@@ -18,7 +18,6 @@ struct SpecRender {
   float textX = 0;
   const ResolvedScroll* scroll = nullptr;
   bool uppercase = false;
-  bool smoothScroll = false;
   IEffect* effect = nullptr;
   bool backgroundDrawn = false;
 };

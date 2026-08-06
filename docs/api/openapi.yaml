@@ -1947,12 +1947,6 @@ components:
         blockNavigation: { type: boolean }
         soundEnabled: { type: boolean }
         uppercase: { type: boolean }
-        smoothScroll:
-          type: boolean
-          description: >
-            Opt-in horizontal sub-pixel anti-aliasing for scrolling text. Off by
-            default; when on, moving text dims its leading/trailing edge columns
-            so motion between whole pixels reads as smoother.
         weekdayBar:
           $ref: "#/components/schemas/WeekdayBar"
           description: >

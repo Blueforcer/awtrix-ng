@@ -86,7 +86,6 @@ void RenderPipeline::renderPage(Canvas& dst, const std::string& id, int64_t nowM
     r.textX = slot ? slot->scroll.x() : 0.0f;
     r.scroll = slot ? &slot->scroll.resolved() : nullptr;
     r.uppercase = s.uppercase;
-    r.smoothScroll = s.smoothScroll;
     r.effect = d_.effects->find(spec.effect);
     EffectSettings es;
     es.speed = spec.extras().effectSpeed;

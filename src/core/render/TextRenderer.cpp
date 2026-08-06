@@ -1,8 +1,6 @@
 #include "core/render/TextRenderer.h"
 
 #include <algorithm>
-#include <cmath>
-#include <vector>
 
 #include "core/render/Color.h"
 #include "core/render/TextEncoding.h"
@@ -122,17 +120,6 @@ int drawText(Canvas& canvas, const GfxFont& font, int x, int y, const std::strin
 
 namespace {
 
-struct SubCell {
-  float cov;
-  float r, g, b;
-};
-
-uint8_t clamp8(float v) {
-  if (v <= 0.0f) return 0;
-  if (v >= 255.0f) return 255;
-  return static_cast<uint8_t>(v + 0.5f);
-}
-
 constexpr int kColCacheWidth = 32;
 
 // Two ways to lay a ramp over a run: wrapping tiles it every span pixels and can drift over time,
@@ -176,28 +163,9 @@ RampSampler makeSampler(const TextPaint& paint, const GfxFont& font, const std::
 
 }
 
-int drawRun(Canvas& canvas, const GfxFont& font, float x, int y, const std::string& s,
+int drawRun(Canvas& canvas, const GfxFont& font, int x, int y, const std::string& s,
             const TextPaint& paint) {
-  const int W = canvas.width();
-  const int H = canvas.height();
-  if (W <= 0 || H <= 0) return width(font, s);
-
-  const int xi = static_cast<int>(std::floor(x));
-  const float frac = x - static_cast<float>(xi);
-  const float wLeft = 1.0f - frac;
-
-  // Kept static so a full-screen run does not allocate every frame; drawRun is not reentrant.
-  static std::vector<SubCell> buf;
-  buf.assign(static_cast<std::size_t>(W) * static_cast<std::size_t>(H), SubCell{0, 0, 0, 0});
-
-  auto add = [&](int cx, int cy, float w, float r, float g, float b) {
-    if (w <= 0.0f || cx < 0 || cx >= W || cy < 0 || cy >= H) return;
-    SubCell& cell = buf[static_cast<std::size_t>(cy) * W + cx];
-    cell.cov += w;
-    cell.r += w * r;
-    cell.g += w * g;
-    cell.b += w * b;
-  };
+  if (canvas.width() <= 0 || canvas.height() <= 0) return width(font, s);
 
   const RampSampler sampler = makeSampler(paint, font, s);
 
@@ -215,8 +183,7 @@ int drawRun(Canvas& canvas, const GfxFont& font, float x, int y, const std::stri
         for (int xx = 0; xx < g->width; ++xx)
           colCache[xx] = sampler.at(advance + g->xOffset + xx);
 
-      const uint32_t glyphCol = sampler.active() ? 0u : paint.glyphColorAt(gi);
-      float cr = color::red(glyphCol), cg = color::green(glyphCol), cb = color::blue(glyphCol);
+      uint32_t col = sampler.active() ? 0u : paint.glyphColorAt(gi);
 
       const uint8_t* bits = font.bitmap + g->bitmapOffset;
       uint16_t bit = 0;
@@ -229,46 +196,16 @@ int drawRun(Canvas& canvas, const GfxFont& font, float x, int y, const std::stri
           ++bit;
           cur <<= 1;
           if (!on) continue;
-          if (sampler.active()) {
-            const uint32_t cc = cached ? colCache[xx] : sampler.at(advance + g->xOffset + xx);
-            cr = color::red(cc);
-            cg = color::green(cc);
-            cb = color::blue(cc);
-          }
-          const int left = xi + advance + g->xOffset + xx;
-          add(left, cy, wLeft, cr, cg, cb);
-          add(left + 1, cy, frac, cr, cg, cb);
+          if (sampler.active())
+            col = cached ? colCache[xx] : sampler.at(advance + g->xOffset + xx);
+          canvas.setPixel(x + advance + g->xOffset + xx, cy, col);
         }
       }
       advance += g->xAdvance;
     }
     ++gi;
   }
-
-  // Resolve the accumulator: cov is the summed coverage, so dividing it out gives the average
-  // colour that landed in the cell, which is then blended over the background using cov as alpha.
-  for (int cy = 0; cy < H; ++cy) {
-    for (int cx = 0; cx < W; ++cx) {
-      const SubCell& cell = buf[static_cast<std::size_t>(cy) * W + cx];
-      if (cell.cov <= 0.0f) continue;
-      const float inv = 1.0f / cell.cov;
-      const float a = cell.cov > 1.0f ? 1.0f : cell.cov;
-      const float ia = 1.0f - a;
-      const uint32_t bg = canvas.getPixel(cx, cy);
-      canvas.setPixel(cx, cy,
-                      color::pack(clamp8(cell.r * inv * a + color::red(bg) * ia),
-                                  clamp8(cell.g * inv * a + color::green(bg) * ia),
-                                  clamp8(cell.b * inv * a + color::blue(bg) * ia)));
-    }
-  }
   return advance;
-}
-
-int drawTextF(Canvas& canvas, const GfxFont& font, float x, int y, const std::string& s,
-              uint32_t color) {
-  TextPaint paint;
-  paint.flat = color;
-  return drawRun(canvas, font, x, y, s, paint);
 }
 
 // Centres the ink rather than the advance box, so side bearings and trailing spaces don't pull the

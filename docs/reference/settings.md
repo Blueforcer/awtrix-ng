@@ -132,7 +132,6 @@ Panel size and wiring - `panelWidth`, `panels`, `panelStart`, `panelWiring`, `pa
 |---|---|---|---|---|---|
 | `textColor` | color | - | `"#FFFFFF"` | - | The global fallback color. **Required - not nullable**; `null` is rejected. Every nullable per-app color inherits it. |
 | `uppercase` | boolean | - | `true` | - | Uppercase the text of pushed apps and notifications before rendering. A payload's own `textCase` overrides it per app. |
-| `smoothScroll` | boolean | - | `false` | - | Place scrolling text at sub-pixel steps instead of whole pixels. Motion reads as smoother, edges as slightly softer. |
 | `scroll` | object | see below | - | - | Device-wide text motion for pushed apps and notifications. A payload's own `scroll` overrides it field by field. |
 
 ### `scroll`

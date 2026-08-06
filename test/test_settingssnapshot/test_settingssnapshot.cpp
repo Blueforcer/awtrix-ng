@@ -63,7 +63,7 @@ static void test_defaults_serialize_whole() {
       "\"dateOrder\":\"dayMonthYear\",\"dateSeparator\":\"dot\",\"dateYearMode\":\"twoDigit\","
       "\"dateShowWeekday\":false,\"dateMonthNames\":false,\"useCelsius\":true,\"blockNavigation\":"
       "false,\"soundEnabled\":true,"
-      "\"uppercase\":true,\"smoothScroll\":false,\"timeColor\":null,\"dateColor\":null,"
+      "\"uppercase\":true,\"timeColor\":null,\"dateColor\":null,"
       "\"humidityColor\":null,\"temperatureColor\":null,\"batteryColor\":null,\"volume\":25,"
       "\"radioVolume\":60,\"radioMeta\":true,\"saturation\":100,\"gamma\":1.899999976,"
       "\"colorCorrection\":null,"

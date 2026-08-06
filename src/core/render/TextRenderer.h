@@ -52,13 +52,8 @@ struct TextPaint {
   }
 };
 
-// x is fractional: the sub-pixel part splits every lit pixel across two columns and the result is
-// alpha-blended over the canvas, which is what makes slow scrolling look smooth.
-int drawRun(Canvas& canvas, const GfxFont& font, float x, int y, const std::string& s,
+int drawRun(Canvas& canvas, const GfxFont& font, int x, int y, const std::string& s,
             const TextPaint& paint);
-
-int drawTextF(Canvas& canvas, const GfxFont& font, float x, int y, const std::string& s,
-              uint32_t color);
 
 int drawCenteredIn(Canvas& canvas, const GfxFont& font, const std::string& s, int baselineY,
                    uint32_t color, int x0, int areaWidth);

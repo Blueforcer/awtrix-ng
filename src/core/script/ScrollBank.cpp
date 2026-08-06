@@ -41,8 +41,7 @@ ScrollBank::Line& ScrollBank::lineFor(int y) {
 }
 
 int ScrollBank::draw(Canvas& canvas, const GfxFont& font, const std::string& text,
-                     const ScrollRun& run, const ScrollDefaults& defaults, bool smoothScroll,
-                     int64_t nowMs) {
+                     const ScrollRun& run, const ScrollDefaults& defaults, int64_t nowMs) {
   Line& line = lineFor(run.y);
 
   render::ScrollLayout layout;
@@ -71,8 +70,7 @@ int ScrollBank::draw(Canvas& canvas, const GfxFont& font, const std::string& tex
   text::TextPaint paint;
   paint.flat = run.color;
   canvas.setClipX(run.x, run.x + run.width - 1);
-  render::drawScrollRun(canvas, font, x, run.y, text, layout.text.advance, paint, &resolved,
-                        smoothScroll);
+  render::drawScrollRun(canvas, font, x, run.y, text, layout.text.advance, paint, &resolved);
   canvas.clearClipX();
   return line.scroll.cycles();
 }

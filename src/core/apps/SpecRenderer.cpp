@@ -136,8 +136,7 @@ void renderText(Canvas& c, const AppSpec& s, const GfxFont& font, uint32_t color
     paint.glyphCount = fragColors.size();
   }
 
-  drawScrollRun(c, font, x, kBaseline, hasFragments ? fragRun : textStr, total, paint, r.scroll,
-                r.smoothScroll);
+  drawScrollRun(c, font, x, kBaseline, hasFragments ? fragRun : textStr, total, paint, r.scroll);
 }
 
 }

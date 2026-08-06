@@ -1072,7 +1072,6 @@ const FIELDS={
  'scroll.speed':F('text','slider','Scroll speed|Lauftext-Tempo','100 % = normal, 0 stops.|100 % = normal, 0 hält an.',{min:0,max:200,unit:'%'}),
  'scroll.gap':F('text','slider','Loop gap|Abstand im Durchlauf','Space between repetitions.|Abstand zwischen Wiederholungen.',{min:0,max:64,unit:'px'}),
  'scroll.holdMs':F('text','slider','Pause|Pause','Before the text starts, and at each bounce turn.|Vor dem Start und an jedem Wendepunkt.',{min:0,max:5000,step:100,unit:'ms'}),
- smoothScroll:F('text','toggle','Smooth scrolling|Weiches Scrollen','Softer edges on moving text.|Weichere Kanten bei Lauftext.'),
  overlay:F('overlay','select','Overlay|Overlay','Set by hand, not from real weather data.|Manuell gesetzt, nicht aus echten Wetterdaten.',{opt:[['','- none -|- keins -']].concat(OVERLAYS.map(o=>[o,o]))}),
  overlaySpeed:F('overlay','slider','Overlay speed|Overlay-Tempo','100 % is the overlay’s own pace.|100 % ist das Eigentempo des Overlays.',{min:10,max:200,step:5,unit:'%'}),
  useCelsius:F('sensors','toggle','Celsius|Celsius','Off = Fahrenheit.|Aus = Fahrenheit.'),

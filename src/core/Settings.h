@@ -92,7 +92,6 @@ struct Settings {
   bool blockNavigation = false;
   bool soundEnabled = true;
   bool uppercase = true;
-  bool smoothScroll = false;
   WeekdayBarConfig weekdayBar;
   OptColor timeColor;
   OptColor dateColor;

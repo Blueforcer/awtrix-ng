@@ -295,53 +295,16 @@ static bool anyPartial(Canvas& c) {
   return false;
 }
 
-static void test_smooth_scroll_off_floors_no_antialiasing() {
+static void test_a_fractional_scroll_position_snaps_to_whole_pixels() {
   AppSpec s;
   s.text = "AAAAAAAAAA";
   Canvas c(32, 8);
   auto r = rc();
   r.textX = 5.5f;
   r.scroll = &animatingScroll();
-  r.smoothScroll = false;
   render::renderSpec(c, s, kFont, r);
   TEST_ASSERT_TRUE(c.getPixel(5, 6) != 0);
-  TEST_ASSERT_FALSE_MESSAGE(anyPartial(c), "no grey edges when smoothScroll is off");
-}
-
-static const FontGlyph kTightG[] = {{0, 3, 3, 3, 0, 0}};
-static const GfxFont kFontTight = {kB, kTightG, 'A', 'A', 8};
-
-static void test_smooth_scroll_fragments_have_no_seam() {
-  AppSpec s;
-  TextFragment f;
-  f.text = "A";
-  f.color = 0xFFFFFFu;
-  s.fragments.push_back(f);
-  s.fragments.push_back(f);
-  Canvas c(32, 8);
-  auto r = rc();
-  r.textX = 2.5f;
-  r.scroll = &animatingScroll();
-  r.smoothScroll = true;
-  render::renderSpec(c, s, kFontTight, r);
-  TEST_ASSERT_EQUAL_HEX32(0x808080u, c.getPixel(2, 6));
-  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(4, 6));
-  TEST_ASSERT_EQUAL_HEX32_MESSAGE(0xFFFFFFu, c.getPixel(5, 6),
-                                  "fragment boundary must not dim");
-  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(6, 6));
-  TEST_ASSERT_EQUAL_HEX32(0x808080u, c.getPixel(8, 6));
-}
-
-static void test_smooth_scroll_on_antialiases_edges() {
-  AppSpec s;
-  s.text = "AAAAAAAAAA";
-  Canvas c(32, 8);
-  auto r = rc();
-  r.textX = 5.5f;
-  r.scroll = &animatingScroll();
-  r.smoothScroll = true;
-  render::renderSpec(c, s, kFont, r);
-  TEST_ASSERT_TRUE_MESSAGE(anyPartial(c), "grey edges when smoothScroll is on");
+  TEST_ASSERT_FALSE_MESSAGE(anyPartial(c), "scrolling text must land on whole pixels");
 }
 
 static void test_toptext_zorder() {
@@ -444,9 +407,7 @@ int main(int, char**) {
   RUN_TEST(test_loop_fills_the_seam_with_neighbouring_copies);
   RUN_TEST(test_a_wrapping_marquee_draws_only_one_copy);
   RUN_TEST(test_fitting_text_ignores_textX);
-  RUN_TEST(test_smooth_scroll_off_floors_no_antialiasing);
-  RUN_TEST(test_smooth_scroll_on_antialiases_edges);
-  RUN_TEST(test_smooth_scroll_fragments_have_no_seam);
+  RUN_TEST(test_a_fractional_scroll_position_snaps_to_whole_pixels);
   RUN_TEST(test_uppercase_textcase);
   RUN_TEST(test_palette_text_starts_at_the_first_stop);
   RUN_TEST(test_palette_outranks_fragment_colours);

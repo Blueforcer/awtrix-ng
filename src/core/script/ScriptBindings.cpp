@@ -407,8 +407,7 @@ int b_ramp_text(bvm* vm) {
     text::TextPaint paint;
     paint.ramp = &ramp;
     paint.rampOriginPx = ramp.originAt(nowMs(), text::width(*activeFont(), str));
-    adv = text::drawRun(*g_ctx.canvas, *activeFont(), static_cast<float>(argInt(vm, 1)),
-                        argInt(vm, 2), str, paint);
+    adv = text::drawRun(*g_ctx.canvas, *activeFont(), argInt(vm, 1), argInt(vm, 2), str, paint);
   }
   be_pushint(vm, adv);
   be_return(vm);
@@ -486,7 +485,7 @@ int b_scroll_text(bvm* vm) {
 
   if (textArg && run.width > 0)
     cycles = g_ctx.scroll->draw(*g_ctx.canvas, *font, be_tostring(vm, textArg), run, defaults,
-                                settings && settings->smoothScroll, nowMs());
+                                nowMs());
   be_pushint(vm, cycles);
   be_return(vm);
 }

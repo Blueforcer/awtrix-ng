@@ -99,7 +99,6 @@ constexpr Field kFields[] = {
     mkBool("blockNavigation", &Settings::blockNavigation),
     mkBool("soundEnabled", &Settings::soundEnabled),
     mkBool("uppercase", &Settings::uppercase),
-    mkBool("smoothScroll", &Settings::smoothScroll),
     mkNullColor("timeColor", &Settings::timeColor),
     mkNullColor("dateColor", &Settings::dateColor),
     mkNullColor("humidityColor", &Settings::humidityColor),

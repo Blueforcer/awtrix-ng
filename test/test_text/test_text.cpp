@@ -109,9 +109,11 @@ static void test_offcanvas_is_safe() {
   TEST_ASSERT_TRUE(true);
 }
 
-static void test_subpixel_integer_matches_grid() {
+static void test_run_lands_on_the_pixel_grid() {
   Canvas c(8, 8);
-  const int adv = text::drawTextF(c, kFont, 2.0f, 0, "A", 0xFFFFFFu);
+  text::TextPaint paint;
+  paint.flat = 0xFFFFFFu;
+  const int adv = text::drawRun(c, kFont, 2, 0, "A", paint);
   TEST_ASSERT_EQUAL_INT(4, adv);
   for (int y = 0; y < 3; ++y)
     for (int x = 2; x < 5; ++x) TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(x, y));
@@ -119,35 +121,14 @@ static void test_subpixel_integer_matches_grid() {
   TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(5, 0));
 }
 
-static void test_subpixel_half_splits_edges_keeps_interior() {
-  Canvas c(8, 8);
-  text::drawTextF(c, kFont, 2.5f, 0, "A", 0xFFFFFFu);
-  TEST_ASSERT_EQUAL_HEX32(0x808080u, c.getPixel(2, 0));
-  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(3, 0));
-  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(4, 0));
-  TEST_ASSERT_EQUAL_HEX32(0x808080u, c.getPixel(5, 0));
-  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(1, 0));
-}
-
-static void test_subpixel_edge_composites_over_background() {
+static void test_run_covers_the_background() {
   Canvas c(8, 8);
   c.clear(0x00FF00u);
-  text::drawTextF(c, kFont, 2.5f, 0, "A", 0xFF0000u);
-  TEST_ASSERT_EQUAL_HEX32(0x808000u, c.getPixel(2, 0));
-  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(3, 0));
-}
-
-static void test_subpixel_floors_no_origin_dwell() {
-  Canvas neg(8, 8);
-  text::drawTextF(neg, kFont, -0.5f, 0, "A", 0xFFFFFFu);
-  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, neg.getPixel(0, 0));
-  TEST_ASSERT_EQUAL_HEX32(0x808080u, neg.getPixel(2, 0));
-
-  Canvas pos(8, 8);
-  text::drawTextF(pos, kFont, 0.5f, 0, "A", 0xFFFFFFu);
-  TEST_ASSERT_EQUAL_HEX32(0x808080u, pos.getPixel(0, 0));
-
-  TEST_ASSERT_NOT_EQUAL(neg.getPixel(0, 0), pos.getPixel(0, 0));
+  text::TextPaint paint;
+  paint.flat = 0xFF0000u;
+  text::drawRun(c, kFont, 2, 0, "A", paint);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(2, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(1, 0));
 }
 
 
@@ -227,20 +208,6 @@ static void test_ramp_origin_handles_negatives() {
   TEST_ASSERT_EQUAL_HEX32(cb.getPixel(0, 0), ca.getPixel(0, 0));
 }
 
-static void test_ramp_samples_before_the_coverage_split() {
-  const uint32_t stops[2] = {0xFF0000u, 0x0000FFu};
-  const render::ColorRamp r = rampOf(stops, 2);
-
-  Canvas whole(16, 8);
-  text::drawRun(whole, kFont, 0, 0, "A", paintWith(r));
-
-  Canvas half(16, 8);
-  text::drawRun(half, kFont, 0.5f, 0, "A", paintWith(r));
-  const uint32_t lead = half.getPixel(0, 0);
-  TEST_ASSERT_INT_WITHIN(1, color::red(whole.getPixel(0, 0)) / 2, color::red(lead));
-  TEST_ASSERT_INT_WITHIN(1, color::blue(whole.getPixel(0, 0)) / 2, color::blue(lead));
-}
-
 static void test_glyph_colours_paint_per_glyph() {
   const uint32_t cols[2] = {0xFF0000u, 0x00FF00u};
   text::TextPaint p;
@@ -274,16 +241,13 @@ int main(int, char**) {
   RUN_TEST(test_draw_B_diagonal);
   RUN_TEST(test_draw_AB_positions);
   RUN_TEST(test_offcanvas_is_safe);
-  RUN_TEST(test_subpixel_integer_matches_grid);
-  RUN_TEST(test_subpixel_half_splits_edges_keeps_interior);
-  RUN_TEST(test_subpixel_edge_composites_over_background);
-  RUN_TEST(test_subpixel_floors_no_origin_dwell);
+  RUN_TEST(test_run_lands_on_the_pixel_grid);
+  RUN_TEST(test_run_covers_the_background);
   RUN_TEST(test_ramp_stretches_between_the_ink);
   RUN_TEST(test_ramp_varies_within_one_glyph);
   RUN_TEST(test_ramp_span_repeats);
   RUN_TEST(test_ramp_origin_shifts_by_whole_spans);
   RUN_TEST(test_ramp_origin_handles_negatives);
-  RUN_TEST(test_ramp_samples_before_the_coverage_split);
   RUN_TEST(test_glyph_colours_paint_per_glyph);
   RUN_TEST(test_empty_ramp_falls_back_to_flat);
   return UNITY_END();
