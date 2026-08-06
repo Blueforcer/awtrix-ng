@@ -183,6 +183,9 @@ async function flash({ erase, buttons, status, progress, log, terminal, index })
   for (const button of buttons) button.disabled = true;
   log.hidden = false;
   terminal.clean();
+  // Everything up to the first written byte leaves the board as it was, and
+  // saying otherwise reads as a brick to someone whose bridge just gave up.
+  let writing = false;
 
   const transport = new Transport(port, false);
   try {
@@ -211,6 +214,7 @@ async function flash({ erase, buttons, status, progress, log, terminal, index })
     progress.hidden = false;
     const total = fileArray.reduce((sum, part) => sum + part.data.length, 0);
     const written = fileArray.map(() => 0);
+    writing = true;
     await loader.writeFlash({
       // `keep` leaves the flash mode, frequency and size in the image header
       // alone -- they were set when the image was merged, for exactly the flash
@@ -232,8 +236,9 @@ async function flash({ erase, buttons, status, progress, log, terminal, index })
       ? "Done. AWTRIX NG is booting, with your settings and Wi-Fi as they were."
       : "Done. AWTRIX NG is booting - it opens its own access point after about 15 seconds.";
   } catch (error) {
-    status.textContent = `Failed: ${error.message || error}. ` +
-      `The chip stays unbootable until a write succeeds - retry it.`;
+    status.textContent = `Failed: ${error.message || error}. ` + (writing
+      ? "The chip stays unbootable until a write succeeds - retry it."
+      : "Nothing was written, so the board is as it was - retry it.");
   } finally {
     progress.hidden = true;
     for (const button of buttons) button.disabled = false;
