@@ -95,7 +95,8 @@ name.
 python -m esptool --chip esp32 --port COM5 --baud 460800 write_flash 0x0 usb-awtrix-ng-4mb.bin
 ```
 
-Use `--chip esp32s3` for an S3 board. When it finishes it prints `Hash of data verified.`
+Use `--chip esp32s3` for an S3 board. When it finishes it prints `Hash of data verified.` If it
+never gets that far, [When it goes wrong](#when-it-goes-wrong) lists what usually stops it.
 
 !!! warning "Do not raise the baud rate to 921600"
     A write at 921600 aborts partway on the USB-serial bridge a TC001 uses. The chip has been
