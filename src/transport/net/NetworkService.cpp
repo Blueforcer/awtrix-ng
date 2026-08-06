@@ -50,8 +50,8 @@ void NetworkService::begin(const DeviceConfig& cfg, bool forceAp,
                            const std::function<void()>& onWait) {
   hostname_ = net::effectiveHostname(cfg.hostname, WiFi.macAddress().c_str());
   WiFi.persistent(true);
-  WiFi.mode(WIFI_STA);
   WiFi.setHostname(hostname_.c_str());
+  WiFi.mode(WIFI_STA);
   // Widest legal channel set (1-13) so an AP on 12 or 13 is visible; the regulatory domain is
   // corrected from the AP's country IE once we associate.
   wifi_country_t country = {};
