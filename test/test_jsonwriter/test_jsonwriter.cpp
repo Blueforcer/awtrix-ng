@@ -1,5 +1,7 @@
 #include <unity.h>
 
+#include <cmath>
+#include <limits>
 #include <string>
 
 #include "core/api/JsonWriter.h"
@@ -33,6 +35,23 @@ static void test_flat_scalars_match() {
                w.endObject();
              }),
              "{\"version\":\"1.0.4-dev\",\"wifiRssi\":-58,\"uptimeSeconds\":1173,\"freeHeapBytes\":107412,\"matrixPower\":true,\"lowBattery\":false}");
+}
+
+static void test_a_failed_sensor_reading_stays_valid_json() {
+  const double nan = std::nan("");
+  const double inf = std::numeric_limits<double>::infinity();
+  std::string out;
+  JsonWriter w(out);
+  w.beginObject();
+  w.member("temperature", nan, 1);
+  w.member("humidity", 25.1, 1);
+  w.member("pressureHpa", inf, 1);
+  w.member("lightLevel", -inf, 1);
+  w.member("batteryVoltage", static_cast<float>(nan));
+  w.endObject();
+  assertSame(out,
+             "{\"temperature\":null,\"humidity\":25.1,\"pressureHpa\":null,\"lightLevel\":null,"
+             "\"batteryVoltage\":null}");
 }
 
 static void test_rounded_numbers_match() {
@@ -238,6 +257,7 @@ int main(int, char**) {
   RUN_TEST(test_sixty_four_bit_extremes_match);
   RUN_TEST(test_flat_scalars_match);
   RUN_TEST(test_rounded_numbers_match);
+  RUN_TEST(test_a_failed_sensor_reading_stays_valid_json);
   RUN_TEST(test_float_values_match);
   RUN_TEST(test_float_formats_match_across_the_range);
   RUN_TEST(test_float_overload_matches_the_document);

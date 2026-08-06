@@ -75,6 +75,7 @@ class JsonWriter {
 
   JsonWriter& number(double v, int decimals) {
     prime();
+    if (std::isnan(v) || std::isinf(v)) { out_ += "null"; return *this; }
     char buf[40];
     int n = snprintf(buf, sizeof(buf), "%.*f", decimals, v);
     if (n < 0) return *this;

@@ -4,6 +4,8 @@
 #include <HTTPClient.h>
 #include <WiFiClient.h>
 
+#include <cmath>
+
 #include "core/Command.h"
 #include "core/CoreEngine.h"
 
@@ -144,9 +146,9 @@ void PeripheryService::tick(int64_t nowMs) {
 
   const SensorReading sr = board_->sensors().read();
   if (sr.present) {
-    rt.temperatureC = sr.temperatureC + cfg_->tempOffset;
-    if (sr.hasHumidity) rt.humidity = sr.humidity + cfg_->humOffset;
-    if (sr.hasPressure) rt.pressureHpa = sr.pressureHpa;
+    if (std::isfinite(sr.temperatureC)) rt.temperatureC = sr.temperatureC + cfg_->tempOffset;
+    if (sr.hasHumidity && std::isfinite(sr.humidity)) rt.humidity = sr.humidity + cfg_->humOffset;
+    if (sr.hasPressure && std::isfinite(sr.pressureHpa)) rt.pressureHpa = sr.pressureHpa;
   }
 }
 

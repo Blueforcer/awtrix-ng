@@ -85,7 +85,7 @@ struct SensorBus::Impl {
         break;
       case SHT31:
         r.present = true; r.hasHumidity = true;
-        r.temperatureC = sht.readTemperature(); r.humidity = sht.readHumidity();
+        sht.readBoth(&r.temperatureC, &r.humidity);
         break;
       default:
         break;
