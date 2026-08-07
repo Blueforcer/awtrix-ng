@@ -5,6 +5,7 @@
 
 #include "core/CoreEngine.h"
 #include "core/Services.h"
+#include "core/sound/SoundClips.h"
 
 namespace awtrix {
 namespace sim {
@@ -16,10 +17,8 @@ class FakeClipService : public IClipService {
   explicit FakeClipService(CoreEngine& engine) : engine_(engine) {}
 
   bool playClip(const std::string& path) override {
-    std::string name = path;
-    if (name.size() > 12) name = name.substr(8, name.size() - 12);
     engine_.state().runtime().clipPlaying = true;
-    engine_.state().runtime().clipName = name;
+    engine_.state().runtime().clipName = sound::clipNameFor(path);
     engine_.state().emit(StateEvent::RadioChanged);
     endsAtMs_ = 0;
     running_ = true;

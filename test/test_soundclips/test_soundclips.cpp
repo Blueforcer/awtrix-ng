@@ -33,6 +33,16 @@ void test_length_cap() {
   TEST_ASSERT_TRUE(sound::clipPathFor(atCap + "a").empty());
 }
 
+void test_name_round_trips_through_the_path() {
+  TEST_ASSERT_EQUAL_STRING("ding", sound::clipNameFor(sound::clipPathFor("ding")).c_str());
+  TEST_ASSERT_EQUAL_STRING("Alarm_2", sound::clipNameFor("/SOUNDS/Alarm_2.mp3").c_str());
+  TEST_ASSERT_TRUE(sound::clipNameFor("").empty());
+  TEST_ASSERT_TRUE(sound::clipNameFor("/SOUNDS/.mp3").empty());
+  TEST_ASSERT_TRUE(sound::clipNameFor("/MELODIES/ding.mp3").empty());
+  TEST_ASSERT_TRUE(sound::clipNameFor("/SOUNDS/ding.txt").empty());
+  TEST_ASSERT_TRUE(sound::clipNameFor("ding.mp3").empty());
+}
+
 }
 
 void setUp() {}
@@ -43,6 +53,7 @@ int main(int, char**) {
   RUN_TEST(test_plain_names_map_into_sounds);
   RUN_TEST(test_unusable_names_yield_empty);
   RUN_TEST(test_length_cap);
+  RUN_TEST(test_name_round_trips_through_the_path);
   UNITY_END();
   return 0;
 }

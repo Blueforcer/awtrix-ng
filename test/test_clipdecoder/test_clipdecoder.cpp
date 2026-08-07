@@ -140,6 +140,22 @@ void test_empty_file_is_an_error() {
   TEST_ASSERT_TRUE(decoded.last == mp3::ClipDecoder::Step::Error);
 }
 
+void test_junk_tail_ends_with_done() {
+  std::vector<uint8_t> data(mp3vectors::ksine_mono_64k_mp3,
+                            mp3vectors::ksine_mono_64k_mp3 +
+                                sizeof(mp3vectors::ksine_mono_64k_mp3));
+  uint32_t state = 0x9E3779B9;
+  for (int i = 0; i < 200 * 1024; ++i) {
+    state = state * 1664525u + 1013904223u;
+    uint8_t b = static_cast<uint8_t>(state >> 24);
+    if (b == 0xFF) b = 0x00;
+    data.push_back(b);
+  }
+  const Decoded decoded = decodeAll(data.data(), data.size(), 1024);
+  TEST_ASSERT_TRUE(decoded.frames > 0);
+  TEST_ASSERT_TRUE(decoded.last == mp3::ClipDecoder::Step::Done);
+}
+
 }
 
 void setUp() {}
@@ -153,6 +169,7 @@ int main(int, char**) {
   RUN_TEST(test_truncated_file_ends_with_done);
   RUN_TEST(test_garbage_is_an_error);
   RUN_TEST(test_empty_file_is_an_error);
+  RUN_TEST(test_junk_tail_ends_with_done);
   UNITY_END();
   return 0;
 }

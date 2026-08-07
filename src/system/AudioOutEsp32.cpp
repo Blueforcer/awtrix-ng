@@ -15,6 +15,7 @@
 
 #include "core/audio/ClipDecoder.h"
 #include "core/radio/PlaylistParser.h"
+#include "core/sound/SoundClips.h"
 #include "core/radio/RadioDisplay.h"
 #include "core/script/ScriptServices.h"
 #include "system/HeapCaps.h"
@@ -126,17 +127,15 @@ DispatchResult AudioOutEsp32::play(const std::string& url, const std::string& la
 }
 
 bool AudioOutEsp32::playClip(const std::string& path) {
-  // The path arrives as "/SOUNDS/<name>.mp3" via clipPathFor; peel the name back out for state.
-  std::string name = path;
-  if (name.size() > 12) name = name.substr(8, name.size() - 12);
-
   if (xSemaphoreTake(lock_, portMAX_DELAY) == pdTRUE) {
     pendingClip_ = path;
-    pendingClipName_ = name;
+    pendingClipName_ = sound::clipNameFor(path);
+    clipStop_.store(false);
+    // Bumped under the lock like urlSeq_, so the task can never pair a new
+    // pending path with a stale sequence number.
+    clipSeq_.fetch_add(1);
     xSemaphoreGive(lock_);
   }
-  clipStop_.store(false);
-  clipSeq_.fetch_add(1);
   return ensureTask();
 }
 
@@ -238,19 +237,20 @@ void AudioOutEsp32::taskEntry(void* self) {
 bool AudioOutEsp32::writeDecodedFrame(const mp3::DecodeResult& result, int16_t* pcm) {
   if (result.sampleRateHz != sampleRateHz_ || result.channels != channels_) {
     closeStream();
-    sampleRateHz_ = result.sampleRateHz;
-    channels_ = result.channels;
     i2s_config_t config = {};
     config.mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_TX);
-    config.sample_rate = static_cast<uint32_t>(sampleRateHz_);
+    config.sample_rate = static_cast<uint32_t>(result.sampleRateHz);
     config.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
-    config.channel_format = channels_ == 1 ? I2S_CHANNEL_FMT_ONLY_LEFT
-                                           : I2S_CHANNEL_FMT_RIGHT_LEFT;
+    config.channel_format = result.channels == 1 ? I2S_CHANNEL_FMT_ONLY_LEFT
+                                                 : I2S_CHANNEL_FMT_RIGHT_LEFT;
     config.communication_format = I2S_COMM_FORMAT_STAND_I2S;
     config.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1;
     config.dma_buf_count = kDmaBufferCount;
     config.dma_buf_len = kDmaBufferFrames;
     config.use_apll = false;
+    // The format members only move once the driver is actually up; otherwise a
+    // failed install would make every following same-format frame skip the
+    // reinstall and write into a driver that does not exist.
     if (i2s_driver_install(I2S_NUM_0, &config, 0, nullptr) != ESP_OK) return false;
     i2s_pin_config_t pins = {};
     pins.bck_io_num = pinBclk_;
@@ -258,6 +258,8 @@ bool AudioOutEsp32::writeDecodedFrame(const mp3::DecodeResult& result, int16_t* 
     pins.data_out_num = pinDout_;
     pins.data_in_num = I2S_PIN_NO_CHANGE;
     i2s_set_pin(I2S_NUM_0, &pins);
+    sampleRateHz_ = result.sampleRateHz;
+    channels_ = result.channels;
     i2sStarted_ = true;
   }
 
@@ -296,27 +298,37 @@ void AudioOutEsp32::playClipFile(const std::string& path, const std::string& nam
   mp3::ClipDecoder walk(decoder_);
   mp3::DecodeResult result;
   const uint32_t startSeq = clipSeq_.load();
-  bool failed = false;
+  bool decodeFailed = false;
+  bool i2sFailed = false;
+  bool finished = false;
 
   while (!clipStop_.load() && clipSeq_.load() == startSeq) {
     const mp3::ClipDecoder::Step step = walk.next(readClipBytes, &file, pcm, result);
-    if (step == mp3::ClipDecoder::Step::Done) break;
+    if (step == mp3::ClipDecoder::Step::Done) {
+      finished = true;
+      break;
+    }
     if (step == mp3::ClipDecoder::Step::Error) {
-      failed = true;
+      decodeFailed = true;
       break;
     }
     if (!writeDecodedFrame(result, pcm)) {
-      failed = true;
+      i2sFailed = true;
       break;
     }
   }
 
   file.close();
   decoder_.reset();
+  // A clip that ran to its end still has up to a DMA queue of audio in flight; leaving right away
+  // would let the idle path tear I2S down mid-tail.
+  if (finished && i2sStarted_ && sampleRateHz_ > 0)
+    vTaskDelay(pdMS_TO_TICKS((kDmaBufferCount * kDmaBufferFrames * 1000) / sampleRateHz_));
   clipPlaying_.store(false);
-  // A bad clip must not look like a dead station, so the complaint goes to the log rather than
+  // A bad clip must not look like a dead station, so the complaints go to the log rather than
   // into radioError.
-  if (failed) logf("sound clip %s is not playable MPEG-1 Layer III audio", path.c_str());
+  if (decodeFailed) logf("sound clip %s is not playable MPEG-1 Layer III audio", path.c_str());
+  if (i2sFailed) logf("could not start the I2S output for sound clip %s", path.c_str());
   publishClipEnded();
 }
 
