@@ -6,7 +6,7 @@ flash size, while the app image does not. One build therefore yields several
 factory images, differing only in their table and in the trailing free space.
 
     python scripts/factory_image.py --env awtrix_s3_octal --flash-size 8MB \\
-        -o usb-awtrix-ng-s3-8mb.bin
+        -o usb-awtrix-ng-s3-octal-8mb.bin
 
 Or every flash variant that SoC ships in, named the way the release assets are
 (gen_partitions.FACTORY_FLASH_SIZES is the list):
@@ -64,7 +64,7 @@ def asset_base(env):
 
 
 def default_name(env, flash_size):
-    """The release-asset name for one image, e.g. usb-awtrix-ng-s3-8mb.bin."""
+    """The release-asset name for one image, e.g. usb-awtrix-ng-s3-octal-8mb.bin."""
     return "usb-%s-%s.bin" % (asset_base(env), flash_size.lower())
 
 
