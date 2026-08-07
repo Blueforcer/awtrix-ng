@@ -205,11 +205,13 @@ jobs:
             usb-awtrix-ng-*.bin
             licenses-awtrix-ng.zip
       - name: Flip the release live, now that every asset is attached
-        # This is what fires `release: published`, and with it the Discord
-        # notification -- see .github/workflows/discord-release.yml.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "$GITHUB_REF_NAME" --draft=false
+      - name: Announce the release on Discord
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run discord-release.yml --ref main -f tag="$GITHUB_REF_NAME"
       - name: Rebuild the docs so the browser flasher serves this release
         # The flasher on getting-started/flashing.md writes whatever factory
         # images the documentation site carries, and those are copied out of the
