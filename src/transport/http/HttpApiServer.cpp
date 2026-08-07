@@ -4,6 +4,10 @@
 #include <Update.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
+// Included by name rather than left to the Arduino headers: the image marker below reads
+// CONFIG_SPIRAM_MODE_QUAD out of it, and an absent macro reads as octal - which is the wrong
+// answer to be arriving at by accident.
+#include <sdkconfig.h>
 
 #include <algorithm>
 
@@ -121,11 +125,51 @@ constexpr uint8_t kEspFlashErasedByte = 0xFF;
 constexpr uint32_t kEspAppDescMagic = 0xABCD5432;
 #if defined(AWTRIX_SOC_ESP32S3)
 constexpr uint16_t kExpectedChipId = 0x0009;
-constexpr const char* kUpdateImageName = "firmware-awtrix-ng-s3.bin";
+#if defined(CONFIG_SPIRAM_MODE_QUAD)
+constexpr const char* kUpdateImageName = "firmware-awtrix-ng-s3-quad.bin";
+#else
+constexpr const char* kUpdateImageName = "firmware-awtrix-ng-s3-octal.bin";
+#endif
 #else
 constexpr uint16_t kExpectedChipId = 0x0000;
 constexpr const char* kUpdateImageName = "firmware-awtrix-ng.bin";
 #endif
+
+// The S3 ships as two images - octal PSRAM and quad - and the header above cannot tell them apart:
+// same chip id, same app descriptor. Getting it wrong is not symmetric. The octal image on a quad
+// board boots with its PSRAM invisible, but the quad image on an octal board fails its PSRAM init
+// and aborts, so the device boot-loops until someone reaches it with a USB cable.
+//
+// Every build therefore carries this marker in its .rodata, and an upload is scanned for it. The
+// variant follows the prefix in the same string so exactly one copy of the prefix exists in the
+// binary: a second one would be found first about half the time, with whatever bytes happen to
+// follow it read as the variant.
+#if defined(AWTRIX_SOC_ESP32S3)
+#if defined(CONFIG_SPIRAM_MODE_QUAD)
+#define AWTRIX_IMAGE_VARIANT "esp32s3-psram-quad"
+#else
+#define AWTRIX_IMAGE_VARIANT "esp32s3-psram-octal"
+#endif
+#else
+#define AWTRIX_IMAGE_VARIANT "esp32"
+#endif
+#define AWTRIX_IMAGE_MARKER_PREFIX "AWTRIX-NG-IMAGE/"
+// Referenced by the scan below, which is what keeps it in the binary; `used` covers the day that
+// reference moves behind a build flag. The prefix length comes from a sizeof, which emits nothing:
+// this array is the only copy of those bytes in the image.
+__attribute__((used)) const char kImageMarker[] =
+    AWTRIX_IMAGE_MARKER_PREFIX AWTRIX_IMAGE_VARIANT;
+constexpr size_t kImageMarkerPrefixLen = sizeof(AWTRIX_IMAGE_MARKER_PREFIX) - 1;
+constexpr const char* kImageVariant = kImageMarker + kImageMarkerPrefixLen;
+constexpr size_t kImageVariantMaxLen = 31;
+
+// A friendlier name for the variant an image announces, for the message the upload is refused with.
+const char* variantName(const std::string& variant) {
+  if (variant == "esp32") return "a classic ESP32";
+  if (variant == "esp32s3-psram-octal") return "an ESP32-S3 with octal PSRAM";
+  if (variant == "esp32s3-psram-quad") return "an ESP32-S3 with quad PSRAM";
+  return "a board this firmware does not know";
+}
 
 const char* chipIdName(uint16_t id) {
   switch (id) {
@@ -378,6 +422,35 @@ void HttpApiServer::collectBody(WebServer& server, const String& uri, HTTPRaw& r
   }
 }
 
+// Walks the upload for the marker every AWTRIX NG image carries, a byte at a time so one split
+// across two chunks is still found. It stops at the first: a firmware image holds exactly one, and
+// an image from before the marker existed holds none - which is read as "says nothing" and let
+// through, so a downgrade to an older release still works.
+void HttpApiServer::scanImageMarker(const uint8_t* buf, size_t len) {
+  for (size_t i = 0; i < len; ++i) {
+    const char c = static_cast<char>(buf[i]);
+    if (markerCapturing_) {
+      // The variant ends at the string terminator. Anything else unprintable ends it too, so a
+      // corrupt marker cannot pull the rest of the image into the name.
+      if (c > 0x20 && markerVariant_.size() < kImageVariantMaxLen) {
+        markerVariant_ += c;
+        continue;
+      }
+      markerRead_ = true;
+      return;
+    }
+    if (c == kImageMarker[markerMatched_]) {
+      if (++markerMatched_ == kImageMarkerPrefixLen) {
+        markerCapturing_ = true;
+        markerVariant_.reserve(kImageVariantMaxLen);
+      }
+    } else {
+      // Restart, but not blindly at zero: the byte that broke the match may open the next one.
+      markerMatched_ = (c == kImageMarker[0]) ? 1 : 0;
+    }
+  }
+}
+
 void HttpApiServer::handleUpdateUpload() {
   HTTPUpload& up = server_->upload();
   if (apMode_) return;
@@ -390,6 +463,10 @@ void HttpApiServer::handleUpdateUpload() {
     if (contentLen > 0 && contentLen > ESP.getFreeSketchSpace()) return;
     updateImageError_.clear();
     uploadContentChecked_ = false;
+    markerMatched_ = 0;
+    markerCapturing_ = false;
+    markerRead_ = false;
+    markerVariant_.clear();
     uploadWriteOk_ = Update.begin(UPDATE_SIZE_UNKNOWN);
   } else if (up.status == UPLOAD_FILE_WRITE) {
     // Catch an image that does not belong in the OTA slot from the very first chunk, before any of
@@ -419,6 +496,18 @@ void HttpApiServer::handleUpdateUpload() {
               kUpdateImageName + " instead";
       }
       if (!updateImageError_.empty()) {
+        logf("update: refused - %s", updateImageError_.c_str());
+        uploadWriteOk_ = false;
+        Update.abort();
+        return;
+      }
+    }
+    if (uploadWriteOk_ && !markerRead_) {
+      scanImageMarker(up.buf, up.currentSize);
+      if (markerRead_ && markerVariant_ != kImageVariant) {
+        updateImageError_ = std::string("this image is built for ") + variantName(markerVariant_) +
+                            ", this device is " + variantName(kImageVariant) + " - upload " +
+                            kUpdateImageName + " instead";
         logf("update: refused - %s", updateImageError_.c_str());
         uploadWriteOk_ = false;
         Update.abort();
