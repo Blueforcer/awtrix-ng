@@ -1717,7 +1717,7 @@ components:
                 - invalidPinConfig      # 400, PUT /api/v1/system only
                 - invalidName           # 400, any route naming an app - name outside [A-Za-z0-9_-]{1,32}
                 - invalidMethodOverride # 400, X-HTTP-Method-Override on a non-POST, naming anything but PUT/PATCH/DELETE, or aimed at the script upload
-                - wrongChip             # 400, POST /update only - image built for a different SoC, or a factory image, refused before anything was written
+                - wrongChip             # 400, POST /update only - image built for a different SoC or the other ESP32-S3 PSRAM type, or a factory image; the running firmware is untouched
                 - unauthorized          # 401
                 - forbidden             # 403, disabled during provisioning
                 - notFound              # 404

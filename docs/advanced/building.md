@@ -9,10 +9,11 @@ that embeds the [web UI](#the-embedded-web-ui), but a firmware build stops witho
 it.
 
 ```bash
-pio run  -e awtrix          # ESP32 firmware (the default environment)
-pio run  -e awtrix_s3       # ESP32-S3 firmware
-pio test -e native          # host unit tests for the portable core
-pio run  -e native_sim      # host simulator: firmware + web UI without an ESP32
+pio run  -e awtrix            # ESP32 firmware (the default environment)
+pio run  -e awtrix_s3_octal   # ESP32-S3 firmware, octal PSRAM
+pio run  -e awtrix_s3_quad    # ESP32-S3 firmware, quad PSRAM
+pio test -e native            # host unit tests for the portable core
+pio run  -e native_sim        # host simulator: firmware + web UI without an ESP32
 ```
 
 `awtrix` is the default environment (`default_envs = awtrix`), so a bare `pio run`
@@ -20,9 +21,9 @@ builds the ESP32 firmware.
 
 ## Build environments
 
-There are **five**. Two build device firmware (`awtrix`, `awtrix_s3`), one is a
-measurement build of the device firmware (`awtrix_probe`), and two run on the host
-(`native`, `native_sim`).
+There are **six**. Three build device firmware (`awtrix`, `awtrix_s3_octal`,
+`awtrix_s3_quad`), one is a measurement build of the device firmware (`awtrix_probe`),
+and two run on the host (`native`, `native_sim`).
 
 ### `awtrix` - the ESP32 firmware
 
@@ -51,7 +52,7 @@ pio run -e awtrix -t upload -t monitor  # flash + open the serial monitor
 The build product is `.pio/build/awtrix/firmware.bin` - the same file you would
 upload through the web UI's OTA page.
 
-### `awtrix_s3` - the ESP32-S3 firmware
+### `awtrix_s3_octal` - the ESP32-S3 firmware
 
 The same sources built for an ESP32-S3 with octal PSRAM, for generic DIY builds. It
 differs from `awtrix` by one build flag, `AWTRIX_SOC_ESP32S3`, which selects the S3
@@ -60,14 +61,49 @@ the firmware is identical.
 
 | Property | Value |
 |---|---|
-| Board | `esp32-s3-devkitc-1-n16r8v` (in `boards/`) |
-| Flash | 16 MB |
+| Board | `esp32-s3-devkitc-1-n16r8` (in `boards/`) |
+| Flash | 16 MB, quad (`flash_mode = qio`) |
 | PSRAM | octal, `memory_type = qio_opi` |
 | Serial | UART0, the port the DevKitC-1's USB bridge is wired to |
 
-A board file describes one module. `-n16r8v` means 16 MB flash and 8 MB **octal**
-PSRAM; a quad-PSRAM or PSRAM-less S3 needs a board file of its own, because a wrong
-`memory_type` does not boot.
+A board file describes one module. `N16R8` is the ESP32-S3-WROOM-1 with 16 MB quad flash and 8 MB
+**octal** PSRAM. A PSRAM-less S3 runs this image as it is - the octal framework libraries carry
+`CONFIG_SPIRAM_IGNORE_NOTFOUND`, so a failed PSRAM init is logged and the boot continues. A
+quad-PSRAM board needs `awtrix_s3_quad` below.
+
+The `V` suffix some sellers add (`N16R8V`, `N32R8V`) is a different module: WROOM-2, 1.8 V, with
+**octal flash**. That needs `memory_type = opi_opi` and a bootloader to match, so it is a board
+file and an image of its own - neither ships.
+
+### `awtrix_s3_quad` - the S3 firmware for quad PSRAM
+
+Identical sources and identical flags to `awtrix_s3_octal`. The whole difference is the board file, and
+in it one field:
+
+| Property | Value |
+|---|---|
+| Board | `esp32-s3-devkitc-1-n8r2` (in `boards/`) |
+| Flash | 8 MB - the common quad module. The released USB images carry a table per flash size regardless |
+| PSRAM | quad, `memory_type = qio_qspi` |
+
+`memory_type` picks which set of precompiled framework libraries the app links against, and those
+carry `CONFIG_SPIRAM_MODE_OCT` or `CONFIG_SPIRAM_MODE_QUAD` respectively. The mode is compiled in,
+never detected, which is why one image cannot serve both kinds of board.
+
+Getting it wrong is not symmetric:
+
+| Image | On an octal board | On a quad board | With no PSRAM |
+|---|---|---|---|
+| `awtrix_s3_octal` | correct | boots, PSRAM invisible: no radio, Berry heap on internal RAM | boots, same as a quad board |
+| `awtrix_s3_quad` | **boot loop** | correct | **boot loop** |
+
+The boot loop is the quad libraries' missing `CONFIG_SPIRAM_IGNORE_NOTFOUND`: a PSRAM init that
+fails calls `abort()`. It takes a USB cable to undo, which is why `POST /update` refuses an image
+built for the other PSRAM type with `wrongChip` rather than installing it.
+
+```bash
+pio run -e awtrix_s3_quad
+```
 
 ### `awtrix_probe` - the heap measurement build
 
@@ -230,10 +266,10 @@ for the firmware builds and the web UI tests:
 |---|---|---|
 | Core host unit tests | `pio test -e native -v` | The portable `core/` layer |
 | Web UI tests (jsdom) | `npm test` (in `webui/test`) | The web UI JS logic, loaded from the shipped `webui/index.html` via jsdom |
-| Firmware build | `pio run -e <env>`, then `scripts/factory_image.py --all` | Both device images - the matrix is `awtrix`, `awtrix_s3` - and a USB install image per flash size |
+| Firmware build | `pio run -e <env>`, then `scripts/factory_image.py --all` | Every device image - the matrix is `awtrix`, `awtrix_s3_octal`, `awtrix_s3_quad` - and a USB install image per flash size |
 | API docs match the firmware | `tools/check_docs_sync.py`, `tools/check_berry_api.py`, `tools/check_prelude_solidified.py`, `tools/check_font_sync.py`, `tools/check_partitions.py` | Documented fields and error codes, the editor's Berry table, the solidified prelude, the generated panel font, and every partition table |
 
-On a `v*` tag a release job additionally publishes both OTA images and the USB install
+On a `v*` tag a release job additionally publishes every OTA image and the USB install
 images for each supported flash size.
 
 A second workflow, `.github/workflows/docs.yml`, builds this documentation with

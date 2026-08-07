@@ -7,6 +7,10 @@ tab is hidden. `POST /api/v1/radio/play` and `POST /api/v1/radio/stop` answer
 `"available": false`, and editing the station list (`PUT /api/v1/radio/stations`)
 works on every build.
 
+There is one image per PSRAM type. A quad-PSRAM board (`N8R2`, `N16R2`) needs
+`firmware-awtrix-ng-s3-quad.bin`; with the `-s3-octal-` image it shows no PSRAM
+on the device page and the Radio section stays hidden.
+
 ## What you need
 
 A **MAX98357A** breakout, or any I²S DAC that takes a standard 16-bit stereo
@@ -136,7 +140,7 @@ HTTPS streams work, and their certificates are not verified.
 
 | Symptom | Cause |
 |---|---|
-| Radio section missing, play/stop answer `503` | Not an ESP32-S3 image, no PSRAM, or the I²S pins are `-1` (station editing and `GET /api/v1/radio` still work) |
+| Radio section missing, play/stop answer `503` | Not an ESP32-S3 image, no PSRAM, the octal image on a quad-PSRAM board, or the I²S pins are `-1` (station editing and `GET /api/v1/radio` still work) |
 | `422` on the pins | One of the three is set and the others are not |
 | "this stream is not MPEG-1 Layer III audio" | An AAC or otherwise unsupported mount |
 | "could not connect to the station" | Wrong URL, station offline, or DNS is not resolving |

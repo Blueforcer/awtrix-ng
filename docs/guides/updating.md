@@ -50,24 +50,32 @@ Status codes for the route: [Firmware upload](../reference/http.md#firmware-uplo
 ## Which file to download
 
 Every release on the [releases page](https://github.com/Blueforcer/awtrix-ng/releases) carries one
-file per chip:
+file per kind of board:
 
 | File | For |
 |---|---|
 | `firmware-awtrix-ng.bin` | Ulanzi TC001 and every other classic ESP32 - 32×8 clocks, AWTRIX 2 conversions, DIY builds |
-| `firmware-awtrix-ng-s3.bin` | ESP32-S3 boards |
+| `firmware-awtrix-ng-s3-octal.bin` | ESP32-S3 boards with octal PSRAM (`N8R8`, `N16R8`) or none |
+| `firmware-awtrix-ng-s3-quad.bin` | ESP32-S3 boards with quad PSRAM (`N8R2`, `N16R2`, `N4R2`) |
 
-One file covers every board of that chip, whatever its flash size - boards differ in their pin
+One file covers every board of that kind, whatever its flash size - boards differ in their pin
 map, which you set on AWTRIX. See [Board presets](../reference/gpio.md#board-presets).
 
-!!! warning "Not the `usb-*.bin` files"
-    A TC001 has a 4 MB ESP32, but `usb-awtrix-ng-4mb.bin` is **not** the file you want here.
-    The `usb-*.bin` images are for a first flash over USB - see
-    [Flashing](../getting-started/flashing.md). To update a device that already runs AWTRIX NG,
-    take `firmware-awtrix-ng.bin`.
+Up to v1.0.15 the S3 file was called `firmware-awtrix-ng-s3.bin`, when it was the only one.
 
-An image built for the other chip, and a USB install image, are both refused with `400 wrongChip`
-before a single byte reaches flash, so uploading the wrong one costs you nothing but the upload.
+The two S3 files differ in which PSRAM the board has. Uploading the wrong one changes nothing:
+AWTRIX refuses it with `400 wrongChip` and carries on running what it had. The **PSRAM** line on
+the device page tells you which you need - around 2 MB is quad, 8 MB is octal.
+
+!!! warning "Not `usb-awtrix-ng.zip`"
+    The `usb-*.bin` images in that zip are for a first flash over USB - see
+    [Flashing](../getting-started/flashing.md). A TC001 has a 4 MB ESP32, but
+    `usb-awtrix-ng-4mb.bin` is **not** the file you want here. To update a device that already
+    runs AWTRIX NG, take `firmware-awtrix-ng.bin`.
+
+An image built for the other chip, one built for the other kind of S3 PSRAM, and a USB install
+image are all refused with `400 wrongChip` before the new image is switched to, so uploading the
+wrong one costs you nothing but the upload.
 
 To upload a build of your own, `pio run -e awtrix` writes it to `.pio/build/awtrix/firmware.bin` -
 see [Building from source](../advanced/building.md).

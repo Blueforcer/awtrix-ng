@@ -1786,12 +1786,14 @@ network, and what the web UI uses. Auth is re-checked inside the upload handler.
 | Status | Condition |
 |---|---|
 | 200 | `{"ok":true}` - AWTRIX then reboots into the new image |
-| 400 | `wrongChip` - the image was built for the other chip (esp32 vs esp32s3), is a `usb-*.bin` for a first flash over USB, or carries no valid firmware header |
+| 400 | `wrongChip` - the image was built for the other chip (esp32 vs esp32s3), for the other kind of ESP32-S3 PSRAM (quad vs octal), is a `usb-*.bin` for a first flash over USB, or carries no valid firmware header |
 | 401 | auth failed |
 | 403 | `forbidden` - firmware upload is disabled in AP/provisioning mode |
 | 500 | `internalError`, `firmware update failed (bad image or storage full)` - the OTA slot could not be written |
 
-The image is size-checked against the free firmware slot before any byte is written.
+The image is size-checked against the free firmware slot before any byte is written, and a refused
+image never replaces the running one: AWTRIX switches slots only after a whole image has arrived
+and verified.
 
 ```bash
 curl -X POST http://<awtrix-ip>/update -F "firmware=@firmware-awtrix-ng.bin"
