@@ -1,0 +1,58 @@
+/* The flow converter widget on guides/migrating-from-awtrix3.md. Only
+   mkdocs-material variables, so both palettes come for free. */
+
+#awtrix-flow-converter .flowconv-input {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--md-code-font-family, monospace);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  padding: 0.6rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.2rem;
+  background: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+}
+
+#awtrix-flow-converter .flowconv-input:focus {
+  outline: none;
+  border-color: var(--md-accent-fg-color);
+}
+
+#awtrix-flow-converter .flowconv-status {
+  margin: 0.6rem 0 0.2rem;
+}
+
+#awtrix-flow-converter .flowconv-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.64rem;
+  background: var(--md-default-fg-color--lightest);
+  color: var(--md-default-fg-color);
+}
+
+#awtrix-flow-converter .flowconv-output {
+  position: relative;
+}
+
+#awtrix-flow-converter .flowconv-output pre {
+  margin: 0;
+  padding: 0.6rem;
+  overflow-x: auto;
+  background: var(--md-code-bg-color);
+  border-radius: 0.2rem;
+}
+
+#awtrix-flow-converter .flowconv-copy {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  padding: 0.1rem 0.8rem;
+  font-size: 0.64rem;
+}
+
+#awtrix-flow-converter .flowconv-changes {
+  margin-top: 0.4rem;
+  font-size: 0.7rem;
+}

@@ -161,6 +161,47 @@ static void test_transient_lazy_init_release_cycle() {
   a.release();
 }
 
+static void test_content_length_sizes_the_allocation() {
+  TEST_ASSERT_EQUAL_UINT32(900u, static_cast<uint32_t>(arenaCapacityFor(900, 32 * 1024)));
+  TEST_ASSERT_EQUAL_UINT32(32u * 1024u,
+                           static_cast<uint32_t>(arenaCapacityFor(64 * 1024, 32 * 1024)));
+  TEST_ASSERT_EQUAL_UINT32(32u * 1024u, static_cast<uint32_t>(arenaCapacityFor(0, 32 * 1024)));
+  TEST_ASSERT_EQUAL_UINT32(32u * 1024u, static_cast<uint32_t>(arenaCapacityFor(-1, 32 * 1024)));
+}
+
+static void test_right_sized_arena_takes_the_whole_body() {
+  BodyArena a;
+  TEST_ASSERT_TRUE(a.init(arenaCapacityFor(7, 8192)));
+  TEST_ASSERT_EQUAL_UINT32(7u, static_cast<uint32_t>(a.capacity()));
+  a.open(8192);
+  a.append("abcdefg", 7);
+  a.finish();
+  TEST_ASSERT_EQUAL_STRING("abcdefg", std::string(a.view()).c_str());
+}
+
+// An oversized upload declares its real length, so the arena is capped and the body overflows
+// into the 413 rather than being truncated.
+static void test_body_over_the_cap_still_overflows() {
+  BodyArena a;
+  TEST_ASSERT_TRUE(a.init(arenaCapacityFor(9, 4)));
+  TEST_ASSERT_EQUAL_UINT32(4u, static_cast<uint32_t>(a.capacity()));
+  a.open(4);
+  a.append("123456789", 9);
+  a.finish();
+  TEST_ASSERT_EQUAL(static_cast<int>(BodyArena::State::Overflow), static_cast<int>(a.state()));
+}
+
+// A client that understates Content-Length must not write past the buffer it paid for.
+static void test_understated_content_length_cannot_overrun() {
+  BodyArena a;
+  TEST_ASSERT_TRUE(a.init(arenaCapacityFor(4, 8192)));
+  a.open(8192);
+  a.append("1234", 4);
+  a.append("5678", 4);
+  a.finish();
+  TEST_ASSERT_EQUAL(static_cast<int>(BodyArena::State::Overflow), static_cast<int>(a.state()));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_boot_init_then_simple_body);
@@ -176,5 +217,9 @@ int main(int, char**) {
   RUN_TEST(test_release_makes_arena_absent);
   RUN_TEST(test_release_on_absent_arena_is_a_noop);
   RUN_TEST(test_transient_lazy_init_release_cycle);
+  RUN_TEST(test_content_length_sizes_the_allocation);
+  RUN_TEST(test_right_sized_arena_takes_the_whole_body);
+  RUN_TEST(test_body_over_the_cap_still_overflows);
+  RUN_TEST(test_understated_content_length_cannot_overrun);
   return UNITY_END();
 }

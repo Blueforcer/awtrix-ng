@@ -1,0 +1,12 @@
+{
+  "inputType": "node-red",
+  "alreadyNg": false,
+  "changeKinds": [
+    "endpoint",
+    "method",
+    "topic"
+  ],
+  "warningCodes": [
+    "jsCode"
+  ]
+}

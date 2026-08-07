@@ -1,6 +1,6 @@
-**Which file do I download?**
-- Updating a device that already runs AWTRIX NG: `firmware-awtrix-ng.bin` for a Ulanzi TC001 or any other classic ESP32, `firmware-awtrix-ng-s3.bin` for an ESP32-S3 board. Upload it under System → Maintenance.
-- First install over USB: the `usb-*.bin` matching your board's chip and flash size - a TC001 takes `usb-awtrix-ng-4mb.bin`. These are **not** for the update route.
+**Added**
+- Berry text takes colours per piece: `text()`, `text_width()`, `text_ink_width()` and both `scroll_text()` forms accept a list of `[text, colour]` pieces wherever they took a string - `text(1, 6, [["CPU ", 0x888888], ["42%", 0x00FF00]])`. The pieces measure, centre and scroll as one line, the same way a pushed app's `text` array does. Leave the colour off a `text()` call and it uses the device's `textColor`.
+- The firmware update row under System → Maintenance names the version the device is running, so you can see what you are updating from (#13).
 
 **Added**
 - Scripts can draw a line in several colors. `text()`, `scroll_text()` and the two width functions take a list of `[text, color]` pieces wherever they took plain text. A piece without a color follows the call, and `text()` may leave its color out to use the device text color.

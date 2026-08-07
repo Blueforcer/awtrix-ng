@@ -1,0 +1,13 @@
+{
+  "inputType": "json-payload",
+  "alreadyNg": false,
+  "changeKinds": [
+    "draw",
+    "key",
+    "unit",
+    "value"
+  ],
+  "warningCodes": [
+    "deadKey"
+  ]
+}

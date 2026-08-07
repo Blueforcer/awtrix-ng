@@ -1,0 +1,8 @@
+rest_command:
+  awtrix_weather:
+    url: http://192.168.1.128/api/v1/apps/pushed/weather
+    method: put
+    payload: '{"text":"{{ temp }}C","icon":"2422","durationMs":8000,"lifetimeMs":300000,"lifetimeExpiry":"mark"}'
+  awtrix_dismiss:
+    url: http://192.168.1.128/api/v1/notifications/active
+    method: delete

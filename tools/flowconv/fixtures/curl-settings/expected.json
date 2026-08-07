@@ -1,0 +1,15 @@
+{
+  "inputType": "curl",
+  "alreadyNg": false,
+  "changeKinds": [
+    "endpoint",
+    "header",
+    "key",
+    "method",
+    "unit",
+    "value"
+  ],
+  "warningCodes": [
+    "crossEndpoint"
+  ]
+}

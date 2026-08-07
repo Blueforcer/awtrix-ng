@@ -13,6 +13,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"HELLO","textColor":"#FF8800"}'
 ```
+<!-- shot:begin id=hello hash=02ac930e -->
+![The panel showing "HELLO" in orange](../assets/shots/text/hello.png){ .shot }
+<!-- shot:end -->
+
 
 An orange `HELLO`. Everything else on this page is one more key in that same JSON object, and every
 key works identically on a pushed app:
@@ -22,6 +26,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/greeting \
   -H 'Content-Type: application/json' \
   -d '{"text":"HELLO","textColor":"#FF8800"}'
 ```
+<!-- shot:begin id=hello-2 hash=3c3512e0 -->
+![The panel showing "HELLO" in orange](../assets/shots/text/hello-2.png){ .shot }
+<!-- shot:end -->
+
 
 The `Content-Type` header is
 [mandatory on every write](../reference/conventions.md#content-type-is-mandatory).
@@ -46,6 +54,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Good morning","textCase":"asTyped"}'
 ```
+<!-- shot:begin id=good-morning hash=eb5052cb -->
+![The panel showing "Good morning"](../assets/shots/text/good-morning.gif){ .shot }
+<!-- shot:end -->
+
 
 Any other word is rejected with `422 validationFailed`. To change the default for every page instead, set
 the global flag once:
@@ -77,6 +89,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"ORANGE","textColor":["HSV",32,100,100]}'  # h 0-360, s/v 0-100
 ```
+<!-- shot:begin id=orange hash=b42ed227 -->
+![The panel showing "ORANGE"](../assets/shots/text/orange.png){ .shot }
+<!-- shot:end -->
+
 
 The short form `"F80"` (each digit expanded ×17) and a packed integer such as `16746496` work too.
 AWTRIX always *answers* in `"#RRGGBB"`, whatever you sent. Exact ranges, HSV wrapping and what
@@ -98,6 +114,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/cpu \
   -H 'Content-Type: application/json' \
   -d '{"text":[{"text":"CPU ","color":"#888888"},{"text":"87","color":"#FF0000"},{"text":"%","color":"#888888"}]}'
 ```
+<!-- shot:begin id=cpu-87 hash=331f16b5 -->
+![The panel showing "CPU" in grey then "87" in red then "%" in grey](../assets/shots/text/cpu-87.png){ .shot }
+<!-- shot:end -->
+
 
 A grey label with a red number. There is no cap on the number of fragments, and a fragment without a
 `color` is white.
@@ -118,6 +138,10 @@ instead of one flat colour. The palette is either a name or a list of colour sto
 # A yellow-to-red gradient stretched across the string
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/hot   -H 'Content-Type: application/json'   -d '{"text":"OVERHEAT","palette":["#FFFF00","#FF0000"],"textColor":"palette"}'
 ```
+<!-- shot:begin id=overheat hash=56a17316 -->
+![The panel showing "OVERHEAT"](../assets/shots/text/overheat.png){ .shot }
+<!-- shot:end -->
+
 
 Yellow on the left, red on the right. The ramp climbs evenly across the string, starting on the first
 stop and ending on the last.
@@ -128,6 +152,10 @@ does any palette of your own - see [Palette editor](palette-editor.md):
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/warm   -H 'Content-Type: application/json'   -d '{"text":"23.4C","palette":"Heat","textColor":"palette"}'
 ```
+<!-- shot:begin id=23-4c hash=c215df10 -->
+![The panel showing "23.4C"](../assets/shots/text/23-4c.png){ .shot }
+<!-- shot:end -->
+
 
 A name that is neither a built-in nor a palette on AWTRIX fails with
 `422 {"code":"validationFailed","field":"palette"}`.
@@ -139,6 +167,10 @@ Two knobs turn the stretched ramp into a running one:
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications   -H 'Content-Type: application/json'   -d '{"text":"PARTY TIME","palette":"Rainbow","textColor":"palette","paletteSpan":24,"paletteSpeed":1}'
 ```
+<!-- shot:begin id=party-time hash=31bf2379 -->
+![The panel showing "PARTY TIME"](../assets/shots/text/party-time.gif){ .shot }
+<!-- shot:end -->
+
 
 - **`paletteSpan`** is how many pixels one full pass takes. `0` - the default - stretches a single
   pass across the whole string, which is what you want for a gradient. A number repeats the palette
@@ -166,6 +198,11 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"BREATHE","textColor":"#00AAFF","textFadeMs":2000}'
 ```
+<!-- shot:begin id=alert-1 hash=39e80c27 -->
+![The panel showing "BREATHE" in cyan](../assets/shots/text/alert-1.gif){ .shot }
+![The panel showing "BREATHE" in cyan](../assets/shots/text/breathe-2.gif){ .shot }
+<!-- shot:end -->
+
 
 `textBlinkMs` is the full on/off period. `textFadeMs` swells and dims the colour smoothly over the
 period rather than snapping. `0` (the default) means off for both, and when both are set, **fade wins**.
@@ -207,6 +244,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
   -H 'Content-Type: application/json' \
   -d '{"text":"A LONG HEADLINE THAT WILL NOT FIT","scroll":{"mode":"loop","speed":50}}'
 ```
+<!-- shot:begin id=a-long-headline-that-will-not-fit hash=32325248 -->
+![The panel showing "A LONG HEADLINE THAT WILL NOT FIT"](../assets/shots/text/a-long-headline-that-will-not-fit.gif){ .shot }
+<!-- shot:end -->
+
 
 | Field | Values | Default | What it does |
 |---|---|---|---|
@@ -241,6 +282,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
   -H 'Content-Type: application/json' \
   -d '{"text":"A LONG HEADLINE THAT WILL NOT FIT","scroll":"static"}'
 ```
+<!-- shot:begin id=a-long-headline-that-will-not-fit-2 hash=71bdcda9 -->
+![The panel showing "A LONG HEADLINE THAT WILL NOT FIT"](../assets/shots/text/a-long-headline-that-will-not-fit-2.png){ .shot }
+<!-- shot:end -->
+
 
 ### Direction, entry and short text
 
@@ -255,6 +300,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
   -H 'Content-Type: application/json' \
   -d '{"text":"HEADLINE","scroll":{"entry":"offscreen","whenFits":"scroll"}}'
 ```
+<!-- shot:begin id=headline hash=9637d902 -->
+![The panel showing "HEADLINE"](../assets/shots/text/headline.gif){ .shot }
+<!-- shot:end -->
+
 
 `whenFits: "scroll"` is what makes that work for text short enough to fit, which by default would
 never move.
@@ -269,6 +318,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
   -H 'Content-Type: application/json' \
   -d '{"text":"A LONG HEADLINE THAT WILL NOT FIT","repeat":1}'
 ```
+<!-- shot:begin id=a-long-headline-that-will-not-fit-3 hash=db12ce01 -->
+![The panel showing "A LONG HEADLINE THAT WILL NOT FIT"](../assets/shots/text/a-long-headline-that-will-not-fit-3.gif){ .shot }
+<!-- shot:end -->
+
 
 The page then stays exactly as long as those runs take. A headline that is read in 4 seconds gives
 way after 4 seconds instead of waiting out the rest of the normal app time. Ask for `repeat: 2` to
@@ -292,6 +345,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/label \
   -H 'Content-Type: application/json' \
   -d '{"text":"CPU","textCenter":false}'
 ```
+<!-- shot:begin id=cpu hash=f6b21beb -->
+![The panel showing "CPU"](../assets/shots/text/cpu.png){ .shot }
+<!-- shot:end -->
+
 
 With an icon, centering happens within the space *right of* the icon column, not across the whole
 panel. Once the text is moving, `textCenter` has no effect.
@@ -303,6 +360,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/label \
   -H 'Content-Type: application/json' \
   -d '{"text":"CPU","textCenter":false,"textOffsetX":2}'
 ```
+<!-- shot:begin id=cpu-2 hash=afe595e3 -->
+![The panel showing "CPU"](../assets/shots/text/cpu-2.png){ .shot }
+<!-- shot:end -->
+
 
 There is no vertical control - the baseline is fixed.
 
@@ -323,6 +384,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Grüße, 21°C, 5 €","textCase":"asTyped"}'
 ```
+<!-- shot:begin id=gr-e-21-c-5 hash=abd54a7a -->
+![The panel showing "Grüße, 21°C, 5 €"](../assets/shots/text/gr-e-21-c-5.gif){ .shot }
+<!-- shot:end -->
+
 
 What survives:
 
@@ -360,6 +425,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/weather \
   -H 'Content-Type: application/json' \
   -d '{"text":"21°C","font":"large"}'
 ```
+<!-- shot:begin id=21-c hash=fb59b5bd -->
+![The panel showing "21°C"](../assets/shots/text/21-c.png){ .shot }
+<!-- shot:end -->
+
 
 | | `small` (default) | `large` |
 |---|---|---|

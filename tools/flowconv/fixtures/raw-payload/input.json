@@ -1,0 +1,22 @@
+{
+  "text": [
+    {"t": "OVER", "c": "#FFFF00"},
+    {"t": "HEAT", "c": "#FF0000"}
+  ],
+  "topText": true,
+  "gradient": ["#FFFF00", "#FF0000"],
+  "noScroll": true,
+  "scrollSpeed": 50,
+  "effectSettings": {"speed": 3, "palette": "Ocean", "blend": true},
+  "duration": 12.5,
+  "repeat": -1,
+  "overlay": "clear",
+  "draw": [
+    {"dp": [28, 4, "#FF0000"]},
+    {"dr": [20, 2, 4, 4, "#0000FF"]},
+    {"dt": [0, 0, "Hi", "#00FF00"]}
+  ],
+  "bar": [1, 2, 3],
+  "autoscale": true,
+  "progressC": "#00FF00"
+}

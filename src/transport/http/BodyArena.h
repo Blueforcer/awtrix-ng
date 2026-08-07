@@ -7,6 +7,15 @@
 
 namespace awtrix {
 
+// How much to allocate for a body whose limit is cap. A declared Content-Length shrinks the
+// allocation to what is actually coming; an absent or non-positive one (chunked upload) has to
+// assume the worst. The result is never above cap, so an oversized body still overflows.
+inline std::size_t arenaCapacityFor(int contentLength, std::size_t cap) {
+  if (contentLength <= 0) return cap;
+  const std::size_t declared = static_cast<std::size_t>(contentLength);
+  return declared < cap ? declared : cap;
+}
+
 // Fixed buffer a request body is streamed into, so no growing std::string fragments the heap
 // mid-upload. Overflow is remembered rather than reported, and answered after the body is drained.
 class BodyArena {

@@ -251,6 +251,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"DOORBELL","soundRtttl":"bell:d=4,o=5,b=100:e,c"}'
 ```
+<!-- shot:begin id=doorbell hash=2a3e87d6 -->
+![The panel showing "DOORBELL"](../assets/shots/sounds/doorbell.png){ .shot }
+<!-- shot:end -->
+
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -265,6 +269,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"ALARM","soundRtttl":"a:d=4,o=5,b=200:c,p,c,p","soundLoop":true,"hold":true,"textColor":"#FF0000"}'
 ```
+<!-- shot:begin id=alarm hash=ae1d028f -->
+![The panel showing "ALARM" in red](../assets/shots/sounds/alarm.png){ .shot }
+<!-- shot:end -->
+
 
 Notification melodies respect `soundEnabled` - with sound off, the notification is shown silently.
 
