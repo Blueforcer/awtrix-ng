@@ -1,0 +1,10 @@
+{
+  "inputType": "ha-yaml",
+  "alreadyNg": false,
+  "changeKinds": [
+    "key",
+    "topic",
+    "unit"
+  ],
+  "warningCodes": []
+}

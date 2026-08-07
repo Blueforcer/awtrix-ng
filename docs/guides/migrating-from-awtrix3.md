@@ -23,6 +23,22 @@ everything:
 
 ---
 
+## Convert a flow automatically
+
+Paste an old flow - a Home Assistant automation or blueprint, a Node-RED or N8N export, a `curl`
+command, or a bare JSON payload - and get it back in the NG dialect. Endpoints, MQTT topics and
+payload keys are rewritten in place; your comments, templates and formatting around them stay as
+they are. Anything that cannot be converted safely - JavaScript that builds payloads, template
+expressions, keys with no NG equivalent - is left untouched and listed as a warning that links to
+the matching section below.
+
+<div id="awtrix-flow-converter">
+  <p>The converter needs JavaScript; the tables below cover the same ground by hand.</p>
+</div>
+<script type="module" src="../../assets/flow-converter/ui.js"></script>
+
+---
+
 ## Where to send
 
 === "HTTP"

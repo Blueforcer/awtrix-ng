@@ -1,0 +1,10 @@
+{
+  "inputType": "json-payload",
+  "alreadyNg": false,
+  "changeKinds": [
+    "unit"
+  ],
+  "warningCodes": [
+    "payloadTooLarge"
+  ]
+}

@@ -1,0 +1,6 @@
+alias: Already migrated
+action:
+  - service: mqtt.publish
+    data:
+      topic: awtrixNG/cmd/apps/pushed/weather
+      payload: '{"text":"21.5 C","icon":"2422","durationMs":8000,"scroll":{"speed":50}}'

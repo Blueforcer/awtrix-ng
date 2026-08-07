@@ -1,0 +1,13 @@
+{
+  "inputType": "ha-yaml",
+  "alreadyNg": false,
+  "changeKinds": [
+    "endpoint",
+    "method",
+    "unit",
+    "value"
+  ],
+  "warningCodes": [
+    "restCommandContentType"
+  ]
+}

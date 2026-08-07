@@ -1,0 +1,8 @@
+rest_command:
+  awtrix_weather:
+    url: http://192.168.1.128/api/custom?name=weather
+    method: post
+    payload: '{"text":"{{ temp }}C","icon":"2422","duration":8,"lifetime":300,"lifetimeMode":1}'
+  awtrix_dismiss:
+    url: http://192.168.1.128/api/notify/dismiss
+    method: post

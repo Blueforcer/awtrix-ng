@@ -1,0 +1,10 @@
+{
+  "inputType": "curl",
+  "alreadyNg": false,
+  "changeKinds": [
+    "endpoint",
+    "header",
+    "structure"
+  ],
+  "warningCodes": []
+}

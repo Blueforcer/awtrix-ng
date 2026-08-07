@@ -208,6 +208,7 @@ curl -X PATCH http://<awtrix-ip>/api/v1/display \
   -H 'Content-Type: application/json' \
   -d '{"overlay":"rain"}'
 ```
+<!-- shot: base={"text":"21.5C"} -->
 
 Tune it with `overlaySettings` - `speed`, `palette` and `blend` in one object, because the
 device-wide overlay owns its settings rather than borrowing an app's:
@@ -218,6 +219,7 @@ curl -X PATCH http://<awtrix-ip>/api/v1/display \
   -H 'Content-Type: application/json' \
   -d '{"overlay":"rain","overlaySettings":{"speed":0.3}}'
 ```
+<!-- shot: base={"text":"21.5C"} -->
 
 The Web UI has the same knob as an **Overlay speed** slider under **Display → Weather overlay**.
 
