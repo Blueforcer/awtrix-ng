@@ -53,6 +53,17 @@ function makeStore() {
     // `configPatch` holds the last PATCH body so a test can see what was sent.
     configs: {},
     configPatch: null,
+    // What GET /api/v1/capabilities answers; override before goto() to test gating.
+    caps: { transitions: [], radio: true, audio: true },
+    settings: { soundEnabled: true },
+    // dir -> Map(name -> size), the file API's flash view.
+    files: { '/ICONS': new Map(), '/SOUNDS': new Map() },
+    melodies: [], // [{name, rtttl, valid, notes, durationMs, bytes}]
+    played: [],   // bodies POSTed to /api/v1/sounds/play
+    radio: { available: true, playing: false, station: '', title: '', error: '',
+             clipPlaying: false, clipName: '', stations: [] },
+    radioPlay: null,   // last POST /api/v1/radio/play body
+    stationsPut: null, // last PUT /api/v1/radio/stations body
     list() {
       if (this.apps) return this.apps;
       return [...scripts.keys()].map(name => ({ name, origin: 'script', error: null }));
@@ -68,13 +79,63 @@ function mockFetch(store, netlog) {
   return async function fetch(input, opts = {}) {
     const url = typeof input === 'string' ? input : input.url;
     const method = (opts.method || 'GET').toUpperCase();
-    const p = new URL(url, 'http://localhost').pathname;
-    netlog.push(method + ' ' + p);
+    const u = new URL(url, 'http://localhost');
+    const p = u.pathname;
+    const q = u.searchParams;
+    netlog.push(method + ' ' + p + (u.search || ''));
 
     if (p === '/api/v1/device') return resp({ ipAddress: '192.168.1.5', firmware: 'test' });
-    if (p === '/api/v1/capabilities') return resp({ transitions: [] });
+    if (p === '/api/v1/capabilities') return resp(store.caps);
     if (p === '/api/v1/system') return resp({ hostname: 'awtrix-ng' });
+    if (p === '/api/v1/settings' && method === 'GET') return resp(store.settings);
     if (p === '/api/v1/scripts/shared') return resp([]);
+
+    if (p === '/api/v1/files') {
+      if (method === 'GET') {
+        const dir = q.get('dir') || '/ICONS';
+        const files = [...(store.files[dir] || new Map())].map(([name, size]) => ({ name, size }));
+        return resp({ files, usedBytes: 1000, totalBytes: 8388608 });
+      }
+      if (method === 'DELETE') {
+        const full = q.get('path') || '';
+        const slash = full.lastIndexOf('/');
+        const dir = full.slice(0, slash), name = full.slice(slash + 1);
+        if (!store.files[dir] || !store.files[dir].delete(name))
+          return resp({ error: { code: 'notFound', message: full } }, false, 404);
+        return resp({ ok: true });
+      }
+    }
+
+    if (p === '/api/v1/sounds' && method === 'GET') return resp({ melodies: store.melodies });
+    if (p === '/api/v1/sounds/play') { store.played.push(JSON.parse(opts.body || '{}')); return resp({ ok: true }); }
+    if (p === '/api/v1/sounds/stop') return resp({ ok: true });
+    const melo = p.match(/^\/api\/v1\/sounds\/(.+)$/);
+    if (melo) {
+      const name = decodeURIComponent(melo[1]);
+      if (method === 'PUT') {
+        const body = JSON.parse(opts.body || '{}');
+        store.melodies = store.melodies.filter(m => m.name !== name);
+        store.melodies.push({ name, rtttl: name + ':' + (body.rtttl || ''), valid: true });
+        return resp({ ok: true });
+      }
+      if (method === 'DELETE') {
+        store.melodies = store.melodies.filter(m => m.name !== name);
+        return resp({ ok: true });
+      }
+    }
+
+    if (p === '/api/v1/radio' && method === 'GET') return resp(store.radio);
+    if (p === '/api/v1/radio/play') {
+      store.radioPlay = JSON.parse(opts.body || '{}');
+      store.radio.playing = true;
+      return resp({ ok: true });
+    }
+    if (p === '/api/v1/radio/stop') { store.radio.playing = false; return resp({ ok: true }); }
+    if (p === '/api/v1/radio/stations' && method === 'PUT') {
+      store.stationsPut = JSON.parse(opts.body || '{}');
+      store.radio.stations = store.stationsPut.stations || [];
+      return resp({ ok: true });
+    }
     if (p.startsWith('/api/v1/logs')) return resp({ lines: [], next: 0 });
     if (p === '/api/v1/apps') return resp(store.list());
     if (p === '/api/v1/apps/order' && method === 'PUT') {
@@ -116,8 +177,11 @@ function mockFetch(store, netlog) {
   };
 }
 
-async function boot() {
+async function boot(opts) {
   const store = makeStore();
+  // The boot IIFE fetches capabilities immediately, so a test that wants
+  // different caps has to hand them in before the page comes up.
+  if (opts && opts.caps) store.caps = opts.caps;
   const netlog = [];
   const dom = new JSDOM(loadHtml(), {
     runScripts: 'dangerously',
@@ -159,4 +223,20 @@ async function goto(window, hash) {
   await flush(80);
 }
 
-module.exports = { boot, bootSim, goto, flush };
+// uploadFile() goes through XMLHttpRequest, which mockFetch never sees. This swaps in a fake
+// that records {method, url, files:[{field,name}]} into log and answers 200.
+function stubXhr(window, log) {
+  window.XMLHttpRequest = class {
+    constructor() { this.upload = {}; this.status = 200; this.responseText = '{"ok":true}'; }
+    open(method, url) { this.method = method; this.url = url; }
+    send(body) {
+      const entry = { method: this.method, url: this.url, files: [] };
+      if (body && typeof body.entries === 'function')
+        for (const [field, v] of body.entries()) entry.files.push({ field, name: v && v.name });
+      log.push(entry);
+      setTimeout(() => this.onload && this.onload(), 0);
+    }
+  };
+}
+
+module.exports = { boot, bootSim, goto, flush, stubXhr };
