@@ -55,8 +55,14 @@ jobs:
           mkdir -p docs/firmware
           # A release from before the USB install images existed carries none of
           # them, and that is not a reason to stop publishing documentation.
-          # They were named factory-*.bin up to v1.0.14, which is why both
-          # patterns are fetched -- the flasher knows either.
+          # Since v1.0.16 they come bundled in usb-awtrix-ng.zip; before that
+          # they were loose usb-*.bin, and factory-*.bin up to v1.0.14 -- all
+          # three shapes are fetched, the flasher wants the unpacked files.
+          gh release download "$tag" --pattern 'usb-awtrix-ng.zip' --dir docs/firmware || true
+          if [ -f docs/firmware/usb-awtrix-ng.zip ]; then
+            unzip -o docs/firmware/usb-awtrix-ng.zip -d docs/firmware
+            rm docs/firmware/usb-awtrix-ng.zip
+          fi
           gh release download "$tag" --pattern 'usb-*.bin' --dir docs/firmware || true
           gh release download "$tag" --pattern 'factory-*.bin' --dir docs/firmware || true
           if ! ls docs/firmware/*.bin >/dev/null 2>&1; then
