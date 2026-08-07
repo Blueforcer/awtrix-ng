@@ -358,7 +358,10 @@ void HttpApiServer::collectBody(WebServer& server, const String& uri, HTTPRaw& r
   switch (raw.status) {
     case RAW_START:
       static_cast<RawWebServer&>(server).setRawReadTimeout(kRawBodyIdleTimeoutMs);
-      if (rawSource) arena.init(script::maxSourceBytes());
+      // A small script must not pay for the whole configured scriptMaxBytes: this arena is alive
+      // at the same time as the source copy and the install reserve.
+      if (rawSource)
+        arena.init(arenaCapacityFor(server.clientContentLength(), script::maxSourceBytes()));
       arena.open(rawSource ? script::maxSourceBytes() : bodyCapFor(method, path));
       return;
     case RAW_WRITE:
