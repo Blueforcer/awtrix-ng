@@ -12,7 +12,7 @@ apology. If you tested on hardware, name the board.
 -->
 
 - [ ] `pio test -e native` passes
-- [ ] `pio run -e awtrix` and `pio run -e awtrix_s3` build
+- [ ] `pio run -e awtrix`, `pio run -e awtrix_s3_octal` and `pio run -e awtrix_s3_quad` build
 - [ ] Tested in the simulator (`pio run -e native_sim`)
 - [ ] Tested on hardware — board:
 

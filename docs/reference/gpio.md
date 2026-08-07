@@ -4,7 +4,8 @@ AWTRIX NG ships **one firmware per chip**, not per board. A commercial 32×8 clo
 mainboard conversion and a panel you wired yourself all run the same binary; what differs is the pin map,
 which is runtime configuration stored on AWTRIX and editable through the API or the web UI.
 
-There are two images, `awtrix` for the ESP32 and `awtrix_s3` for the ESP32-S3 - see
+There are three images: `awtrix` for the ESP32, `awtrix_s3_octal` and `awtrix_s3_quad` for
+the ESP32-S3 - see
 [Rules come from the chip](#rules-come-from-the-chip).
 
 The pin map lives in [system configuration](system.md) alongside Wi-Fi, MQTT and calibration -
