@@ -1,8 +1,36 @@
 # Sounds & melodies
 
-AWTRIX can play melodies written in RTTTL, the ringtone format from Nokia phones. There are three ways to start one: an inline melody string, a melody file stored on AWTRIX, or the built-in R2D2 chirp.
+AWTRIX plays two kinds of sound: **MP3 clips** on boards with a speaker (an I2S DAC, the same one the [internet radio](radio.md) uses), and **RTTTL melodies** - the ringtone format from Nokia phones - on the buzzer every board has. A melody can arrive as an inline string, as a melody file stored on AWTRIX, or as the built-in R2D2 chirp.
 
-Everything below describes a board with a passive buzzer on `pinBuzzer`. If your board is an AWTRIX 2 conversion with a DFPlayer Mini module, read [DFPlayer boards](#dfplayer-boards) first - the same keys mean different things there.
+Everything below the [MP3 sounds](#mp3-sounds) section describes a board with a passive buzzer on `pinBuzzer`. If your board is an AWTRIX 2 conversion with a DFPlayer Mini module, read [DFPlayer boards](#dfplayer-boards) first - the same keys mean different things there.
+
+## MP3 sounds
+
+Only on boards with a speaker; without one, the section below does not apply and `name` always means a melody. Upload short MP3 clips in the web UI's Audio tab (drag & drop, like icons) or with the file API:
+
+```bash
+curl -X POST "http://<awtrix-ip>/api/v1/files?dir=/SOUNDS" -F "file=@ding.mp3"
+```
+
+The clip lands at `/SOUNDS/ding.mp3`, and the file name without `.mp3` is what you play:
+
+```bash
+curl -X POST http://<awtrix-ip>/api/v1/sounds/play \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"ding"}'
+```
+
+The same name works as `sound:"ding"` in a [notification](notifications.md#sound). Names are up to 32 characters of `A-Z`, `a-z`, `0-9`, `_` and `-`.
+
+How `name` is resolved on a speaker build: AWTRIX looks for `/SOUNDS/<name>.mp3` first and falls back to the melody file `/MELODIES/<name>.txt`. A clip with the same name as a melody wins.
+
+Worth knowing:
+
+- The upload accepts MP3 (MPEG-1 Layer III) only - the usual 32/44.1/48 kHz files from any converter. A file that only pretends to be one uploads fine but stays silent and leaves a note in the log.
+- If the radio is streaming, a clip interrupts it; the stream reconnects by itself once the clip ends, with a short gap while it rebuffers.
+- Clips use the `radioVolume` setting, not `volume` - one speaker, one knob.
+- List and delete go through the same file API as icons: `GET /api/v1/files?dir=/SOUNDS` and `DELETE /api/v1/files?path=/SOUNDS/ding.mp3`. See [Files](../reference/http.md#files).
+- Clips share flash with everything else, so keep them short - a few seconds each. The storage bar in the Audio tab shows where you stand.
 
 ## Play a melody right now
 
@@ -25,7 +53,7 @@ Three ascending notes, and:
 | Key | What it plays |
 |---|---|
 | `rtttl` | the melody string in the request |
-| `name` | a melody file stored on AWTRIX - `/MELODIES/<name>.txt` |
+| `name` | a stored sound - `/SOUNDS/<name>.mp3` on speaker builds first, else `/MELODIES/<name>.txt` |
 | `builtin` | the R2D2 melody - see [below](#the-r2d2-builtin) |
 
 Send **exactly one** key. A body carrying more than one is rejected with `422 validationFailed` and nothing plays.
@@ -106,9 +134,9 @@ Silences whatever is playing. It ignores `soundEnabled`, so a playing melody can
 
 Instead of sending a melody every time, store it on AWTRIX and play it by name.
 
-### The Sounds tab
+### The Audio tab
 
-The web UI has an editor for this - one row per melody stored on AWTRIX, with the name in one field and the melody in the other. It checks the string as you type, plays it in your browser without sending anything, and plays it out loud when you want to hear it for real. See [Sounds](../getting-started/web-ui.md#sounds).
+The web UI has an editor for this - one row per melody stored on AWTRIX, with the name in one field and the melody in the other. It checks the string as you type, plays it in your browser without sending anything, and plays it out loud when you want to hear it for real. See [Melodies](../getting-started/web-ui.md#melodies).
 
 ### Save one
 
@@ -158,7 +186,7 @@ curl -X POST http://<awtrix-ip>/api/v1/sounds/play \
   -d '{"name":"doorbell"}'
 ```
 
-If `/MELODIES/doorbell.txt` does not exist - or exists but does not parse - you get:
+On a speaker build an MP3 clip called `doorbell` would play instead - see [MP3 sounds](#mp3-sounds). If `/MELODIES/doorbell.txt` does not exist - or exists but does not parse - you get:
 
 ```json
 {"error":{"code":"notFound","message":"sound not found"}}
@@ -226,7 +254,7 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `sound` | string \| int | `""` | Melody file name (or DFPlayer track) |
+| `sound` | string \| int | `""` | MP3 sound or melody file name (or DFPlayer track) |
 | `soundRtttl` | string | `""` | Inline RTTTL melody |
 | `soundLoop` | bool | `false` | Re-trigger the melody each time it finishes, while the notification is shown |
 
@@ -268,7 +296,7 @@ A DFPlayer Mini plays MP3 files off an SD card and cannot produce notes, so noth
 ## Related
 
 - [Sounds](../reference/http.md#sounds) - full status codes for every sounds route
-- [Sounds tab](../getting-started/web-ui.md#sounds) - the melody editor
+- [Audio tab](../getting-started/web-ui.md#audio) - MP3 sounds and the melody editor
 - [Sound](../reference/settings.md#sound) - `volume` and `soundEnabled`
 - [Sound hardware](../reference/system.md#sound-hardware) - `dfplayer` and the buzzer pins
 - [Notification-only keys](../reference/payload.md#notification-only-keys) - `sound`, `soundRtttl`, `soundLoop`

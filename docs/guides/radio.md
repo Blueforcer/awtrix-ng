@@ -36,7 +36,7 @@ all three to turn the output off. A half-configured set is rejected with a `422`
 
 ## Adding stations
 
-The [**Radio** tab](../getting-started/web-ui.md#radio) in the web UI is the
+The [**Audio** tab's Radio section](../getting-started/web-ui.md#radio) in the web UI is the
 quickest way in: give each station a name and its stream URL, then save. Up to 32
 stations, names up to 24 characters, URLs up to 255.
 
@@ -136,7 +136,7 @@ HTTPS streams work, and their certificates are not verified.
 
 | Symptom | Cause |
 |---|---|
-| Radio tab missing, play/stop answer `503` | Not an ESP32-S3 image, no PSRAM, or the I²S pins are `-1` (station editing and `GET /api/v1/radio` still work) |
+| Radio section missing, play/stop answer `503` | Not an ESP32-S3 image, no PSRAM, or the I²S pins are `-1` (station editing and `GET /api/v1/radio` still work) |
 | `422` on the pins | One of the three is set and the others are not |
 | "this stream is not MPEG-1 Layer III audio" | An AAC or otherwise unsupported mount |
 | "could not connect to the station" | Wrong URL, station offline, or DNS is not resolving |
@@ -145,7 +145,7 @@ HTTPS streams work, and their certificates are not verified.
 
 ## Related
 
-- [Web UI tour - Radio](../getting-started/web-ui.md#radio) - the tab, and what each control does
+- [Web UI tour - Radio](../getting-started/web-ui.md#radio) - the Audio tab's Radio section, and what each control does
 - [HTTP API - Radio](../reference/http.md#radio) - every route, field and status code
 - [GPIO & boards](../reference/gpio.md) - the I²S pins and what else can sit on them
 - [Sounds & melodies](sounds.md) - the buzzer, for alerts rather than music

@@ -166,7 +166,7 @@ paths:
         | `config/wifi.json` | `{wifiSsid, wifiPass}` merged into the config |
         | `config/system.json` | rest of the device config (validated like PUT /system) |
         | `config/settings.json` | display/behaviour settings (applied live + persisted) |
-        | `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `SCRIPTS/*` | written to LittleFS |
+        | `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `SOUNDS/*`, `SCRIPTS/*` | written to LittleFS |
         | `apploop.json` | app rotation order |
 
         Content is checked per folder exactly like `POST /api/v1/files`; a
@@ -204,6 +204,7 @@ paths:
                       icons: { type: integer }
                       melodies: { type: integer }
                       palettes: { type: integer }
+                      sounds: { type: integer }
                       scripts: { type: integer }
                       skipped: { type: integer }
                   warnings: { type: array, items: { type: string } }
@@ -932,10 +933,15 @@ paths:
       tags: [sounds]
       summary: Play a sound
       description: |
-        Exactly one of `name` (melody file), `rtttl` (inline melody) or
+        Exactly one of `name` (stored sound), `rtttl` (inline melody) or
         `builtin` ("r2d2"). Supplying more than one is rejected with `422`
         (`field: "name"`). On a DFPlayer board `rtttl` and `builtin` are not
         supported and are rejected with `422`.
+
+        On builds with a speaker (I2S DAC), `name` plays the MP3 clip
+        `/SOUNDS/<name>.mp3` when one exists and falls back to the melody
+        `/MELODIES/<name>.txt`; a playing radio stream is interrupted and
+        reconnects afterwards.
 
         An inline `rtttl` that does not parse is rejected with `422` carrying
         the reason and the byte offset - the same parser the buzzer plays from.
@@ -1288,6 +1294,8 @@ paths:
                       interpolates between palette entries.
                   transitions: { type: array, items: { type: string } }
                   overlays: { type: array, items: { type: string } }
+                  radio: { type: boolean, description: This build and hardware can stream internet radio }
+                  audio: { type: boolean, description: This build and hardware can play stored MP3 sounds; today identical to `radio` }
                   palettes:
                     type: array
                     items: { type: string }
@@ -1498,7 +1506,7 @@ paths:
   /api/v1/files:
     get:
       tags: [files]
-      summary: List files (icons, melodies, palettes)
+      summary: List files (icons, melodies, palettes, sounds)
       parameters:
         - { name: dir, in: query, schema: { type: string, default: /ICONS } }
       responses:
@@ -1895,6 +1903,8 @@ components:
         station: { type: string, description: The label tuned to }
         title: { type: string, description: Last track title from the stream, UTF-8 }
         error: { type: string, description: Why playback stopped; cleared on the next successful play }
+        clipPlaying: { type: boolean, description: An MP3 sound clip is playing right now }
+        clipName: { type: string, description: The playing clip's name without the .mp3; empty when none }
         underruns: { type: integer, description: Times the output fell more than one DMA buffer behind real time. Counts dropouts a listener would hear. Accumulates for as long as the radio service is up; it does not reset per station, so read it as a difference across two polls. }
         decodeUs: { type: integer, description: Mean microseconds to decode one frame. A frame is 26.1 ms of audio, so this over 26100 is the share of one core the decoder uses. }
         starvedMs: { type: integer, description: Milliseconds the audio task spent with nothing to decode. Separates a slow network from a slow decoder. Accumulates from boot like underruns; it does not reset per station. }

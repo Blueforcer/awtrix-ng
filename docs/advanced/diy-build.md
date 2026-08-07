@@ -596,7 +596,7 @@ Work down this list; each step isolates one part of the hardware.
 | Panel stuck dim with `autoBrightness` on | No LDR, or `ldrOnGround` set the wrong way |
 | Percentage nonsense | `batteryDividerRatio` still at the default |
 | No temperature | Sensor not on the bus, missing pull-ups, or a second chip answering first |
-| Radio tab missing, `/radio/play` returns `503` | Not an S3 image, no PSRAM, or the I2S pins are `-1` |
+| Radio section missing, `/radio/play` returns `503` | Not an S3 image, no PSRAM, or the I2S pins are `-1` |
 | `invalidPinConfig` on a write | The message names the field and the rule - [Errors](../reference/errors.md#gpio-validation-invalidpinconfig) |
 
 ---

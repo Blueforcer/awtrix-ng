@@ -184,7 +184,7 @@ Every AWTRIX 3 custom-app key, and where it went. The full definition of each ne
 | `hold` | `hold` | Unchanged |
 | `stack` | `stack` | Unchanged |
 | `wakeup` | `wakeup` | Unchanged |
-| `sound` | `sound` | Unchanged - melody file name or DFPlayer track |
+| `sound` | `sound` | Unchanged - melody file name or DFPlayer track; NG additionally resolves an uploaded MP3 clip of that name on boards with a speaker |
 | `rtttl` | `soundRtttl` | Rename |
 | `loopSound` | `soundLoop` | Rename |
 | `clients` | - | No equivalent; have your automation send to each device itself |

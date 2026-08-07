@@ -72,13 +72,18 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -d '{"text":"Doorbell","icon":"1234","soundRtttl":"bell:d=4,o=5,b=120:c,e,g"}'
 ```
 
-**From a file** - `sound` names `/MELODIES/<sound>.txt` on the buzzer, or a track number on DFPlayer hardware:
+**From a file** - `sound` names a stored sound:
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Doorbell","sound":"chime"}'
 ```
+
+On a board with a speaker (I2S DAC), `sound` plays the MP3 clip `/SOUNDS/chime.mp3` if one is
+uploaded, and falls back to the melody `/MELODIES/chime.txt` on the buzzer. Without a speaker it is
+always the melody; on DFPlayer hardware it is a track number. Uploading clips:
+[MP3 sounds](sounds.md#mp3-sounds).
 
 The melody plays once, when the notification first appears. Add `"soundLoop": true` to re-trigger it each time it finishes, for as long as the notification is on screen.
 

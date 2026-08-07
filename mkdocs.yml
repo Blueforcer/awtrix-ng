@@ -80,7 +80,7 @@ nav:
           - Icon editor: guides/icon-editor.md
           - Palette editor: guides/palette-editor.md
       - Sound:
-          - Sounds & melodies: guides/sounds.md
+          - Sounds & melodies: guides/sounds.md  # MP3 clips, RTTTL melodies, DFPlayer
           - Internet radio: guides/radio.md
       - Integrations:
           - Home Assistant: guides/home-assistant.md

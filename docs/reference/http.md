@@ -1259,7 +1259,7 @@ Stops whatever is playing. `{"ok":true}`, always.
 
 | Key | Type | Meaning |
 |---|---|---|
-| `name` | string | melody file - plays `/MELODIES/<name>.txt`, or a DFPlayer track |
+| `name` | string | stored sound - on builds with a speaker `/SOUNDS/<name>.mp3` first, else the melody `/MELODIES/<name>.txt`, or a DFPlayer track |
 | `rtttl` | string | inline RTTTL melody |
 | `builtin` | string | plays the built-in R2D2 melody |
 
@@ -1270,7 +1270,7 @@ carrying more than one is rejected whole - nothing plays.
 |---|---|
 | 200 | `{"ok":true}` |
 | 400 | body is not valid JSON (`invalidJson`) |
-| 404 | `notFound`, `sound not found` - `name` only: the melody file is missing or unparseable, or there is no buzzer |
+| 404 | `notFound`, `sound not found` - `name` only: no MP3 clip and the melody file is missing or unparseable, or there is no buzzer |
 | 422 | `field: "name"`, `exactly one of "name", "rtttl" or "builtin" is allowed` - more than one of the three keys is present |
 | 422 | `field: "name"`, `one of "name", "rtttl" or "builtin" is required` - none of the three keys held a string |
 | 422 | `field: "rtttl"` - the inline melody does not parse; `message` carries the reason and the byte offset |
@@ -1297,7 +1297,8 @@ curl -X POST http://<awtrix-ip>/api/v1/sounds/play \
 
 Internet radio over an I²S DAC. **ESP32-S3 only.** Every route here answers `503 unavailable` on a
 classic ESP32, on an S3 without PSRAM, and on an S3 with the I²S pins unset.
-`capabilities.radio` says which it is, and the web UI hides its Radio tab when it is `false`.
+`capabilities.radio` says which it is, and the web UI hides the Audio tab's Radio section when it
+is `false`.
 
 Editing the station list is the exception - that works on every build.
 
@@ -1314,6 +1315,8 @@ Playback status and the station list in one read.
   "station": "SWR3",
   "title": "Kraftwerk - Das Model",
   "error": "",
+  "clipPlaying": false,
+  "clipName": "",
   "underruns": 0,
   "decodeUs": 4180,
   "starvedMs": 0,
@@ -1329,6 +1332,8 @@ Playback status and the station list in one read.
 | `station` | string | The label that was tuned to - a station name, or the URL for an ad-hoc play |
 | `title` | string | Last track title the stream reported, UTF-8, empty until one arrives |
 | `error` | string | Why playback stopped, cleared on the next successful play |
+| `clipPlaying` | boolean | An [MP3 sound](../guides/sounds.md#mp3-sounds) is playing right now |
+| `clipName` | string | Which one, without the `.mp3`; empty when none |
 | `underruns` | integer | Times the output fell more than one buffer behind real time - each one is a dropout you hear |
 | `decodeUs` | integer | Rolling average microseconds to decode one MP3 frame; a frame is 26100 µs of audio |
 | `starvedMs` | integer | Milliseconds the audio task waited with nothing to decode - separates a slow network from a slow decoder |
@@ -1404,8 +1409,13 @@ Validation is all-or-nothing, and the error names the offending row:
 The name lists this firmware build supports. Fetch this rather than hardcoding names.
 
 ```json
-{"effects":[...],"transitions":[...],"overlays":[...],"palettes":[...],"radio":bool,"gpio":{...}}
+{"effects":[...],"transitions":[...],"overlays":[...],"palettes":[...],"radio":bool,"audio":bool,"gpio":{...}}
 ```
+
+`radio` and `audio` say whether this build and this hardware can stream internet radio and play
+[MP3 sounds](../guides/sounds.md#mp3-sounds) - today both require the same thing, an ESP32-S3 with
+PSRAM and the I²S pins set, so they carry the same value. The web UI shows the matching Audio-tab
+sections only when they are `true`.
 
 | Key | Count | Values |
 |---|---|---|
@@ -1682,7 +1692,7 @@ curl "http://<awtrix-ip>/api/v1/logs?after=0"
 
 ## Files
 
-The filesystem holds your icons, melodies and palettes. How much room it has depends on the flash
+The filesystem holds your icons, melodies, palettes and MP3 sounds. How much room it has depends on the flash
 size of the board - see [Limits](limits.md#storage). `GET /api/v1/files` reports the real figures
 as `usedBytes` and `totalBytes`.
 
@@ -1719,8 +1729,8 @@ Path resolution:
 
 * filename starts with `/` → used as the absolute path, `?dir=` ignored
 * otherwise → `<dir>/<filename>`, with a leading `/` prepended to `dir` if missing
-* the resolved path must be under `/ICONS`, `/MELODIES` or `/PALETTES` and contain no `..` -
-  anything else is rejected with `400 invalidPath` before a byte is written
+* the resolved path must be under `/ICONS`, `/MELODIES`, `/PALETTES` or `/SOUNDS` and contain no
+  `..` - anything else is rejected with `400 invalidPath` before a byte is written
 * the parent directory is created if it does not exist
 
 The multipart **field name is irrelevant** - any file part is accepted.
@@ -1728,10 +1738,10 @@ The multipart **field name is irrelevant** - any file part is accepted.
 | Status | Condition |
 |---|---|
 | 200 | `{"ok":true}` |
-| 400 | `invalidPath` - the target escapes the three asset folders, or contains `..` |
+| 400 | `invalidPath` - the target escapes the four asset folders, or contains `..` |
 | 401 | auth failed - returned only *after* the entire body has been consumed |
 | 403 | `forbidden` - file upload is disabled in AP/provisioning mode |
-| 415 | `unsupportedMediaType` - the content does not match the target folder: `/ICONS` needs GIF or JPEG magic bytes, `/MELODIES` must parse as RTTTL text, `/PALETTES` must be plain `RRGGBB`-per-line text |
+| 415 | `unsupportedMediaType` - the content does not match the target folder: `/ICONS` needs GIF or JPEG magic bytes, `/MELODIES` must parse as RTTTL text, `/PALETTES` must be plain `RRGGBB`-per-line text, `/SOUNDS` needs MP3 magic bytes (an ID3 tag or a frame sync) |
 | 500 | `internalError` - the write failed (storage full); nothing is left behind |
 
 PNG is served correctly once on AWTRIX, but it is not accepted by the `/ICONS` upload check -
@@ -1750,13 +1760,13 @@ curl -X POST "http://<awtrix-ip>/api/v1/files?dir=/ICONS" \
 |---|---|---|---|
 | `path` | string | yes | full path of the file to remove |
 
-Deletion is confined to `/ICONS`, `/MELODIES` and `/PALETTES`: `path` must be under one of those
-folders and contain no `..`.
+Deletion is confined to `/ICONS`, `/MELODIES`, `/PALETTES` and `/SOUNDS`: `path` must be under one
+of those folders and contain no `..`.
 
 | Status | Condition |
 |---|---|
 | 200 | `{"ok":true}` |
-| 400 | `invalidPath` - missing `path`, a `..` traversal, or a path outside the three asset folders |
+| 400 | `invalidPath` - missing `path`, a `..` traversal, or a path outside the four asset folders |
 | 404 | `notFound`, `file not found` - the path is valid but no such file exists |
 | 405 | wrong method - `allowed method(s): GET, POST, DELETE` |
 
@@ -1809,7 +1819,7 @@ supported `backupFormat` - before anything else in the archive is touched.
 | `config/system.json` | the rest of device configuration, validated like [`PUT /api/v1/system`](#put-apiv1system) |
 | `config/settings.json` | display/behaviour settings, validated like [`PATCH /api/v1/settings`](#patch-apiv1settings) - applied to the running device immediately |
 | `apploop.json` | app rotation order and the switched-off list, same shape as [`PUT /api/v1/apps/order`](#put-apiv1appsorder) |
-| `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `SCRIPTS/*` | written to LittleFS under the matching directory |
+| `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `SOUNDS/*`, `SCRIPTS/*` | written to LittleFS under the matching directory |
 
 Content is checked per folder exactly like [`POST /api/v1/files`](#post-apiv1files): a path that
 escapes its folder, an entry whose CRC does not check out, or a file whose content does not match
@@ -1825,7 +1835,7 @@ restore. An unrecognized entry name is skipped and warned about too.
 A restore can partially succeed, so this route answers its own JSON shape instead of the
 [error body](#errors) used everywhere else: `ok`, an `applied` object counting how many entries
 of each kind were actually applied (`wifi`, `system`, `settings`, `appLoop`, `radioStations`,
-`icons`, `melodies`, `palettes`, `scripts`, plus `skipped` for rejected entries), and a `warnings` array with one
+`icons`, `melodies`, `palettes`, `sounds`, `scripts`, plus `skipped` for rejected entries), and a `warnings` array with one
 string per skipped or rejected entry.
 
 Config changes that only take effect at boot - new Wi-Fi credentials, `config/system.json` - need
@@ -1851,10 +1861,10 @@ The gzipped web UI, embedded in the firmware. Served for `/` and `/index.html`.
 
 Authentication applies. This branch is not method-gated: any method reaches it.
 
-### GET /ICONS/*, /MELODIES/*, /PALETTES/*, /SCRIPTS/*, /apploop.json
+### GET /ICONS/*, /MELODIES/*, /PALETTES/*, /SOUNDS/*, /SCRIPTS/*, /apploop.json
 
-Static files from LittleFS. **GET only**. `/ICONS/`, `/MELODIES/` and `/PALETTES/` are served
-in every mode; `/SCRIPTS/*` and `/apploop.json` are served over GET **only outside provisioning
+Static files from LittleFS. **GET only**. `/ICONS/`, `/MELODIES/`, `/PALETTES/` and `/SOUNDS/`
+are served in every mode; `/SCRIPTS/*` and `/apploop.json` are served over GET **only outside provisioning
 AP mode** (they are part of the backup-readable set). Any path containing `..` is rejected before
 the filesystem is touched. Everything else falls through to the 404 below.
 
@@ -1864,7 +1874,8 @@ the filesystem is touched. Everything else falls through to the 404 below.
 | 404 | `notFound`, `file not found` - missing file, or the path is a directory |
 
 MIME type by extension: `.jpg`/`.jpeg` → `image/jpeg`, `.gif` → `image/gif`, `.png` →
-`image/png`, `.txt` → `text/plain`, anything else → `application/octet-stream`.
+`image/png`, `.txt` → `text/plain`, `.mp3` → `audio/mpeg`, anything else →
+`application/octet-stream`.
 
 Authentication applies.
 
@@ -1931,4 +1942,4 @@ Anything not matched above answers **404** `notFound` with message `unknown rout
 | POST | `/update` | [firmware image](#post-update) |
 | POST | `/api/v1/restore` | [backup ZIP; available in AP mode](#post-apiv1restore) |
 | GET | `/`, `/index.html` | [web UI](#get) |
-| GET | `/ICONS/*`, `/MELODIES/*`, `/PALETTES/*`, `/SCRIPTS/*`, `/apploop.json` | [static assets](#web-ui-and-static-assets) |
+| GET | `/ICONS/*`, `/MELODIES/*`, `/PALETTES/*`, `/SOUNDS/*`, `/SCRIPTS/*`, `/apploop.json` | [static assets](#web-ui-and-static-assets) |
