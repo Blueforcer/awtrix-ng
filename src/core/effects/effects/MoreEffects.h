@@ -251,16 +251,46 @@ inline void SwirlOutEffect::render(Canvas& c, int64_t f) {
 
 inline void LookingEyesEffect::render(Canvas& c, int64_t f) {
   c.clear(0x000000u);
-  const int px = static_cast<int>(std::sin(f * kPhasePerStep) * 1.5f);
-  const int py = static_cast<int>(std::cos(f * 1.4f * kPhasePerStep));
-  const int kEyeW = 4;
+  // 8x8 ball per eye, drawn row by row instead of from a bitmap: x offset and width of each row.
+  static const uint8_t kBallX[8] = {2, 1, 0, 0, 0, 0, 1, 2};
+  static const uint8_t kBallW[8] = {4, 6, 8, 8, 8, 8, 6, 4};
   const int cx = c.width() / 2;
-  const int leftEye = std::max(0, cx - 2 * kEyeW);
-  const int rightEye = std::min(c.width() - kEyeW, cx + kEyeW);
-  for (int ex : {leftEye, rightEye}) {
-    c.fillRect(ex, 2, 4, 4, 0xFFFFFFu);
-    c.setPixel(ex + 1 + (px > 0 ? 2 : (px < 0 ? 0 : 1)), 3 + (py > 0 ? 1 : 0), 0x000000u);
-    c.setPixel(ex + 2 + (px > 0 ? 1 : (px < 0 ? -1 : 0)), 3 + (py > 0 ? 1 : 0), 0x000000u);
+  const int eyeX[2] = {std::max(0, std::min(c.width() - 8, cx - 10)),
+                       std::max(0, std::min(c.width() - 8, cx + 2))};
+
+  // Gaze: a slot is 60 frames (~1.4 s), and every other slot keeps the target its predecessor
+  // picked, so a look is held for 1.4 s or 2.9 s. The move itself is a 3-frame saccade.
+  // Both axes are drawn from tables that crowd the middle: extreme stares stay rare.
+  static const uint8_t kGazeX[16] = {2, 3, 2, 4, 3, 1, 2, 3, 4, 2, 3, 0, 3, 2, 5, 3};
+  static const uint8_t kGazeY[8] = {2, 3, 2, 3, 1, 3, 2, 4};
+  auto gaze = [](int64_t slot, int axis) {
+    const uint32_t s = noise::hash2(static_cast<uint32_t>(slot), 0x45594553u);
+    const uint32_t r = (s & 1u) ? s : noise::hash2(static_cast<uint32_t>(slot - 1), 0x45594553u);
+    return axis ? kGazeY[(r >> 12) % 8u] : kGazeX[(r >> 4) % 16u];
+  };
+  const int64_t slot = f / 60;
+  const int step = static_cast<int>(f % 60);
+  const int mix = step < 3 ? step : 3;
+  const int px = (gaze(slot - 1, 0) * (3 - mix) + gaze(slot, 0) * mix) / 3;
+  const int py = (gaze(slot - 1, 1) * (3 - mix) + gaze(slot, 1) * mix) / 3;
+
+  // Blink: one per 160-frame window (~3.8 s), at a phase the window's hash picks, so the rhythm
+  // never settles. The lids snap shut and open again a little slower.
+  int top = 0, bottom = 7;
+  const int64_t window = f / 160;
+  const int start = 10 + static_cast<int>(noise::hash2(static_cast<uint32_t>(window), 0x424C4E4Bu) % 140u);
+  const int since = static_cast<int>(f % 160) - start;
+  if (since >= 0 && since < 7) {
+    static const uint8_t kLid[7] = {1, 3, 4, 4, 3, 2, 1};
+    const int lid = kLid[since];
+    top = lid;
+    bottom = 7 - lid / 2;
+  }
+
+  for (const int x0 : eyeX) {
+    for (int y = top; y <= bottom; ++y)
+      c.fillRect(x0 + kBallX[y], y, kBallW[y], 1, 0xFFFFFFu);
+    c.fillRect(x0 + px, py, 2, 2, 0x000000u);
   }
 }
 
