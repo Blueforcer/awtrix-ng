@@ -78,7 +78,7 @@ jobs:
         run: pip install -U platformio esptool
       - name: Build firmware
         run: pio run -e ${{ matrix.env }}
-      - name: Build factory images
+      - name: Build USB install images
         # The full-flash artefact: bootloader, partition table, boot_app0 and the
         # app, one image per flash variant this SoC ships in. Built on every run,
         # not only on tags -- the merge depends on the generated partition table,
@@ -87,8 +87,11 @@ jobs:
         run: python scripts/factory_image.py --env ${{ matrix.env }} --all -o dist
       - uses: actions/upload-artifact@v4
         with:
-          name: factory-${{ matrix.env }}
-          path: dist/factory-*.bin
+          # The prefix is usb-, not factory-, and comes from factory_image.asset_name.
+          # Keep the two in step: if-no-files-found is error, so a stale pattern here
+          # fails the tag build after every test has already passed.
+          name: usb-${{ matrix.env }}
+          path: dist/usb-*.bin
           if-no-files-found: error
 
   docs:
