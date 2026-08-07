@@ -12,6 +12,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/download \
   -H 'Content-Type: application/json' \
   -d '{"text":"64%","progress":64,"progressColor":"#00AAFF","progressTrackColor":"#202020"}'
 ```
+<!-- shot:begin id=64-progress hash=777efbfc -->
+![The panel showing "64%", a 64% progress bar along the bottom row](../assets/shots/graphics/64-progress.png){ .shot }
+<!-- shot:end -->
+
 
 **What you see:** `64%` on the middle rows, and along the very bottom row of the panel a bar that is
 bright blue for the left ~20 pixels and dark grey for the remaining ~12.
@@ -48,6 +52,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/build \
   -H 'Content-Type: application/json' \
   -d '{"text":"BUILD","progress":30,"progressColor":"#00FF00","progressTrackColor":"#FFFFFF"}'
 ```
+<!-- shot:begin id=build-progress hash=3012488b -->
+![The panel showing "BUILD", a 30% progress bar along the bottom row](../assets/shots/graphics/build-progress.png){ .shot }
+<!-- shot:end -->
+
 
 **What you see:** `BUILD` across the panel, and on row 7 a green segment covering the leftmost ~9
 pixels with white filling the rest of the row all the way to x=31.
@@ -71,6 +79,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/traffic \
   -H 'Content-Type: application/json' \
   -d '{"barChart":[2,5,3,8,6,4,7,1],"chartColor":"#00FF00"}'
 ```
+<!-- shot:begin id=barchart hash=a9e11e89 -->
+![The panel showing a bar chart of 8 columns](../assets/shots/graphics/barchart.png){ .shot }
+<!-- shot:end -->
+
 
 **What you see:** eight green columns filling the whole panel width, evenly spaced with a gap
 between them, all growing up from the bottom row. The tallest (`8`) reaches the top of the panel;
@@ -92,6 +104,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/traffic \
   -H 'Content-Type: application/json' \
   -d '{"barChart":[2,5,3,8,6,4,7,1],"chartAutoscale":false,"chartColor":"#00FF00"}'
 ```
+<!-- shot:begin id=barchart-2 hash=7654a47f -->
+![The panel showing a bar chart of 8 columns](../assets/shots/graphics/barchart-2.png){ .shot }
+<!-- shot:end -->
+
 
 **Color.** `chartColor` sets the bars - and the line, if the page also has one. Omit it and both use
 the resolved text color (your `textColor` key, or the global `textColor` setting). Cells that are
@@ -115,6 +131,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/temp \
   -H 'Content-Type: application/json' \
   -d '{"lineChart":[3,4,6,5,7,8,6,4],"chartColor":"#FF8800"}'
 ```
+<!-- shot:begin id=linechart hash=a4027603 -->
+![The panel showing a line chart](../assets/shots/graphics/linechart.png){ .shot }
+<!-- shot:end -->
+
 
 **What you see:** an orange zig-zag stretching the full width - the first point sits at x=0, the
 last at x=31, with the six others spaced evenly between, and the segments drawn as 1px lines
@@ -129,6 +149,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/combo \
   -H 'Content-Type: application/json' \
   -d '{"barChart":[2,5,3,8,6,4,7,1],"lineChart":[2,5,3,8,6,4,7,1],"chartColor":"#00FF00"}'
 ```
+<!-- shot:begin id=barchart-linechart hash=3461b85f -->
+![The panel showing a bar chart of 8 columns, a line chart](../assets/shots/graphics/barchart-linechart.png){ .shot }
+<!-- shot:end -->
+
 
 **What you see:** eight green columns with a line of the same green tracing across their tops.
 
@@ -196,6 +220,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/stars \
   -H 'Content-Type: application/json' \
   -d '{"draw":[["pixels","#FFF",2,1,7,0,13,3,19,1,25,2,29,5]]}'
 ```
+<!-- shot:begin id=draw hash=4af494ee -->
+![The panel showing drawn shapes](../assets/shots/graphics/draw.png){ .shot }
+<!-- shot:end -->
+
 
 **What you see:** six white points scattered across the upper half of the panel, like a small
 starfield.
@@ -348,6 +376,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/cpu \
   -H 'Content-Type: application/json' \
   -d '{"text":"CPU","textInFront":true,"barChart":[2,5,3,8,6,4,7,1],"chartColor":"#040"}'
 ```
+<!-- shot:begin id=cpu-barchart hash=9db63956 -->
+![The panel showing "CPU", a bar chart of 8 columns](../assets/shots/graphics/cpu-barchart.png){ .shot }
+<!-- shot:end -->
+
 
 **What you see:** dark green bars filling the panel with white `CPU` legible on top of them. Drop
 `textInFront` and the bars paint over the letters instead.
@@ -371,6 +403,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/weather \
   -H 'Content-Type: application/json' \
   -d '{"icon":"11201","lineChart":[3,4,6,5,7,8,6,4],"chartColor":"#FF8800"}'
 ```
+<!-- shot:begin id=11201-linechart hash=bf7c13bf -->
+![The panel showing an icon on the left, a line chart](../assets/shots/graphics/11201-linechart.png){ .shot }
+<!-- shot:end -->
+
 
 **What you see:** the icon occupying the leftmost 8 pixels, then a 1px gap, then the orange line
 chart plotted across the remaining 23 pixels.

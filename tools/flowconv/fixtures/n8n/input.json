@@ -1,0 +1,38 @@
+{
+  "name": "TikTok Follower Count",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 12 }]
+        }
+      },
+      "name": "Every 12 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "http://192.168.1.255/api/custom",
+        "queryParametersUi": {
+          "parameter": [
+            { "name": "name", "value": "tiktok" }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            { "name": "text", "value": "={{ $json.followerCount }}" },
+            { "name": "icon", "value": "35685" },
+            { "name": "duration", "value": "5" },
+            { "name": "pushIcon", "value": "2" }
+          ]
+        }
+      },
+      "name": "Send to Clock",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [600, 300]
+    }
+  ],
+  "connections": {}
+}

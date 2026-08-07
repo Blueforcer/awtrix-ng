@@ -1,0 +1,44 @@
+[
+    {
+        "id": "a1b2c3d4.e5f6",
+        "type": "inject",
+        "z": "flow1",
+        "name": "every 10 min",
+        "repeat": "600",
+        "wires": [
+            [
+                "f1e2d3c4.b5a6"
+            ]
+        ]
+    },
+    {
+        "id": "f1e2d3c4.b5a6",
+        "type": "function",
+        "z": "flow1",
+        "name": "build payload",
+        "func": "var subs = msg.payload.items[0].statistics.subscriberCount;\nmsg.payload = { text: subs, icon: \"09XX\", duration: 10, pushIcon: 2 };\nmsg.topic = \"awtrix/cmd/apps/pushed/youtube\";\nreturn msg;",
+        "wires": [
+            [
+                "09a8b7c6.d5e4"
+            ]
+        ]
+    },
+    {
+        "id": "09a8b7c6.d5e4",
+        "type": "mqtt out",
+        "z": "flow1",
+        "name": "to awtrix",
+        "topic": "awtrix/cmd/apps/pushed/youtube",
+        "qos": "0",
+        "wires": []
+    },
+    {
+        "id": "11223344.5566",
+        "type": "http request",
+        "z": "flow1",
+        "name": "dismiss",
+        "method": "DELETE",
+        "url": "http://192.168.1.128/api/v1/notifications/active",
+        "wires": []
+    }
+]

@@ -23,6 +23,22 @@ everything:
 
 ---
 
+## Convert a flow automatically
+
+Paste an old flow - a Home Assistant automation or blueprint, a Node-RED or N8N export, a `curl`
+command, or a bare JSON payload - and get it back in the NG dialect. Endpoints, MQTT topics and
+payload keys are rewritten in place; your comments, templates and formatting around them stay as
+they are. Anything that cannot be converted safely - JavaScript that builds payloads, template
+expressions, keys with no NG equivalent - is left untouched and listed as a warning that links to
+the matching section below.
+
+<div id="awtrix-flow-converter">
+  <p>The converter needs JavaScript; the tables below cover the same ground by hand.</p>
+</div>
+<script type="module" src="../../assets/flow-converter/ui.js"></script>
+
+---
+
 ## Where to send
 
 === "HTTP"
@@ -228,6 +244,10 @@ When both a palette and a blink/fade are set, the palette wins - the
 ```json
 { "text": "A LONG HEADLINE", "scroll": { "mode": "bounce", "speed": 50 } }
 ```
+<!-- shot:begin id=a-long-headline hash=6c6d187a -->
+![The panel showing "A LONG HEADLINE"](../assets/shots/migrating-from-awtrix3/a-long-headline.gif){ .shot }
+<!-- shot:end -->
+
 
 The two direct translations: `"noScroll": true` → `"scroll": {"mode": "static"}`, and
 `"scrollSpeed": 50` → `"scroll": {"speed": 50}`. Every field you leave out inherits from the global

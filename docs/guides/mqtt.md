@@ -70,6 +70,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
 mosquitto_pub -h 192.168.1.10 -t 'awtrixNG/cmd/notify' \
   -m '{"text":"Build failed","textColor":"#FF0000"}'
 ```
+<!-- shot:begin id=build-failed hash=0c19e8d2 -->
+![The panel showing "Build failed" in red](../assets/shots/mqtt/build-failed.gif){ .shot }
+<!-- shot:end -->
+
 
 It holds everywhere:
 

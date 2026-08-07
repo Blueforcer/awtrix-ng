@@ -17,6 +17,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H "Content-Type: application/json" \
   -d '{"text":"Mail","icon":"1234"}'
 ```
+<!-- shot:begin id=mail-1234 hash=1c3a8760 -->
+![The panel showing "Mail", an icon on the left](../assets/shots/icons/mail-1234.png){ .shot }
+<!-- shot:end -->
+
 
 The icon ID is **the file name without the extension**. `1234.jpg` on disk is `"icon":"1234"`
 in a payload - never `"1234.jpg"`, never a path. IDs are matched literally and are
@@ -86,6 +90,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
   -H "Content-Type: application/json" \
   -d '{"text":"Long headline that scrolls","icon":"1234","iconMode":"push"}'
 ```
+<!-- shot:begin id=long-headline-that-scrolls-1234 hash=7a4ca93d -->
+![The panel showing "Long headline that scrolls", an icon on the left](../assets/shots/icons/long-headline-that-scrolls-1234.gif){ .shot }
+<!-- shot:end -->
+
 
 Everything about how an icon renders and lays out - the `icon`, `iconMode` and `iconOffsetX`
 keys, the 9px text column, the full-width GIF background, and what happens when an icon is
@@ -106,6 +114,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H "Content-Type: application/json" \
   -d "{\"text\":\"Inline\",\"icon\":\"$(base64 -w0 1234.jpg)\"}"
 ```
+<!-- shot:begin id=inline-icon hash=d8daa0d9 -->
+![The panel showing "Inline", an icon on the left](../assets/shots/icons/inline-icon.png){ .shot }
+<!-- shot:end -->
+
 
 This suits a one-shot notification from a script that has the image to hand and does not want to
 leave a file behind. The trade-off is payload size: the image travels with every request.

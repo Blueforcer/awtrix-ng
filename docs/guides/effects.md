@@ -27,6 +27,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/demo \
   -H 'Content-Type: application/json' \
   -d '{"text":"HELLO","effect":"Pacifica"}'
 ```
+<!-- shot:begin id=hello-pacifica hash=c6b5d47b -->
+![The panel showing "HELLO", the Pacifica effect behind it](../assets/shots/effects/hello-pacifica.gif){ .shot }
+<!-- shot:end -->
+
 
 The app joins the rotation immediately. To take it away again:
 
@@ -91,6 +95,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/demo \
   -H 'Content-Type: application/json' \
   -d '{"text":"HI","effect":"Plasma","effectSpeed":0.4,"palette":"Lava"}'
 ```
+<!-- shot:begin id=hi-plasma hash=0cd99fc1 -->
+![The panel showing "HI", the Plasma effect behind it](../assets/shots/effects/hi-plasma.gif){ .shot }
+<!-- shot:end -->
+
 
 ### Slow it down or speed it up
 
@@ -103,6 +111,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/demo \
   -H 'Content-Type: application/json' \
   -d '{"text":"CALM","effect":"PlasmaCloud","effectSpeed":0.25}'
 ```
+<!-- shot:begin id=calm-plasmacloud hash=52e9da1e -->
+![The panel showing "CALM", the PlasmaCloud effect behind it](../assets/shots/effects/calm-plasmacloud.gif){ .shot }
+<!-- shot:end -->
+
 
 A value outside `0.1 … 10` is silently pulled to the nearest bound rather than rejected with an
 error, so an animation can neither freeze nor run away.
@@ -190,6 +202,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/weather \
   -H 'Content-Type: application/json' \
   -d '{"text":"7C","overlay":"snow"}'
 ```
+<!-- shot:begin id=7c-snow hash=aac29590 -->
+![The panel showing "7C", a snow overlay](../assets/shots/effects/7c-snow.gif){ .shot }
+<!-- shot:end -->
+
 
 Overlay names are matched case-insensitively - `rain`, `Rain` and `RAIN` are all the same overlay.
 An unknown name is rejected with `422 validationFailed` on the `overlay` field and the app is not
@@ -208,6 +224,11 @@ curl -X PATCH http://<awtrix-ip>/api/v1/display \
   -H 'Content-Type: application/json' \
   -d '{"overlay":"rain"}'
 ```
+<!-- shot: base={"text":"21.5C"} -->
+<!-- shot:begin id=rain hash=31230fce -->
+![The panel showing a rain overlay](../assets/shots/effects/rain.gif){ .shot }
+<!-- shot:end -->
+
 
 Tune it with `overlaySettings` - `speed`, `palette` and `blend` in one object, because the
 device-wide overlay owns its settings rather than borrowing an app's:
@@ -218,6 +239,11 @@ curl -X PATCH http://<awtrix-ip>/api/v1/display \
   -H 'Content-Type: application/json' \
   -d '{"overlay":"rain","overlaySettings":{"speed":0.3}}'
 ```
+<!-- shot: base={"text":"21.5C"} -->
+<!-- shot:begin id=rain-2 hash=50d38b3a -->
+![The panel showing a rain overlay](../assets/shots/effects/rain-2.gif){ .shot }
+<!-- shot:end -->
+
 
 The Web UI has the same knob as an **Overlay speed** slider under **Display → Weather overlay**.
 

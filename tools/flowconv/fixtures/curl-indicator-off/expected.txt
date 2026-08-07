@@ -1,0 +1,2 @@
+curl -X DELETE http://awtrix.local/api/v1/indicators/2
+curl -X PUT http://awtrix.local/api/v1/indicators/1 -H "Content-Type: application/json" -d '{"color":"#00FF00","blinkMs":500}'

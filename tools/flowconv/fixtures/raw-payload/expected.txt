@@ -1,0 +1,54 @@
+{
+  "text": [
+    {
+      "text": "OVER",
+      "color": "#FFFF00"
+    },
+    {
+      "text": "HEAT",
+      "color": "#FF0000"
+    }
+  ],
+  "topText": true,
+  "palette": "Ocean",
+  "effectSpeed": 3,
+  "paletteBlend": true,
+  "durationMs": 12500,
+  "repeat": 0,
+  "overlay": "",
+  "draw": [
+    [
+      "pixel",
+      28,
+      4,
+      "#FF0000"
+    ],
+    [
+      "rect",
+      20,
+      2,
+      4,
+      4,
+      "#0000FF"
+    ],
+    [
+      "text",
+      0,
+      0,
+      "Hi",
+      "#00FF00"
+    ]
+  ],
+  "barChart": [
+    1,
+    2,
+    3
+  ],
+  "chartAutoscale": true,
+  "progressColor": "#00FF00",
+  "scroll": {
+    "mode": "static",
+    "speed": 50
+  },
+  "textColor": "palette"
+}

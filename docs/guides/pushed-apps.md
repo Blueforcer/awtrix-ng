@@ -17,6 +17,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/weather \
   -H "Content-Type: application/json" \
   -d '{"text":"21.5C","icon":"2422","textColor":"#00AAFF"}'
 ```
+<!-- shot:begin id=21-5c-2422 hash=40d6154b -->
+![The panel showing "21.5C" in cyan, an icon on the left](../assets/shots/pushed-apps/21-5c-2422.png){ .shot }
+<!-- shot:end -->
+
 
 `weather` is the last stop in the rotation. Wait for the loop to come around to it, or jump
 straight there:
@@ -111,6 +115,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/doorbell \
   -H "Content-Type: application/json" \
   -d '{"text":"DING","lifetimeMs":300000,"lifetimeExpiry":"remove"}'
 ```
+<!-- shot:begin id=ding hash=ce0f788d -->
+![The panel showing "DING"](../assets/shots/pushed-apps/ding.png){ .shot }
+<!-- shot:end -->
+
 
 That makes `mark` a dead-man's switch: push every minute with `lifetimeMs: 180000`, and if your
 automation dies the app grows a red frame instead of showing a three-hour-old number as if it were
@@ -331,6 +339,10 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
   -H "Content-Type: application/json" \
   -d '{"text":"A rather long headline that will not fit on the matrix","repeat":1}'
 ```
+<!-- shot:begin id=a-rather-long-headline-that-will-not-fit hash=e87cf57c -->
+![The panel showing "A rather long headline that will not fit on the matrix"](../assets/shots/pushed-apps/a-rather-long-headline-that-will-not-fit.gif){ .shot }
+<!-- shot:end -->
+
 
 The app then stays exactly as long as those passes take: one whose text is read before the normal
 app time is up hands over there and then. Give it a `durationMs` if it should stay longer, or a

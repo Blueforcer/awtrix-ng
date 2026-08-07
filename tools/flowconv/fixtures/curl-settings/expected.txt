@@ -1,0 +1,2 @@
+curl -X PATCH http://awtrix.local/api/v1/settings \
+  -H "Content-Type: application/json" -d '{"appDurationMs":10000,"transitionEffect":"Rotate","transitionDurationMs":400,"time24h":true,"timeLeadingZero":true,"timeShowSeconds":false,"timeShowAmPm":false,"timeSeparatorMode":"blink","dateOrder":"dayMonthYear","dateSeparator":"dot","dateYearMode":"twoDigit","weekdayBar":{"show":true,"activeColor":"#DDDDDD","inactiveColor":"#333333"},"scroll":{"speed":80},"brightness":120,"MATP":false}'

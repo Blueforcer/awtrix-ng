@@ -1,0 +1,9 @@
+{
+  "inputType": "ha-yaml",
+  "alreadyNg": false,
+  "changeKinds": [],
+  "warningCodes": [
+    "jinjaPayload",
+    "templatedTopic"
+  ]
+}

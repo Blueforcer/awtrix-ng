@@ -1,0 +1,18 @@
+alias: SpeedTest (Awtrix)
+description: Push the measured download speed whenever it changes.
+trigger:
+  - platform: state
+    entity_id: sensor.speedtest_download
+condition: []
+action:
+  - service: mqtt.publish
+    data:
+      # The device prefix is the MAC-derived default.
+      topic: awtrix_d670d0/custom/speeds_d
+      retain: false
+      payload: '{"text":"{{ states(''sensor.speedtest_download'') }} Mbit","icon":"4954","duration":7,"pushIcon":0,"noScroll":true}'
+  - service: mqtt.publish
+    data:
+      topic: awtrix_d670d0/custom/speeds_u
+      payload: '{"text":"{{ states(''sensor.speedtest_upload'') }} Mbit","icon":"4955","duration":7,"color":[0,255,110]}'
+mode: single

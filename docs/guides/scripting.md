@@ -40,6 +40,10 @@ end
 
 return Hello()
 ```
+<!-- shot:begin id=hello hash=d6cd03db -->
+![The panel showing "hi" in green](../assets/shots/scripting/hello.png){ .shot }
+<!-- shot:end -->
+
 
 Save it. `Hello` is now in the app rotation, and when it comes round the panel says **hi** in green.
 
@@ -61,6 +65,10 @@ end
 
 return Hello()
 ```
+<!-- shot:begin id=hello-2 hash=add6df2b -->
+![The panel showing the Hello script](../assets/shots/scripting/hello-2.gif){ .shot }
+<!-- shot:end -->
+
 
 Centred text, and a red pixel walking down the left edge once a second.
 
@@ -260,6 +268,10 @@ end
 
 return Frames()
 ```
+<!-- shot:begin id=frames hash=fadab4c1 -->
+![The panel showing the Frames script](../assets/shots/scripting/frames.gif){ .shot }
+<!-- shot:end -->
+
 
 A typo in a builtin (`clesr()`) fails at install time with a `syntax_error`, rather
 than when that line finally runs. Methods on your own class are looked up when they are
@@ -289,6 +301,10 @@ end
 
 return Bin()
 ```
+<!-- shot:begin id=bin hash=d3528868 -->
+![The panel showing "Bin out!" in cyan](../assets/shots/scripting/bin.png){ .shot }
+<!-- shot:end -->
+
 
 Four rules worth knowing:
 
@@ -352,6 +368,10 @@ end
 
 return Slow()
 ```
+<!-- shot:begin id=slow hash=9ef9b2b7 -->
+![The panel showing "read me" in yellow](../assets/shots/scripting/slow.png){ .shot }
+<!-- shot:end -->
+
 
 `duration()` is asked each time the rotation arrives at you, so you can return a different value depending on what there is to show - a long dwell while a message is up, the global time otherwise. **Return `0` or nothing to keep the global app-time**; a missing hook, a non-positive number and a broken app all fall back to it, so you never have to answer unless you want to. The value only sets *how long* you stay - it does not change *whether* you appear (`should_show()`) or *where* you sit in the loop.
 
@@ -744,6 +764,10 @@ end
 
 return Cpu()
 ```
+<!-- shot:begin id=cpu hash=1244574b -->
+![The panel showing the Cpu script](../assets/shots/scripting/cpu.png){ .shot }
+<!-- shot:end -->
+
 
 ### Effects and overlays
 
@@ -787,6 +811,10 @@ end
 
 return Clock()
 ```
+<!-- shot:begin id=clock hash=bffc0176 -->
+![The panel showing the Clock script](../assets/shots/scripting/clock.gif){ .shot }
+<!-- shot:end -->
+
 
 An effect background is bright and busy. Turn the speed down and pick a darker
 palette when text has to stay readable on top of it.
@@ -835,6 +863,10 @@ end
 
 return Greeter()
 ```
+<!-- shot:begin id=greeter hash=b2e7f7f4 -->
+![The panel showing the Greeter script](../assets/shots/scripting/greeter.png){ .shot }
+<!-- shot:end -->
+
 
 On the **Apps** tab the row now has a **⚙** button. It opens the settings under the row, with a
 text box for the name and a colour picker for the colour - the picker carries its hex value across
@@ -972,6 +1004,10 @@ end
 
 return Battery()
 ```
+<!-- shot:begin id=battery hash=a2a3b4fd -->
+![The panel showing the Battery script](../assets/shots/scripting/battery.png){ .shot }
+<!-- shot:end -->
+
 
 The `import` line goes at the **top of the file**, outside the class, and every method can use the
 name from there on.
@@ -1032,6 +1068,10 @@ end
 
 return Greeter()
 ```
+<!-- shot:begin id=greeter-2 hash=dec387e0 -->
+![The panel showing the Greeter script](../assets/shots/scripting/greeter-2.png){ .shot }
+<!-- shot:end -->
+
 
 On the **Apps** tab the module's row now has the same **⚙** an app with settings gets. Change the
 city there once, and every app that imports `location` shows it.
@@ -1249,6 +1289,10 @@ end
 
 return Sensor()
 ```
+<!-- shot:begin id=sensor hash=a8d1204d -->
+![The panel showing the Sensor script](../assets/shots/scripting/sensor.png){ .shot }
+<!-- shot:end -->
+
 
 Subscribing to a topic you already hold replaces the callback rather than adding a second one. There is no unsubscribe - deleting or re-saving the script drops its subscriptions.
 

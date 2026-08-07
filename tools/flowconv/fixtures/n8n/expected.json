@@ -1,0 +1,10 @@
+{
+  "inputType": "n8n",
+  "alreadyNg": false,
+  "changeKinds": [
+    "endpoint",
+    "unit",
+    "value"
+  ],
+  "warningCodes": []
+}

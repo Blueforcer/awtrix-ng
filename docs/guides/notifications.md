@@ -11,6 +11,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Hello"}'
 ```
+<!-- shot:begin id=hello hash=23471d29 -->
+![The panel showing "Hello"](../assets/shots/notifications/hello.png){ .shot }
+<!-- shot:end -->
+
 
 The panel shows `HELLO` for seven seconds, then goes back to the clock. You get back:
 
@@ -31,6 +35,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Hello","textCase":"asTyped"}'
 ```
+<!-- shot:begin id=hello-2 hash=3a7d7fc1 -->
+![The panel showing "Hello"](../assets/shots/notifications/hello-2.png){ .shot }
+<!-- shot:end -->
+
 
 ## Color
 
@@ -41,6 +49,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Disk full","textColor":"#FF0000"}'
 ```
+<!-- shot:begin id=disk-full hash=3ae41e26 -->
+![The panel showing "Disk full" in red](../assets/shots/notifications/disk-full.png){ .shot }
+<!-- shot:end -->
+
 
 `"#FF0000"` is one of several accepted spellings - `"FF0000"`, `"F00"`, `[255,0,0]`, `["HSV",0,100,100]` and the packed integer `16711680` all mean the same red. The full table is at [Colors](../reference/payload.md#colors).
 
@@ -55,6 +67,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Doorbell","icon":"1234","textColor":"#00AAFF"}'
 ```
+<!-- shot:begin id=doorbell-1234 hash=3325d083 -->
+![The panel showing "Doorbell" in cyan, an icon on the left](../assets/shots/notifications/doorbell-1234.gif){ .shot }
+<!-- shot:end -->
+
 
 AWTRIX looks for `/ICONS/1234.gif` first, then `/ICONS/1234.jpg`. Only GIF and JPEG work - no PNG. If nothing matches, the notification still shows, just without the icon and without the reserved icon column.
 
@@ -71,6 +87,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Doorbell","icon":"1234","soundRtttl":"bell:d=4,o=5,b=120:c,e,g"}'
 ```
+<!-- shot:begin id=doorbell-1234-2 hash=18a4801e -->
+![The panel showing "Doorbell", an icon on the left](../assets/shots/notifications/doorbell-1234-2.gif){ .shot }
+<!-- shot:end -->
+
 
 **From a file** - `sound` names `/MELODIES/<sound>.txt` on the buzzer, or a track number on DFPlayer hardware:
 
@@ -79,6 +99,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Doorbell","sound":"chime"}'
 ```
+<!-- shot:begin id=doorbell hash=4a63a307 -->
+![The panel showing "Doorbell"](../assets/shots/notifications/doorbell.png){ .shot }
+<!-- shot:end -->
+
 
 The melody plays once, when the notification first appears. Add `"soundLoop": true` to re-trigger it each time it finishes, for as long as the notification is on screen.
 
@@ -93,6 +117,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Quick","durationMs":2000}'
 ```
+<!-- shot:begin id=quick hash=f76b10aa -->
+![The panel showing "Quick"](../assets/shots/notifications/quick.png){ .shot }
+<!-- shot:end -->
+
 
 Durations are integer **milliseconds**. `0` or negative falls back to the global setting.
 
@@ -105,6 +133,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"ALARM","textColor":"#FF0000","hold":true}'
 ```
+<!-- shot:begin id=alarm hash=7dd56ffb -->
+![The panel showing "ALARM" in red](../assets/shots/notifications/alarm.png){ .shot }
+<!-- shot:end -->
+
 
 `hold: true` ignores `durationMs` entirely. The notification stays on the panel until it is [dismissed](#dismissing) - nothing times it out. Combine it with `soundLoop` for an alarm that will not stop on its own.
 
@@ -117,6 +149,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Motion","wakeup":true}'
 ```
+<!-- shot:begin id=motion hash=b8dd0c71 -->
+![The panel showing "Motion"](../assets/shots/notifications/motion.png){ .shot }
+<!-- shot:end -->
+
 
 `wakeup: true` skips display blanking for as long as that notification is the active one. When it ends, the panel goes dark again.
 
@@ -131,6 +167,10 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"URGENT","stack":false,"textColor":"#FF0000"}'
 ```
+<!-- shot:begin id=urgent hash=819ab435 -->
+![The panel showing "URGENT" in red](../assets/shots/notifications/urgent.png){ .shot }
+<!-- shot:end -->
+
 
 Replacing restarts scroll, icon and sound from the top. On an empty queue, `stack: false` behaves like a normal push.
 

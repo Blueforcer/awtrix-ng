@@ -1,0 +1,2 @@
+curl -X PUT "http://192.168.1.128/api/v1/apps/pushed/weather" \
+  -H "Content-Type: application/json" -d '{"text":"21.5 C","icon":"2422","textColor":"#00AAFF","durationMs":8000,"lifetimeMs":300000,"lifetimeExpiry":"mark","iconMode":"push","scroll":{"speed":50}}'

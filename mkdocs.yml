@@ -9,9 +9,11 @@ copyright: PolyForm Noncommercial 1.0.0 - Stephan Mühl (Blueforcer)
 docs_dir: docs
 
 # The AI system prompt is not a page of its own -- guides/ai-prompt.md embeds it
-# as a snippet and links the raw file for download.
+# as a snippet and links the raw file for download. The flow converter's
+# package.json only marks its directory as ESM for the node-run tests.
 exclude_docs: |
   examples/berry-app-system-prompt.md
+  assets/flow-converter/package.json
 
 theme:
   name: material
@@ -35,6 +37,10 @@ theme:
       primary: black
       accent: red
       toggle: { icon: material/weather-sunny, name: Light mode }
+
+extra_css:
+  - assets/shots.css
+  - assets/flow-converter/converter.css
 
 plugins:
   - search

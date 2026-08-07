@@ -48,6 +48,10 @@ jobs:
       - name: Run web UI tests
         run: npm test
         working-directory: webui/test
+      - name: Run flow-converter engine tests
+        # The converter on the migration page is dependency-free ES modules,
+        # so its golden fixtures run on the node this job already has.
+        run: node --test "tools/flowconv/*.test.mjs"
 
   device-build:
     name: Firmware build (${{ matrix.env }})
@@ -111,12 +115,25 @@ jobs:
         # It lives here rather than in docs.yml because this workflow also runs
         # on tags, so a release cannot publish with the docs out of sync.
         run: python tools/check_docs_sync.py
+      - name: Check the flow converter's maps against the migration tables
+        # The converter widget applies the same renames the key-map tables
+        # teach by hand, links its warnings at anchors across the docs, and
+        # maps TEFF numbers by the row order of the transitions table. Any of
+        # those edited without the other side leaves the page and the widget
+        # disagreeing at the same scroll position.
+        run: python tools/check_flow_converter.py
       - name: Check the downloadable agent skill against its sources
         # The zip the docs offer is committed, so an edit to SKILL.md or to the
         # AI system prompt it packs leaves a stale archive that nothing else
         # notices -- the download keeps working and keeps handing out the old
         # API.
         run: python tools/gen_agent_skill.py --check
+      - name: Check the guide screenshots against their examples
+        # The pictures under the guide examples are rendered by the simulator,
+        # which CI does not build, so they are committed. Without this an
+        # example can be edited and its picture left showing the old result --
+        # the one kind of stale doc a reader has no way to spot.
+        run: python tools/check_docshots.py
       - name: Check the editor's Berry API table against the firmware
         # Same class of drift, different consumer: the web UI editor highlights
         # and completes from a table generated out of the binding registrations.

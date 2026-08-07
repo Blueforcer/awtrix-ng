@@ -1,0 +1,27 @@
+blueprint:
+  name: Weather + Forecast
+  domain: automation
+  input:
+    awtrix:
+      name: AWTRIX Device
+      selector:
+        device:
+          integration: mqtt
+          multiple: true
+variables:
+  device_ids: !input awtrix
+  payload: >-
+    {% if forecast %}
+      {"draw": [
+        {"dp": [0, 0, "#FF0000"]},
+        {"dt": [10, 1, "{{ temp }}", "#FFFFFF"]}
+      ], "duration": {{ page_time }}}
+    {% endif %}
+action:
+  - repeat:
+      for_each: "{{ devices_topics }}"
+      sequence:
+        - service: mqtt.publish
+          data:
+            topic: "{{ repeat.item }}"
+            payload: "{{ payload }}"

@@ -1,0 +1,20 @@
+alias: Doorbell notification
+trigger:
+  - platform: state
+    entity_id: binary_sensor.doorbell
+    to: "on"
+action:
+  - service: mqtt.publish
+    data:
+      topic: awtrix/cmd/notify
+      payload: >
+        {
+          "text": "Ding dong",
+          "icon": "23404",
+          "durationMs": {{ ( ring_time | int ) * 1000 }},
+          "palette": "Rainbow",
+          "sound": "doorbell",
+          "soundLoop": true,
+          "textColor": "palette"
+        }
+mode: single

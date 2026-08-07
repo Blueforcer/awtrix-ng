@@ -1,0 +1,2 @@
+curl -X PUT http://awtrix.local/api/v1/apps/order \
+  -H "Content-Type: application/json" -d '{"order":["Time","weather"],"disabled":["Battery"]}'
