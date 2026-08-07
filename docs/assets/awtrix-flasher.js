@@ -28,10 +28,38 @@ const ROM_BAUD = 115200;
 // image carries the project name, the S3 one carries it with an -s3 suffix.
 // Up to v1.0.14 the prefix was factory-, so both are tried and the first that
 // the published release actually carries wins.
+// Both S3 images name their PSRAM type since v1.0.16. The older names stay in the list because the
+// flasher serves whatever the newest release carries, and the first name that release has wins.
 const ASSET_PREFIX = {
   "ESP32": ["usb-awtrix-ng-", "factory-awtrix-ng-"],
-  "ESP32-S3": ["usb-awtrix-ng-s3-", "factory-awtrix-ng-s3-"],
+  "ESP32-S3": ["usb-awtrix-ng-s3-octal-", "usb-awtrix-ng-s3-", "factory-awtrix-ng-s3-"],
 };
+
+// An S3's PSRAM mode is compiled into its image, so the flash size alone does
+// not name the file: a quad-PSRAM module needs the -s3-quad- one. esptool-js
+// reads the capability out of efuse, where 2 means the 2 MB quad part, 1 the
+// 8 MB octal part and 0 no in-package PSRAM at all. Only the quad module is
+// steered away -- the octal image boots on the other two, its PSRAM simply
+// invisible on a board that has none.
+const S3_QUAD_PREFIX = ["usb-awtrix-ng-s3-quad-"];
+const PSRAM_CAP_QUAD = 2;
+
+async function prefixesFor(loader, chip) {
+  const prefixes = ASSET_PREFIX[chip] || [];
+  if (chip !== "ESP32-S3" || typeof loader.chip.getPsramCap !== "function") return prefixes;
+  try {
+    if (await loader.chip.getPsramCap(loader) === PSRAM_CAP_QUAD) {
+      // The octal names stay behind it: a release from before the quad image
+      // existed carries none, and the octal one still boots such a board.
+      return S3_QUAD_PREFIX.concat(prefixes);
+    }
+  } catch {
+    // An efuse read that fails says nothing about the board. A discrete PSRAM
+    // chip beside the SoC reads as 0 for the same reason, and both land here:
+    // the octal image is the guess that survives being wrong.
+  }
+  return prefixes;
+}
 
 // Where the partition table sits inside the USB install image, and the type/subtype
 // pair naming the partition that holds the settings and the Wi-Fi credentials.
@@ -194,7 +222,7 @@ async function flash({ erase, buttons, status, progress, log, terminal, index })
 
     const chip = loader.chip.CHIP_NAME;
     const flashSize = await loader.detectFlashSize();
-    const candidates = (ASSET_PREFIX[chip] || []).map(
+    const candidates = (await prefixesFor(loader, chip)).map(
       (prefix) => `${prefix}${flashSize.toLowerCase()}.bin`);
     const asset = candidates.find((name) => index.assets.includes(name));
     if (!asset) {
