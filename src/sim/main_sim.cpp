@@ -420,6 +420,9 @@ int main(int argc, char** argv) {
     c.source = Source::Internal;
     return g_engine->submit(c);
   };
+  g_scriptSvc.soundPlaying = [] {
+    return (g_clips && g_clips->clipPlaying()) || g_board.sound().isPlaying();
+  };
   g_scriptSvc.rotateNext = [] { g_engine->scriptNextApp(); };
   g_scriptSvc.rotatePrevious = [] { g_engine->scriptPreviousApp(); };
   g_scriptSvc.showApp = [](const std::string& id) { return g_engine->scriptShowApp(id); };

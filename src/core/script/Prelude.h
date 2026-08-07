@@ -278,9 +278,15 @@ end
 def _sound_stop() # sound.stop()
   return _native_sound(2, '')
 end
+# Whether the device is making sound right now -- an MP3 clip, a melody or a
+# DFPlayer track alike. Lets a script wait for one sound before the next.
+def _sound_playing() # sound.playing()
+  return _native_sound_playing()
+end
 sound.play = _sound_play
 sound.rtttl = _sound_rtttl
 sound.stop = _sound_stop
+sound.playing = _sound_playing
 
 # ---- sensor ----------------------------------------------------------------
 # What the device measures, straight from the reading the built-in apps draw.

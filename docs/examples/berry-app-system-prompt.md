@@ -935,9 +935,10 @@ changes a setting for its own screen, change it back when it stops drawing.
 
 | Call | Does |
 |---|---|
-| `sound.play(name)` | plays an uploaded file or DFPlayer track |
+| `sound.play(name)` | plays an uploaded sound (MP3 clip on speaker boards, else a melody file) or DFPlayer track |
 | `sound.rtttl(melody)` | plays an inline RTTTL string |
 | `sound.stop()` | stops playback |
+| `sound.playing()` | `true` while any sound is playing |
 
 Returns `true` when the request was **accepted**, not when a file of that name
 exists. Use `sound` for noise alone; use `notify()` (5.10) when the sound belongs

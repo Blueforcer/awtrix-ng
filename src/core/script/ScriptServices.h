@@ -150,6 +150,7 @@ struct ScriptServices {
   std::function<const RuntimeState*()> runtime;
   std::function<bool(const std::string& json)> setSettings;
   std::function<bool(SoundAction, const std::string&)> sound;
+  std::function<bool()> soundPlaying;
   std::function<void()> rotateNext;
   std::function<void()> rotatePrevious;
   std::function<bool(const std::string&)> showApp;

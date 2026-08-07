@@ -2324,7 +2324,7 @@ window.addEventListener('beforeunload',e=>{if(scrDraft&&scrDraft.dirty)e.prevent
    Device API from ScriptBindings.cpp + Prelude.h; language builtins from
    Berry's be_baselib.c and the modules berry_conf.h enables. Regenerated on
    every build, so adding a binding is all it takes to teach the editor. */
-const BERRY_API=["bar_chart(list, paint?, autoscale?)","circle(cx, cy, r, color)","circle_fill(cx, cy, r, color)","clear(color?)","day()","effect(name, settings?)","epoch_ms()","font(name)","height()","hour()","hsv(h, s, v)","icon(name, x, y)","line(x0, y0, x1, y1, color)","line_chart(list, paint?, autoscale?)","log(value)","minute()","month()","now_ms()","overlay(name, settings?)","pixel(x, y, color)","progress(pct, paint?, bg?)","ramp_text(x, y, str, palette, span?, speed?)","rect(x, y, w, h, color)","rect_fill(x, y, w, h, color)","rgb(r, g, b)","scroll_text(txt, color?, opts?)","second()","text(x, y, txt, color?)","text_ink_width(txt)","text_width(txt)","version()","weekday()","width()","year()","clamp(v, lo, hi)","http.delete(url, cb, opts?)","http.get(url, cb, opts?)","http.patch(url, body, cb, opts?)","http.post(url, body, cb, opts?)","http.put(url, body, cb, opts?)","http.request(method, url, cb, opts?)","max(a, b)","min(a, b)","mqtt.publish(topic, payload)","mqtt.subscribe(topic, cb)","notify(spec)","num(v, dflt?)","re.match(pattern, text)","re.matchall(pattern, text)","re.search(pattern, text)","rotation.next()","rotation.pause()","rotation.previous()","rotation.resume()","rotation.show()","round(v, digits?)","sensor.battery()","sensor.battery_volts()","sensor.humidity()","sensor.light()","sensor.pressure()","sensor.temperature()","settings.apply_case(str)","settings.get(key)","settings.set(key, value)","shared.age(key)","shared.get(key, dflt?)","shared.keys(owner?)","shared.set(key, value)","sound.play(name)","sound.rtttl(melody)","sound.stop()","store.get(k, dflt?)","store.set(k, v)"];
+const BERRY_API=["bar_chart(list, paint?, autoscale?)","circle(cx, cy, r, color)","circle_fill(cx, cy, r, color)","clear(color?)","day()","effect(name, settings?)","epoch_ms()","font(name)","height()","hour()","hsv(h, s, v)","icon(name, x, y)","line(x0, y0, x1, y1, color)","line_chart(list, paint?, autoscale?)","log(value)","minute()","month()","now_ms()","overlay(name, settings?)","pixel(x, y, color)","progress(pct, paint?, bg?)","ramp_text(x, y, str, palette, span?, speed?)","rect(x, y, w, h, color)","rect_fill(x, y, w, h, color)","rgb(r, g, b)","scroll_text(txt, color?, opts?)","second()","text(x, y, txt, color?)","text_ink_width(txt)","text_width(txt)","version()","weekday()","width()","year()","clamp(v, lo, hi)","http.delete(url, cb, opts?)","http.get(url, cb, opts?)","http.patch(url, body, cb, opts?)","http.post(url, body, cb, opts?)","http.put(url, body, cb, opts?)","http.request(method, url, cb, opts?)","max(a, b)","min(a, b)","mqtt.publish(topic, payload)","mqtt.subscribe(topic, cb)","notify(spec)","num(v, dflt?)","re.match(pattern, text)","re.matchall(pattern, text)","re.search(pattern, text)","rotation.next()","rotation.pause()","rotation.previous()","rotation.resume()","rotation.show()","round(v, digits?)","sensor.battery()","sensor.battery_volts()","sensor.humidity()","sensor.light()","sensor.pressure()","sensor.temperature()","settings.apply_case(str)","settings.get(key)","settings.set(key, value)","shared.age(key)","shared.get(key, dflt?)","shared.keys(owner?)","shared.set(key, value)","sound.play(name)","sound.playing()","sound.rtttl(melody)","sound.stop()","store.get(k, dflt?)","store.set(k, v)"];
 const BERRY_MODS=["http","mqtt","re","rotation","sensor","settings","shared","sound","store"];
 const BERRY_CORE=["assert","bool","call","classname","classof","compile","format","gc","global","input","int","isinstance","issubclass","json","math","module","number","print","real","size","str","strict","string","super","type"];
 const BERRY_MAXBYTES=8192;
@@ -3760,12 +3760,14 @@ function clipsSection(){
   return{nodes,mark};
 }
 async function viewAudio(view){
+  const g=gen;
   if(S.audioCap===null||S.radioCap===null){
     try{
       const caps=(await api('/api/v1/capabilities')).data||{};
       S.radioCap=caps.radio===true;
       S.audioCap=caps.audio===true||(caps.audio===undefined&&S.radioCap);
     }catch(e){}
+    if(g!==gen)return;
   }
   const{section,panel}=sectionShell(view);
   const muted=el('div',{class:'ghelp',style:'display:none;color:var(--warn)'},t('melomuted'));

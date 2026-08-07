@@ -110,7 +110,7 @@ row that sounds like the app you have in mind, and follow it.
 | [Handing values to another app](#talking-to-other-apps) | `shared.set()` `shared.get()` `shared.age()` `shared.keys()` |
 | [Sharing code between apps](#sharing-code-between-scripts) | a `# @module` file, then `import` |
 | [Interrupting with an alert](#notifications) | `notify()` |
-| [Making a noise](#sound) | `sound.play()` `sound.rtttl()` `sound.stop()` |
+| [Making a noise](#sound) | `sound.play()` `sound.rtttl()` `sound.stop()` `sound.playing()` |
 | [What the device measures](#reading-the-sensors) | `sensor.temperature()` `sensor.humidity()` `sensor.pressure()` `sensor.light()` `sensor.battery()` |
 | [What the owner configured](#device-settings) | `settings.get()` `settings.set()` `settings.apply_case()` |
 | [Moving the rotation along](#driving-the-rotation) | `rotation.show()` `rotation.next()` `rotation.previous()` `rotation.pause()` `rotation.resume()` |
@@ -1300,15 +1300,19 @@ end
 
 | Call | Does |
 |---|---|
-| `sound.play(name)` | plays an uploaded file or DFPlayer track |
+| `sound.play(name)` | plays an uploaded sound - an [MP3 clip](sounds.md#mp3-sounds) on boards with a speaker, else a melody file, or a DFPlayer track |
 | `sound.rtttl(melody)` | plays an [RTTTL](sounds.md#writing-rtttl) string |
 | `sound.stop()` | stops whatever is playing |
+| `sound.playing()` | `true` while the device is making sound - an MP3 clip, a melody or a DFPlayer track alike |
 
-All three return `true` when the request was **accepted**, which is not the same
-as "a file of that name exists" or "you will hear it": the request is queued and
-AWTRIX answers it a frame later. If sound is switched off device-wide, your
-call is accepted and nothing plays - `settings.get("soundEnabled")` is how you
-find out beforehand.
+`play`, `rtttl` and `stop` return `true` when the request was **accepted**, which
+is not the same as "a file of that name exists" or "you will hear it": the
+request is queued and AWTRIX answers it a frame later. If sound is switched off
+device-wide, your call is accepted and nothing plays -
+`settings.get("soundEnabled")` is how you find out beforehand.
+
+`sound.playing()` lets a script wait for one sound to finish before starting
+the next, or hold a frame while an alarm is still sounding.
 
 Use `notify()` instead when the sound belongs to an *event* that should also
 interrupt the rotation and show something. Use `sound` when you only want the
