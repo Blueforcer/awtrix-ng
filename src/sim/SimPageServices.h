@@ -2,27 +2,47 @@
 
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 
 #include <ctime>
 
+#include "core/Services.h"
 #include "core/render/RenderPipeline.h"
+#include "core/sound/SoundClips.h"
 #include "hal/IBoard.h"
+#include "sim/SimStore.h"
 
 namespace awtrix {
 
 class SimPageSound : public IPageSound {
  public:
   explicit SimPageSound(IBoard& board) : board_(board) {}
+  // Mirrors DevicePageSound: explicit RTTTL first, then a stored MP3 clip, then the melody file.
   void play(const AppSpec& spec) override {
-    if (!spec.extras().rtttl.empty())
+    if (!spec.extras().rtttl.empty()) {
       board_.sound().playRtttl(spec.extras().rtttl);
-    else if (!spec.sound.empty())
-      board_.sound().playFile(spec.sound);
+      return;
+    }
+    if (spec.sound.empty()) return;
+    if (clips_) {
+      const std::string path = sound::clipPathFor(spec.sound);
+      if (!path.empty() && std::filesystem::exists(std::filesystem::u8path(sim::hostPath(path)))) {
+        clips_->playClip(path);
+        return;
+      }
+    }
+    board_.sound().playFile(spec.sound);
   }
-  bool isPlaying() const override { return board_.sound().isPlaying(); }
+  bool isPlaying() const override {
+    if (clips_ && clips_->clipPlaying()) return true;
+    return board_.sound().isPlaying();
+  }
+
+  void setClips(IClipService* clips) { clips_ = clips; }
 
  private:
   IBoard& board_;
+  IClipService* clips_ = nullptr;
 };
 
 // Same as DevicePageClock except that it reads the host's local time: there is no NTP sync and the

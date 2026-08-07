@@ -399,6 +399,9 @@ void appendRadioJson(std::string& out, CoreEngine& engine) {
   out += ",\"station\":" + quoted(runtime.radioStation);
   out += ",\"title\":" + quoted(runtime.radioTitle);
   out += ",\"error\":" + quoted(runtime.radioError);
+  out += ",\"clipPlaying\":";
+  out += runtime.clipPlaying ? "true" : "false";
+  out += ",\"clipName\":" + quoted(runtime.clipName);
   out += ",\"underruns\":" + std::to_string(engine.radioUnderruns());
   out += ",\"decodeUs\":" + std::to_string(engine.radioDecodeUs());
   out += ",\"starvedMs\":" + std::to_string(engine.radioStarvedMs());

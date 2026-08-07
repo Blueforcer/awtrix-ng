@@ -73,6 +73,16 @@ class IRadioService {
   virtual uint32_t bufferBytes() const { return 0; }
 };
 
+// Plays a stored MP3 clip on the same output the radio uses. The caller hands in a validated
+// "/SOUNDS/<name>.mp3" path; whether the file exists is the caller's problem.
+class IClipService {
+ public:
+  virtual ~IClipService() = default;
+  virtual bool playClip(const std::string& path) = 0;
+  virtual void stopClip() = 0;
+  virtual bool clipPlaying() const = 0;
+};
+
 class IRadioStations {
  public:
   virtual ~IRadioStations() = default;

@@ -146,6 +146,7 @@ const char* mimeFor(const std::string& path) {
   if (ext == ".gif") return "image/gif";
   if (ext == ".png") return "image/png";
   if (ext == ".txt") return "text/plain";
+  if (ext == ".mp3") return "audio/mpeg";
   return "application/octet-stream";
 }
 
@@ -276,7 +277,7 @@ void HttpApiServer::handleFileUploadDone() {
   if (!uploadAuthed_) { sendUnauthorized(); return; }
   if (!uploadPathOk_) {
     sendError(400, "invalidPath",
-              "filename must be under /ICONS, /MELODIES or /PALETTES and contain no '..'");
+              "filename must be under /ICONS, /MELODIES, /PALETTES or /SOUNDS and contain no '..'");
     return;
   }
   if (!uploadContentOk_) {
@@ -328,12 +329,12 @@ void HttpApiServer::handleRestoreDone() {
     return;
   }
   const backup::RestoreResult r = restoreApplier_->result();
-  if ((r.icons || r.melodies || r.palettes) && onAssetsChanged_) onAssetsChanged_();
+  if ((r.icons || r.melodies || r.palettes || r.sounds) && onAssetsChanged_) onAssetsChanged_();
   if (r.ok) {
     logf("restore: applied wifi=%d system=%d settings=%d apploop=%d icons=%d melodies=%d "
-         "palettes=%d scripts=%d (%u warning(s))",
-         r.wifi, r.system, r.settings, r.appLoop, r.icons, r.melodies, r.palettes, r.scripts,
-         static_cast<unsigned>(r.warnings.size()));
+         "palettes=%d sounds=%d scripts=%d (%u warning(s))",
+         r.wifi, r.system, r.settings, r.appLoop, r.icons, r.melodies, r.palettes, r.sounds,
+         r.scripts, static_cast<unsigned>(r.warnings.size()));
   } else {
     logf("restore: rejected - %s", r.error.c_str());
   }
@@ -1000,7 +1001,7 @@ bool HttpApiServer::serveFiles(const Request& req) {
     const String fn = server_->hasArg("path") ? server_->arg("path") : String("");
     if (!assets::isWritable(std::string(fn.c_str()))) {
       sendError(400, "invalidPath",
-                "path must be under /ICONS, /MELODIES or /PALETTES and contain no '..'");
+                "path must be under /ICONS, /MELODIES, /PALETTES or /SOUNDS and contain no '..'");
       return true;
     }
     if (LittleFS.remove(fn)) {

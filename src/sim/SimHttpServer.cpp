@@ -48,6 +48,7 @@ const char* mimeFor(const std::string& path) {
   if (ext == ".gif") return "image/gif";
   if (ext == ".png") return "image/png";
   if (ext == ".txt") return "text/plain";
+  if (ext == ".mp3") return "audio/mpeg";
   return "application/octet-stream";
 }
 
@@ -368,7 +369,7 @@ void SimHttpServer::Impl::handleFiles(const httplib::Request& req, const std::st
       if (target[0] != '/') target = dir + "/" + target;
       if (!assets::isWritable(target)) {
         sendError(res, 400, "invalidPath",
-                  "filename must be under /ICONS, /MELODIES or /PALETTES and contain no '..'");
+                  "filename must be under /ICONS, /MELODIES, /PALETTES or /SOUNDS and contain no '..'");
         return;
       }
       const assets::AssetKind kind = assets::kindFor(target);
@@ -394,7 +395,7 @@ void SimHttpServer::Impl::handleFiles(const httplib::Request& req, const std::st
     const std::string fn = req.has_param("path") ? req.get_param_value("path") : "";
     if (!assets::isWritable(fn)) {
       sendError(res, 400, "invalidPath",
-                "path must be under /ICONS, /MELODIES or /PALETTES and contain no '..'");
+                "path must be under /ICONS, /MELODIES, /PALETTES or /SOUNDS and contain no '..'");
       return;
     }
     std::error_code ec;

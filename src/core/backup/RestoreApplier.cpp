@@ -26,6 +26,7 @@ RestoreApplier::Kind RestoreApplier::classify(const std::string& name) {
   if (startsWith(name, "ICONS/")) return Kind::Icon;
   if (startsWith(name, "MELODIES/")) return Kind::Melody;
   if (startsWith(name, "PALETTES/")) return Kind::Palette;
+  if (startsWith(name, "SOUNDS/")) return Kind::Sound;
   if (startsWith(name, "SCRIPTS/")) return Kind::Script;
   return Kind::Unknown;
 }
@@ -69,6 +70,7 @@ void RestoreApplier::onEntryStart(const std::string& name, uint32_t) {
     case Kind::Icon:
     case Kind::Melody:
     case Kind::Palette:
+    case Kind::Sound:
     case Kind::Script: {
       const std::string path = "/" + name_;
       // Keeps a hand-made archive from writing outside the asset directories.
@@ -104,7 +106,8 @@ void RestoreApplier::onEntryData(const uint8_t* data, std::size_t n) {
 
   // Sniff the first chunk against the format the directory expects, so a mislabelled file is
   // dropped early. Only the first chunk is checked; asset files stream past too fast to buffer.
-  const bool sniffable = kind_ == Kind::Icon || kind_ == Kind::Melody || kind_ == Kind::Palette;
+  const bool sniffable = kind_ == Kind::Icon || kind_ == Kind::Melody ||
+                         kind_ == Kind::Palette || kind_ == Kind::Sound;
   if (sniffable && !contentChecked_ && n > 0) {
     contentChecked_ = true;
     const assets::AssetKind ak = assets::kindFor("/" + name_);
@@ -227,6 +230,7 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
       case Kind::Icon: ++result_.icons; break;
       case Kind::Melody: ++result_.melodies; break;
       case Kind::Palette: ++result_.palettes; break;
+      case Kind::Sound: ++result_.sounds; break;
       case Kind::Script: ++result_.scripts; break;
       default: break;
     }
@@ -266,6 +270,7 @@ std::string RestoreResult::toJson() const {
   w.member("icons", icons);
   w.member("melodies", melodies);
   w.member("palettes", palettes);
+  w.member("sounds", sounds);
   w.member("scripts", scripts);
   w.member("skipped", skipped);
   w.endObject();

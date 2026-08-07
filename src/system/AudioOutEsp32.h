@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <string>
+#include <vector>
 
 #include "core/CoreEngine.h"
 #include "core/Services.h"
@@ -17,19 +18,26 @@
 
 namespace awtrix {
 
-class RadioAudioEsp32 : public IRadioService {
+// Owns the I2S output. One audio task plays both internet radio streams and
+// stored MP3 clips; a clip interrupts the stream and the stream reconnects on
+// its own once the clip is over.
+class AudioOutEsp32 : public IRadioService, public IClipService {
  public:
   static void* operator new(std::size_t bytes);
   static void operator delete(void* p);
 
-  RadioAudioEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int pinDout);
-  ~RadioAudioEsp32() override;
+  AudioOutEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int pinDout);
+  ~AudioOutEsp32() override;
 
   DispatchResult play(const std::string& url, const std::string& label,
                       DispatchDetail& detail) override;
   void stop() override;
   void setVolume(int percent) override;
   bool isPlaying() const override { return playing_.load(); }
+
+  bool playClip(const std::string& path) override;
+  void stopClip() override { clipStop_.store(true); }
+  bool clipPlaying() const override { return clipPlaying_.load(); }
 
   void tick(int64_t nowMs);
 
@@ -43,10 +51,14 @@ class RadioAudioEsp32 : public IRadioService {
  private:
   static void taskEntry(void* self);
   void run();
-  bool openStream(const std::string& url, std::string& error);
+  bool ensureTask();
+  void playClipFile(const std::string& path, const std::string& name, int16_t* pcm);
+  bool writeDecodedFrame(const mp3::DecodeResult& result, int16_t* pcm);
   void closeStream();
   void publishTitle(const std::string& title);
   void publishError(const std::string& message);
+  void publishClipStarted(const std::string& name);
+  void publishClipEnded();
 
   CoreEngine& engine_;
   const int pinBclk_;
@@ -58,14 +70,18 @@ class RadioAudioEsp32 : public IRadioService {
 
   std::atomic<bool> playing_{false};
   std::atomic<bool> stopRequested_{false};
+  std::atomic<bool> clipStop_{false};
+  std::atomic<bool> clipPlaying_{false};
   std::atomic<int> volume_{60};
   std::atomic<uint32_t> handoffSeq_{0};
   std::atomic<uint32_t> urlSeq_{0};
+  std::atomic<uint32_t> clipSeq_{0};
   std::atomic<uint32_t> underruns_{0};
   std::atomic<uint32_t> decodeUs_{0};
   std::atomic<uint32_t> starvedMs_{0};
   std::atomic<uint32_t> bufferBytes_{0};
   uint32_t seenSeq_ = 0;
+  uint32_t clipSeenSeq_ = 0;
 
   // Shared with the audio task and only valid under lock_; the atomics above signal when there is
   // something new to pick up.
@@ -73,6 +89,10 @@ class RadioAudioEsp32 : public IRadioService {
   std::string pendingLabel_;
   std::string pendingTitle_;
   std::string pendingError_;
+  std::string pendingClip_;
+  std::string pendingClipName_;
+  std::string pendingClipStarted_;
+  bool pendingClipEnded_ = false;
 
   radio::TitleTracker tracker_;
   radio::MetadataSplitter splitter_;

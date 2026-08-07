@@ -44,6 +44,7 @@ struct RestoreResult {
   int icons = 0;
   int melodies = 0;
   int palettes = 0;
+  int sounds = 0;
   int scripts = 0;
   int skipped = 0;
   std::vector<std::string> warnings;

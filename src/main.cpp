@@ -52,7 +52,7 @@
 #include "system/DevicePageServices.h"
 #include "persistence/AppOrderStore.h"
 #include "persistence/RadioStore.h"
-#include "system/RadioAudioEsp32.h"
+#include "system/AudioOutEsp32.h"
 #include "persistence/DeviceConfig.h"
 #include "persistence/Filesystem.h"
 #include "persistence/NvsSettings.h"
@@ -124,7 +124,7 @@ BootAnimator g_bootAnim;
 DiscoveryService g_disco;
 ArtnetService g_artnet;
 #if defined(AWTRIX_SOC_ESP32S3)
-std::unique_ptr<RadioAudioEsp32> g_radio;
+std::unique_ptr<AudioOutEsp32> g_radio;
 #endif
 DeviceConfig g_cfg;
 bool g_settingsDirty = false;
@@ -405,11 +405,13 @@ void setup() {
       return out;
     };
 #if defined(AWTRIX_SOC_ESP32S3)
-    if (RadioAudioEsp32::usable(g_cfg.pinI2sBclk, g_cfg.pinI2sLrclk, g_cfg.pinI2sDout)) {
-      g_radio.reset(new RadioAudioEsp32(*g_engine, g_cfg.pinI2sBclk, g_cfg.pinI2sLrclk,
-                                        g_cfg.pinI2sDout));
+    if (AudioOutEsp32::usable(g_cfg.pinI2sBclk, g_cfg.pinI2sLrclk, g_cfg.pinI2sDout)) {
+      g_radio.reset(new AudioOutEsp32(*g_engine, g_cfg.pinI2sBclk, g_cfg.pinI2sLrclk,
+                                      g_cfg.pinI2sDout));
       g_radio->setVolume(g_engine->state().settings().radioVolume);
       g_engine->setRadioService(g_radio.get());
+      g_sound->setClips(g_radio.get());
+      g_pageSound->setClips(g_radio.get());
     }
 #endif
     // What this build can do never changes at runtime, so the JSON is rendered once and the
@@ -422,6 +424,7 @@ void setup() {
         ",\"palettes\":[\"Cloud\",\"Lava\",\"Ocean\",\"Forest\",\"Stripe\","
         "\"Party\",\"Heat\",\"Rainbow\"]"
         ",\"radio\":" +
+        std::string(g_engine->radioAvailable() ? "true" : "false") + ",\"audio\":" +
         std::string(g_engine->radioAvailable() ? "true" : "false") + ",\"gpio\":" +
         pins::toJson(pins::activeProfile()) + "}");
     g_http.setCapabilitiesJson(caps);

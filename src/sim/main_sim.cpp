@@ -61,6 +61,7 @@
 #include "media/ScriptIcon.h"
 #include "persistence/AppOrderStore.h"
 #include "persistence/RadioStore.h"
+#include "sim/FakeClipService.h"
 #include "sim/FakeRadioService.h"
 #include "persistence/DeviceConfig.h"
 #include "persistence/Filesystem.h"
@@ -85,15 +86,29 @@ namespace {
 class SimSoundService : public ISoundService {
  public:
   explicit SimSoundService(IBoard& board) : board_(board) {}
-  bool playSound(const std::string& payload) override { return board_.sound().playFile(payload); }
+  // Mirrors DeviceSound: a stored MP3 clip wins over a melody of the same name.
+  bool playSound(const std::string& payload) override {
+    if (clips_) {
+      const std::string path = sound::clipPathFor(payload);
+      if (!path.empty() && stdfs::exists(stdfs::u8path(sim::hostPath(path))))
+        return clips_->playClip(path);
+    }
+    return board_.sound().playFile(payload);
+  }
   void playRtttl(const std::string& rtttl) override { board_.sound().playRtttl(rtttl); }
   void r2d2(const std::string&) override {
     board_.sound().playRtttl("r2d2:d=4,o=5,b=240:16c6,16g6,16e6,16a6,16g6,16e7");
   }
-  void stop() override { board_.sound().stop(); }
+  void stop() override {
+    if (clips_) clips_->stopClip();
+    board_.sound().stop();
+  }
+
+  void setClips(IClipService* clips) { clips_ = clips; }
 
  private:
   IBoard& board_;
+  IClipService* clips_ = nullptr;
 };
 
 class SimDisplayService : public IDisplayService {
@@ -155,6 +170,7 @@ ScriptMqttBridge g_scriptMqtt;
 SimTerminalMatrix g_term;
 SimPeriphery g_periphery;
 std::unique_ptr<sim::FakeRadioService> g_radio;
+std::unique_ptr<sim::FakeClipService> g_clips;
 DeviceConfig g_cfg;
 bool g_settingsDirty = false;
 int64_t g_lastSettingsSaveMs = -100000;
@@ -343,6 +359,9 @@ int main(int argc, char** argv) {
     };
   g_radio = std::unique_ptr<sim::FakeRadioService>(new sim::FakeRadioService(*g_engine));
   g_engine->setRadioService(g_radio.get());
+  g_clips = std::unique_ptr<sim::FakeClipService>(new sim::FakeClipService(*g_engine));
+  sound.setClips(g_clips.get());
+  g_pageSound->setClips(g_clips.get());
 
     std::string caps = "{\"effects\":" + jsonList(g_effects.names()) +
                        ",\"paletteEffects\":" + jsonList(g_effects.paletteNames()) +
@@ -351,6 +370,8 @@ int main(int argc, char** argv) {
                        ",\"palettes\":[\"Cloud\",\"Lava\",\"Ocean\",\"Forest\",\"Stripe\","
                        "\"Party\",\"Heat\",\"Rainbow\"]"
                        ",\"radio\":" +
+                       std::string(g_engine->radioAvailable() ? "true" : "false") +
+                       ",\"audio\":" +
                        std::string(g_engine->radioAvailable() ? "true" : "false") +
                        ",\"gpio\":" + pins::toJson(pins::activeProfile()) + "}";
     g_http.setCapabilitiesJson(caps);
@@ -502,6 +523,7 @@ int main(int argc, char** argv) {
     g_board.sound().tick();
     g_engine->tick(now);
     if (g_radio) g_radio->tick(now);
+    if (g_clips) g_clips->tick(now);
 
     {
       RenderCtx sctx;
