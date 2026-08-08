@@ -417,6 +417,10 @@ void RadioAudioEsp32::run() {
           config.use_apll = false;
           if (i2s_driver_install(I2S_NUM_0, &config, 0, nullptr) == ESP_OK) {
             i2s_pin_config_t pins = {};
+            // mck_io_num is the first field, so zero-initialising it means GPIO 0, not "unused":
+            // the driver only skips the MCLK routing for -1. Left at 0 the S3 clocks its boot
+            // strapping pin for as long as the radio plays.
+            pins.mck_io_num = I2S_PIN_NO_CHANGE;
             pins.bck_io_num = pinBclk_;
             pins.ws_io_num = pinLrclk_;
             pins.data_out_num = pinDout_;
