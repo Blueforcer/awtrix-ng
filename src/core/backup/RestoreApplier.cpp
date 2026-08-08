@@ -110,7 +110,12 @@ void RestoreApplier::onEntryData(const uint8_t* data, std::size_t n) {
                          kind_ == Kind::Palette || kind_ == Kind::Clip;
   if (sniffable && !contentChecked_ && n > 0) {
     contentChecked_ = true;
-    const assets::AssetKind ak = assets::kindFor("/" + name_);
+    // From the kind the entry was already classified as, rather than parsing its name a second
+    // time: two answers to the same question drift apart the moment a folder is renamed.
+    const assets::AssetKind ak = kind_ == Kind::Icon      ? assets::AssetKind::Icon
+                                 : kind_ == Kind::Melody  ? assets::AssetKind::Melody
+                                 : kind_ == Kind::Palette ? assets::AssetKind::Palette
+                                                          : assets::AssetKind::Clip;
     if (!assets::contentLooksValid(ak, data, static_cast<unsigned>(n))) {
       result_.warnings.push_back("skipped /" + name_ + ": content does not match " +
                                  assets::acceptedFormats(ak));

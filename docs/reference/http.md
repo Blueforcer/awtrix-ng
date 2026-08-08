@@ -1333,7 +1333,7 @@ Playback status and the station list in one read.
 | Key | Type | Meaning |
 |---|---|---|
 | `available` | boolean | Whether this build and this hardware can play at all |
-| `clip.playing` | boolean | A stored [MP3 clip](../guides/sounds.md#mp3-clips) is playing right now |
+| `clip.playing` | boolean | A stored [clip](../guides/sounds.md#clips) is playing right now |
 | `clip.name` | string | Which one, without the `.mp3`; empty when none |
 | `radio.playing` | boolean | A stream is running |
 | `radio.station` | string | The label that was tuned to - a station name, or the URL for an ad-hoc play |
@@ -1709,7 +1709,7 @@ curl "http://<awtrix-ip>/api/v1/logs?after=0"
 
 ## Files
 
-The filesystem holds your icons, melodies, palettes and MP3 sounds. How much room it has depends on the flash
+The filesystem holds your icons, melodies, palettes and clips. How much room it has depends on the flash
 size of the board - see [Limits](limits.md#storage). `GET /api/v1/files` reports the real figures
 as `usedBytes` and `totalBytes`.
 
@@ -1842,7 +1842,7 @@ supported `backupFormat` - before anything else in the archive is touched.
 | `config/system.json` | the rest of device configuration, validated like [`PUT /api/v1/system`](#put-apiv1system) |
 | `config/settings.json` | display/behaviour settings, validated like [`PATCH /api/v1/settings`](#patch-apiv1settings) - applied to the running device immediately |
 | `apploop.json` | app rotation order and the switched-off list, same shape as [`PUT /api/v1/apps/order`](#put-apiv1appsorder) |
-| `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `CLIPS/*`, `SCRIPTS/*` | written to LittleFS under the matching directory |
+| `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `CLIPS/*`, `SCRIPTS/*` | written under the matching directory |
 
 Content is checked per folder exactly like [`POST /api/v1/files`](#post-apiv1files): a path that
 escapes its folder, an entry whose CRC does not check out, or a file whose content does not match
@@ -1858,7 +1858,7 @@ restore. An unrecognized entry name is skipped and warned about too.
 A restore can partially succeed, so this route answers its own JSON shape instead of the
 [error body](#errors) used everywhere else: `ok`, an `applied` object counting how many entries
 of each kind were actually applied (`wifi`, `system`, `settings`, `appLoop`, `radioStations`,
-`icons`, `melodies`, `palettes`, `sounds`, `scripts`, plus `skipped` for rejected entries), and a `warnings` array with one
+`icons`, `melodies`, `palettes`, `clips`, `scripts`, plus `skipped` for rejected entries), and a `warnings` array with one
 string per skipped or rejected entry.
 
 Config changes that only take effect at boot - new Wi-Fi credentials, `config/system.json` - need
