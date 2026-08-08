@@ -1344,7 +1344,7 @@ end
 
 | Call | Does |
 |---|---|
-| `sound.play(name)` | plays an uploaded sound - an [MP3 clip](sounds.md#mp3-sounds) on boards with a speaker, else a melody file, or a DFPlayer track |
+| `sound.play(name)` | plays a stored sound - a [clip](sounds.md#clips) on boards with a speaker, else a melody, or a DFPlayer track |
 | `sound.rtttl(melody)` | plays an [RTTTL](sounds.md#writing-rtttl) string |
 | `sound.stop()` | stops whatever is playing |
 | `sound.playing()` | `true` while the device is making sound - an MP3 clip, a melody or a DFPlayer track alike |

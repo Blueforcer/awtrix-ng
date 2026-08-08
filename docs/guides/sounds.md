@@ -1,18 +1,18 @@
-# Sounds & melodies
+# Clips & melodies
 
-AWTRIX plays two kinds of sound: **MP3 clips** on boards with a speaker (an I2S DAC, the same one the [internet radio](radio.md) uses), and **RTTTL melodies** - the ringtone format from Nokia phones - on the buzzer every board has. A melody can arrive as an inline string, as a melody file stored on AWTRIX, or as the built-in R2D2 chirp.
+AWTRIX plays two kinds of sound: **clips** - your own MP3 files, on a board with a speaker - and **melodies**, the short ringtones from the Nokia era, on the buzzer every board has. A melody can be typed straight into the request, stored on AWTRIX under a name, or the built-in R2D2 chirp.
 
-Everything below the [MP3 sounds](#mp3-sounds) section describes a board with a passive buzzer on `pinBuzzer`. If your board is an AWTRIX 2 conversion with a DFPlayer Mini module, read [DFPlayer boards](#dfplayer-boards) first - the same keys mean different things there.
+Everything below the [Clips](#clips) section is about the buzzer. If your board is an AWTRIX 2 conversion with a DFPlayer Mini module, read [DFPlayer boards](#dfplayer-boards) first - the same keys mean different things there.
 
-## MP3 sounds
+## Clips
 
-Only on boards with a speaker; without one, the section below does not apply and every stored sound is a melody. Upload short MP3 clips in the web UI's Audio tab (drag & drop, like icons) or with the file API:
+Only on boards with a speaker. Drag your MP3s onto the **Clips** section of the web UI's Audio tab, the way icons are uploaded, or send one from the command line:
 
 ```bash
-curl -X POST "http://<awtrix-ip>/api/v1/files?dir=/CLIPS" -F "file=@ding.mp3"
+curl -X POST http://<awtrix-ip>/api/v1/audio/clips -F "file=@ding.mp3"
 ```
 
-The clip lands at `/CLIPS/ding.mp3`, and the file name without `.mp3` is what you play:
+The file name without `.mp3` is the name you play it by:
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/audio/play \
@@ -20,17 +20,17 @@ curl -X POST http://<awtrix-ip>/api/v1/audio/play \
   -d '{"clip":"ding"}'
 ```
 
-The same name works as `sound:"ding"` in a [notification](notifications.md#sound). Names are up to 32 characters of `A-Z`, `a-z`, `0-9`, `_` and `-`.
+The same name works as `sound:"ding"` in a [notification](notifications.md#sound), and as `sound.play("ding")` in a script.
 
-The API asks for one or the other: `clip` plays `/CLIPS/<name>.mp3`, `melody` plays `/MELODIES/<name>.txt`. Only a script's `sound.play(name)` still takes either, and there a clip of that name wins.
+**Name your files carefully.** A clip is played by its file name, so it may only use `A-Z`, `a-z`, `0-9`, `_` and `-`, up to 32 characters. `My Song (2024).mp3` is refused when you upload it - rename it to `my-song-2024.mp3` first. A clip and a melody may share a name; asking for a `clip` or a `melody` says which one you mean.
 
 Worth knowing:
 
-- The upload accepts MP3 (MPEG-1 Layer III) only - the usual 32/44.1/48 kHz files from any converter. A file that only pretends to be one uploads fine but stays silent and leaves a note in the log.
-- If the radio is streaming, a clip interrupts it; the stream reconnects by itself once the clip ends, with a short gap while it rebuffers.
+- Ordinary MP3 files, the kind any converter produces. Something that is not one is refused when you upload it.
+- A clip interrupts a running radio stream, and the stream comes back by itself once the clip has finished.
 - Clips use the `radioVolume` setting, not `volume` - one speaker, one knob.
-- List and delete go through the same file API as icons: `GET /api/v1/files?dir=/CLIPS` and `DELETE /api/v1/files?path=/CLIPS/ding.mp3`. See [Files](../reference/http.md#files).
-- Clips share flash with everything else, so keep them short - a few seconds each. The storage bar in the Audio tab shows where you stand.
+- Delete one with `DELETE /api/v1/audio/clips/ding`, or with the bin next to it in the Audio tab.
+- Clips share the device's storage with icons, melodies and scripts, so keep them to a few seconds. The bar at the bottom of the Audio tab shows what is left.
 
 ## Play a melody right now
 
@@ -187,7 +187,7 @@ curl -X POST http://<awtrix-ip>/api/v1/audio/play \
   -d '{"melody":"doorbell"}'
 ```
 
-On a speaker build an MP3 clip called `doorbell` would play instead - see [MP3 sounds](#mp3-sounds). If `/MELODIES/doorbell.txt` does not exist - or exists but does not parse - you get:
+Asking for a `melody` never reaches a clip of the same name. If no melody called `doorbell` is stored - or it is stored but AWTRIX cannot read it - you get:
 
 ```json
 {"error":{"code":"notFound","message":"no melody of that name"}}
@@ -231,7 +231,7 @@ Out-of-range values are rejected with `422`; you do not have to clamp them yours
 
 ## Muting
 
-`soundEnabled` (default `true`) is the global mute. It covers every trigger - `rtttl`, `name`, `builtin`, and a notification's own melody:
+`soundEnabled` (default `true`) is the global mute. It covers everything - clips, melodies, the built-in chirp and a notification's own melody:
 
 ```bash
 curl -X PATCH http://<awtrix-ip>/api/v1/settings \

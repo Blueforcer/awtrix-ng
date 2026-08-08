@@ -1430,7 +1430,7 @@ The name lists this firmware build supports. Fetch this rather than hardcoding n
 ```
 
 `radio` and `audio` say whether this build and this hardware can stream internet radio and play
-[MP3 sounds](../guides/sounds.md#mp3-sounds) - today both require the same thing, an ESP32-S3 with
+[clips](../guides/sounds.md#clips) - today both require the same thing, an ESP32-S3 with
 PSRAM and the I²S pins set, so they carry the same value. The web UI shows the matching Audio-tab
 sections only when they are `true`.
 

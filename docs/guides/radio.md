@@ -87,24 +87,28 @@ the same read:
 ```json
 {
   "available": true,
-  "playing": true,
-  "station": "SWR3",
-  "title": "Kraftwerk - Das Model",
-  "error": "",
-  "underruns": 0,
-  "decodeUs": 4180,
-  "starvedMs": 0,
-  "bufferBytes": 12288,
+  "clip": {"playing": false, "name": ""},
+  "radio": {
+    "playing": true,
+    "station": "SWR3",
+    "title": "Kraftwerk - Das Model",
+    "error": "",
+    "underruns": 0,
+    "decodeUs": 4180,
+    "starvedMs": 0,
+    "bufferBytes": 12288
+  },
   "stations": [{"name":"SWR3","url":"https://liveradio.swr.de/sw282p3/swr3/"}]
 }
 ```
 
 The same document is published retained on `<prefix>/state/audio`.
 
-`underruns`, `starvedMs`, `decodeUs` and `bufferBytes` report playback health rather
-than settings - `underruns` counts audible dropouts and `starvedMs` the time spent
-waiting for data, so a rising pair of those means the stream is not keeping up.
-Field-by-field: [HTTP API - GET /api/v1/audio](../reference/http.md#get-apiv1radio).
+The four numbers under `radio` say how well playback is going, not what is set:
+`underruns` counts the dropouts you can hear, `starvedMs` the time spent waiting
+for the station to deliver. If those two climb while music plays, the stream is
+not arriving fast enough - usually the Wi-Fi, occasionally the station.
+Field-by-field: [HTTP API - GET /api/v1/audio](../reference/http.md#get-apiv1audio).
 
 ## On the matrix
 
@@ -112,17 +116,16 @@ With `radioMeta` on - the default - each new track title appears as it arrives,
 for about seven seconds, then the normal rotation continues. Turn it off to have
 the radio play without ever taking over the display.
 
-Titles come from the stream's ICY metadata. Stations resend the same title every
-few seconds; only actual changes are shown.
+The title comes from the station itself. Stations repeat it every few seconds;
+AWTRIX shows it only when it actually changes.
 
 Volume is `radioVolume`, `0`–`100`. It is separate from `volume`, which drives
 the buzzer or a DFPlayer - different hardware, and different scales.
 
 ## Limits
 
-**MPEG-1 Layer III only.** That is what internet radio overwhelmingly is, but a
-station that only offers AAC will not play - the API reports the stream as
-unusable. 44.1, 48 and 32 kHz, mono or stereo, any bitrate including variable.
+**MP3 stations only.** That is what internet radio overwhelmingly is, but a
+station that offers AAC instead will not play, and says so. 44.1, 48 and 32 kHz, mono or stereo, any bitrate including variable.
 
 **One stream at a time.** Starting a new station stops the current one.
 

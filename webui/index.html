@@ -2297,7 +2297,7 @@ async function collectBackup(cats){
   if(cats.melodies){for(const m of((await api('/api/v1/audio/melodies')).data.melodies||[]))
     entries.push({name:'MELODIES/'+m.name+'.txt',data:m.rtttl});included.push('melodies');}
   if(cats.palettes){await grab('/PALETTES');included.push('palettes');}
-  if(cats.sounds){await grab('/CLIPS');included.push('sounds');}
+  if(cats.clips){await grab('/CLIPS');included.push('clips');}
   if(cats.scripts){await grab('/SCRIPTS');included.push('scripts');}
   if(cats.apporder){try{entries.unshift({name:'apploop.json',data:await text('/apploop.json')});included.push('apporder');}catch(e){}}
   entries.unshift({name:'manifest.json',data:JSON.stringify(
@@ -3161,7 +3161,7 @@ function maintenanceSection(page){
   ]);
 }
 const BK_CATS=[['wifi','bkWifi'],['settings','bkSettings'],['icons','bkIcons'],
-  ['melodies','bkMelodies'],['palettes','bkPalettes'],['sounds','bkSounds'],
+  ['melodies','bkMelodies'],['palettes','bkPalettes'],['clips','bkSounds'],
   ['scripts','bkScripts'],['apporder','bkApporder']];
 function backupSection(page,allowBackup){
   const rows=[];

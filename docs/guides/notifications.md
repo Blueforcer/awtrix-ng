@@ -107,7 +107,7 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
 On a board with a speaker (I2S DAC), `sound` plays the MP3 clip `/CLIPS/chime.mp3` if one is
 uploaded, and falls back to the melody `/MELODIES/chime.txt` on the buzzer. Without a speaker it is
 always the melody; on DFPlayer hardware it is a track number. Uploading clips:
-[MP3 sounds](sounds.md#mp3-sounds).
+[clips](sounds.md#clips).
 
 The melody plays once, when the notification first appears. Add `"soundLoop": true` to re-trigger it each time it finishes, for as long as the notification is on screen.
 
