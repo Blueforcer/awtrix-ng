@@ -61,7 +61,7 @@ Send **exactly one** key. A body carrying more than one is rejected with `422 va
 
 The `Content-Type` header is
 [mandatory on every write](../reference/conventions.md#content-type-is-mandatory).
-Full status-code table: [Sounds](../reference/http.md#sounds).
+Full status-code table: [Audio](../reference/http.md#audio).
 
 ## Writing RTTTL
 
@@ -304,7 +304,7 @@ A DFPlayer Mini plays MP3 files off an SD card and cannot produce notes, so noth
 
 ## Related
 
-- [Sounds](../reference/http.md#sounds) - full status codes for every sounds route
+- [Audio](../reference/http.md#audio) - full status codes for every audio route
 - [Audio tab](../getting-started/web-ui.md#audio) - MP3 sounds and the melody editor
 - [Sound](../reference/settings.md#sound) - `volume` and `soundEnabled`
 - [Sound hardware](../reference/system.md#sound-hardware) - `dfplayer` and the buzzer pins

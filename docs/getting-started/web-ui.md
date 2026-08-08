@@ -444,7 +444,7 @@ and it is split for you: the name goes to the name field, the rest stays put.
 
 A melody that does not parse is still shown, with the parser's complaint, so you can fix it.
 
-More: [Sounds & melodies](../guides/sounds.md) · [HTTP API → Sounds](../reference/http.md#sounds).
+More: [Sounds & melodies](../guides/sounds.md) · [HTTP API → Audio](../reference/http.md#audio).
 
 ### Radio
 

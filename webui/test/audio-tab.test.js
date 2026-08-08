@@ -3,8 +3,8 @@
    One tab, three sections behind two capability flags: MP3 clips (audio),
    RTTTL melodies (always) and radio stations (radio). Old #/sounds and #/radio
    bookmarks redirect. Clips live under /api/v1/audio/clips
-   API; play goes through POST /api/v1/sounds/play with the base name, and the
-   playing indicator is fed from GET /api/v1/radio's clipPlaying/clipName.
+   API; play goes through POST /api/v1/audio/play with the base name, and the
+   playing indicator is fed from GET /api/v1/audio's clip.playing/clip.name.
 
    Run:  node audio-tab.test.js */
 const { boot, goto, flush, stubXhr } = require('./harness');
@@ -61,7 +61,7 @@ async function capabilityGating() {
 }
 
 async function clipUpload() {
-  console.log('audio: upload drops into /SOUNDS');
+  console.log('audio: upload drops into /CLIPS');
   const { window } = await boot();
   const xhrLog = [];
   stubXhr(window, xhrLog);

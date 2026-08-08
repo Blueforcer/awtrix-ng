@@ -432,6 +432,7 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
   overflow:hidden;text-overflow:ellipsis}
 .edbar .end:empty{display:none}
 .edbar .warn{color:var(--warn)}
+.meta .warn{color:var(--warn);font-weight:400}
 .edbar .over{color:var(--err);font-weight:700}
 .edbar .good{color:var(--ok)}
 .edbar .bad{color:var(--err)}
@@ -749,6 +750,7 @@ const I18N={en:{
   dismiss:'Dismiss notification',dismissed:'Notification dismissed',
   snap:'Save screenshot',rec:'Record GIF',recstop:'Stop recording, save GIF',
   livepre:'Live preview',version:'Version',host:'Hostname',ip:'IP address',wifi:'WiFi',uptime:'Uptime',ram:'Free RAM',psram:'PSRAM',
+  psramnone:'none - if this board has PSRAM, write the -s3-quad- image',
   battery:'Battery',light:'Light level',temp:'Temperature',hum:'Humidity',curapp:'Current app',
   excellent:'excellent',good:'good',fair:'fair',weak:'weak',
   advanced:'Advanced',advhelp:'Fields this firmware reports that this page has no form for. Raw values - change with care.',
@@ -898,6 +900,7 @@ const I18N={en:{
   dismiss:'Benachrichtigung schließen',dismissed:'Benachrichtigung geschlossen',
   snap:'Screenshot speichern',rec:'GIF aufnehmen',recstop:'Aufnahme beenden, GIF speichern',
   livepre:'Live-Vorschau',version:'Version',host:'Hostname',ip:'IP-Adresse',wifi:'WLAN',uptime:'Laufzeit',ram:'Freier RAM',psram:'PSRAM',
+  psramnone:'keins - hat dieses Board PSRAM, dann das -s3-quad- Image aufspielen',
   battery:'Akku',light:'Lichtstärke',temp:'Temperatur',hum:'Luftfeuchte',curapp:'Aktuelle App',
   excellent:'ausgezeichnet',good:'gut',fair:'mäßig',weak:'schwach',
   advanced:'Erweitert',advhelp:'Felder, die diese Firmware meldet und für die diese Seite kein Formular hat. Rohwerte - mit Bedacht ändern.',
@@ -1858,7 +1861,7 @@ function vitalTile(d){
       el('i',{style:'width:'+d.bar.toFixed(1)+'%;background:'+TONE[d.tone]})),
     d.s?el('div',{class:'s'},d.s):null);
 }
-const metaItem=(k,v)=>el('span',null,k+' ',el('b',null,String(v)));
+const metaItem=(k,v,cls)=>el('span',null,k+' ',el('b',cls?{class:cls}:null,String(v)));
 function viewDash(view){
   const SC=10;
   const cv=el('canvas',{id:'screen',width:32*SC,height:8*SC,role:'img','aria-label':t('livepre')});
@@ -1929,7 +1932,8 @@ function viewDash(view){
       metaItem(t('version'),st.version),metaItem(t('host'),st.hostname||S.sysHost),metaItem(t('ip'),st.ipAddress),
       metaItem(t('uptime'),uptimeStr(st.uptimeSeconds)),
       metaItem(t('ram'),fmtBytes(st.freeHeapBytes)),
-      ...(st.psramTotalBytes?[metaItem(t('psram'),fmtBytes(st.psramFreeBytes)+' / '+fmtBytes(st.psramTotalBytes))]:[]),
+      ...(st.psramTotalBytes?[metaItem(t('psram'),fmtBytes(st.psramFreeBytes)+' / '+fmtBytes(st.psramTotalBytes))]
+        :st.soc==='esp32s3'?[metaItem(t('psram'),t('psramnone'),'warn')]:[]),
       metaItem(t('curapp'),st.currentApp));
   }
   if(S.stats)renderVitals(S.stats);

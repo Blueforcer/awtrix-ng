@@ -22,7 +22,7 @@ Everything else follows from it. Both are supported first-class, with their own 
 
 | | ESP32 (classic) | **ESP32-S3** |
 |---|---|---|
-| Firmware image | `usb-awtrix-ng-4mb.bin` (or 8/16 MB) | `usb-awtrix-ng-s3-octal-8mb.bin` / `-16mb.bin`, or the `-s3-quad-` pair on a quad-PSRAM board |
+| Firmware image | `usb-awtrix-ng-4mb.bin` (or 8/16 MB) | `usb-awtrix-ng-s3-octal-<flash>.bin`, or the `-s3-quad-` one if that finds no PSRAM |
 | Usable GPIO | 0-39, of which 34-39 are input-only | 0-48 except 22-25, **no input-only pins** |
 | ADC for battery + LDR | GPIO 32-39 | GPIO 1-10 |
 | Panel, apps, scripting, MQTT, Art-Net | yes | yes |
@@ -40,10 +40,10 @@ for a clock that never plays a stream.
     The firmware reserves GPIO 26-37 for flash and PSRAM on every S3 build regardless, so a
     PSRAM-less board buys you no extra pins.
 
-    The `R2` boards (`N8R2`, `N16R2`, `N4R2`) have PSRAM too, but **quad** rather than octal, and
-    that takes a different image: `usb-awtrix-ng-s3-quad-8mb.bin`. With the `-octal-` image such a
-    board runs, but without the radio. The browser flasher on
-    [Flashing](../getting-started/flashing.md) picks the right one for you.
+    An S3 reaches its PSRAM over one of two wirings, and the image has to match - what is printed
+    on the board does not settle it. Write the `-octal-` image, then look at **PSRAM** on the device
+    page: a size means done, `none` on a board that has PSRAM means write the `-quad-` one. Details:
+    [Flashing](../getting-started/flashing.md#which-of-the-two-s3-images).
 
 ---
 
@@ -601,7 +601,7 @@ Work down this list; each step isolates one part of the hardware.
 | Panel stuck dim with `autoBrightness` on | No LDR, or `ldrOnGround` set the wrong way |
 | Percentage nonsense | `batteryDividerRatio` still at the default |
 | No temperature | Sensor not on the bus, missing pull-ups, or a second chip answering first |
-| Radio section missing, `/radio/play` returns `503` | Not an S3 image, no PSRAM, the I2S pins are `-1`, or a quad-PSRAM board running the `-octal-` image instead of the `-quad-` one |
+| Radio section missing, `/api/v1/audio/play` returns `503` | Not an S3 image, the I2S pins are `-1`, or the device page shows **PSRAM: none** - no PSRAM, or the `-quad-` image is the one this board needs |
 | `invalidPinConfig` on a write | The message names the field and the rule - [Errors](../reference/errors.md#gpio-validation-invalidpinconfig) |
 
 ---

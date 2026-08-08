@@ -1176,7 +1176,10 @@ curl -X DELETE http://<awtrix-ip>/api/v1/indicators/1
 
 ---
 
-## Sounds
+## Audio
+
+Everything the speaker and the buzzer do, under one address: stored clips, melodies,
+the built-in chirp and internet radio.
 
 ### GET /api/v1/audio/melodies
 
@@ -1297,7 +1300,7 @@ curl -X POST http://<awtrix-ip>/api/v1/audio/play \
 
 ---
 
-## Radio
+### Radio
 
 Internet radio over an I²S DAC. **ESP32-S3 only.** Every route here answers `503 unavailable` on a
 classic ESP32, on an S3 without PSRAM, and on an S3 with the I²S pins unset.

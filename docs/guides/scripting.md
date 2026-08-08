@@ -1356,7 +1356,29 @@ device-wide, your call is accepted and nothing plays -
 `settings.get("soundEnabled")` is how you find out beforehand.
 
 `sound.playing()` lets a script wait for one sound to finish before starting
-the next, or hold a frame while an alarm is still sounding.
+the next, or hold a frame while an alarm is still sounding. A button that plays
+a clip wants exactly that, or a quick double press stacks two of them:
+
+```berry
+  def on_button(btn)
+    if btn == "select" && !sound.playing()
+      sound.play("doorbell")            # /CLIPS/doorbell.mp3, else the melody
+    end
+  end
+```
+
+Playing one after another belongs in `loop()`, never in `draw()` - the panel
+must keep painting while the queue drains:
+
+```berry
+  var queue                             # ["chime", "alarm"], filled elsewhere
+
+  def loop()
+    if size(self.queue) > 0 && !sound.playing()
+      sound.play(self.queue.pop(0))
+    end
+  end
+```
 
 Use `notify()` instead when the sound belongs to an *event* that should also
 interrupt the rotation and show something. Use `sound` when you only want the

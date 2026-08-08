@@ -75,6 +75,12 @@ The `V` suffix some sellers add (`N16R8V`, `N32R8V`) is a different module: WROO
 **octal flash**. That needs `memory_type = opi_opi` and a bootloader to match, so it is a board
 file and an image of its own - neither ships.
 
+**`R8` says 8 MB, not which bus.** That holds for Espressif's own modules, where `R8` is octal, but
+not for the boards that carry their own PSRAM chip beside the SoC - an ESP-PSRAM64H is 8 MB over
+**quad**. Such a board wants `awtrix_s3_quad` despite its `N16R8` label, and the released
+`usb-awtrix-ng-s3-quad-16mb.bin` matches its flash. Building locally for one, the 8 MB board file
+works as it is: its partition table simply leaves the upper half of the flash unused.
+
 ### `awtrix_s3_quad` - the S3 firmware for quad PSRAM
 
 Identical sources and identical flags to `awtrix_s3_octal`. The whole difference is the board file, and

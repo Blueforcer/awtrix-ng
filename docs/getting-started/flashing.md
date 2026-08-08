@@ -75,22 +75,34 @@ image per board and flash size:
 |---|---|
 | `usb-awtrix-ng-4mb.bin` | 4 MB ESP32 boards, the Ulanzi TC001 among them |
 | `usb-awtrix-ng-8mb.bin`, `usb-awtrix-ng-16mb.bin` | ESP32 boards with more flash |
-| `usb-awtrix-ng-s3-octal-8mb.bin`, `usb-awtrix-ng-s3-octal-16mb.bin` | ESP32-S3 boards with **octal** PSRAM (`N8R8`, `N16R8`) or none at all |
-| `usb-awtrix-ng-s3-quad-8mb.bin`, `usb-awtrix-ng-s3-quad-16mb.bin` | ESP32-S3 boards with **quad** PSRAM (`N8R2`, `N16R2`, `N4R2`) |
+| `usb-awtrix-ng-s3-octal-*.bin` | ESP32-S3 boards - start here |
+| `usb-awtrix-ng-s3-quad-*.bin` | ESP32-S3 boards whose PSRAM the one above does not find |
 
-Take the one matching your board's flash size. If you are unsure how much it has, or which kind of
-PSRAM it carries, ask the chip - `esptool` prints both:
+Take the one matching your board's flash size. If you are unsure how much it has, ask the chip:
 
 ```bash
 python -m esptool --port COM5 flash_id
 ```
 
-`Embedded PSRAM 2MB` in that output means quad, `Embedded PSRAM 8MB` means octal, and no PSRAM
-line at all means the `-octal-` image too.
+### Which of the two S3 images
 
-!!! warning "Take the right S3 image"
-    The `-quad-` image on a board that is not quad does not start at all, and the `-octal-` image
-    on a quad board starts but has no radio. Writing the other image over USB fixes either.
+An S3 reaches its PSRAM over one of two wirings, quad or octal, and the image has to match. Nothing
+printed on the board tells you reliably which one it is: `R8` and `R2` describe the size, sellers
+use them loosely, and a board can carry its PSRAM as a separate chip that no tool sees from outside.
+
+So do not guess - **write the `-octal-` image first**. It starts on every S3, with or without PSRAM,
+and then the device itself answers the question: open its page and look at **PSRAM**.
+
+| What the device shows | What it means |
+|---|---|
+| A size, usually 8 MB | Right image, nothing more to do |
+| `none`, and your board has no PSRAM | Right image. No radio on this board, that is the hardware |
+| `none`, but your board is advertised with PSRAM | It is wired quad - write the `-quad-` image |
+
+!!! warning "Only in that order"
+    The `-quad-` image does not start at all on a board that is not quad - the panel stays dark
+    until you write the other one over USB. The `-octal-` image always starts, at worst without
+    PSRAM. That is why it goes first.
 
 The `firmware-awtrix-ng*.bin` assets on the same page are **not** for this - they are for
 [updating a device](../guides/updating.md) that already runs AWTRIX NG.

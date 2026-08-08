@@ -940,6 +940,17 @@ changes a setting for its own screen, change it back when it stops drawing.
 | `sound.stop()` | stops the clip or melody; a running radio stream keeps playing |
 | `sound.playing()` | `true` while any sound is playing |
 
+Check it before playing on a button, or a double press stacks two clips. Chain sounds in `loop()`,
+never in `draw()`:
+
+```berry
+  def on_button(btn)
+    if btn == "select" && !sound.playing()
+      sound.play("doorbell")
+    end
+  end
+```
+
 Returns `true` when the request was **accepted**, not when a file of that name
 exists. Use `sound` for noise alone; use `notify()` (5.10) when the sound belongs
 to an event that should also interrupt the rotation and show something.

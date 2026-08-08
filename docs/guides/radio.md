@@ -7,9 +7,10 @@ tab is hidden. `POST /api/v1/audio/play` and `POST /api/v1/audio/stop` answer
 `"available": false`, and editing the station list (`PUT /api/v1/audio/stations`)
 works on every build.
 
-There is one image per PSRAM type. A quad-PSRAM board (`N8R2`, `N16R2`) needs
-`firmware-awtrix-ng-s3-quad.bin`; with the `-s3-octal-` image it shows no PSRAM
-on the device page and the Radio section stays hidden.
+There is one image per PSRAM wiring, and the wrong one hides the radio: the
+device page then shows **PSRAM: none** although the board has some. That is the
+signal to write `firmware-awtrix-ng-s3-quad.bin` - see
+[Flashing](../getting-started/flashing.md#which-of-the-two-s3-images).
 
 ## What you need
 
@@ -143,7 +144,7 @@ HTTPS streams work, and their certificates are not verified.
 
 | Symptom | Cause |
 |---|---|
-| Radio section missing, play/stop answer `503` | Not an ESP32-S3 image, no PSRAM, the octal image on a quad-PSRAM board, or the I²S pins are `-1` (station editing and `GET /api/v1/audio` still work) |
+| Radio section missing, play/stop answer `503` | Not an ESP32-S3 image, the I²S pins are `-1`, or the device page shows **PSRAM: none** - then the board either has none or wants the `-quad-` image (station editing and `GET /api/v1/audio` still work) |
 | `422` on the pins | One of the three is set and the others are not |
 | "this stream is not MPEG-1 Layer III audio" | An AAC or otherwise unsupported mount |
 | "could not connect to the station" | Wrong URL, station offline, or DNS is not resolving |
@@ -153,6 +154,6 @@ HTTPS streams work, and their certificates are not verified.
 ## Related
 
 - [Web UI tour - Radio](../getting-started/web-ui.md#radio) - the Audio tab's Radio section, and what each control does
-- [HTTP API - Radio](../reference/http.md#radio) - every route, field and status code
+- [HTTP API - Audio](../reference/http.md#audio) - every route, field and status code
 - [GPIO & boards](../reference/gpio.md) - the I²S pins and what else can sit on them
 - [Sounds & melodies](sounds.md) - the buzzer, for alerts rather than music

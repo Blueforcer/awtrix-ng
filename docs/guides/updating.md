@@ -55,8 +55,8 @@ file per kind of board:
 | File | For |
 |---|---|
 | `firmware-awtrix-ng.bin` | Ulanzi TC001 and every other classic ESP32 - 32×8 clocks, AWTRIX 2 conversions, DIY builds |
-| `firmware-awtrix-ng-s3-octal.bin` | ESP32-S3 boards with octal PSRAM (`N8R8`, `N16R8`) or none |
-| `firmware-awtrix-ng-s3-quad.bin` | ESP32-S3 boards with quad PSRAM (`N8R2`, `N16R2`, `N4R2`) |
+| `firmware-awtrix-ng-s3-octal.bin` | ESP32-S3 boards - the one to start with |
+| `firmware-awtrix-ng-s3-quad.bin` | ESP32-S3 boards whose PSRAM the other one does not find |
 
 One file covers every board of that kind, whatever its flash size - boards differ in their pin
 map, which you set on AWTRIX. See [Board presets](../reference/gpio.md#board-presets).

@@ -43,12 +43,17 @@ const ASSET_PREFIX = {
 // invisible on a board that has none.
 const S3_QUAD_PREFIX = ["usb-awtrix-ng-s3-quad-"];
 const PSRAM_CAP_QUAD = 2;
+const PSRAM_CAP_NONE = 0;
 
-async function prefixesFor(loader, chip) {
+async function prefixesFor(loader, chip, note) {
   const prefixes = ASSET_PREFIX[chip] || [];
   if (chip !== "ESP32-S3" || typeof loader.chip.getPsramCap !== "function") return prefixes;
   try {
-    if (await loader.chip.getPsramCap(loader) === PSRAM_CAP_QUAD) {
+    const cap = await loader.chip.getPsramCap(loader);
+    // Only PSRAM inside the chip package shows up here. A board that carries its own PSRAM chip
+    // reads as none, and those are quad more often than not - so say it instead of guessing on.
+    if (cap === PSRAM_CAP_NONE && note) note();
+    if (cap === PSRAM_CAP_QUAD) {
       // The octal names stay behind it: a release from before the quad image
       // existed carries none, and the octal one still boots such a board.
       return S3_QUAD_PREFIX.concat(prefixes);
@@ -222,7 +227,8 @@ async function flash({ erase, buttons, status, progress, log, terminal, index })
 
     const chip = loader.chip.CHIP_NAME;
     const flashSize = await loader.detectFlashSize();
-    const candidates = (await prefixesFor(loader, chip)).map(
+    let psramHint = false;
+    const candidates = (await prefixesFor(loader, chip, () => { psramHint = true; })).map(
       (prefix) => `${prefix}${flashSize.toLowerCase()}.bin`);
     const asset = candidates.find((name) => index.assets.includes(name));
     if (!asset) {
@@ -231,6 +237,12 @@ async function flash({ erase, buttons, status, progress, log, terminal, index })
     }
 
     status.textContent = `${chip}, ${flashSize} flash. Downloading ${asset}…`;
+    if (psramHint) {
+      log.hidden = false;
+      terminal.writeLine("This chip reports no PSRAM of its own, so the octal image is the safe "
+        + "choice. Once it boots, check PSRAM on the device page: if it says none although your "
+        + "board has some, write usb-awtrix-ng-s3-quad-" + flashSize.toLowerCase() + ".bin.");
+    }
     const response = await fetch(new URL(asset, FIRMWARE));
     if (!response.ok) throw new Error(`${asset}: HTTP ${response.status}`);
     const image = new Uint8Array(await response.arrayBuffer());
