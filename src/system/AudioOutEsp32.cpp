@@ -257,9 +257,7 @@ bool AudioOutEsp32::writeDecodedFrame(const mp3::DecodeResult& result, int16_t* 
     pins.ws_io_num = pinLrclk_;
     pins.data_out_num = pinDout_;
     pins.data_in_num = I2S_PIN_NO_CHANGE;
-    // mck_io_num is the first field, so zero-initialising it means GPIO 0, not "unused": the
-    // driver only skips the MCLK routing for -1. Left at 0 the S3 clocks its boot strapping pin
-    // for as long as audio plays.
+    // Zero would mean GPIO 0, not "unused": only -1 keeps MCLK off the boot strapping pin.
     pins.mck_io_num = I2S_PIN_NO_CHANGE;
     i2s_set_pin(I2S_NUM_0, &pins);
     sampleRateHz_ = result.sampleRateHz;
