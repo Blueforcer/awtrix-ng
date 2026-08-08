@@ -69,6 +69,7 @@
 #include "sim/SimBoard.h"
 #include "sim/SimHttpServer.h"
 #include "sim/SimPageServices.h"
+#include "sim/SimClipPlayback.h"
 #include "sim/SimPeriphery.h"
 #include "sim/SimScriptServices.h"
 #include "sim/SimStore.h"
@@ -86,14 +87,10 @@ namespace {
 class SimSoundService : public ISoundService {
  public:
   explicit SimSoundService(IBoard& board) : board_(board) {}
-  // Mirrors DeviceSound: a stored MP3 clip wins over a melody of the same name.
-  bool playSound(const std::string& payload) override {
-    if (clips_) {
-      const std::string path = sound::clipPathFor(payload);
-      if (!path.empty() && stdfs::exists(stdfs::u8path(sim::hostPath(path))))
-        return clips_->playClip(path);
-    }
-    return board_.sound().playFile(payload);
+  bool playSound(const std::string& name, SoundKind kind) override {
+    if (kind != SoundKind::Melody && playStoredClip(clips_, name)) return true;
+    if (kind == SoundKind::Clip) return false;
+    return board_.sound().playFile(name);
   }
   void playRtttl(const std::string& rtttl) override { board_.sound().playRtttl(rtttl); }
   void r2d2(const std::string&) override {

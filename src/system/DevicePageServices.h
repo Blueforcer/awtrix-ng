@@ -7,53 +7,33 @@
 
 #include "core/Services.h"
 #include "core/render/RenderPipeline.h"
-#include "core/sound/SoundClips.h"
 #include "hal/IBoard.h"
-
-#if defined(AWTRIX_SOC_ESP32S3)
-#include <LittleFS.h>
-#endif
+#include "system/ClipPlayback.h"
 
 namespace awtrix {
 
 class DevicePageSound : public IPageSound {
  public:
   explicit DevicePageSound(IBoard& board) : board_(board) {}
-  // Explicit RTTTL in the notification is a deliberate choice and wins; after that a stored MP3
-  // clip beats a melody of the same name on builds with an I2S output.
+  // RTTTL spelled out in the notification is a deliberate choice and wins over everything stored.
   void play(const AppSpec& spec) override {
     if (!spec.extras().rtttl.empty()) {
       board_.sound().playRtttl(spec.extras().rtttl);
       return;
     }
     if (spec.sound.empty()) return;
-#if defined(AWTRIX_SOC_ESP32S3)
-    if (clips_) {
-      const std::string path = sound::clipPathFor(spec.sound);
-      if (!path.empty() && LittleFS.exists(path.c_str())) {
-        clips_->playClip(path);
-        return;
-      }
-    }
-#endif
+    if (playStoredClip(clips_, spec.sound)) return;
     board_.sound().playFile(spec.sound);
   }
   bool isPlaying() const override {
-#if defined(AWTRIX_SOC_ESP32S3)
-    if (clips_ && clips_->clipPlaying()) return true;
-#endif
-    return board_.sound().isPlaying();
+    return (clips_ && clips_->clipPlaying()) || board_.sound().isPlaying();
   }
 
-#if defined(AWTRIX_SOC_ESP32S3)
   void setClips(IClipService* clips) { clips_ = clips; }
-#endif
 
  private:
   IBoard& board_;
-#if defined(AWTRIX_SOC_ESP32S3)
   IClipService* clips_ = nullptr;
-#endif
 };
 
 class DevicePageClock : public IPageClock {

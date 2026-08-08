@@ -2,9 +2,9 @@
 
 AWTRIX can play an MP3 internet radio stream and show what is on air. It needs
 an ESP32-S3 with PSRAM and an external I²S DAC. Without all three the **Radio**
-tab is hidden. `POST /api/v1/radio/play` and `POST /api/v1/radio/stop` answer
-`503 unavailable`; `GET /api/v1/radio` still works and reports
-`"available": false`, and editing the station list (`PUT /api/v1/radio/stations`)
+tab is hidden. `POST /api/v1/audio/play` and `POST /api/v1/audio/stop` answer
+`503 unavailable`; `GET /api/v1/audio` still works and reports
+`"available": false`, and editing the station list (`PUT /api/v1/audio/stations`)
 works on every build.
 
 There is one image per PSRAM type. A quad-PSRAM board (`N8R2`, `N16R2`) needs
@@ -47,7 +47,7 @@ stations, names up to 24 characters, URLs up to 255.
 The same list over the API:
 
 ```bash
-curl -X PUT http://<awtrix-ip>/api/v1/radio/stations \
+curl -X PUT http://<awtrix-ip>/api/v1/audio/stations \
   -H 'Content-Type: application/json' \
   -d '{"stations":[{"name":"SWR3","url":"https://liveradio.swr.de/sw282p3/swr3/"}]}'
 ```
@@ -71,17 +71,17 @@ playlist is reported as an error.
 ## Playing
 
 ```bash
-curl -X POST http://<awtrix-ip>/api/v1/radio/play \
+curl -X POST http://<awtrix-ip>/api/v1/audio/play \
   -H 'Content-Type: application/json' -d '{"station":"SWR3"}'
 ```
 
 `{"index":0}` picks by position, and `{"url":"http://..."}` plays something that
-is not in the list at all. Stop with `POST /api/v1/radio/stop`.
+is not in the list at all. Stop with `POST /api/v1/audio/stop`.
 
-Over MQTT the same three commands are `cmd/radio/play`, `cmd/radio/stop` and
-`cmd/radio/stations`.
+Over MQTT the same three commands are `cmd/audio/play`, `cmd/audio/stop` and
+`cmd/audio/stations`.
 
-`GET /api/v1/radio` reports what is happening and returns the station list in
+`GET /api/v1/audio` reports what is happening and returns the station list in
 the same read:
 
 ```json
@@ -99,12 +99,12 @@ the same read:
 }
 ```
 
-The same document is published retained on `<prefix>/state/radio`.
+The same document is published retained on `<prefix>/state/audio`.
 
 `underruns`, `starvedMs`, `decodeUs` and `bufferBytes` report playback health rather
 than settings - `underruns` counts audible dropouts and `starvedMs` the time spent
 waiting for data, so a rising pair of those means the stream is not keeping up.
-Field-by-field: [HTTP API - GET /api/v1/radio](../reference/http.md#get-apiv1radio).
+Field-by-field: [HTTP API - GET /api/v1/audio](../reference/http.md#get-apiv1radio).
 
 ## On the matrix
 
@@ -140,7 +140,7 @@ HTTPS streams work, and their certificates are not verified.
 
 | Symptom | Cause |
 |---|---|
-| Radio section missing, play/stop answer `503` | Not an ESP32-S3 image, no PSRAM, the octal image on a quad-PSRAM board, or the I²S pins are `-1` (station editing and `GET /api/v1/radio` still work) |
+| Radio section missing, play/stop answer `503` | Not an ESP32-S3 image, no PSRAM, the octal image on a quad-PSRAM board, or the I²S pins are `-1` (station editing and `GET /api/v1/audio` still work) |
 | `422` on the pins | One of the three is set and the others are not |
 | "this stream is not MPEG-1 Layer III audio" | An AAC or otherwise unsupported mount |
 | "could not connect to the station" | Wrong URL, station offline, or DNS is not resolving |

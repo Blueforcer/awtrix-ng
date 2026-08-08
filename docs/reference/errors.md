@@ -59,7 +59,7 @@ counts for.
 | `invalidJson` | 400 | any route with a body | The body is not parseable JSON. On the routes where an empty body is a parse error, a missing/empty body lands here too - see [Content-Type](#content-type-the-empty-body-trap). |
 | `invalidPinConfig` | 400 | `PUT /api/v1/system` only | The merged GPIO map is unusable. Nothing was saved. See [GPIO validation](#gpio-validation-invalidpinconfig). |
 | `invalidPath` | 400 | `POST` / `DELETE /api/v1/files` | The filename or path is outside `/ICONS`, `/MELODIES`, `/PALETTES`, or contains `..`. Nothing was written or removed. |
-| `invalidName` | 400 | every route that names an app in its path | The name does not match `[A-Za-z0-9_-]{1,32}`. Checked before the payload is parsed. Carries `field: "name"`. |
+| `invalidName` | 400 | every route that names an app in its path, and `POST /api/v1/files` for `/CLIPS` | The name does not match `[A-Za-z0-9_-]{1,32}`. Checked before the payload is parsed; on a sound upload, before a byte is written. Carries `field: "name"` except on the upload. |
 | `invalidMethodOverride` | 400 | routing, when `X-HTTP-Method-Override` is present | The header sits on something other than a `POST`, names anything but `PUT`/`PATCH`/`DELETE`, or tries to reach the raw script upload. Nothing was routed. See [Method override](http.md#method-override). |
 | `badRequest` | 400 | `POST /api/v1/restore` only | The multipart upload finished without a backup file ever being received. See [Restore result](#restore-result). |
 | `wrongChip` | 400 | `POST /update` (firmware upload) | The upload is not an update image for this device: built for a different chip, for the other kind of ESP32-S3 PSRAM (quad vs octal), a `usb-*.bin` meant for a first flash over USB, or not a firmware image at all. `message` says which. The running firmware is untouched. |
@@ -72,7 +72,7 @@ counts for.
 | `validationFailed` | 422 | write routes | The JSON parsed, but a value is invalid. Usually carries `field`. **Nothing was applied.** |
 | `insufficientStorage` | 507 | pushed apps, notification queue, script store, or a large request body | A store or queue is full ([Limits](limits.md#apps-and-notifications)); the request was rejected instead of silently dropped. Also returned when AWTRIX is too low on memory to act on a large body - a small body (a bare reboot, a short JSON) is never refused this way. Carries `field: "name"` when a script install hit `scriptLimit`, `field: "source"` when there was not enough memory to receive the source at all. |
 | `internalError` | 500 | dispatch fallback, OTA, uploads | The command reached AWTRIX and failed. A failed firmware flash reads `firmware update failed (bad image or storage full)`. |
-| `unavailable` | 503 | `GET /api/v1/apps/script/{name}`, `GET /api/v1/scripts/shared`, `POST /api/v1/radio/play`, `POST /api/v1/radio/stop` | The build has no scripting platform (so there is no source to answer with) or no audio output. A `PUT` on the script path answers `500 internalError` instead. |
+| `unavailable` | 503 | `GET /api/v1/apps/script/{name}`, `GET /api/v1/scripts/shared`, `POST /api/v1/audio/play`, `POST /api/v1/audio/stop` | The build has no scripting platform (so there is no source to answer with) or no audio output. A `PUT` on the script path answers `500 internalError` instead. |
 | `serviceBusy` | 503 | script install, radio play | A transient refusal, distinct from a hard `insufficientStorage` capacity limit; retry shortly. The response carries `Retry-After: 2`. Carries `field: "name"` on a script install and `field: "url"` when a radio stream is refused for lack of memory. |
 
 `field` appears on five codes only, so do not write clients that require it. `invalidName` always
@@ -112,9 +112,9 @@ normally.
 | Route or cause | `message` |
 | --- | --- |
 | `PUT /api/v1/apps/active` with an unknown name | `app not found` |
-| `POST /api/v1/sounds/play` with an unknown `name` | `sound not found` |
+| `POST /api/v1/audio/play` with an unknown `clip` or `melody` | `no clip of that name` / `no melody of that name` |
 | `GET /api/v1/apps/script/{name}` for a script that does not exist | `no such script` |
-| `DELETE /api/v1/sounds/{name}` for a melody that does not exist | `melody not found` |
+| `DELETE /api/v1/audio/melodies/{name}` for a melody that does not exist | `melody not found` |
 | Anything else not found | `not found` |
 | `/api/v1/indicators/{id}` where `{id}` is not `1`, `2` or `3` | `indicator id must be 1..3` |
 | A missing file under `/ICONS/`, `/MELODIES/`, `/PALETTES/`, or `DELETE /api/v1/files` | `file not found` |
@@ -154,14 +154,14 @@ a wrong method on any of them answers `405`. Only a genuinely unrecognized path 
 | `/api/v1/display/moodlight` | `PUT, DELETE` |
 | `/api/v1/display/screen` | `GET` |
 | `/api/v1/indicators/{id}` | `PUT, DELETE` |
-| `/api/v1/sounds` | `GET` |
-| `/api/v1/sounds/{name}` | `PUT, DELETE` |
-| `/api/v1/sounds/play` | `POST` |
-| `/api/v1/sounds/stop` | `POST` |
-| `/api/v1/radio` | `GET` |
-| `/api/v1/radio/play` | `POST` |
-| `/api/v1/radio/stop` | `POST` |
-| `/api/v1/radio/stations` | `PUT` |
+| `/api/v1/audio/melodies` | `GET` |
+| `/api/v1/audio/melodies/{name}` | `PUT, DELETE` |
+| `/api/v1/audio/play` | `POST` |
+| `/api/v1/audio/stop` | `POST` |
+| `/api/v1/audio` | `GET` |
+| `/api/v1/audio/play` | `POST` |
+| `/api/v1/audio/stop` | `POST` |
+| `/api/v1/audio/stations` | `PUT` |
 | `/api/v1/device` | `GET` |
 | `/api/v1/device/reboot` | `POST` |
 | `/api/v1/device/sleep` | `POST` |
@@ -271,8 +271,8 @@ JSON, while `{}` is a well-formed object with nothing in it.
 | `PUT /api/v1/apps/pushed/{name}` | `422` - `a JSON body is required; use DELETE /api/v1/apps/{name} to remove the app` | same `422` |
 | `PUT /api/v1/display/moodlight` | `422` - `a JSON body is required; use DELETE to turn the mood light off` | same `422` |
 | `PUT /api/v1/indicators/{id}` | `422` - `a JSON body is required; use DELETE to turn the indicator off` | same `422` |
-| `POST /api/v1/radio/play` | `422` - `a JSON body is required; name a station, an index or a url` | same `422` |
-| `PUT /api/v1/radio/stations` | `422` - `a JSON body is required; send {"stations":[...]}` | `422 validationFailed`, `field: "stations"`, `must be an array` |
+| `POST /api/v1/audio/play` | `422` - `a JSON body is required; name a station, an index or a url` | same `422` |
+| `PUT /api/v1/audio/stations` | `422` - `a JSON body is required; send {"stations":[...]}` | `422 validationFailed`, `field: "stations"`, `must be an array` |
 | `POST /api/v1/notifications` | `400 invalidJson` | `200` - an empty notification is queued |
 | `PATCH /api/v1/settings` | `400 invalidJson` | `200` - nothing changed |
 | `PATCH /api/v1/display` | `400 invalidJson` | `200` - nothing changed |
@@ -337,20 +337,20 @@ curl -i -X PATCH http://<awtrix-ip>/api/v1/settings \
 | `PATCH /api/v1/display` | `overlaySettings.palette` | `unknown palette` |
 | `POST /api/v1/device/sleep` | `durationMs` | `must be a positive integer (milliseconds)` |
 | `POST /api/v1/notifications` | *(none)* | `send one notification per request; an array of more than one is not accepted` |
-| `POST /api/v1/sounds/play` | `name` | `one of "name", "rtttl" or "builtin" is required` |
-| `POST /api/v1/sounds/play` | `name` | `exactly one of "name", "rtttl" or "builtin" is allowed` - more than one supplied |
-| `POST /api/v1/sounds/play` | `rtttl` | `RTTTL is not supported on this sound backend` - DFPlayer board |
-| `POST /api/v1/sounds/play` | `builtin` | `the built-in melody is not supported on this sound backend` - DFPlayer board |
+| `POST /api/v1/audio/play` | `name` | `one of "name", "rtttl" or "builtin" is required` |
+| `POST /api/v1/audio/play` | `name` | `exactly one of "name", "rtttl" or "builtin" is allowed` - more than one supplied |
+| `POST /api/v1/audio/play` | `rtttl` | `RTTTL is not supported on this sound backend` - DFPlayer board |
+| `POST /api/v1/audio/play` | `builtin` | `the built-in melody is not supported on this sound backend` - DFPlayer board |
 | `PUT /api/v1/apps/pushed/{name}` | *(none)* | `a JSON body is required; use DELETE /api/v1/apps/{name} to remove the app` - empty or `{}` body |
 | `PUT /api/v1/display/moodlight` | *(none)* | `a JSON body is required; use DELETE to turn the mood light off` - empty or `{}` body |
 | `PUT /api/v1/indicators/{id}` | *(none)* | `a JSON body is required; use DELETE to turn the indicator off` - empty or `{}` body |
-| `POST /api/v1/radio/play` | *(none)* | `a JSON body is required; name a station, an index or a url` - empty or `{}` body |
-| `POST /api/v1/radio/play` | `station` | `give a station name, an index or a url` - none of the three supplied |
-| `POST /api/v1/radio/play` | `station` | `unknown station` |
-| `POST /api/v1/radio/play` | `index` | `must be an integer`, or `no station at that position` |
-| `POST /api/v1/radio/play` | `url` | `must start with http:// or https://`, or `not a usable http or https URL` |
-| `PUT /api/v1/radio/stations` | *(none)* | `a JSON body is required; send {"stations":[...]}` - empty body |
-| `PUT /api/v1/radio/stations` | `stations` | `must be an array` |
+| `POST /api/v1/audio/play` | *(none)* | `a JSON body is required; name a station, an index or a url` - empty or `{}` body |
+| `POST /api/v1/audio/play` | `station` | `give a station name, an index or a url` - none of the three supplied |
+| `POST /api/v1/audio/play` | `station` | `unknown station` |
+| `POST /api/v1/audio/play` | `index` | `must be an integer`, or `no station at that position` |
+| `POST /api/v1/audio/play` | `url` | `must start with http:// or https://`, or `not a usable http or https URL` |
+| `PUT /api/v1/audio/stations` | *(none)* | `a JSON body is required; send {"stations":[...]}` - empty body |
+| `PUT /api/v1/audio/stations` | `stations` | `must be an array` |
 | `PUT /api/v1/apps/script/{name}` | `source` | `request body must be the script source` - empty body |
 | `PUT /api/v1/apps/pushed/{name}`, `POST /api/v1/notifications` | `effect` | the payload names an effect AWTRIX does not know |
 | `PUT /api/v1/apps/pushed/{name}`, `POST /api/v1/notifications` | `overlay` | the payload names an overlay AWTRIX does not know |

@@ -166,7 +166,7 @@ paths:
         | `config/wifi.json` | `{wifiSsid, wifiPass}` merged into the config |
         | `config/system.json` | rest of the device config (validated like PUT /system) |
         | `config/settings.json` | display/behaviour settings (applied live + persisted) |
-        | `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `SOUNDS/*`, `SCRIPTS/*` | written to LittleFS |
+        | `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `CLIPS/*`, `SCRIPTS/*` | written to LittleFS |
         | `apploop.json` | app rotation order |
 
         Content is checked per folder exactly like `POST /api/v1/files`; a
@@ -767,7 +767,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200": { $ref: "#/components/responses/Ok" }
 
-  /api/v1/sounds:
+  /api/v1/audio/melodies:
     get:
       tags: [sounds]
       summary: Every melody on the device
@@ -801,7 +801,7 @@ paths:
                   usedBytes: { type: integer }
                   totalBytes: { type: integer }
 
-  /api/v1/sounds/{name}:
+  /api/v1/audio/melodies/{name}:
     parameters:
       - name: name
         in: path
@@ -843,7 +843,7 @@ paths:
         "200": { $ref: "#/components/responses/Ok" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /api/v1/radio:
+  /api/v1/audio:
     get:
       tags: [radio]
       summary: Playback status and the station list
@@ -862,7 +862,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RadioState" }
 
-  /api/v1/radio/play:
+  /api/v1/audio/play:
     post:
       tags: [radio]
       summary: Tune to a station
@@ -872,7 +872,7 @@ paths:
         or .pls playlist is resolved to its first playable entry.
 
         A 200 means tuning started. A stream that turns out to be unplayable is
-        reported afterwards through `error` on `GET /api/v1/radio`.
+        reported afterwards through `error` on `GET /api/v1/audio`.
       requestBody:
         required: true
         content:
@@ -885,7 +885,7 @@ paths:
         "422": { $ref: "#/components/responses/Invalid" }
         "503": { $ref: "#/components/responses/Unavailable" }
 
-  /api/v1/radio/stop:
+  /api/v1/audio/stop:
     post:
       tags: [radio]
       summary: Stop playback
@@ -894,7 +894,7 @@ paths:
         "200": { $ref: "#/components/responses/Ok" }
         "503": { $ref: "#/components/responses/Unavailable" }
 
-  /api/v1/radio/stations:
+  /api/v1/audio/stations:
     put:
       tags: [radio]
       summary: Replace the station list
@@ -916,7 +916,7 @@ paths:
         "400": { $ref: "#/components/responses/BadJson" }
         "422": { $ref: "#/components/responses/Invalid" }
 
-  /api/v1/sounds/stop:
+  /api/v1/audio/stop:
     post:
       tags: [sounds]
       summary: Stop whatever is playing
@@ -928,7 +928,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200": { $ref: "#/components/responses/Ok" }
 
-  /api/v1/sounds/play:
+  /api/v1/audio/play:
     post:
       tags: [sounds]
       summary: Play a sound
@@ -939,7 +939,7 @@ paths:
         supported and are rejected with `422`.
 
         On builds with a speaker (I2S DAC), `name` plays the MP3 clip
-        `/SOUNDS/<name>.mp3` when one exists and falls back to the melody
+        `/CLIPS/<name>.mp3` when one exists and falls back to the melody
         `/MELODIES/<name>.txt`; a playing radio stream is interrupted and
         reconnects afterwards.
 

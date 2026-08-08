@@ -57,13 +57,13 @@ function makeStore() {
     caps: { transitions: [], radio: true, audio: true },
     settings: { soundEnabled: true },
     // dir -> Map(name -> size), the file API's flash view.
-    files: { '/ICONS': new Map(), '/SOUNDS': new Map() },
+    files: { '/ICONS': new Map(), '/CLIPS': new Map() },
     melodies: [], // [{name, rtttl, valid, notes, durationMs, bytes}]
-    played: [],   // bodies POSTed to /api/v1/sounds/play
-    radio: { available: true, playing: false, station: '', title: '', error: '',
-             clipPlaying: false, clipName: '', stations: [] },
-    radioPlay: null,   // last POST /api/v1/radio/play body
-    stationsPut: null, // last PUT /api/v1/radio/stations body
+    played: [],   // bodies POSTed to /api/v1/audio/play
+    radio: { available: true, clip: { playing: false, name: '' },
+             radio: { playing: false, station: '', title: '', error: '' }, stations: [] },
+    radioPlay: null,   // last POST /api/v1/audio/play carrying a station or a url
+    stationsPut: null, // last PUT /api/v1/audio/stations body
     list() {
       if (this.apps) return this.apps;
       return [...scripts.keys()].map(name => ({ name, origin: 'script', error: null }));
@@ -106,10 +106,31 @@ function mockFetch(store, netlog) {
       }
     }
 
-    if (p === '/api/v1/sounds' && method === 'GET') return resp({ melodies: store.melodies });
-    if (p === '/api/v1/sounds/play') { store.played.push(JSON.parse(opts.body || '{}')); return resp({ ok: true }); }
-    if (p === '/api/v1/sounds/stop') return resp({ ok: true });
-    const melo = p.match(/^\/api\/v1\/sounds\/(.+)$/);
+    if (p === '/api/v1/audio/melodies' && method === 'GET') return resp({ melodies: store.melodies });
+    if (p === '/api/v1/audio/clips' && method === 'GET') {
+      const m = store.files['/CLIPS'] || new Map();
+      return resp({ files: [...m].map(([name, size]) => ({ name, size })),
+                    usedBytes: 1024, totalBytes: 1048576 });
+    }
+    if (p === '/api/v1/audio/play') {
+      const body = JSON.parse(opts.body || '{}');
+      if (body.station !== undefined || body.url !== undefined || body.index !== undefined) {
+        store.radioPlay = body;
+        store.radio.radio.playing = true;
+      } else {
+        store.played.push(body);
+      }
+      return resp({ ok: true });
+    }
+    if (p === '/api/v1/audio/stop') { store.radio.radio.playing = false; return resp({ ok: true }); }
+    const clip = p.match(/^\/api\/v1\/audio\/clips\/(.+)$/);
+    if (clip && method === 'DELETE') {
+      const name = decodeURIComponent(clip[1]) + '.mp3';
+      if (!store.files['/CLIPS'].delete(name))
+        return resp({ error: { code: 'notFound', message: name } }, false, 404);
+      return resp({ ok: true });
+    }
+    const melo = p.match(/^\/api\/v1\/audio\/melodies\/(.+)$/);
     if (melo) {
       const name = decodeURIComponent(melo[1]);
       if (method === 'PUT') {
@@ -124,14 +145,8 @@ function mockFetch(store, netlog) {
       }
     }
 
-    if (p === '/api/v1/radio' && method === 'GET') return resp(store.radio);
-    if (p === '/api/v1/radio/play') {
-      store.radioPlay = JSON.parse(opts.body || '{}');
-      store.radio.playing = true;
-      return resp({ ok: true });
-    }
-    if (p === '/api/v1/radio/stop') { store.radio.playing = false; return resp({ ok: true }); }
-    if (p === '/api/v1/radio/stations' && method === 'PUT') {
+    if (p === '/api/v1/audio' && method === 'GET') return resp(store.radio);
+    if (p === '/api/v1/audio/stations' && method === 'PUT') {
       store.stationsPut = JSON.parse(opts.body || '{}');
       store.radio.stations = store.stationsPut.stations || [];
       return resp({ ok: true });

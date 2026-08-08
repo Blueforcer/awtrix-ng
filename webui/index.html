@@ -89,6 +89,7 @@ main>.wide{grid-column:1/-1}
   background:var(--card2);border-radius:calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0}
 .section>header .ghelp{color:var(--dim);font-size:12.5px;margin-top:2px}
 .section .rows{padding:2px 18px}
+.section .rows.pad{padding:12px 18px}
 .frow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 20px;align-items:center;padding:12px 0;border-bottom:1px solid var(--brd2)}
 .frow:last-child{border-bottom:none}
 .frow .lab{display:grid;gap:2px;min-width:0}
@@ -289,6 +290,12 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .melorow.bad{outline:1px solid var(--err)}
 .melorow.bad .meta{color:var(--err)}
 .melorow.dirty{border-left:3px solid var(--acc);padding-left:7px}
+.melorow.on{border-left:3px solid var(--ok);padding-left:7px}
+.melorow.clip{grid-template-columns:1fr auto auto}
+.melorow.clip .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.melorow.clip .sz{color:var(--dim);font-variant-numeric:tabular-nums}
+.melorow .meta:empty{display:none}
+.audbar{justify-content:flex-end;margin:0 0 8px}
 .applist{display:grid;gap:6px}
 .approw{display:flex;align-items:center;gap:8px;background:var(--card2);border-radius:8px;
   padding:7px 10px;border:1px solid transparent;flex-wrap:wrap}
@@ -709,14 +716,14 @@ function armable(btn,fn){
 const I18N={en:{
   dash:'Dashboard',display:'Display',system:'System',icons:'Icons',palettes:'Palettes',log:'Log',
   audioTab:'Audio',
-  clips:'MP3 sounds',
-  clipshelp:'Short MP3 clips. Play them with the API or with sound:"name" in a notification.',
+  clips:'Clips',
+  clipshelp:'Your own MP3 files, for notifications and scripts.',
   radioTab:'Radio',
   radioH:'Internet radio stations.',
   radionone:'No stations yet. Add one below.',
   radioname:'Name',radiourl:'Stream URL',
-  radioadd:'Add station',radiosave:'Save stations',
-  radioplaying:'Playing',radiostopped:'Not playing',radiostop:'Stop',
+  radioadd:'Add station',
+  radioplaying:'Playing',radiostopped:'Not playing',
   radiodupe:'name already used',radiobadurl:'must start with http:// or https://',
   radiolong:'name is too long (24 characters)',
 
@@ -759,7 +766,7 @@ const I18N={en:{
   bkSectionAp:'Restore',bkSectionApH:'Upload a previously created backup .zip.',
   bkTitle:'Create backup',bkDownload:'Download backup',bkDownloadH:'Pick what to include, then save a .zip.',
   bkWorking:'Collecting…',bkDone:'Backup downloaded',bkNone:'Select at least one category',
-  bkWifi:'WiFi',bkSettings:'Settings',bkIcons:'Icons',bkMelodies:'Melodies',bkPalettes:'Palettes',bkSounds:'MP3 sounds',bkScripts:'Scripts',bkApporder:'App order',
+  bkWifi:'WiFi',bkSettings:'Settings',bkIcons:'Icons',bkMelodies:'Melodies',bkPalettes:'Palettes',bkSounds:'Clips',bkScripts:'Scripts',bkApporder:'App order',
   bkRestoreT:'Restore backup',bkRestore:'Choose backup…',
   bkRestoreH:'Upload a backup .zip.',
   bkCaptiveHint:'The Wi‑Fi sign‑in popup can’t upload files. To restore, open this page in a browser:',
@@ -769,7 +776,7 @@ const I18N={en:{
   editorTab:'Icon Editor',
   edLoading:'Loading the editor…',
   edUnreachable:'The editor did not load.',
-  melodies:'Melodies',
+  melodies:'Melodies',melodieshelp:'Short ringtones, for notifications and scripts.',
   newmelo:'New melody',meloname:'Name',melortttl:'d=4,o=5,b=120:c,e,g',
   melopre:'Preview here',meloplay:'Play on AWTRIX',melostop:'Stop',
   melomuted:'Sound is off - playing on AWTRIX stays silent. Turn it on under System › Audio.',
@@ -856,14 +863,14 @@ const I18N={en:{
   grpMisc:'Misc',grpMiscH:'Everything else.',
 },de:{
   audioTab:'Audio',
-  clips:'MP3-Sounds',
-  clipshelp:'Kurze MP3-Clips. Per API oder mit sound:"name" in einer Meldung abspielen.',
+  clips:'Clips',
+  clipshelp:'Eigene MP3-Dateien für Meldungen und Skripte.',
   radioTab:'Radio',
   radioH:'Internetradio-Sender.',
   radionone:'Noch keine Sender. Unten einen anlegen.',
   radioname:'Name',radiourl:'Stream-URL',
-  radioadd:'Sender hinzuf\u00fcgen',radiosave:'Sender speichern',
-  radioplaying:'L\u00e4uft',radiostopped:'Nicht aktiv',radiostop:'Stopp',
+  radioadd:'Sender hinzuf\u00fcgen',
+  radioplaying:'L\u00e4uft',radiostopped:'Nicht aktiv',
   radiodupe:'Name schon vergeben',radiobadurl:'muss mit http:// oder https:// beginnen',
   radiolong:'Name zu lang (24 Zeichen)',
 
@@ -908,7 +915,7 @@ const I18N={en:{
   bkSectionAp:'Wiederherstellen',bkSectionApH:'Ein zuvor erstelltes Backup-.zip einspielen.',
   bkTitle:'Sicherung erstellen',bkDownload:'Backup herunterladen',bkDownloadH:'Auswählen, was rein soll, dann .zip speichern.',
   bkWorking:'Sammle…',bkDone:'Backup heruntergeladen',bkNone:'Mindestens eine Kategorie wählen',
-  bkWifi:'WLAN',bkSettings:'Einstellungen',bkIcons:'Icons',bkMelodies:'Melodien',bkPalettes:'Paletten',bkSounds:'MP3-Sounds',bkScripts:'Skripte',bkApporder:'App-Reihenfolge',
+  bkWifi:'WLAN',bkSettings:'Einstellungen',bkIcons:'Icons',bkMelodies:'Melodien',bkPalettes:'Paletten',bkSounds:'Clips',bkScripts:'Skripte',bkApporder:'App-Reihenfolge',
   bkRestoreT:'Sicherung wiederherstellen',bkRestore:'Sicherung wählen…',
   bkRestoreH:'Backup-.zip hochladen.',
   bkCaptiveHint:'Der WLAN-Anmelde-Dialog kann keine Dateien hochladen. Zum Wiederherstellen diese Seite im Browser öffnen:',
@@ -918,7 +925,7 @@ const I18N={en:{
   editorTab:'Icon-Editor',
   edLoading:'Editor wird geladen…',
   edUnreachable:'Der Editor wurde nicht geladen.',
-  melodies:'Melodien',
+  melodies:'Melodien',melodieshelp:'Kurze Klingeltöne für Meldungen und Skripte.',
   newmelo:'Neue Melodie',meloname:'Name',melortttl:'d=4,o=5,b=120:c,e,g',
   melopre:'Hier anhören',meloplay:'Auf AWTRIX abspielen',melostop:'Stopp',
   melomuted:'Ton ist aus - Abspielen auf AWTRIX bleibt stumm. Einschalten unter System › Audio.',
@@ -1631,10 +1638,10 @@ function sectionShell(view){
       subnav.querySelectorAll('a').forEach(a=>a.classList.toggle('on',a.dataset.sec===e.target.id));
     });
   },{rootMargin:'-15% 0px -70% 0px'}):null;
-  function section(id,title,help,nodes){
+  function section(id,title,help,nodes,pad){
     const sec=el('section',{class:'section',id:'sec-'+id},
       el('header',null,el('h2',null,title),help?el('div',{class:'ghelp'},help):null),
-      el('div',{class:'rows'},nodes));
+      el('div',{class:pad?'rows pad':'rows'},nodes));
     panel.append(sec);
     const a=el('a',{'data-sec':'sec-'+id},title);
     a.addEventListener('click',()=>sec.scrollIntoView({behavior:'smooth',block:'start'}));
@@ -2287,10 +2294,10 @@ async function collectBackup(cats){
     entries.push({name:'config/settings.json',data:JSON.stringify((await api('/api/v1/settings')).data)});
     included.push('settings');}
   if(cats.icons){await grab('/ICONS');included.push('icons');}
-  if(cats.melodies){for(const m of((await api('/api/v1/sounds')).data.melodies||[]))
+  if(cats.melodies){for(const m of((await api('/api/v1/audio/melodies')).data.melodies||[]))
     entries.push({name:'MELODIES/'+m.name+'.txt',data:m.rtttl});included.push('melodies');}
   if(cats.palettes){await grab('/PALETTES');included.push('palettes');}
-  if(cats.sounds){await grab('/SOUNDS');included.push('sounds');}
+  if(cats.sounds){await grab('/CLIPS');included.push('sounds');}
   if(cats.scripts){await grab('/SCRIPTS');included.push('scripts');}
   if(cats.apporder){try{entries.unshift({name:'apploop.json',data:await text('/apploop.json')});included.push('apporder');}catch(e){}}
   entries.unshift({name:'manifest.json',data:JSON.stringify(
@@ -3242,7 +3249,8 @@ function uploadZone(dir,accept,hint,onDone,asGif){
 }
 let assetRev=0;
 async function uploadFile(file,dir,name,onProgress){
-  const x=await xhrPost('/api/v1/files?dir='+encodeURIComponent(dir),'file',file,name,onProgress);
+  const url=dir.startsWith('/api/')?dir:'/api/v1/files?dir='+encodeURIComponent(dir);
+  const x=await xhrPost(url,'file',file,name,onProgress);
   if(x.status>=300)throw new Error('HTTP '+x.status);
   assetRev++;
 }
@@ -3516,7 +3524,7 @@ function melodiesSection(){
 
   async function reload(){
     try{
-      const{data}=await api('/api/v1/sounds');
+      const{data}=await api('/api/v1/audio/melodies');
       const melodies=(data.melodies||[]).sort((a,b)=>a.name.localeCompare(b.name));
       saved=melodies.map(m=>m.name);
       list.replaceChildren(...melodies.map(m=>meloRow(m)));
@@ -3535,13 +3543,13 @@ function melodiesSection(){
     const meta=el('div',{class:'meta'});
     const row=el('div',{class:'melorow'+(isNew?' dirty':'')});
 
-    const pre=el('button',{class:'icon',title:t('melopre'),'aria-label':t('melopre')},'🔊');
+    const pre=el('button',{class:'icon',title:t('melopre'),'aria-label':t('melopre')},'🎧');
     const play=el('button',{class:'icon',title:t('meloplay'),'aria-label':t('meloplay')},'▶');
     const save=el('button',{class:'icon pri',title:t('save'),'aria-label':t('save'),disabled:true},'💾');
     const del=armable(el('button',{class:'danger icon',title:t('del'),'aria-label':t('del')},icon('trash')),
       async()=>{
         if(isNew){row.remove();return;}
-        try{await api('/api/v1/sounds/'+encodeURIComponent(orig),{method:'DELETE'});
+        try{await api('/api/v1/audio/melodies/'+encodeURIComponent(orig),{method:'DELETE'});
           toast(t('deleted'));reload();}
         catch(e){toast(e.message,false);}
       });
@@ -3578,16 +3586,16 @@ function melodiesSection(){
 
     pre.addEventListener('click',()=>{const p=check();if(p.ok)previewPlay(p);});
     play.addEventListener('click',async()=>{
-      try{await post('/api/v1/sounds/play',{rtttl:full()});toast(t('playing'));}
+      try{await post('/api/v1/audio/play',{rtttl:full()});toast(t('playing'));}
       catch(e){toast(e.message,false);}
     });
     save.addEventListener('click',async()=>{
       const name=nameIn.value.trim();
       save.disabled=true;
       try{
-        await req('PUT','/api/v1/sounds/'+encodeURIComponent(name),{rtttl:rtIn.value.trim()});
+        await req('PUT','/api/v1/audio/melodies/'+encodeURIComponent(name),{rtttl:rtIn.value.trim()});
         if(!isNew&&name!==orig)
-          await api('/api/v1/sounds/'+encodeURIComponent(orig),{method:'DELETE'});
+          await api('/api/v1/audio/melodies/'+encodeURIComponent(orig),{method:'DELETE'});
         toast(t('saved'));reload();
       }catch(e){toast(e.message,false);save.disabled=false;}
     });
@@ -3606,88 +3614,104 @@ function melodiesSection(){
     list.append(row);
     row.querySelector('input').focus();
   });
-  const stopBtn=el('button',null,'■ '+t('melostop'));
-  stopBtn.addEventListener('click',async()=>{
-    previewStop();
-    try{await post('/api/v1/sounds/stop',{});}catch(e){toast(e.message,false);}
-  });
-
   reload();
-  return[list,el('div',{class:'row',style:'margin:10px 0'},addBtn,stopBtn)];
+  return[list,el('div',{class:'row',style:'margin:10px 0 0'},addBtn)];
 }
 function radioSection(onState){
-  const status=el('div',{class:'ghelp'},t('radiostopped'));
+  const status=el('div',{class:'ghelp',style:'margin-left:auto'},t('radiostopped'));
   const list=el('div',{class:'melolist'});
-  const stop=el('button',null,t('radiostop'));
   let stations=[];
 
   function rows(){return[...list.querySelectorAll('.melorow')];}
   function read(){
     return rows().map(r=>({name:r.querySelector('.rn').value.trim(),
-                           url:r.querySelector('.ru').value.trim()}));
+                           url:r.querySelector('.ru').value.trim()}))
+                 .filter(s=>s.name&&s.url);
   }
-  function check(){
-    const seen={};let ok=true;
-    rows().forEach(r=>{
-      const n=r.querySelector('.rn').value.trim(),u=r.querySelector('.ru').value.trim();
-      let bad='';
-      if(!n||!u)bad=' ';
-      else if(n.length>24)bad=t('radiolong');
-      else if(!/^https?:\/\//i.test(u))bad=t('radiobadurl');
-      else if(seen[n])bad=t('radiodupe');
-      seen[n]=1;
-      r.classList.toggle('bad',!!bad);
-      r.querySelector('.rm').replaceChildren(bad.trim());
-      if(bad)ok=false;
-    });
-    save.disabled=!ok;
+  // The API takes the whole list, so a row's save sends every row - unfinished ones excluded.
+  async function put(){
+    await req('PUT','/api/v1/audio/stations',{stations:read()});
   }
+  function checkAll(){rows().forEach(r=>r.check&&r.check());}
   function row(st){
-    const r=el('div',{class:'melorow'});
-    const name=el('input',{class:'rn',value:(st&&st.name)||'',placeholder:t('radioname')});
-    const url=el('input',{class:'ru',value:(st&&st.url)||'',placeholder:t('radiourl')});
-    const acts=el('div',{class:'acts'});
-    const play=el('button',null,'▶');
-    const del=el('button',null,'✕');
+    const isNew=!st;
+    const orig=st||{name:'',url:''};
+    const r=el('div',{class:'melorow'+(isNew?' dirty':'')});
+    const name=el('input',{class:'rn',value:orig.name,placeholder:t('radioname'),
+      maxlength:'24','aria-label':t('radioname')});
+    const url=el('input',{class:'ru',value:orig.url,placeholder:t('radiourl'),
+      'aria-label':t('radiourl')});
+    const msg=el('div',{class:'rm meta'});
+    const play=el('button',{class:'icon',title:t('meloplay'),'aria-label':t('meloplay')},'▶');
+    const save=el('button',{class:'icon pri',title:t('save'),'aria-label':t('save'),disabled:true},'💾');
+    const del=armable(el('button',{class:'danger icon',title:t('del'),'aria-label':t('del')},icon('trash')),
+      async()=>{
+        if(isNew){r.remove();checkAll();return;}
+        r.remove();
+        try{await put();toast(t('deleted'));reload();}
+        catch(e){toast(e.message,false);reload();}
+      });
+
+    const dirty=()=>isNew||name.value.trim()!==orig.name||url.value.trim()!==orig.url;
+    r.check=function(){
+      const n=name.value.trim(),u=url.value.trim();
+      const dup=rows().some(o=>o!==r&&o.querySelector('.rn').value.trim()===n&&n);
+      let bad='';
+      if(n.length>24)bad=t('radiolong');
+      else if(u&&!/^https?:\/\//i.test(u))bad=t('radiobadurl');
+      else if(dup)bad=t('radiodupe');
+      r.classList.toggle('bad',!!bad);
+      r.classList.toggle('dirty',dirty());
+      msg.replaceChildren(bad);
+      save.disabled=!(n&&u&&!bad&&dirty());
+      play.disabled=!(n&&u)||!!bad;
+      return !bad;
+    };
+
+    // An edited row plays by URL so a station can be tried before it is saved.
     play.addEventListener('click',async()=>{
       const n=name.value.trim();
-      try{await post('/api/v1/radio/play',n?{station:n}:{url:url.value.trim()});refresh();}
+      try{await post('/api/v1/audio/play',dirty()?{url:url.value.trim()}:{station:n});refresh();}
       catch(e){toast(e.message,false);}
     });
-    del.addEventListener('click',()=>{r.remove();check();});
-    acts.replaceChildren(play,del);
-    const msg=el('div',{class:'rm meta'});
-    [name,url].forEach(i=>i.addEventListener('input',debounce(check,150)));
-    r.replaceChildren(name,url,acts,msg);
+    save.addEventListener('click',async()=>{
+      save.disabled=true;
+      try{await put();toast(t('saved'));reload();}
+      catch(e){toast(e.message,false);save.disabled=false;}
+    });
+    const recheck=debounce(()=>checkAll(),150);
+    [name,url].forEach(i=>i.addEventListener('input',recheck));
+    r.replaceChildren(name,url,el('div',{class:'acts'},play,save,del),msg);
     return r;
   }
   function paint(){
     list.replaceChildren(...(stations.length?stations.map(row)
                                             :[el('div',{class:'empty'},t('radionone'))]));
-    check();
+    checkAll();
   }
 
   const add=el('button',null,t('radioadd'));
   add.addEventListener('click',()=>{
     const empty=list.querySelector('.empty');
     if(empty)list.replaceChildren();
-    list.appendChild(row(null));check();
+    const r=row(null);
+    list.appendChild(r);
+    checkAll();
+    r.querySelector('input').focus();
   });
-  const save=el('button',null,t('radiosave'));
-  save.addEventListener('click',async()=>{
-    try{await req('PUT','/api/v1/radio/stations',{stations:read()});toast('OK',true);refresh();}
-    catch(e){toast(e.message,false);}
-  });
-  stop.addEventListener('click',async()=>{
-    try{await post('/api/v1/radio/stop',{});refresh();}catch(e){toast(e.message,false);}
-  });
-
+  async function reload(){
+    try{
+      const{data}=await api('/api/v1/audio');
+      stations=data.stations||[];
+      paint();
+    }catch(e){}
+  }
   async function refresh(){
     try{
-      const{data}=await api('/api/v1/radio');
-      status.replaceChildren(data.playing
-        ?t('radioplaying')+': '+data.station+(data.title?' - '+data.title:'')
-        :(data.error||t('radiostopped')));
+      const{data}=await api('/api/v1/audio');
+      status.replaceChildren(data.radio.playing
+        ?t('radioplaying')+': '+data.radio.station+(data.radio.title?' - '+data.radio.title:'')
+        :(data.radio.error||t('radiostopped')));
       if(!list.childElementCount){stations=data.stations||[];paint();}
       if(onState)onState(data);
     }catch(e){}
@@ -3695,7 +3719,7 @@ function radioSection(onState){
 
   refresh();
   poller(refresh,4000);
-  return[status,list,el('div',{class:'row',style:'margin:10px 0'},add,save,stop)];
+  return[list,el('div',{class:'row',style:'margin:10px 0 0'},add,status)];
 }
 function clipsSection(){
   const storSlot=el('div');
@@ -3706,28 +3730,34 @@ function clipsSection(){
     playing=name||'';
     list.querySelectorAll('.melorow').forEach(r=>{
       const on=r.dataset.clip===playing&&playing!=='';
-      r.classList.toggle('dirty',on);
-      r.querySelector('.meta').replaceChildren(on?'▶ '+t('radioplaying'):'');
+      r.classList.toggle('on',on);
+      // Cleared with no argument, not with '': .meta:empty is what keeps idle rows compact.
+      const m=r.querySelector('.meta');
+      if(on)m.replaceChildren('▶ '+t('radioplaying'));else m.replaceChildren();
     });
   }
 
   function clipRow(f){
     const base=f.name.replace(/\.mp3$/i,'');
-    const pre=el('button',{class:'icon',title:t('melopre'),'aria-label':t('melopre')},'🔊');
+    const pre=el('button',{class:'icon',title:t('melopre'),'aria-label':t('melopre')},'🎧');
+    // Through the shared preview handle, so Stopp reaches it and a second click cannot stack.
     pre.addEventListener('click',()=>{
-      new Audio('/SOUNDS/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev).play().catch(()=>{});
+      previewStop();
+      const a=new Audio('/CLIPS/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev);
+      audioStop=()=>a.pause();
+      a.play().catch(()=>{});
     });
     const play=el('button',{class:'icon',title:t('meloplay'),'aria-label':t('meloplay')},'▶');
     play.addEventListener('click',async()=>{
-      try{await post('/api/v1/sounds/play',{name:base});toast(t('playing'));}
+      try{await post('/api/v1/audio/play',{clip:base});toast(t('playing'));}
       catch(e){toast(e.message,false);}
     });
     const del=armable(el('button',{class:'danger icon',title:t('del'),'aria-label':t('del')},icon('trash')),
       async()=>{
-        try{await delFile('/SOUNDS/'+f.name);toast(t('deleted'));reload();}
+        try{await api('/api/v1/audio/clips/'+encodeURIComponent(base),{method:'DELETE'});toast(t('deleted'));reload();}
         catch(e){toast(e.message,false);}
       });
-    const row=el('div',{class:'melorow','data-clip':base},
+    const row=el('div',{class:'melorow clip','data-clip':base},
       el('span',{class:'nm',title:f.name},base),
       el('span',{class:'sz'},fmtBytes(f.size)),
       el('div',{class:'acts'},pre,play,del),
@@ -3737,7 +3767,7 @@ function clipsSection(){
 
   async function reload(){
     try{
-      const{data}=await api('/api/v1/files?dir='+encodeURIComponent('/SOUNDS'),{cache:'no-store'});
+      const{data}=await api('/api/v1/audio/clips',{cache:'no-store'});
       const files=(data.files||[]).filter(f=>/\.mp3$/i.test(f.name))
         .sort((a,b)=>a.name.localeCompare(b.name));
       storSlot.replaceChildren(storageCard(data));
@@ -3747,17 +3777,11 @@ function clipsSection(){
     }catch(e){toast(e.message,false);}
   }
 
-  const stopBtn=el('button',null,'■ '+t('melostop'));
-  stopBtn.addEventListener('click',async()=>{
-    try{await post('/api/v1/sounds/stop',{});}catch(e){toast(e.message,false);}
-  });
-
   reload();
   const nodes=[
-    uploadZone('/SOUNDS','.mp3,audio/mpeg','⬆ '+t('upload')+' (.mp3)',reload,false),
-    storSlot,list,
-    el('div',{class:'row',style:'margin:10px 0'},stopBtn)];
-  return{nodes,mark};
+    uploadZone('/api/v1/audio/clips','.mp3,audio/mpeg','⬆ '+t('upload')+' (.mp3)',reload,false),
+    list];
+  return{nodes,mark,storSlot};
 }
 async function viewAudio(view){
   const g=gen;
@@ -3771,6 +3795,13 @@ async function viewAudio(view){
   }
   const{section,panel}=sectionShell(view);
   const muted=el('div',{class:'ghelp',style:'display:none;color:var(--warn)'},t('melomuted'));
+  // One transport control for the page: the browser preview, the device sound and the stream.
+  const stopAll=el('button',null,'■ '+t('melostop'));
+  stopAll.addEventListener('click',async()=>{
+    previewStop();
+    try{await post('/api/v1/audio/stop',{});}catch(e){toast(e.message,false);}
+  });
+  panel.prepend(el('div',{class:'row audbar'},stopAll));
   panel.prepend(muted);
   (async()=>{
     try{
@@ -3779,27 +3810,29 @@ async function viewAudio(view){
     }catch(e){}
   })();
 
-  let markClip=()=>{};
+  let markClip=()=>{},storage=null;
   if(S.audioCap){
     const clips=clipsSection();
     markClip=clips.mark;
-    section('clips',t('clips'),t('clipshelp'),clips.nodes);
+    section('clips',t('clips'),t('clipshelp'),clips.nodes,1);
+    storage=clips.storSlot;
   }
-  section('melodies',t('melodies'),'',melodiesSection());
+  section('melodies',t('melodies'),t('melodieshelp'),melodiesSection(),1);
   if(S.radioCap){
     section('radio',t('radioTab'),t('radioH'),
-      radioSection(d=>markClip(d.clipPlaying?d.clipName:'')));
+      radioSection(d=>markClip(d.clip.playing?d.clip.name:'')),1);
   }else if(S.audioCap){
     // No radio section polling on this build, so the clip indicator needs its own timer.
     const refresh=async()=>{
       try{
-        const{data}=await api('/api/v1/radio');
-        markClip(data.clipPlaying?data.clipName:'');
+        const{data}=await api('/api/v1/audio');
+        markClip(data.clip.playing?data.clip.name:'');
       }catch(e){}
     };
     refresh();
     poller(refresh,4000);
   }
+  if(storage)panel.append(storage);
 }
 const PAL_MAX=16;
 const PAL_BUILTIN=[

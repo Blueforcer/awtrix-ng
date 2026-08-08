@@ -22,11 +22,11 @@ class JsonWriter;
 std::string buildSettingsJson(CoreEngine& engine);
 std::string buildDisplayJson(CoreEngine& engine);
 std::string buildScreenJson(const Canvas& canvas);
-std::string buildRadioJson(CoreEngine& engine);
+std::string buildAudioJson(CoreEngine& engine);
 std::string buildAppsJson(CoreEngine& engine, const script::ScriptHost* scripts = nullptr);
 std::string buildSharedStateJson(const std::vector<script::SharedEntry>& entries);
 
-void appendRadioJson(std::string& out, CoreEngine& engine);
+void appendAudioJson(std::string& out, CoreEngine& engine);
 void appendAppsJson(std::string& out, CoreEngine& engine,
                     const script::ScriptHost* scripts = nullptr,
                     const std::vector<script::StoredScript>* stored = nullptr);

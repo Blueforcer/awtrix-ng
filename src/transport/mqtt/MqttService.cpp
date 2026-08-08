@@ -65,7 +65,7 @@ void MqttService::tick() {
       publish(std::string("state/buttons/") + kNames[i], buttons[i] ? "1" : "0", true);
   }
   if (cadence_.settingsDue()) publish("state/settings", buildSettingsJson(*engine_), true);
-  if (cadence_.radioDue()) publish("state/radio", buildRadioJson(*engine_), true);
+  if (cadence_.radioDue()) publish("state/audio", buildAudioJson(*engine_), true);
   if (cadence_.stateDue(now))
     publish("state/device", buildDeviceStateJson(*engine_, *board_, uid_, scriptingRunning_),
             true);

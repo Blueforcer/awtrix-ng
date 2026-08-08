@@ -381,7 +381,9 @@ void appendAppsJson(std::string& out, CoreEngine& engine, const script::ScriptHo
   out += ']';
 }
 
-void appendRadioJson(std::string& out, CoreEngine& engine) {
+// One document for the whole output: what is sounding right now, and the stream side under
+// its own key so a clip is never mistaken for a station.
+void appendAudioJson(std::string& out, CoreEngine& engine) {
   const RuntimeState& runtime = engine.state().runtime();
   auto quoted = [](const std::string& value) {
     std::string out = "\"";
@@ -394,18 +396,18 @@ void appendRadioJson(std::string& out, CoreEngine& engine) {
 
   out += "{\"available\":";
   out += engine.radioAvailable() ? "true" : "false";
-  out += ",\"playing\":";
+  out += ",\"clip\":{\"playing\":";
+  out += runtime.clipPlaying ? "true" : "false";
+  out += ",\"name\":" + quoted(runtime.clipName) + "}";
+  out += ",\"radio\":{\"playing\":";
   out += runtime.radioPlaying ? "true" : "false";
   out += ",\"station\":" + quoted(runtime.radioStation);
   out += ",\"title\":" + quoted(runtime.radioTitle);
   out += ",\"error\":" + quoted(runtime.radioError);
-  out += ",\"clipPlaying\":";
-  out += runtime.clipPlaying ? "true" : "false";
-  out += ",\"clipName\":" + quoted(runtime.clipName);
   out += ",\"underruns\":" + std::to_string(engine.radioUnderruns());
   out += ",\"decodeUs\":" + std::to_string(engine.radioDecodeUs());
   out += ",\"starvedMs\":" + std::to_string(engine.radioStarvedMs());
-  out += ",\"bufferBytes\":" + std::to_string(engine.radioBufferBytes());
+  out += ",\"bufferBytes\":" + std::to_string(engine.radioBufferBytes()) + "}";
   // stationsJson() hands back a whole document; splice out just the array it contains.
   const std::string stations = engine.stationsJson();
   const std::size_t open = stations.find('[');
@@ -429,9 +431,9 @@ std::string buildAppsJson(CoreEngine& engine, const script::ScriptHost* scripts)
   return out;
 }
 
-std::string buildRadioJson(CoreEngine& engine) {
+std::string buildAudioJson(CoreEngine& engine) {
   std::string out;
-  appendRadioJson(out, engine);
+  appendAudioJson(out, engine);
   return out;
 }
 

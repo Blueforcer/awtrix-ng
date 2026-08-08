@@ -6,30 +6,30 @@ Everything below the [MP3 sounds](#mp3-sounds) section describes a board with a 
 
 ## MP3 sounds
 
-Only on boards with a speaker; without one, the section below does not apply and `name` always means a melody. Upload short MP3 clips in the web UI's Audio tab (drag & drop, like icons) or with the file API:
+Only on boards with a speaker; without one, the section below does not apply and every stored sound is a melody. Upload short MP3 clips in the web UI's Audio tab (drag & drop, like icons) or with the file API:
 
 ```bash
-curl -X POST "http://<awtrix-ip>/api/v1/files?dir=/SOUNDS" -F "file=@ding.mp3"
+curl -X POST "http://<awtrix-ip>/api/v1/files?dir=/CLIPS" -F "file=@ding.mp3"
 ```
 
-The clip lands at `/SOUNDS/ding.mp3`, and the file name without `.mp3` is what you play:
+The clip lands at `/CLIPS/ding.mp3`, and the file name without `.mp3` is what you play:
 
 ```bash
-curl -X POST http://<awtrix-ip>/api/v1/sounds/play \
+curl -X POST http://<awtrix-ip>/api/v1/audio/play \
   -H 'Content-Type: application/json' \
-  -d '{"name":"ding"}'
+  -d '{"clip":"ding"}'
 ```
 
 The same name works as `sound:"ding"` in a [notification](notifications.md#sound). Names are up to 32 characters of `A-Z`, `a-z`, `0-9`, `_` and `-`.
 
-How `name` is resolved on a speaker build: AWTRIX looks for `/SOUNDS/<name>.mp3` first and falls back to the melody file `/MELODIES/<name>.txt`. A clip with the same name as a melody wins.
+The API asks for one or the other: `clip` plays `/CLIPS/<name>.mp3`, `melody` plays `/MELODIES/<name>.txt`. Only a script's `sound.play(name)` still takes either, and there a clip of that name wins.
 
 Worth knowing:
 
 - The upload accepts MP3 (MPEG-1 Layer III) only - the usual 32/44.1/48 kHz files from any converter. A file that only pretends to be one uploads fine but stays silent and leaves a note in the log.
 - If the radio is streaming, a clip interrupts it; the stream reconnects by itself once the clip ends, with a short gap while it rebuffers.
 - Clips use the `radioVolume` setting, not `volume` - one speaker, one knob.
-- List and delete go through the same file API as icons: `GET /api/v1/files?dir=/SOUNDS` and `DELETE /api/v1/files?path=/SOUNDS/ding.mp3`. See [Files](../reference/http.md#files).
+- List and delete go through the same file API as icons: `GET /api/v1/files?dir=/CLIPS` and `DELETE /api/v1/files?path=/CLIPS/ding.mp3`. See [Files](../reference/http.md#files).
 - Clips share flash with everything else, so keep them short - a few seconds each. The storage bar in the Audio tab shows where you stand.
 
 ## Play a melody right now
@@ -37,7 +37,7 @@ Worth knowing:
 Paste this:
 
 ```bash
-curl -X POST http://<awtrix-ip>/api/v1/sounds/play \
+curl -X POST http://<awtrix-ip>/api/v1/audio/play \
   -H 'Content-Type: application/json' \
   -d '{"rtttl":"beep:d=4,o=5,b=120:c,e,g"}'
 ```
@@ -48,12 +48,13 @@ Three ascending notes, and:
 {"ok":true}
 ```
 
-`POST /api/v1/sounds/play` takes exactly one of three keys:
+`POST /api/v1/audio/play` takes exactly one of three keys:
 
 | Key | What it plays |
 |---|---|
 | `rtttl` | the melody string in the request |
-| `name` | a stored sound - `/SOUNDS/<name>.mp3` on speaker builds first, else `/MELODIES/<name>.txt` |
+| `clip` | a stored MP3, `/CLIPS/<name>.mp3` |
+| `melody` | a stored melody, `/MELODIES/<name>.txt` |
 | `builtin` | the R2D2 melody - see [below](#the-r2d2-builtin) |
 
 Send **exactly one** key. A body carrying more than one is rejected with `422 validationFailed` and nothing plays.
@@ -92,7 +93,7 @@ Every value has a fixed set it must come from:
 Anything outside those sets is refused, including `b#`, `e#`, a sharpened rest and a duration such as `3`. The reply names the reason and the position in the string:
 
 ```bash
-curl -X POST http://<awtrix-ip>/api/v1/sounds/play \
+curl -X POST http://<awtrix-ip>/api/v1/audio/play \
   -H 'Content-Type: application/json' \
   -d '{"rtttl":"d=4,o=5,b=120:c,e,g"}'
 ```
@@ -108,15 +109,15 @@ Some melodies to try:
 
 ```bash
 # Two-tone doorbell
-curl -X POST http://<awtrix-ip>/api/v1/sounds/play -H 'Content-Type: application/json' \
+curl -X POST http://<awtrix-ip>/api/v1/audio/play -H 'Content-Type: application/json' \
   -d '{"rtttl":"bell:d=4,o=5,b=100:e,c"}'
 
 # Descending "something went wrong"
-curl -X POST http://<awtrix-ip>/api/v1/sounds/play -H 'Content-Type: application/json' \
+curl -X POST http://<awtrix-ip>/api/v1/audio/play -H 'Content-Type: application/json' \
   -d '{"rtttl":"loose:d=8,o=5,b=120:16c,16b,16a,4g"}'
 
 # Jackpot fanfare
-curl -X POST http://<awtrix-ip>/api/v1/sounds/play -H 'Content-Type: application/json' \
+curl -X POST http://<awtrix-ip>/api/v1/audio/play -H 'Content-Type: application/json' \
   -d '{"rtttl":"jackpot:d=8,o=5,b=120:16c,16e,16g,c6,16p,16c6,16e6,4g6"}'
 ```
 
@@ -125,7 +126,7 @@ A melody string is capped at **512 characters**, whether it arrives inline or si
 ### Stop one
 
 ```bash
-curl -X POST http://<awtrix-ip>/api/v1/sounds/stop
+curl -X POST http://<awtrix-ip>/api/v1/audio/stop
 ```
 
 Silences whatever is playing. It ignores `soundEnabled`, so a playing melody can always be stopped.
@@ -141,7 +142,7 @@ The web UI has an editor for this - one row per melody stored on AWTRIX, with th
 ### Save one
 
 ```bash
-curl -X PUT http://<awtrix-ip>/api/v1/sounds/doorbell \
+curl -X PUT http://<awtrix-ip>/api/v1/audio/melodies/doorbell \
   -H 'Content-Type: application/json' \
   -d '{"rtttl":"d=4,o=5,b=100:e,c"}'
 ```
@@ -155,7 +156,7 @@ Names are 1 to 24 characters of `A-Z`, `a-z`, `0-9`, `_` and `-`.
 ### List them
 
 ```bash
-curl http://<awtrix-ip>/api/v1/sounds
+curl http://<awtrix-ip>/api/v1/audio/melodies
 ```
 
 ```json
@@ -171,7 +172,7 @@ curl http://<awtrix-ip>/api/v1/sounds
 ### Delete one
 
 ```bash
-curl -X DELETE http://<awtrix-ip>/api/v1/sounds/doorbell
+curl -X DELETE http://<awtrix-ip>/api/v1/audio/melodies/doorbell
 ```
 
 `404 notFound` if there is no such melody. To **rename**, save under the new name and delete the old one; there is no rename route.
@@ -181,15 +182,15 @@ curl -X DELETE http://<awtrix-ip>/api/v1/sounds/doorbell
 Pass the file's name **without the `.txt`**:
 
 ```bash
-curl -X POST http://<awtrix-ip>/api/v1/sounds/play \
+curl -X POST http://<awtrix-ip>/api/v1/audio/play \
   -H 'Content-Type: application/json' \
-  -d '{"name":"doorbell"}'
+  -d '{"melody":"doorbell"}'
 ```
 
 On a speaker build an MP3 clip called `doorbell` would play instead - see [MP3 sounds](#mp3-sounds). If `/MELODIES/doorbell.txt` does not exist - or exists but does not parse - you get:
 
 ```json
-{"error":{"code":"notFound","message":"sound not found"}}
+{"error":{"code":"notFound","message":"no melody of that name"}}
 ```
 
 with status `404`.
@@ -199,7 +200,7 @@ with status `404`.
 There is exactly **one** built-in sound:
 
 ```bash
-curl -X POST http://<awtrix-ip>/api/v1/sounds/play \
+curl -X POST http://<awtrix-ip>/api/v1/audio/play \
   -H 'Content-Type: application/json' \
   -d '{"builtin":"r2d2"}'
 ```
@@ -238,7 +239,7 @@ curl -X PATCH http://<awtrix-ip>/api/v1/settings \
   -d '{"soundEnabled":false}'
 ```
 
-While muted, AWTRIX still accepts every sound command and still answers `200 {"ok":true}`. That includes `{"name": …}` for a melody that does not exist, which would otherwise answer `404 sound not found` - so test your melody names with sound **on**.
+While muted, AWTRIX still accepts every sound command and still answers `200 {"ok":true}`. That includes `{"melody": …}` for one that does not exist, which would otherwise answer `404 no melody of that name` - so test your melody names with sound **on**.
 
 For genuine silence, set `pinBuzzer` to `-1` in the [pin map](../reference/gpio.md#the-pin-map). With no buzzer pin, nothing is ever played.
 
@@ -283,11 +284,11 @@ These three are **notification-only keys** - a pushed app that sends one is reje
 Same body, same three keys, same exactly-one rule:
 
 ```bash
-mosquitto_pub -h <broker> -t 'awtrixNG/cmd/sounds/play' \
+mosquitto_pub -h <broker> -t 'awtrixNG/cmd/audio/play' \
   -m '{"rtttl":"beep:d=4,o=5,b=120:c,e,g"}'
 ```
 
-Errors come back on `awtrixNG/cmd/sounds/play/result` as `{"ok":false,"error":{…}}`. Storing and listing melody files are HTTP-only. See [Command topics](../reference/mqtt.md#command-topics).
+Errors come back on `awtrixNG/cmd/audio/play/result` as `{"ok":false,"error":{…}}`. Storing and listing melody files are HTTP-only. See [Command topics](../reference/mqtt.md#command-topics).
 
 ## DFPlayer boards
 
@@ -297,7 +298,7 @@ A DFPlayer Mini plays MP3 files off an SD card and cannot produce notes, so noth
 
 - `rtttl` and `builtin` answer `422` rather than pretending to play;
 - a notification's `soundRtttl` has no request to fail, so it is simply silent;
-- `name` is the only key that works, and it means a **track number**, not a file in `/MELODIES`. `{"name":"3"}` plays `/MP3/0003.mp3`; anything that is not a positive number returns `404 sound not found`. A notification's `sound` key works the same way.
+- `melody` is the only key that works, and it means a **track number**, not a file in `/MELODIES`. `{"melody":"3"}` plays `/MP3/0003.mp3`; anything that is not a positive number returns `404 no melody of that name`. A notification's `sound` key works the same way.
 
 `volume` and `soundEnabled` behave exactly as they do on the buzzer.
 

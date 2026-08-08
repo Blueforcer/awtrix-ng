@@ -3,6 +3,7 @@
 #include <string>
 
 #include "core/sound/Rtttl.h"
+#include "core/sound/SoundClips.h"
 
 namespace awtrix {
 namespace assets {
@@ -10,7 +11,7 @@ namespace assets {
 inline bool isAssetPath(const std::string& path) {
   if (path.find("..") != std::string::npos) return false;
   return path.rfind("/ICONS/", 0) == 0 || path.rfind("/MELODIES/", 0) == 0 ||
-         path.rfind("/PALETTES/", 0) == 0 || path.rfind("/SOUNDS/", 0) == 0;
+         path.rfind("/PALETTES/", 0) == 0 || path.rfind("/CLIPS/", 0) == 0;
 }
 
 inline bool isServable(const std::string& path) { return isAssetPath(path); }
@@ -26,18 +27,30 @@ inline bool isBackupReadable(const std::string& path) {
 inline bool isBackupWritable(const std::string& path) {
   if (path.find("..") != std::string::npos) return false;
   return path.rfind("/ICONS/", 0) == 0 || path.rfind("/MELODIES/", 0) == 0 ||
-         path.rfind("/PALETTES/", 0) == 0 || path.rfind("/SOUNDS/", 0) == 0 ||
+         path.rfind("/PALETTES/", 0) == 0 || path.rfind("/CLIPS/", 0) == 0 ||
          path.rfind("/SCRIPTS/", 0) == 0;
 }
 
-enum class AssetKind { Unknown, Icon, Melody, Palette, Sound };
+enum class AssetKind { Unknown, Icon, Melody, Palette, Clip };
 
 inline AssetKind kindFor(const std::string& path) {
   if (path.rfind("/ICONS/", 0) == 0) return AssetKind::Icon;
   if (path.rfind("/MELODIES/", 0) == 0) return AssetKind::Melody;
   if (path.rfind("/PALETTES/", 0) == 0) return AssetKind::Palette;
-  if (path.rfind("/SOUNDS/", 0) == 0) return AssetKind::Sound;
+  if (path.rfind("/CLIPS/", 0) == 0) return AssetKind::Clip;
   return AssetKind::Unknown;
+}
+
+// A clip is played by its bare name, so a name the player cannot form is a file nobody can
+// reach: it uploads, takes flash and answers "sound not found" forever. The rule is the one
+// sound::clipPathFor builds a path from, plus the .mp3 suffix the lookup appends.
+inline bool uploadNameOk(const std::string& path) {
+  if (kindFor(path) != AssetKind::Clip) return true;
+  const size_t slash = path.rfind('/');
+  const std::string file = slash == std::string::npos ? path : path.substr(slash + 1);
+  constexpr size_t kExt = 4;  // ".mp3"
+  if (file.size() <= kExt || file.compare(file.size() - kExt, kExt, ".mp3") != 0) return false;
+  return !sound::clipPathFor(file.substr(0, file.size() - kExt)).empty();
 }
 
 inline bool looksLikeImage(const unsigned char* data, unsigned n) {
@@ -71,7 +84,7 @@ inline bool contentLooksValid(AssetKind kind, const unsigned char* data, unsigne
       }
       return true;
     }
-    case AssetKind::Sound:
+    case AssetKind::Clip:
       return looksLikeMp3(data, n);
     case AssetKind::Unknown:
       return false;
@@ -84,7 +97,7 @@ inline const char* acceptedFormats(AssetKind kind) {
     case AssetKind::Icon: return "GIF or JPEG";
     case AssetKind::Melody: return "RTTTL text";
     case AssetKind::Palette: return "text, one RRGGBB per line";
-    case AssetKind::Sound: return "MP3 (MPEG-1 Layer III)";
+    case AssetKind::Clip: return "MP3 (MPEG-1 Layer III)";
     default: return "";
   }
 }

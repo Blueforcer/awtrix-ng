@@ -13,7 +13,7 @@ using namespace awtrix;
 
 namespace {
 struct FSound : ISoundService {
-  bool playSound(const std::string&) override { return true; }
+  bool playSound(const std::string&, SoundKind) override { return true; }
   void playRtttl(const std::string&) override {}
   void r2d2(const std::string&) override {}
   void stop() override {}

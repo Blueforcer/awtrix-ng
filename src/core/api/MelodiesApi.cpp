@@ -1,4 +1,4 @@
-#include "core/api/SoundsApi.h"
+#include "core/api/MelodiesApi.h"
 
 #include <string>
 #include <string_view>
@@ -9,7 +9,7 @@
 
 namespace awtrix {
 namespace api {
-namespace sounds {
+namespace melodies {
 
 namespace {
 

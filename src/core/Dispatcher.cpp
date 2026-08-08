@@ -289,8 +289,15 @@ DispatchResult Dispatcher::dispatch(const Command& cmd, CommandContext& ctx) {
       ctx.sound.playRtttl(cmd.payload);
       return DispatchResult::Ok;
     case CommandType::PlaySound:
+    case CommandType::PlayClip:
+    case CommandType::PlayMelody: {
       if (!ctx.state.settings().soundEnabled) return DispatchResult::Ok;
-      return ctx.sound.playSound(cmd.payload) ? DispatchResult::Ok : DispatchResult::NotFound;
+      const SoundKind kind = cmd.type == CommandType::PlayClip     ? SoundKind::Clip
+                             : cmd.type == CommandType::PlayMelody ? SoundKind::Melody
+                                                                   : SoundKind::Any;
+      return ctx.sound.playSound(cmd.payload, kind) ? DispatchResult::Ok
+                                                    : DispatchResult::NotFound;
+    }
     case CommandType::R2D2:
       if (!ctx.state.settings().soundEnabled) return DispatchResult::Ok;
       if (!ctx.sound.supportsRtttl()) {
@@ -307,6 +314,10 @@ DispatchResult Dispatcher::dispatch(const Command& cmd, CommandContext& ctx) {
       return ctx.stations->setStations(cmd.payload, ctx.detail);
     case CommandType::RadioPlay:
       return applyRadioPlay(cmd, ctx);
+    case CommandType::StopAudio:
+      ctx.sound.stop();
+      if (!ctx.radio) return DispatchResult::Ok;
+      [[fallthrough]];
     case CommandType::RadioStop:
       if (!ctx.radio) {
         ctx.detail = {"", "this build has no audio output"};

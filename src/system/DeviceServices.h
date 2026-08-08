@@ -12,7 +12,7 @@
 #include "core/PinRules.h"
 #include "core/Services.h"
 #include "core/render/Canvas.h"
-#include "core/sound/SoundClips.h"
+#include "system/ClipPlayback.h"
 #include "hal/IBoard.h"
 #include "transport/DeviceStateJson.h"
 
@@ -24,37 +24,26 @@ using Publisher = std::function<void(const std::string& suffix, const std::strin
 class DeviceSound : public ISoundService {
  public:
   explicit DeviceSound(IBoard& board) : board_(board) {}
-  // A stored MP3 clip wins over a melody of the same name, but only on builds with an I2S output.
-  bool playSound(const std::string& payload) override {
-#if defined(AWTRIX_SOC_ESP32S3)
-    if (clips_) {
-      const std::string path = sound::clipPathFor(payload);
-      if (!path.empty() && LittleFS.exists(path.c_str())) return clips_->playClip(path);
-    }
-#endif
-    return board_.sound().playFile(payload);
+  bool playSound(const std::string& name, SoundKind kind) override {
+    if (kind != SoundKind::Melody && playStoredClip(clips_, name)) return true;
+    if (kind == SoundKind::Clip) return false;
+    return board_.sound().playFile(name);
   }
   void playRtttl(const std::string& rtttl) override { board_.sound().playRtttl(rtttl); }
   void r2d2(const std::string& ) override {
     board_.sound().playRtttl("r2d2:d=4,o=5,b=240:16c6,16g6,16e6,16a6,16g6,16e7");
   }
   void stop() override {
-#if defined(AWTRIX_SOC_ESP32S3)
     if (clips_) clips_->stopClip();
-#endif
     board_.sound().stop();
   }
   bool supportsRtttl() const override { return board_.sound().supportsRtttl(); }
 
-#if defined(AWTRIX_SOC_ESP32S3)
   void setClips(IClipService* clips) { clips_ = clips; }
-#endif
 
  private:
   IBoard& board_;
-#if defined(AWTRIX_SOC_ESP32S3)
   IClipService* clips_ = nullptr;
-#endif
 };
 
 class DeviceDisplay : public IDisplayService {

@@ -69,6 +69,8 @@ class HttpApiServer {
   bool serveSystem(const Request& req);
   bool serveSounds(const Request& req);
   bool serveFiles(const Request& req);
+  bool serveClips(const Request& req);
+  void listDir(const char* dir);
 
   bool authOk();
   void collectBody(WebServer& server, const String& uri, HTTPRaw& raw);
@@ -89,6 +91,7 @@ class HttpApiServer {
   // handle*Done() reads them once the body is in and picks the status code.
   bool uploadAuthed_ = false;
   bool uploadPathOk_ = false;
+  bool uploadNameOk_ = true;
   bool uploadWriteOk_ = false;
   bool uploadContentOk_ = true;
   bool uploadContentChecked_ = false;

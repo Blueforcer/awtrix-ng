@@ -9,6 +9,7 @@
 #include "core/Services.h"
 #include "core/render/RenderPipeline.h"
 #include "core/sound/SoundClips.h"
+#include "sim/SimClipPlayback.h"
 #include "hal/IBoard.h"
 #include "sim/SimStore.h"
 
@@ -24,18 +25,11 @@ class SimPageSound : public IPageSound {
       return;
     }
     if (spec.sound.empty()) return;
-    if (clips_) {
-      const std::string path = sound::clipPathFor(spec.sound);
-      if (!path.empty() && std::filesystem::exists(std::filesystem::u8path(sim::hostPath(path)))) {
-        clips_->playClip(path);
-        return;
-      }
-    }
+    if (playStoredClip(clips_, spec.sound)) return;
     board_.sound().playFile(spec.sound);
   }
   bool isPlaying() const override {
-    if (clips_ && clips_->clipPlaying()) return true;
-    return board_.sound().isPlaying();
+    return (clips_ && clips_->clipPlaying()) || board_.sound().isPlaying();
   }
 
   void setClips(IClipService* clips) { clips_ = clips; }

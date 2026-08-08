@@ -31,7 +31,12 @@ struct FakeNotify : INotifyService {
 };
 struct FakeSound : ISoundService {
   std::string sound, rtttl, r2; bool soundRet = true; bool rtttlOk = true; int stops = 0;
-  bool playSound(const std::string& p) override { sound = p; return soundRet; }
+  SoundKind kind = SoundKind::Any;
+  bool playSound(const std::string& p, SoundKind k) override {
+    sound = p;
+    kind = k;
+    return soundRet;
+  }
   void playRtttl(const std::string& p) override { rtttl = p; }
   void r2d2(const std::string& p) override { r2 = p; }
   void stop() override { ++stops; }

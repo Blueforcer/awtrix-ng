@@ -471,12 +471,9 @@ void setup() {
     c.source = Source::Internal;
     return g_engine->submit(c);
   };
-  g_scriptSvc.soundPlaying = [] {
-#if defined(AWTRIX_SOC_ESP32S3)
-    if (g_radio && g_radio->clipPlaying()) return true;
-#endif
-    return g_board->sound().isPlaying();
-  };
+  // One answer for "is something sounding", clip or melody: the page sound service already
+  // merges both, and a script asking must not get a different answer than an app does.
+  g_scriptSvc.soundPlaying = [] { return g_pageSound->isPlaying(); };
   g_scriptSvc.rotateNext = [] { g_engine->scriptNextApp(); };
   g_scriptSvc.rotatePrevious = [] { g_engine->scriptPreviousApp(); };
   g_scriptSvc.showApp = [](const std::string& id) { return g_engine->scriptShowApp(id); };

@@ -264,7 +264,7 @@ settings.apply_case = _settings_apply_case
 
 # ---- sound -----------------------------------------------------------------
 # Queued for the device to play, not played inside your draw call: the request
-# takes the same route POST /api/v1/sounds/play does, so the "sound is switched
+# takes the same route POST /api/v1/audio/play does, so the "sound is switched
 # off" and "this backend has no RTTTL" rules are the device's, decided once.
 # True means the request was accepted, not that a file of that name exists.
 # The action numbers are script::SoundAction (Play, Rtttl, Stop) in that order.

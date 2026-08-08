@@ -53,24 +53,51 @@ std::string mqttError(const std::string& httpBody) {
 
 // Exactly one of "name", "rtttl" or "builtin". RTTTL is parsed here so a bad melody fails with
 // a useful message instead of reaching the player.
-RouteOutcome routeSoundsPlay(const std::string& body, Source src, Command& cmd,
-                             HttpResult& immediate) {
-  JsonReader atName, atRtttl, atBuiltin;
-  if (!readMembers(body,
-                   {{"name", &atName}, {"rtttl", &atRtttl}, {"builtin", &atBuiltin}})) {
+// Every source of sound the device has, one key each. A station or a url is a stream and goes to
+// the radio dispatch; the rest are one-shots.
+RouteOutcome routeAudioPlay(const std::string& body, Source src, Command& cmd,
+                            HttpResult& immediate) {
+  JsonReader atClip, atMelody, atRtttl, atBuiltin, atStation, atIndex, atUrl;
+  if (!readMembers(body, {{"clip", &atClip},
+                          {"melody", &atMelody},
+                          {"rtttl", &atRtttl},
+                          {"builtin", &atBuiltin},
+                          {"station", &atStation},
+                          {"index", &atIndex},
+                          {"url", &atUrl}})) {
     immediate = errorResult(400, "invalidJson",
                             src == Source::Mqtt ? "payload is not valid JSON"
                                                 : "request body is not valid JSON");
     return RouteOutcome::Respond;
   }
-  if (present(atName) + present(atRtttl) + present(atBuiltin) > 1) {
-    immediate = errorResult(422, "validationFailed",
-                            "exactly one of \"name\", \"rtttl\" or \"builtin\" is allowed", "name");
+  const int keys = present(atClip) + present(atMelody) + present(atRtttl) + present(atBuiltin) +
+                   present(atStation) + present(atIndex) + present(atUrl);
+  static constexpr const char* kOneOf =
+      "exactly one of \"clip\", \"melody\", \"rtttl\", \"builtin\", \"station\", \"index\" or \"url\"";
+  if (keys > 1) {
+    immediate = errorResult(422, "validationFailed", std::string(kOneOf) + " is allowed", "clip");
     return RouteOutcome::Respond;
   }
+  if (keys == 0) {
+    immediate = errorResult(422, "validationFailed", std::string(kOneOf) + " is required", "clip");
+    return RouteOutcome::Respond;
+  }
+
+  // A stream keeps the payload as sent: the radio dispatch reads station, index or url itself.
+  if (present(atStation) || present(atIndex) || present(atUrl)) {
+    cmd = make(CommandType::RadioPlay, src);
+    cmd.payload = body;
+    return RouteOutcome::Routed;
+  }
+
   std::string value;
-  if (atName.appendString(value)) {
-    cmd = make(CommandType::PlaySound, src);
+  if (atClip.appendString(value)) {
+    cmd = make(CommandType::PlayClip, src);
+    cmd.payload = value;
+    return RouteOutcome::Routed;
+  }
+  if (atMelody.appendString(value)) {
+    cmd = make(CommandType::PlayMelody, src);
     cmd.payload = value;
     return RouteOutcome::Routed;
   }
@@ -89,8 +116,8 @@ RouteOutcome routeSoundsPlay(const std::string& body, Source src, Command& cmd,
     cmd.payload = value;
     return RouteOutcome::Routed;
   }
-  immediate = errorResult(422, "validationFailed",
-                          "one of \"name\", \"rtttl\" or \"builtin\" is required", "name");
+  immediate = errorResult(422, "validationFailed", std::string(kOneOf) + " must be a string",
+                          "clip");
   return RouteOutcome::Respond;
 }
 
@@ -346,35 +373,27 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
     }
   }
 
-  if (path == "/api/v1/sounds/play") {
-    if (post) return routeSoundsPlay(body, src, cmd, immediate);
-    return methodNotAllowed("POST");
-  }
-
-  if (path == "/api/v1/sounds/stop") {
-    if (post) return command(CommandType::StopSound);
-    return methodNotAllowed("POST");
-  }
-
-  if (path == "/api/v1/radio/play") {
+  if (path == "/api/v1/audio/play") {
     if (post) {
-      if (body.empty() || body == "{}") return requireBody("name a station, an index or a url");
-      return command(CommandType::RadioPlay);
+      if (body.empty()) return requireBody("name a clip, a melody, a station or a url");
+      return routeAudioPlay(body, src, cmd, immediate);
     }
     return methodNotAllowed("POST");
   }
 
-  if (path == "/api/v1/radio/stop") {
-    if (post) return command(CommandType::RadioStop);
+  // Stops everything the output is doing, stream included: one output, one stop.
+  if (path == "/api/v1/audio/stop") {
+    if (post) return command(CommandType::StopAudio);
     return methodNotAllowed("POST");
   }
 
-  if (path == "/api/v1/radio/stations") {
+  if (path == "/api/v1/audio/stations") {
     if (put) {
       if (body.empty()) return requireBody("send {\"stations\":[...]}");
       return command(CommandType::SetRadioStations);
     }
-    return methodNotAllowed("PUT");
+    if (get) return RouteOutcome::NoMatch;
+    return methodNotAllowed("GET, PUT");
   }
 
   if (path == "/api/v1/device/reboot") {
@@ -390,7 +409,7 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
     return methodNotAllowed("POST");
   }
 
-  if (path == "/api/v1/radio" || path == "/api/v1/device" ||
+  if (path == "/api/v1/audio" || path == "/api/v1/device" ||
       path == "/api/v1/display/screen" ||
       path == "/api/v1/capabilities" ||
       path == "/api/v1/version" || path == "/version" ||
@@ -444,9 +463,7 @@ RouteOutcome routeMqtt(const std::string& suffix, const std::string& payload,
   if (op == "apps/next") return command(CommandType::NextApp);
   if (op == "apps/previous") return command(CommandType::PreviousApp);
   if (op == "apps/order") return command(CommandType::SetAppOrder);
-  if (op == "radio/play") return command(CommandType::RadioPlay);
-  if (op == "radio/stop") return command(CommandType::RadioStop);
-  if (op == "radio/stations") return command(CommandType::SetRadioStations);
+  if (op == "audio/stations") return command(CommandType::SetRadioStations);
   if (op == "settings") return command(CommandType::SetSettings);
   if (op == "settings/reset") return command(CommandType::ResetSettings);
   if (op == "display") return command(CommandType::SetDisplay);
@@ -468,13 +485,13 @@ RouteOutcome routeMqtt(const std::string& suffix, const std::string& payload,
       return RouteOutcome::Routed;
     }
   }
-  if (op == "sounds/play") {
+  if (op == "audio/play") {
     HttpResult imm;
-    const RouteOutcome o = routeSoundsPlay(payload, src, cmd, imm);
+    const RouteOutcome o = routeAudioPlay(payload, src, cmd, imm);
     if (o == RouteOutcome::Respond) resultPayload = mqttError(imm.body);
     return o;
   }
-  if (op == "sounds/stop") return command(CommandType::StopSound);
+  if (op == "audio/stop") return command(CommandType::StopAudio);
   if (op == "device/reboot") return command(CommandType::Reboot);
   if (op == "device/sleep") return command(CommandType::Sleep);
   if (op == "screen/get") return command(CommandType::SendScreen);
@@ -581,9 +598,11 @@ HttpResult httpResponse(const Command& cmd, DispatchResult r, const DispatchDeta
   if (r == DispatchResult::ParseError) {
     fallback = "request body is not valid JSON";
   } else if (r == DispatchResult::NotFound) {
-    fallback = cmd.type == CommandType::SwitchApp    ? "app not found"
-               : cmd.type == CommandType::PlaySound  ? "sound not found"
-                                                     : "not found";
+    fallback = cmd.type == CommandType::SwitchApp     ? "app not found"
+               : cmd.type == CommandType::PlayClip    ? "no clip of that name"
+               : cmd.type == CommandType::PlayMelody  ? "no melody of that name"
+               : cmd.type == CommandType::PlaySound   ? "no sound of that name"
+                                                      : "not found";
   }
   res.body = errorJson(shape.code, messageFor(detail, fallback), detail.field);
   return res;

@@ -2,7 +2,7 @@
 
    One tab, three sections behind two capability flags: MP3 clips (audio),
    RTTTL melodies (always) and radio stations (radio). Old #/sounds and #/radio
-   bookmarks redirect. Clips are plain files under /SOUNDS via the generic file
+   bookmarks redirect. Clips live under /api/v1/audio/clips
    API; play goes through POST /api/v1/sounds/play with the base name, and the
    playing indicator is fed from GET /api/v1/radio's clipPlaying/clipName.
 
@@ -76,8 +76,8 @@ async function clipUpload() {
   zone.dispatchEvent(drop);
   await flush(60);
 
-  assert(xhrLog.length === 1 && xhrLog[0].url === '/api/v1/files?dir=%2FSOUNDS',
-    'upload POSTs to the file API with dir=/SOUNDS');
+  assert(xhrLog.length === 1 && xhrLog[0].url === '/api/v1/audio/clips',
+    'upload POSTs to the clip route, which needs no dir parameter');
   assert(xhrLog[0].files.length === 1 && xhrLog[0].files[0].name === 'ding.mp3',
     'the mp3 goes up unconverted under its own name');
 }
@@ -85,7 +85,7 @@ async function clipUpload() {
 async function clipListPlayDelete() {
   console.log('audio: list, play, delete');
   const { window, store, netlog } = await boot();
-  store.files['/SOUNDS'].set('ding.mp3', 4321);
+  store.files['/CLIPS'].set('ding.mp3', 4321);
   await goto(window, '#/audio');
 
   const rows = clipRows(window);
@@ -94,26 +94,25 @@ async function clipListPlayDelete() {
 
   rows[0].querySelectorAll('button')[1].click(); // ▶ play on AWTRIX
   await flush(40);
-  assert(store.played.length === 1 && store.played[0].name === 'ding',
-    'play posts {"name":"ding"} to /api/v1/sounds/play');
+  assert(store.played.length === 1 && store.played[0].clip === 'ding',
+    'play posts {"clip":"ding"} to /api/v1/audio/play');
 
   const del = rows[0].querySelector('button.danger');
   del.click(); del.click(); // armable double-click confirm
   await flush(80);
-  assert(netlog.some(l => l.startsWith('DELETE /api/v1/files?path=%2FSOUNDS%2Fding.mp3')),
-    'delete goes through the file API');
+  assert(netlog.some(l => l.startsWith('DELETE /api/v1/audio/clips/ding')),
+    'delete addresses the clip by name, not by file path');
   assert(clipRows(window).length === 0, 'row disappears after the reload');
 }
 
 async function clipIndicator() {
   console.log('audio: playing indicator from the radio poll');
   const { window, store } = await boot();
-  store.files['/SOUNDS'].set('ding.mp3', 4321);
-  store.radio.clipPlaying = true;
-  store.radio.clipName = 'ding';
+  store.files['/CLIPS'].set('ding.mp3', 4321);
+  store.radio.clip = { playing: true, name: 'ding' };
   await goto(window, '#/audio');
   const row = clipRows(window)[0];
-  assert(row.classList.contains('dirty') && row.querySelector('.meta').textContent.includes('▶'),
+  assert(row.classList.contains('on') && row.querySelector('.meta').textContent.includes('▶'),
     'the playing clip row is marked');
 }
 
@@ -133,7 +132,7 @@ async function melodiesIntact() {
   assert(!save.disabled, 'editing enables save');
   save.click();
   await flush(60);
-  assert(netlog.some(l => l.startsWith('PUT /api/v1/sounds/beep')), 'save PUTs the melody');
+  assert(netlog.some(l => l.startsWith('PUT /api/v1/audio/melodies/beep')), 'save PUTs the melody');
   assert(store.melodies.some(m => m.name === 'beep' && m.rtttl.includes('c6')),
     'the new RTTTL body arrives');
 }
@@ -146,12 +145,18 @@ async function radioIntact() {
 
   const row = window.document.querySelector('#sec-radio .melorow');
   assert(!!row && row.querySelector('.rn').value === 'test', 'station list renders');
-  const buttons = [...window.document.querySelectorAll('#sec-radio .row button')];
-  const save = buttons.find(b => b.textContent.includes('Save') || b.textContent.includes('speichern'));
+  const save = row.querySelector('button.pri');
+  assert(save.disabled, 'an untouched station has nothing to save');
+  const url = row.querySelector('.ru');
+  url.value = 'http://example.com/other';
+  url.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await flush(300); // debounce(150)
+  assert(!save.disabled, 'editing enables the row save');
   save.click();
   await flush(60);
   assert(store.stationsPut && store.stationsPut.stations.length === 1 &&
-    store.stationsPut.stations[0].name === 'test', 'save PUTs the station list');
+    store.stationsPut.stations[0].url === 'http://example.com/other',
+    'the row save PUTs the whole station list');
 }
 
 (async () => {

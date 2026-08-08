@@ -18,7 +18,7 @@
 #include "core/api/ApiRouter.h"
 #include "core/api/JsonCoerce.h"
 #include "core/api/JsonWriter.h"
-#include "core/api/SoundsApi.h"
+#include "core/api/MelodiesApi.h"
 #include "core/api/StateJson.h"
 #include "core/backup/RestoreApplier.h"
 #include "core/render/Canvas.h"
@@ -255,7 +255,7 @@ void SimHttpServer::Impl::handleSounds(const httplib::Request& req, const std::s
                                        httplib::Response& res) {
   const std::string path = req.path;
 
-  if (path == "/api/v1/sounds") {
+  if (path == "/api/v1/audio/melodies") {
     if (method != "GET") {
       sendError(res, 405, "methodNotAllowed", "allowed method(s): GET");
       return;
@@ -266,13 +266,13 @@ void SimHttpServer::Impl::handleSounds(const httplib::Request& req, const std::s
     for (stdfs::directory_iterator it(stdfs::u8path(sim::hostPath("/MELODIES")), ec), end;
          !ec && it != end; ++it) {
       if (!it->is_regular_file()) continue;
-      const std::string name = api::sounds::nameFromFile(it->path().filename().u8string());
+      const std::string name = api::melodies::nameFromFile(it->path().filename().u8string());
       if (name.empty()) continue;
       std::string content;
       if (!sim::readFile(it->path().u8string(), content)) continue;
       if (!first) out += ',';
       first = false;
-      out += api::sounds::entryJson(name, content, static_cast<uint32_t>(content.size()));
+      out += api::melodies::entryJson(name, content, static_cast<uint32_t>(content.size()));
     }
     // Usage is measured for real on disk, but there is no flash partition to report a size for, so
     // the total is a plausible 8 MB stand-in for the device's SPIFFS area.
@@ -286,11 +286,11 @@ void SimHttpServer::Impl::handleSounds(const httplib::Request& req, const std::s
     return;
   }
 
-  const std::string name = path.substr(sizeof("/api/v1/sounds/") - 1);
-  const std::string file = sim::hostPath(api::sounds::pathFor(name));
+  const std::string name = path.substr(sizeof("/api/v1/audio/melodies/") - 1);
+  const std::string file = sim::hostPath(api::melodies::pathFor(name));
 
   if (method == "PUT") {
-    const api::sounds::PutResult r = api::sounds::prepareWrite(name, req.body);
+    const api::melodies::PutResult r = api::melodies::prepareWrite(name, req.body);
     if (!r.ok) {
       sendJson(res, r.status, api::errorJson(r.code.c_str(), r.message, r.field));
       return;
@@ -310,7 +310,7 @@ void SimHttpServer::Impl::handleSounds(const httplib::Request& req, const std::s
 
   if (method == "DELETE") {
     std::error_code ec;
-    if (!api::sounds::nameFromFile(name + ".txt").empty() &&
+    if (!api::melodies::nameFromFile(name + ".txt").empty() &&
         stdfs::remove(stdfs::u8path(file), ec)) {
       if (onAssetsChanged) onAssetsChanged();
       sendJson(res, 200, "{\"ok\":true}");
@@ -369,7 +369,7 @@ void SimHttpServer::Impl::handleFiles(const httplib::Request& req, const std::st
       if (target[0] != '/') target = dir + "/" + target;
       if (!assets::isWritable(target)) {
         sendError(res, 400, "invalidPath",
-                  "filename must be under /ICONS, /MELODIES, /PALETTES or /SOUNDS and contain no '..'");
+                  "filename must be under /ICONS, /MELODIES, /PALETTES or /CLIPS and contain no '..'");
         return;
       }
       const assets::AssetKind kind = assets::kindFor(target);
@@ -395,7 +395,7 @@ void SimHttpServer::Impl::handleFiles(const httplib::Request& req, const std::st
     const std::string fn = req.has_param("path") ? req.get_param_value("path") : "";
     if (!assets::isWritable(fn)) {
       sendError(res, 400, "invalidPath",
-                "path must be under /ICONS, /MELODIES, /PALETTES or /SOUNDS and contain no '..'");
+                "path must be under /ICONS, /MELODIES, /PALETTES or /CLIPS and contain no '..'");
       return;
     }
     std::error_code ec;
@@ -543,7 +543,7 @@ void SimHttpServer::Impl::route(const httplib::Request& req, httplib::Response& 
   if (serveState(req, method, res)) return;
   if (serveSystem(req, method, res)) return;
 
-  if (path == "/api/v1/sounds" || path.rfind("/api/v1/sounds/", 0) == 0) {
+  if (path == "/api/v1/audio/melodies" || path.rfind("/api/v1/audio/melodies/", 0) == 0) {
     handleSounds(req, method, res);
     return;
   }
@@ -617,8 +617,8 @@ bool SimHttpServer::Impl::serveState(const httplib::Request& req, const std::str
     sendJson(res, 200, buildScreenJson(*screen));
     return true;
   }
-  if (path == "/api/v1/radio") {
-    sendJson(res, 200, buildRadioJson(*engine));
+  if (path == "/api/v1/audio") {
+    sendJson(res, 200, buildAudioJson(*engine));
     return true;
   }
   if (path == "/api/v1/apps") {

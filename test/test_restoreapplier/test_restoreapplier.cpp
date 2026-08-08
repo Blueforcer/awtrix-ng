@@ -142,27 +142,27 @@ void test_rejects_path_traversal_entry() {
   TEST_ASSERT_TRUE(r.warnings.size() >= 1);
 }
 
-void test_sounds_restore_and_content_sniff() {
+void test_clips_restore_and_content_sniff() {
   MockSink sink;
   const backup::RestoreResult r = run(awtrix_test::kSoundsBackup, awtrix_test::kSoundsBackup_len,
                                       sink);
 
   TEST_ASSERT_TRUE(r.ok);
-  TEST_ASSERT_EQUAL_INT(1, r.sounds);
+  TEST_ASSERT_EQUAL_INT(1, r.clips);
 
-  const MockSink::File* mp3 = sink.find("/SOUNDS/beep.mp3");
+  const MockSink::File* mp3 = sink.find("/CLIPS/beep.mp3");
   TEST_ASSERT_NOT_NULL(mp3);
   TEST_ASSERT_TRUE(mp3->ended);
   TEST_ASSERT_EQUAL_HEX8('I', mp3->data[0]);
 
-  // Text smuggled into SOUNDS/ fails the sniff and only leaves a warning behind.
-  const MockSink::File* txt = sink.find("/SOUNDS/readme.txt");
+  // Text smuggled into CLIPS/ fails the sniff and only leaves a warning behind.
+  const MockSink::File* txt = sink.find("/CLIPS/readme.txt");
   TEST_ASSERT_NOT_NULL(txt);
   TEST_ASSERT_TRUE(txt->aborted);
   TEST_ASSERT_FALSE(txt->ended);
   TEST_ASSERT_TRUE(r.warnings.size() >= 1);
 
-  TEST_ASSERT_TRUE(r.toJson().find("\"sounds\":1") != std::string::npos);
+  TEST_ASSERT_TRUE(r.toJson().find("\"clips\":1") != std::string::npos);
 }
 
 void test_result_json_reports_counts() {
@@ -185,7 +185,7 @@ int main(int, char**) {
   RUN_TEST(test_asset_files_written_to_absolute_paths);
   RUN_TEST(test_rejects_foreign_backup_without_touching_anything);
   RUN_TEST(test_rejects_path_traversal_entry);
-  RUN_TEST(test_sounds_restore_and_content_sniff);
+  RUN_TEST(test_clips_restore_and_content_sniff);
   RUN_TEST(test_result_json_reports_counts);
   UNITY_END();
   return 0;

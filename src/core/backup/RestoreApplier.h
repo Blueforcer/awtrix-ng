@@ -24,7 +24,7 @@ class RestoreApplier : public ZipVisitor {
  private:
   enum class Kind {
     Manifest, Wifi, System, Settings, AppLoop, RadioStations,
-    Icon, Melody, Palette, Sound, Script, Unknown
+    Icon, Melody, Palette, Clip, Script, Unknown
   };
 
   static Kind classify(const std::string& name);

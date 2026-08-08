@@ -104,7 +104,7 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
 <!-- shot:end -->
 
 
-On a board with a speaker (I2S DAC), `sound` plays the MP3 clip `/SOUNDS/chime.mp3` if one is
+On a board with a speaker (I2S DAC), `sound` plays the MP3 clip `/CLIPS/chime.mp3` if one is
 uploaded, and falls back to the melody `/MELODIES/chime.txt` on the buzzer. Without a speaker it is
 always the melody; on DFPlayer hardware it is a track number. Uploading clips:
 [MP3 sounds](sounds.md#mp3-sounds).

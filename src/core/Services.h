@@ -32,10 +32,14 @@ class INotifyService {
   virtual bool dismissNamed(const std::string& name) = 0;
 };
 
+enum class SoundKind { Any, Clip, Melody };
+
 class ISoundService {
  public:
   virtual ~ISoundService() = default;
-  virtual bool playSound(const std::string& payload) = 0;
+  // SoundKind::Any is what a script means by a name: a clip wins over a melody of the same name.
+  // The API names the kind instead, so "no clip called ding" cannot be answered with a melody.
+  virtual bool playSound(const std::string& name, SoundKind kind) = 0;
   virtual void playRtttl(const std::string& rtttl) = 0;
   virtual void r2d2(const std::string& payload) = 0;
   virtual void stop() = 0;
@@ -74,7 +78,7 @@ class IRadioService {
 };
 
 // Plays a stored MP3 clip on the same output the radio uses. The caller hands in a validated
-// "/SOUNDS/<name>.mp3" path; whether the file exists is the caller's problem.
+// "/CLIPS/<name>.mp3" path; whether the file exists is the caller's problem.
 class IClipService {
  public:
   virtual ~IClipService() = default;

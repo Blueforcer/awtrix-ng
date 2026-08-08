@@ -573,11 +573,11 @@ Both `sound` and `soundRtttl` are gated on the global `soundEnabled` setting, an
 
 `sound` accepts a **string or an integer** - an integer is converted to its decimal string, so `"sound": 5` becomes `"5"`. Bools, floats and objects are ignored. Its meaning depends on the sound hardware:
 
-- **Speaker (I2S DAC)** - `/SOUNDS/<sound>.mp3` plays if it exists, else the melody below. A playing radio stream is interrupted and reconnects afterwards.
+- **Speaker (I2S DAC)** - `/CLIPS/<sound>.mp3` plays if it exists, else the melody below. A playing radio stream is interrupted and reconnects afterwards.
 - **Buzzer** - names `/MELODIES/<sound>.txt`, an RTTTL file. A missing file plays nothing.
 - **DFPlayer** - parsed as a track number, which must be greater than 0.
 
-`soundRtttl` is an inline melody string played directly, with no filesystem access. An unparseable melody plays nothing - a notification is not rejected over its melody, so unlike [`POST /api/v1/sounds/play`](http.md#post-apiv1soundsplay) there is no `422` here. Check a melody on that route, or in the [Audio tab](../getting-started/web-ui.md#melodies), before pasting it into a notification.
+`soundRtttl` is an inline melody string played directly, with no filesystem access. An unparseable melody plays nothing - a notification is not rejected over its melody, so unlike [`POST /api/v1/audio/play`](http.md#post-apiv1soundsplay) there is no `422` here. Check a melody on that route, or in the [Audio tab](../getting-started/web-ui.md#melodies), before pasting it into a notification.
 
 When both `sound` and `soundRtttl` are present, only the `soundRtttl` melody plays. On DFPlayer hardware, `soundRtttl` is not supported at all.
 

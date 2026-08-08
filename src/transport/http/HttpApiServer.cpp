@@ -17,7 +17,7 @@
 #include "core/CoreEngine.h"
 #include "core/ProvisioningPolicy.h"
 #include "core/api/ApiRouter.h"
-#include "core/api/SoundsApi.h"
+#include "core/api/MelodiesApi.h"
 #include "core/api/JsonWriter.h"
 #include "core/api/StateJson.h"
 #include "core/backup/RestoreApplier.h"
@@ -250,6 +250,9 @@ void HttpApiServer::begin(uint16_t port, CoreEngine& engine, IBoard& board, Canv
       "/api/v1/files", HTTP_POST, [this]() { handleFileUploadDone(); },
       [this]() { handleFileUpload(); });
   server_->on(
+      "/api/v1/audio/clips", HTTP_POST, [this]() { handleFileUploadDone(); },
+      [this]() { handleFileUpload(); });
+  server_->on(
       "/api/v1/restore", HTTP_POST, [this]() { handleRestoreDone(); },
       [this]() { handleRestoreUpload(); });
   server_->addHandler(new BodyHandler(*this));
@@ -266,6 +269,7 @@ void HttpApiServer::handleFileUpload() {
   if (up.status == UPLOAD_FILE_START) {
     if (uploadFile_) uploadFile_.close();
     uploadPathOk_ = false;
+    uploadNameOk_ = true;
     uploadWriteOk_ = false;
     uploadPath_.clear();
     if (apMode_) { uploadAuthed_ = false; return; }
@@ -274,12 +278,17 @@ void HttpApiServer::handleFileUpload() {
     if (!uploadAuthed_) return;
     String fn = up.filename;
     if (!fn.startsWith("/")) {
-      String dir = server_->hasArg("dir") ? server_->arg("dir") : String("/ICONS");
+      String dir = server_->uri() == "/api/v1/audio/clips" ? String("/CLIPS")
+                   : server_->hasArg("dir")                  ? server_->arg("dir")
+                                                             : String("/ICONS");
       if (!dir.startsWith("/")) dir = "/" + dir;
       fn = dir + "/" + fn;
     }
     uploadPathOk_ = assets::isWritable(std::string(fn.c_str()));
     if (!uploadPathOk_) return;
+    // Refused before the file is opened, so an unplayable name never reaches flash at all.
+    uploadNameOk_ = assets::uploadNameOk(std::string(fn.c_str()));
+    if (!uploadNameOk_) return;
     const int slash = fn.lastIndexOf('/');
     if (slash > 0) {
       const String dir = fn.substring(0, slash);
@@ -321,7 +330,13 @@ void HttpApiServer::handleFileUploadDone() {
   if (!uploadAuthed_) { sendUnauthorized(); return; }
   if (!uploadPathOk_) {
     sendError(400, "invalidPath",
-              "filename must be under /ICONS, /MELODIES, /PALETTES or /SOUNDS and contain no '..'");
+              "filename must be under /ICONS, /MELODIES, /PALETTES or /CLIPS and contain no '..'");
+    return;
+  }
+  if (!uploadNameOk_) {
+    sendError(400, "invalidName",
+              "a sound is played by its file name: use 1-32 characters of A-Z, a-z, 0-9, _ or - "
+              "and the .mp3 suffix");
     return;
   }
   if (!uploadContentOk_) {
@@ -373,11 +388,11 @@ void HttpApiServer::handleRestoreDone() {
     return;
   }
   const backup::RestoreResult r = restoreApplier_->result();
-  if ((r.icons || r.melodies || r.palettes || r.sounds) && onAssetsChanged_) onAssetsChanged_();
+  if ((r.icons || r.melodies || r.palettes || r.clips) && onAssetsChanged_) onAssetsChanged_();
   if (r.ok) {
     logf("restore: applied wifi=%d system=%d settings=%d apploop=%d icons=%d melodies=%d "
-         "palettes=%d sounds=%d scripts=%d (%u warning(s))",
-         r.wifi, r.system, r.settings, r.appLoop, r.icons, r.melodies, r.palettes, r.sounds,
+         "palettes=%d clips=%d scripts=%d (%u warning(s))",
+         r.wifi, r.system, r.settings, r.appLoop, r.icons, r.melodies, r.palettes, r.clips,
          r.scripts, static_cast<unsigned>(r.warnings.size()));
   } else {
     logf("restore: rejected - %s", r.error.c_str());
@@ -644,6 +659,7 @@ void HttpApiServer::dispatch() {
   if (serveDiagnostics(req)) return;
   if (serveSystem(req)) return;
   if (serveSounds(req)) return;
+  if (serveClips(req)) return;
   if (serveFiles(req)) return;
 
   sendError(404, "notFound", "unknown route");
@@ -856,9 +872,9 @@ bool HttpApiServer::serveState(const Request& req) {
     return true;
   }
 
-  if (path == "/api/v1/radio") {
+  if (path == "/api/v1/audio") {
     respBuf_.clear();
-    appendRadioJson(respBuf_, *engine_);
+    appendAudioJson(respBuf_, *engine_);
     sendJson(200, respBuf_);
     return true;
   }
@@ -990,7 +1006,7 @@ bool HttpApiServer::serveSystem(const Request& req) {
 bool HttpApiServer::serveSounds(const Request& req) {
   const std::string& path = req.path;
 
-  if (path == "/api/v1/sounds") {
+  if (path == "/api/v1/audio/melodies") {
     if (!req.get) {
       sendError(405, "methodNotAllowed", "allowed method(s): GET");
       return true;
@@ -1004,14 +1020,14 @@ bool HttpApiServer::serveSounds(const Request& req) {
     bool first = true;
     if (root && root.isDirectory())
       for (File f = root.openNextFile(); f; f = root.openNextFile()) {
-        const std::string name = api::sounds::nameFromFile(std::string(f.name()));
+        const std::string name = api::melodies::nameFromFile(std::string(f.name()));
         if (name.empty()) continue;
         std::string content;
         content.reserve(f.size());
         while (f.available()) content.push_back(static_cast<char>(f.read()));
         const std::string entry =
             (first ? "" : ",") +
-            api::sounds::entryJson(name, content, static_cast<uint32_t>(f.size()));
+            api::melodies::entryJson(name, content, static_cast<uint32_t>(f.size()));
         server_->sendContent(entry.c_str());
         first = false;
       }
@@ -1022,12 +1038,12 @@ bool HttpApiServer::serveSounds(const Request& req) {
     return true;
   }
 
-  if (path.rfind("/api/v1/sounds/", 0) == 0) {
-    const std::string name = path.substr(sizeof("/api/v1/sounds/") - 1);
-    const String file = String(api::sounds::pathFor(name).c_str());
+  if (path.rfind("/api/v1/audio/melodies/", 0) == 0) {
+    const std::string name = path.substr(sizeof("/api/v1/audio/melodies/") - 1);
+    const String file = String(api::melodies::pathFor(name).c_str());
 
     if (req.method == "PUT") {
-      const api::sounds::PutResult r = api::sounds::prepareWrite(name, req.body);
+      const api::melodies::PutResult r = api::melodies::prepareWrite(name, req.body);
       if (!r.ok) {
         sendJson(r.status, api::errorJson(r.code.c_str(), r.message, r.field));
         return true;
@@ -1046,7 +1062,7 @@ bool HttpApiServer::serveSounds(const Request& req) {
     }
 
     if (req.method == "DELETE") {
-      if (!api::sounds::nameFromFile(name + ".txt").empty() && LittleFS.remove(file)) {
+      if (!api::melodies::nameFromFile(name + ".txt").empty() && LittleFS.remove(file)) {
         if (onAssetsChanged_) onAssetsChanged_();
         sendJson(200, "{\"ok\":true}");
       } else {
@@ -1061,31 +1077,64 @@ bool HttpApiServer::serveSounds(const Request& req) {
   return false;
 }
 
+// Clips are files, but they are addressed by name everywhere else, so they get their own routes
+// rather than making a caller know which folder they live in.
+bool HttpApiServer::serveClips(const Request& req) {
+  if (req.path == "/api/v1/audio/clips") {
+    if (req.get) return listDir("/CLIPS"), true;
+    sendError(405, "methodNotAllowed", "allowed method(s): GET, POST");
+    return true;
+  }
+  if (req.path.rfind("/api/v1/audio/clips/", 0) != 0) return false;
+  const std::string name = req.path.substr(sizeof("/api/v1/audio/clips/") - 1);
+  const std::string path = sound::clipPathFor(name);
+  if (path.empty()) {
+    sendError(400, "invalidName",
+              "a clip is named with 1-32 characters of A-Z, a-z, 0-9, _ or -");
+    return true;
+  }
+  if (req.method != "DELETE") {
+    sendError(405, "methodNotAllowed", "allowed method(s): DELETE");
+    return true;
+  }
+  if (!LittleFS.remove(path.c_str())) {
+    sendError(404, "notFound", "no clip of that name");
+    return true;
+  }
+  if (onAssetsChanged_) onAssetsChanged_();
+  sendJson(200, "{\"ok\":true}");
+  return true;
+}
+
+void HttpApiServer::listDir(const char* dir) {
+  server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server_->send(200, "application/json", "");
+  server_->sendContent("{\"files\":[");
+  File root = LittleFS.open(dir);
+  bool first = true;
+  if (root && root.isDirectory())
+    for (File f = root.openNextFile(); f; f = root.openNextFile()) {
+      std::string entry = first ? "" : ",";
+      first = false;
+      api::JsonWriter ew(entry);
+      ew.beginObject();
+      ew.member("name", std::string(f.name()));
+      ew.member("size", static_cast<unsigned long>(f.size()));
+      ew.endObject();
+      server_->sendContent(entry.c_str());
+    }
+  const String tail = String("],\"usedBytes\":") + LittleFS.usedBytes() +
+                      ",\"totalBytes\":" + LittleFS.totalBytes() + "}";
+  server_->sendContent(tail);
+  server_->sendContent("");
+}
+
 bool HttpApiServer::serveFiles(const Request& req) {
   if (req.path != "/api/v1/files") return false;
 
   if (req.get) {
     const String dir = server_->hasArg("dir") ? server_->arg("dir") : String("/ICONS");
-    server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
-    server_->send(200, "application/json", "");
-    server_->sendContent("{\"files\":[");
-    File root = LittleFS.open(dir);
-    bool first = true;
-    if (root && root.isDirectory())
-      for (File f = root.openNextFile(); f; f = root.openNextFile()) {
-        std::string entry = first ? "" : ",";
-        first = false;
-        api::JsonWriter ew(entry);
-        ew.beginObject();
-        ew.member("name", std::string(f.name()));
-        ew.member("size", static_cast<unsigned long>(f.size()));
-        ew.endObject();
-        server_->sendContent(entry.c_str());
-      }
-    const String tail = String("],\"usedBytes\":") + LittleFS.usedBytes() +
-                        ",\"totalBytes\":" + LittleFS.totalBytes() + "}";
-    server_->sendContent(tail);
-    server_->sendContent("");
+    listDir(dir.c_str());
     return true;
   }
 
@@ -1093,7 +1142,7 @@ bool HttpApiServer::serveFiles(const Request& req) {
     const String fn = server_->hasArg("path") ? server_->arg("path") : String("");
     if (!assets::isWritable(std::string(fn.c_str()))) {
       sendError(400, "invalidPath",
-                "path must be under /ICONS, /MELODIES, /PALETTES or /SOUNDS and contain no '..'");
+                "path must be under /ICONS, /MELODIES, /PALETTES or /CLIPS and contain no '..'");
       return true;
     }
     if (LittleFS.remove(fn)) {

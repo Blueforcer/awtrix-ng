@@ -23,7 +23,7 @@ const FontGlyph kWideG[] = {W, W, W, W, W, W, W, W, W, W,
 const GfxFont kWideFont = {kB, kWideG, '.', 'A', 8};
 
 struct FSound : ISoundService {
-  bool playSound(const std::string&) override { return true; }
+  bool playSound(const std::string&, SoundKind) override { return true; }
   void playRtttl(const std::string&) override {}
   void r2d2(const std::string&) override {}
   void stop() override {}
