@@ -19,10 +19,12 @@ enum class CommandType : uint8_t {
   Moodlight,
   SetDisplay,
   Sleep,
-  PlayRtttl,
-  PlaySound,
-  R2D2,
-  StopSound,
+  // arg is a sound::Source, payload is the value it names.
+  PlayAudio,
+  // payload is the raw request body; the stream keys are read from it further down.
+  PlayStream,
+  // arg is a sound::StopScope.
+  StopAudio,
   Reboot,
   FactoryReset,
   ResetSettings,
@@ -31,8 +33,6 @@ enum class CommandType : uint8_t {
   ScriptConfigSet,
   ScriptRemove,
   DeleteApp,
-  RadioPlay,
-  RadioStop,
   SetRadioStations
 };
 

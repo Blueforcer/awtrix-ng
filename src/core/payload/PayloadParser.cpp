@@ -9,6 +9,7 @@
 #include "core/payload/Base64.h"
 #include "core/payload/EffectSettingsJson.h"
 #include "core/payload/PaletteJson.h"
+#include "core/sound/Rtttl.h"
 
 namespace awtrix {
 namespace payload {
@@ -576,7 +577,8 @@ Take takeEffectMember(const std::string& k, api::JsonReader r, AppSpec& s, Dispa
   return Take::NotMine;
 }
 
-Take takeNotificationMember(const std::string& k, api::JsonReader r, AppSpec& s) {
+Take takeNotificationMember(const std::string& k, api::JsonReader r, AppSpec& s,
+                            DispatchDetail* err) {
   if (k == "name") {
     if (r.isString()) r.appendString(s.name);
     return Take::Ok;
@@ -585,8 +587,21 @@ Take takeNotificationMember(const std::string& k, api::JsonReader r, AppSpec& s)
   if (k == "stack") { takeBool(r, s.stack); return Take::Ok; }
   if (k == "wakeup") { takeBool(r, s.wakeup); return Take::Ok; }
   if (k == "soundLoop") { takeBool(r, s.loopSound); return Take::Ok; }
+  // Checked here rather than at the player: an unparsable melody used to reach the backend and
+  // simply go quiet, with nothing said to whoever sent the notification.
   if (k == "soundRtttl") {
-    if (r.isString()) r.appendString(s.extrasMut().rtttl);
+    if (!r.isString()) return Take::Ok;
+    std::string melody;
+    r.appendString(melody);
+    const rtttl::Parse parsed = rtttl::parse(melody);
+    if (!parsed.ok) {
+      if (err) {
+        err->field = "soundRtttl";
+        err->message = parsed.describe();
+      }
+      return Take::Failed;
+    }
+    s.extrasMut().rtttl = melody;
     return Take::Ok;
   }
   // Old AWTRIX clients send the melody as a number; either form ends up as the file name.
@@ -636,7 +651,7 @@ bool readAppSpec(api::JsonReader root, bool isNotification, AppSpec& s, Dispatch
     if (t == Take::NotMine) t = takeTimingMember(k, r, s, err);
     if (t == Take::NotMine) t = takeChartMember(k, r, s, err);
     if (t == Take::NotMine) t = takeEffectMember(k, r, s, err);
-    if (t == Take::NotMine && isNotification) t = takeNotificationMember(k, r, s);
+    if (t == Take::NotMine && isNotification) t = takeNotificationMember(k, r, s, err);
     if (t == Take::Failed) return false;
 
     if (!r.skipValue()) return false;

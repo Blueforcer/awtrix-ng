@@ -99,7 +99,13 @@ struct Settings {
   OptColor temperatureColor;
   OptColor batteryColor;
   ScrollDefaults scrollDefaults;
-  int volume = 25;
+  // One gain per output, all of them a percentage. The buzzer default is the old 25-of-30 in the
+  // new scale, so no device gets quieter across the update.
+  int buzzerVolume = 80;
+  int dfplayerVolume = 80;
+  // Stored MP3s sit above the stream on purpose: a doorbell has to carry over a station that was
+  // deliberately turned down, and files are mastered hotter than a stream anyway.
+  int mp3Volume = 70;
   int radioVolume = 60;
   bool radioMeta = true;
   int saturation = 100;

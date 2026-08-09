@@ -403,9 +403,12 @@ The debounce time and the double-press window are fixed and cannot be configured
 
 | Key | Type | Range | Default | Effect | Reboot |
 |---|---|---|---|---|---|
-| `dfplayer` | bool | - | `false` | Selects the sound backend: DFPlayer Mini (AWTRIX 2 mainboard conversions) when `dfplayer` is true **and** both DF pins are `>= 0`; otherwise the passive buzzer. The DF pins themselves are validated whenever they're set, regardless of this flag. | yes |
+| `dfplayer` | bool | - | `false` | Talk to a DFPlayer Mini (AWTRIX 2 mainboard conversions) when `dfplayer` is true **and** both DF pins are `>= 0`. The buzzer at `pinBuzzer` keeps working alongside it - the two are separate outputs with separate volumes. The DF pins themselves are validated whenever they're set, regardless of this flag. | yes |
 
-See [Sounds & melodies](../guides/sounds.md).
+The flag is what keeps two GPIOs free on every board that has no module: the ESP32 defaults name
+`pinDfRx` and `pinDfTx` whether or not one is attached.
+
+See [MP3s & melodies](../guides/sounds.md).
 
 ## Art-Net
 

@@ -52,7 +52,7 @@ AWTRIX draws **19 background effects**:
 | `Matrix` | Per-column falling green trails, bright-headed, with random phases and trail lengths | **no** |
 | `SwirlIn` | A 48-point spiral converging inward | yes |
 | `SwirlOut` | A 48-point spiral expanding outward | yes |
-| `LookingEyes` | Two white eyes with pupils that track left/right/up/down | **no** |
+| `LookingEyes` | Two 8x8 eyes that glance around and blink every few seconds | **no** |
 | `TwinklingStars` | 22 randomly placed stars twinkling on a 30-step cycle | yes |
 | `ColorWaves` | Horizontal hue sweep across the panel | yes |
 

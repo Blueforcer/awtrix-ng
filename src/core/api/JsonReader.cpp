@@ -429,14 +429,14 @@ bool isWellFormed(std::string_view text) {
   return probe.skipValue() && probe.atEnd();
 }
 
-bool readMembers(std::string_view text, std::initializer_list<Member> members) {
+bool readMembers(std::string_view text, const Member* members, std::size_t count) {
   if (!isWellFormed(text)) return false;
   JsonReader r{text};
   if (!r.isObject() || !r.enterObject()) return true;
   while (r.nextMember()) {
-    for (const Member& m : members) {
-      if (!r.keyEquals(m.key)) continue;
-      *m.value = r;
+    for (std::size_t i = 0; i < count; ++i) {
+      if (!r.keyEquals(members[i].key)) continue;
+      *members[i].value = r;
       break;
     }
     if (!r.skipValue()) return false;

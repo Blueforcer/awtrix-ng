@@ -19,7 +19,7 @@ Esp32Board::Esp32Board(const DeviceConfig& cfg) {
   layout_ = sanitizeMatrixLayout(cfg.matrixLayout(), &layoutWasInvalid_);
   buzzer_.setPin(pins_.buzzer);
   dfplayer_.setPins(pins_.dfRx, pins_.dfTx);
-  if (pins_.dfplayerEnabled && pins_.dfRx >= 0 && pins_.dfTx >= 0) sound_ = &dfplayer_;
+  dfplayerWired_ = pins_.dfplayerEnabled && pins_.dfRx >= 0 && pins_.dfTx >= 0;
 }
 
 void Esp32Board::begin() {
@@ -33,7 +33,9 @@ void Esp32Board::begin() {
   if (pins_.btnRight >= 0) pinMode(pins_.btnRight, INPUT_PULLUP);
   // 120 is only the brightness for the first few frames; the periphery loop takes over immediately.
   renderer_.begin(pins_.matrix, layout_, 120);
-  sound_->begin();
+  // Both: LEDC and the UART share nothing, so a DFPlayer costs no melodies.
+  if (pins_.buzzer >= 0) buzzer_.begin();
+  if (dfplayerWired_) dfplayer_.begin();
   sensors_.setPins(pins_.i2cSda, pins_.i2cScl);
   sensors_.begin();
 }

@@ -26,6 +26,7 @@ RestoreApplier::Kind RestoreApplier::classify(const std::string& name) {
   if (startsWith(name, "ICONS/")) return Kind::Icon;
   if (startsWith(name, "MELODIES/")) return Kind::Melody;
   if (startsWith(name, "PALETTES/")) return Kind::Palette;
+  if (startsWith(name, "MP3/")) return Kind::Mp3;
   if (startsWith(name, "SCRIPTS/")) return Kind::Script;
   return Kind::Unknown;
 }
@@ -69,6 +70,7 @@ void RestoreApplier::onEntryStart(const std::string& name, uint32_t) {
     case Kind::Icon:
     case Kind::Melody:
     case Kind::Palette:
+    case Kind::Mp3:
     case Kind::Script: {
       const std::string path = "/" + name_;
       // Keeps a hand-made archive from writing outside the asset directories.
@@ -104,10 +106,16 @@ void RestoreApplier::onEntryData(const uint8_t* data, std::size_t n) {
 
   // Sniff the first chunk against the format the directory expects, so a mislabelled file is
   // dropped early. Only the first chunk is checked; asset files stream past too fast to buffer.
-  const bool sniffable = kind_ == Kind::Icon || kind_ == Kind::Melody || kind_ == Kind::Palette;
+  const bool sniffable = kind_ == Kind::Icon || kind_ == Kind::Melody ||
+                         kind_ == Kind::Palette || kind_ == Kind::Mp3;
   if (sniffable && !contentChecked_ && n > 0) {
     contentChecked_ = true;
-    const assets::AssetKind ak = assets::kindFor("/" + name_);
+    // From the kind the entry was already classified as, rather than parsing its name a second
+    // time: two answers to the same question drift apart the moment a folder is renamed.
+    const assets::AssetKind ak = kind_ == Kind::Icon      ? assets::AssetKind::Icon
+                                 : kind_ == Kind::Melody  ? assets::AssetKind::Melody
+                                 : kind_ == Kind::Palette ? assets::AssetKind::Palette
+                                                          : assets::AssetKind::Mp3;
     if (!assets::contentLooksValid(ak, data, static_cast<unsigned>(n))) {
       result_.warnings.push_back("skipped /" + name_ + ": content does not match " +
                                  assets::acceptedFormats(ak));
@@ -227,6 +235,7 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
       case Kind::Icon: ++result_.icons; break;
       case Kind::Melody: ++result_.melodies; break;
       case Kind::Palette: ++result_.palettes; break;
+      case Kind::Mp3: ++result_.mp3; break;
       case Kind::Script: ++result_.scripts; break;
       default: break;
     }
@@ -266,6 +275,7 @@ std::string RestoreResult::toJson() const {
   w.member("icons", icons);
   w.member("melodies", melodies);
   w.member("palettes", palettes);
+  w.member("mp3", mp3);
   w.member("scripts", scripts);
   w.member("skipped", skipped);
   w.endObject();

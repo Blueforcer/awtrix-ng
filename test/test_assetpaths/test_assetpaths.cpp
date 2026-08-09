@@ -12,6 +12,8 @@ void test_public_dirs_allowed() {
   TEST_ASSERT_TRUE(assets::isWritable("/ICONS/1.gif"));
   TEST_ASSERT_TRUE(assets::isWritable("/MELODIES/alarm.txt"));
   TEST_ASSERT_TRUE(assets::isWritable("/PALETTES/fire.json"));
+  TEST_ASSERT_TRUE(assets::isWritable("/MP3/ding.mp3"));
+  TEST_ASSERT_TRUE(assets::isServable("/MP3/ding.mp3"));
   TEST_ASSERT_TRUE(assets::isServable("/ICONS/sub/2.jpg"));
 }
 
@@ -19,6 +21,7 @@ void test_traversal_rejected() {
   TEST_ASSERT_FALSE(assets::isWritable("/ICONS/../apploop.json"));
   TEST_ASSERT_FALSE(assets::isWritable("/ICONS/../../secret"));
   TEST_ASSERT_FALSE(assets::isServable("/MELODIES/../../etc/passwd"));
+  TEST_ASSERT_FALSE(assets::isWritable("/MP3/../device.json"));
 }
 
 void test_absolute_escape_rejected() {
@@ -49,6 +52,8 @@ void test_lookalike_prefixes_rejected() {
   TEST_ASSERT_FALSE(assets::isWritable("/ICONSX/1.gif"));
   TEST_ASSERT_FALSE(assets::isWritable("/MELODIES_BACKUP/x"));
   TEST_ASSERT_FALSE(assets::isWritable("ICONS/1.gif"));
+  TEST_ASSERT_FALSE(assets::isWritable("/MP3X/ding.mp3"));
+  TEST_ASSERT_FALSE(assets::isWritable("SOUNDS/ding.mp3"));
 }
 
 void test_empty_rejected() {
@@ -72,6 +77,7 @@ void test_backup_writable_adds_scripts_only() {
   TEST_ASSERT_TRUE(assets::isBackupWritable("/ICONS/a.gif"));
   TEST_ASSERT_TRUE(assets::isBackupWritable("/MELODIES/a.txt"));
   TEST_ASSERT_TRUE(assets::isBackupWritable("/PALETTES/a.txt"));
+  TEST_ASSERT_TRUE(assets::isBackupWritable("/MP3/ding.mp3"));
   TEST_ASSERT_TRUE(assets::isBackupWritable("/SCRIPTS/weather.ax"));
   TEST_ASSERT_FALSE(assets::isBackupWritable("/ICONS/../../evil.txt"));
   TEST_ASSERT_FALSE(assets::isBackupWritable("/apploop.json"));
@@ -82,7 +88,28 @@ void test_kind_follows_the_folder() {
   TEST_ASSERT_TRUE(assets::kindFor("/ICONS/a.gif") == assets::AssetKind::Icon);
   TEST_ASSERT_TRUE(assets::kindFor("/MELODIES/a.txt") == assets::AssetKind::Melody);
   TEST_ASSERT_TRUE(assets::kindFor("/PALETTES/a.txt") == assets::AssetKind::Palette);
+  TEST_ASSERT_TRUE(assets::kindFor("/MP3/a.mp3") == assets::AssetKind::Mp3);
   TEST_ASSERT_TRUE(assets::kindFor("/other/a.txt") == assets::AssetKind::Unknown);
+}
+
+void test_sounds_accept_mp3_and_reject_the_rest() {
+  const unsigned char id3[] = {'I', 'D', '3', 0x04, 0x00};
+  const unsigned char sync[] = {0xFF, 0xFB, 0x90, 0x00};
+  const unsigned char syncMpeg2[] = {0xFF, 0xF3, 0x90, 0x00};
+  const unsigned char gif[] = {'G', 'I', 'F', '8', '9', 'a'};
+  const unsigned char jpeg[] = {0xFF, 0xD8, 0xFF, 0xE0};
+  const unsigned char text[] = {'h', 'e', 'l', 'l', 'o'};
+  const unsigned char shortId3[] = {'I', 'D'};
+  TEST_ASSERT_TRUE(assets::contentLooksValid(assets::AssetKind::Mp3, id3, sizeof(id3)));
+  TEST_ASSERT_TRUE(assets::contentLooksValid(assets::AssetKind::Mp3, sync, sizeof(sync)));
+  TEST_ASSERT_TRUE(assets::contentLooksValid(assets::AssetKind::Mp3, syncMpeg2, sizeof(syncMpeg2)));
+  TEST_ASSERT_FALSE(assets::contentLooksValid(assets::AssetKind::Mp3, gif, sizeof(gif)));
+  TEST_ASSERT_FALSE(assets::contentLooksValid(assets::AssetKind::Mp3, jpeg, sizeof(jpeg)));
+  TEST_ASSERT_FALSE(assets::contentLooksValid(assets::AssetKind::Mp3, text, sizeof(text)));
+  TEST_ASSERT_FALSE(assets::contentLooksValid(assets::AssetKind::Mp3, shortId3, sizeof(shortId3)));
+  TEST_ASSERT_FALSE(assets::contentLooksValid(assets::AssetKind::Mp3, id3, 0));
+  TEST_ASSERT_EQUAL_STRING("MP3 (MPEG-1 Layer III)",
+                           assets::acceptedFormats(assets::AssetKind::Mp3));
 }
 
 void test_icons_accept_gif_and_jpeg() {
@@ -131,6 +158,24 @@ void test_melody_upload_must_parse() {
 
 }
 
+void test_sound_upload_name_must_be_playable() {
+  TEST_ASSERT_TRUE(assets::uploadNameOk("/MP3/ding.mp3"));
+  TEST_ASSERT_TRUE(assets::uploadNameOk("/MP3/Alarm_2-long.mp3"));
+  // The player builds "/MP3/<name>.mp3" from the bare name, so anything it cannot spell is
+  // a file that would upload and then never be found.
+  TEST_ASSERT_FALSE(assets::uploadNameOk("/MP3/two words.mp3"));
+  TEST_ASSERT_FALSE(assets::uploadNameOk("/MP3/I'm (500).mp3"));
+  TEST_ASSERT_FALSE(assets::uploadNameOk("/MP3/tune.MP3"));
+  TEST_ASSERT_FALSE(assets::uploadNameOk("/MP3/no-extension"));
+  TEST_ASSERT_FALSE(assets::uploadNameOk("/MP3/.mp3"));
+  // 32 is the limit, so this pair is the boundary either side of it.
+  TEST_ASSERT_TRUE(assets::uploadNameOk("/MP3/exactly-thirty-two-characters-ab.mp3"));
+  TEST_ASSERT_FALSE(assets::uploadNameOk("/MP3/one-over-the-thirty-two-char-limit.mp3"));
+  // Other folders keep their own rules; this one is about MP3 names only.
+  TEST_ASSERT_TRUE(assets::uploadNameOk("/ICONS/two words.gif"));
+  TEST_ASSERT_TRUE(assets::uploadNameOk("/MELODIES/two words.txt"));
+}
+
 void setUp() {}
 void tearDown() {}
 
@@ -146,11 +191,13 @@ int main(int, char**) {
   RUN_TEST(test_backup_readable_covers_scripts_and_apploop);
   RUN_TEST(test_backup_writable_adds_scripts_only);
   RUN_TEST(test_kind_follows_the_folder);
+  RUN_TEST(test_sounds_accept_mp3_and_reject_the_rest);
   RUN_TEST(test_icons_accept_gif_and_jpeg);
   RUN_TEST(test_icons_reject_png_whatever_it_is_called);
   RUN_TEST(test_icons_reject_text_and_truncated_headers);
   RUN_TEST(test_text_folders_accept_text_and_reject_binary);
   RUN_TEST(test_melody_upload_must_parse);
+  RUN_TEST(test_sound_upload_name_must_be_playable);
   UNITY_END();
   return 0;
 }

@@ -59,11 +59,9 @@ outbound-only. `<P>/cmd` and `<P>/cmd/` on their own match nothing.
 | `<P>/cmd/display` | `{"power":bool?,"overlay":"rain"\|null?}` | `PATCH /api/v1/display` |
 | `<P>/cmd/display/moodlight` | moodlight JSON; empty = off | `PUT` / `DELETE /api/v1/display/moodlight` |
 | `<P>/cmd/indicators/1` \| `/2` \| `/3` | `{"color","blinkMs","fadeMs"}`; empty or `{}` = off | `PUT` / `DELETE /api/v1/indicators/{id}` |
-| `<P>/cmd/sounds/play` | `{"name"}` \| `{"rtttl"}` \| `{"builtin"}` | `POST /api/v1/sounds/play` |
-| `<P>/cmd/sounds/stop` | ignored | `POST /api/v1/sounds/stop` |
-| `<P>/cmd/radio/play` | `{"station"}` \| `{"index"}` \| `{"url"}` | `POST /api/v1/radio/play` |
-| `<P>/cmd/radio/stop` | ignored | `POST /api/v1/radio/stop` |
-| `<P>/cmd/radio/stations` | `{"stations":[…]}` | `PUT /api/v1/radio/stations` |
+| `<P>/cmd/audio/play` | `{"sound"}` \| `{"mp3"}` \| `{"melody"}` \| `{"track"}` \| `{"rtttl"}` \| `{"station"}` \| `{"index"}` \| `{"url"}` | `POST /api/v1/audio/play` |
+| `<P>/cmd/audio/stop` | ignored | `POST /api/v1/audio/stop` |
+| `<P>/cmd/audio/stations` | `{"stations":[…]}` | `PUT /api/v1/audio/stations` |
 | `<P>/cmd/device/reboot` | ignored | `POST /api/v1/device/reboot` |
 | `<P>/cmd/device/sleep` | `{"durationMs":ms}` | `POST /api/v1/device/sleep` |
 | `<P>/cmd/screen/get` | ignored | publishes `<P>/state/screen` |
@@ -257,33 +255,42 @@ preserves the stored color. A payload that omits `color`, `blinkMs` or `fadeMs`
 leaves that field exactly as it was; only the empty payload or `{}` zeroes
 everything at once.
 
-### sounds/play
+### audio/play
 
-Send **exactly one** of `name`, `rtttl` or `builtin`. Sending more than one is refused whole with
-`{"ok":false,"error":{"code":"validationFailed","message":"exactly one of \"name\", \"rtttl\" or
-\"builtin\" is allowed","field":"name"}}` and nothing plays - no key wins over another, and there
-is no fallback. Full rules: [HTTP API - POST /api/v1/sounds/play](http.md#post-apiv1soundsplay).
+Send **exactly one** key, and the key chooses which output answers. Sending more than one is
+refused whole - `field` names the first key you sent - and nothing plays. Only `sound` looks at
+more than one output; the rest never fall back. Full rules:
+[HTTP API - POST /api/v1/audio/play](http.md#post-apiv1audioplay).
 
 | Key | Type | Range | Default | Units | Meaning |
 |---|---|---|---|---|---|
-| `name` | string | a file on the device | - | - | Play a stored sound file. |
-| `rtttl` | string | RTTTL | - | - | Play an inline RTTTL melody. |
-| `builtin` | string | - | - | - | Plays the built-in R2D2 melody. The value is **ignored**, so `{"builtin":"chime"}` and `{"builtin":"r2d2"}` are identical. |
+| `sound` | string | a name | - | - | A stored MP3, else a melody, else a DFPlayer track if the name is a plain number. |
+| `mp3` | string | a stored MP3 | - | - | Play `/MP3/<name>.mp3`. |
+| `melody` | string | a stored melody | - | - | Play `/MELODIES/<name>.txt`. |
+| `track` | integer | 1-2999 | - | - | Play that track from the DFPlayer's SD card. |
+| `rtttl` | string | RTTTL | - | - | Play an inline RTTTL melody on the buzzer. |
+| `station` | string | a stored station | - | - | Start the radio on that station. |
+| `index` | integer | 0-31 | - | - | Start the radio on that position in the list. |
+| `url` | string | http/https | - | - | Start the radio on a stream that is not stored. |
 
 ```bash
-mosquitto_pub -h broker.local -t 'awtrixNG/cmd/sounds/play' -m '{"name":"beep"}'
-mosquitto_pub -h broker.local -t 'awtrixNG/cmd/sounds/play' \
+mosquitto_pub -h broker.local -t 'awtrixNG/cmd/audio/play' -m '{"mp3":"beep"}'
+mosquitto_pub -h broker.local -t 'awtrixNG/cmd/audio/play' \
   -m '{"rtttl":"two:d=4,o=5,b=200:c,e"}'
 ```
 
 No recognised key answers:
 
 ```json
-{"ok":false,"error":{"code":"validationFailed","message":"one of \"name\", \"rtttl\" or \"builtin\" is required","field":"name"}}
+{"ok":false,"error":{"code":"validationFailed","message":"exactly one of \"sound\", \"mp3\", \"melody\", \"track\", \"rtttl\", \"station\", \"index\" or \"url\" is required"}}
 ```
 
-When `soundEnabled` is `false`, all three keys answer `{"ok":true}` and nothing
-is played. A successful result is not a guarantee that anything was heard.
+When `soundEnabled` is `false`, the one-shot keys answer `{"ok":true}` and nothing
+is played. A successful result is not a guarantee that anything was heard. A radio stream is not
+muted by that switch.
+
+`cmd/audio/stop` takes an optional `{"scope":"sounds"|"stream"|"all"}`; with no payload it stops
+everything.
 
 ### device/reboot
 
@@ -346,7 +353,7 @@ Eight codes can appear here, with the messages they carry:
 
 The `code` values match HTTP exactly; two messages are less specific. `notFound`
 collapses to a bare `not found` where HTTP distinguishes `app not found` from
-`sound not found`, and `invalidJson` says `payload` where HTTP says
+`no MP3 of that name`, and `invalidJson` says `payload` where HTTP says
 `request body`.
 
 A `/result` topic is never itself read as a command, so replies published back
@@ -359,7 +366,7 @@ to the broker do not loop.
 | `<P>/state/device` | device JSON (`GET /api/v1/device` shape) | **yes** | every `statsInterval` (default **10 s**), and at once when power or an indicator changes |
 | `<P>/state/settings` | settings JSON (`GET /api/v1/settings` shape) | **yes** | on every settings change, and on connect |
 | `<P>/state/apps/active` | app name, plain string (not JSON) | **yes** | immediately on change, and on connect |
-| `<P>/state/radio` | radio JSON (`GET /api/v1/radio` shape) | **yes** | on play, stop, track change and error, and on connect |
+| `<P>/state/audio` | audio JSON (`GET /api/v1/audio` shape) | **yes** | on play, stop, track change and error, and on connect |
 | `<P>/state/capabilities` | `{"effects":[…],"paletteEffects":[…],"transitions":[…],"overlays":[…],"palettes":[…],"radio":bool,"gpio":{…}}` | **yes** | once per connect |
 | `<P>/state/prefix` | `<P>` itself, plain string (not JSON) | **yes** | once per connect |
 | `<P>/state/buttons/left` \| `/select` \| `/right` | `"1"` / `"0"` | **yes** | on button edge, and on connect |
@@ -439,7 +446,7 @@ lost in transit is lost silently.
 | `<P>/state/device` | **yes** |
 | `<P>/state/settings` | **yes** |
 | `<P>/state/apps/active` | **yes** |
-| `<P>/state/radio` | **yes** |
+| `<P>/state/audio` | **yes** |
 | `<P>/state/capabilities` | **yes** |
 | `<P>/state/prefix` | **yes** |
 | `<P>/state/buttons/*` | **yes** |

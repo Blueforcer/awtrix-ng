@@ -24,7 +24,7 @@ namespace awtrix {
 // Everything that changes what the panel shows goes through here.
 class CoreEngine : public IAppService, public INotifyService, public IRadioStations {
  public:
-  CoreEngine(ISoundService& sound, IDisplayService& display, ISystemService& system);
+  CoreEngine(sound::AudioRouter& audio, IDisplayService& display, ISystemService& system);
 
   // Runs the command inline and returns its result; HTTP and MQTT use this so they can answer the
   // caller. submit() only queues, and the next tick() drains it.
@@ -37,12 +37,14 @@ class CoreEngine : public IAppService, public INotifyService, public IRadioStati
     orderSaveFn_ = std::move(cb);
   }
 
-  void setRadioService(IRadioService* radio) { radio_ = radio; }
-  bool radioAvailable() const { return radio_ != nullptr; }
-  uint32_t radioUnderruns() const { return radio_ ? radio_->underruns() : 0; }
-  uint32_t radioDecodeUs() const { return radio_ ? radio_->decodeUs() : 0; }
-  uint32_t radioStarvedMs() const { return radio_ ? radio_->starvedMs() : 0; }
-  uint32_t radioBufferBytes() const { return radio_ ? radio_->bufferBytes() : 0; }
+  // Telemetry stays here rather than behind the router: the router deliberately hands out no
+  // sink of its own, so nothing can reach past it to play something.
+  void setPcmSink(sound::IPcmSink* pcm) { pcm_ = pcm; }
+  bool radioAvailable() const { return pcm_ != nullptr; }
+  uint32_t radioUnderruns() const { return pcm_ ? pcm_->underruns() : 0; }
+  uint32_t radioDecodeUs() const { return pcm_ ? pcm_->decodeUs() : 0; }
+  uint32_t radioStarvedMs() const { return pcm_ ? pcm_->starvedMs() : 0; }
+  uint32_t radioBufferBytes() const { return pcm_ ? pcm_->bufferBytes() : 0; }
 
   void setStationPersist(std::function<void(const std::string& json)> cb) {
     stationSaveFn_ = std::move(cb);
@@ -138,7 +140,7 @@ class CoreEngine : public IAppService, public INotifyService, public IRadioStati
 
   std::vector<radio::Station> stations_;
   std::function<void(const std::string&)> stationSaveFn_;
-  IRadioService* radio_ = nullptr;
+  sound::IPcmSink* pcm_ = nullptr;
 
   struct PushedAppEntry {
     std::string name;
@@ -176,7 +178,7 @@ class CoreEngine : public IAppService, public INotifyService, public IRadioStati
   uint32_t notifPassesDoneGen_ = 0;
   std::string rotationPassesDonePage_;
   bool scriptRotationPaused_ = false;
-  ISoundService& sound_;
+  sound::AudioRouter& audio_;
   IDisplayService& display_;
   ISystemService& system_;
   // Timestamp of the last tick, ms since boot. Commands executed between ticks use it as clock.

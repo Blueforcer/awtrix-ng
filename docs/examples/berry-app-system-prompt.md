@@ -905,7 +905,7 @@ hard-coding white.
 `key` is a key of `PATCH /api/v1/settings`, spelled exactly as the API spells
 it: `brightness`, `textColor`, `appDurationMs`, `useCelsius`, `time24h`,
 `soundEnabled`, `autoBrightness`, `uppercase`, `timeColor`, `dateColor`,
-`temperatureColor`, `humidityColor`, `batteryColor`, `gamma`, `volume`,
+`temperatureColor`, `humidityColor`, `batteryColor`, `gamma`, `buzzerVolume`,
 `timeSeparatorMode`, `transitionEffect`, and the rest of that schema. Case
 matters.
 
@@ -935,9 +935,33 @@ changes a setting for its own screen, change it back when it stops drawing.
 
 | Call | Does |
 |---|---|
-| `sound.play(name)` | plays an uploaded file or DFPlayer track |
-| `sound.rtttl(melody)` | plays an inline RTTTL string |
-| `sound.stop()` | stops playback |
+| `sound.play(name)` | a name, and the device decides: an uploaded MP3, else a melody file, else a DFPlayer track when the name is a plain number |
+| `sound.mp3(name)` | only an MP3 - never falls back to a melody |
+| `sound.melody(name)` | only a stored melody |
+| `sound.track(number)` | only a DFPlayer track, 1-2999 |
+| `sound.rtttl(melody)` | plays an inline RTTTL string on the buzzer |
+| `sound.stop()` | stops the one-shots; a running radio stream keeps playing |
+| `sound.playing()` | `true` while a one-shot sound is playing |
+| `sound.sinks()` | which outputs the panel has: `{'buzzer': bool, 'track': bool, 'mp3': bool, 'radio': bool}` |
+
+Check `playing()` before playing on a button, or a double press stacks two MP3s. Chain sounds in
+`loop()`, never in `draw()`:
+
+```berry
+  def on_button(btn)
+    if btn == "select" && !sound.playing()
+      sound.play("doorbell")
+    end
+  end
+```
+
+The explicit calls never fall back, so use `sinks()` when your app should sound right on hardware
+it was not written for:
+
+```berry
+  if sound.sinks()['mp3'] sound.mp3("doorbell")
+  else sound.rtttl("bell:d=4,o=5,b=100:e,c") end
+```
 
 Returns `true` when the request was **accepted**, not when a file of that name
 exists. Use `sound` for noise alone; use `notify()` (5.10) when the sound belongs

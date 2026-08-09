@@ -12,12 +12,6 @@
 using namespace awtrix;
 
 namespace {
-struct FSound : ISoundService {
-  bool playSound(const std::string&) override { return true; }
-  void playRtttl(const std::string&) override {}
-  void r2d2(const std::string&) override {}
-  void stop() override {}
-};
 struct FDisplay : IDisplayService {
   void sendScreen() override {}
 };
@@ -52,14 +46,14 @@ void setUp() {}
 void tearDown() {}
 
 static void test_default_app_list() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_UINT(5u, (unsigned)e.appHost().count());
   TEST_ASSERT_EQUAL_STRING("Time", e.currentAppId().c_str());
 }
 
 static void test_custom_app_add_and_delete() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
                         rc(e.execute(cmd(CommandType::SetPushedApp, "weather", "{\"text\":\"x\"}"))));
@@ -72,7 +66,7 @@ static void test_custom_app_add_and_delete() {
 }
 
 static void test_pushed_apps_follow_the_order_they_arrived_in() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetPushedApp, "zulu", "{\"text\":\"x\"}"));
   e.execute(cmd(CommandType::SetPushedApp, "alpha", "{\"text\":\"x\"}"));
@@ -85,7 +79,7 @@ static void test_pushed_apps_follow_the_order_they_arrived_in() {
 }
 
 static void test_updating_a_pushed_app_leaves_its_place_alone() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetPushedApp, "zulu", "{\"text\":\"x\"}"));
   e.execute(cmd(CommandType::SetPushedApp, "alpha", "{\"text\":\"x\"}"));
@@ -96,7 +90,7 @@ static void test_updating_a_pushed_app_leaves_its_place_alone() {
 }
 
 static void test_a_returning_pushed_app_lands_at_the_end() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetPushedApp, "zulu", "{\"text\":\"x\"}"));
   e.execute(cmd(CommandType::SetPushedApp, "alpha", "{\"text\":\"x\"}"));
@@ -108,7 +102,7 @@ static void test_a_returning_pushed_app_lands_at_the_end() {
 }
 
 static void test_an_array_push_keeps_its_element_order() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetPushedApp, "arr",
                 "[{\"text\":\"a\"},{\"text\":\"b\"},{\"text\":\"c\"}]"));
@@ -119,7 +113,7 @@ static void test_an_array_push_keeps_its_element_order() {
 }
 
 static void test_an_arranged_app_keeps_its_slot_when_others_arrive() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetPushedApp, "zulu", "{\"text\":\"x\"}"));
   e.execute(cmd(CommandType::SetAppOrder, "",
@@ -133,7 +127,7 @@ static void test_an_arranged_app_keeps_its_slot_when_others_arrive() {
 }
 
 static void test_array_custom_apps_indexed() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
       rc(e.execute(cmd(CommandType::SetPushedApp, "multi", "[{\"text\":\"a\"},{\"text\":\"b\"}]"))));
@@ -145,7 +139,7 @@ static void test_array_custom_apps_indexed() {
 }
 
 static void test_custom_app_capacity_is_507() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   for (int i = 0; i < 50; ++i) {
     TEST_ASSERT_EQUAL_INT(
@@ -162,7 +156,7 @@ static void test_custom_app_capacity_is_507() {
 }
 
 static void test_notification_capacity_is_507() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   for (int i = 0; i < 32; ++i) {
     TEST_ASSERT_EQUAL_INT(
@@ -175,7 +169,7 @@ static void test_notification_capacity_is_507() {
 }
 
 static void test_notify_and_dismiss() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
                         rc(e.execute(cmd(CommandType::Notify, "", "{\"text\":\"hi\"}"))));
@@ -186,7 +180,7 @@ static void test_notify_and_dismiss() {
 }
 
 static void test_switch_app() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
                         rc(e.execute(cmd(CommandType::SwitchApp, "", "Humidity"))));
@@ -202,7 +196,7 @@ static void test_switch_app() {
 }
 
 static void test_the_disabled_list_decides_what_stays_out() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
       rc(e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Humidity\",\"Time\"],\"disabled\":[\"Date\",\"Temperature\",\"Battery\"]}"))));
@@ -212,7 +206,7 @@ static void test_the_disabled_list_decides_what_stays_out() {
 }
 
 static void test_an_app_that_turns_up_later_joins_the_loop() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Time\"],\"disabled\":[\"Date\",\"Temperature\",\"Humidity\",\"Battery\"]}"));
   TEST_ASSERT_EQUAL_UINT(1u, (unsigned)e.appHost().count());
@@ -227,7 +221,7 @@ static void test_an_app_that_turns_up_later_joins_the_loop() {
 }
 
 static void test_order_allows_duplicate_apps() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetSettings, "", "{\"transitionDurationMs\":400}"));
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
@@ -245,7 +239,7 @@ static void test_order_allows_duplicate_apps() {
 }
 
 static void test_order_reserves_spot_for_unknown_apps() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
       rc(e.execute(cmd(CommandType::SetAppOrder, "",
@@ -259,7 +253,7 @@ static void test_order_reserves_spot_for_unknown_apps() {
 }
 
 static void test_apps_inventory_includes_switched_off_apps() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Time\"],\"disabled\":[\"Date\",\"ghost\"]}"));
   const auto all = e.allApps();
@@ -270,7 +264,7 @@ static void test_apps_inventory_includes_switched_off_apps() {
 }
 
 static void test_per_app_duration_overrides_global() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetSettings, "", "{\"transitionDurationMs\":400}"));
   e.execute(cmd(CommandType::SetPushedApp, "fast", "{\"text\":\"x\",\"durationMs\":2000}"));
@@ -288,7 +282,7 @@ static void test_per_app_duration_overrides_global() {
 }
 
 static void test_frequent_pushes_do_not_freeze_the_rotation() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetSettings, "", "{\"transitionDurationMs\":1000}"));
   e.execute(cmd(CommandType::SetPushedApp, "weather", "{\"text\":\"21\"}"));
@@ -302,7 +296,7 @@ static void test_frequent_pushes_do_not_freeze_the_rotation() {
 }
 
 static void test_unknown_effect_or_overlay_name_is_rejected() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   EffectRegistry effects, overlays;
   FEffect plasma("Plasma"), rain("rain");
@@ -334,7 +328,7 @@ static void test_unknown_effect_or_overlay_name_is_rejected() {
 }
 
 static void test_bad_scroll_in_a_payload_is_rejected() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
 
   TEST_ASSERT_EQUAL_INT(
@@ -360,7 +354,7 @@ static void test_bad_scroll_in_a_payload_is_rejected() {
 }
 
 static void test_notification_array_is_rejected_not_truncated() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(
       rc(DispatchResult::ValidationError),
@@ -373,7 +367,7 @@ static void test_notification_array_is_rejected_not_truncated() {
 }
 
 static void test_humidity_app_gated_on_sensor_capability() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   auto has = [&](const char* n) {
     const auto a = e.allApps();
@@ -386,7 +380,7 @@ static void test_humidity_app_gated_on_sensor_capability() {
 }
 
 static void test_temperature_app_gated_on_sensor_capability() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   auto has = [&](const char* n) {
     const auto a = e.allApps();
@@ -401,7 +395,7 @@ static void test_temperature_app_gated_on_sensor_capability() {
 }
 
 static void test_settings_change_leaves_loop_alone() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
       rc(e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Time\",\"Date\"],\"disabled\":[\"Temperature\",\"Humidity\",\"Battery\"]}"))));
@@ -413,7 +407,7 @@ static void test_settings_change_leaves_loop_alone() {
 }
 
 static void test_bus_submit_then_tick_drains() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_TRUE(e.submit(cmd(CommandType::Notify, "", "{\"text\":\"q\"}")));
   TEST_ASSERT_FALSE(e.hasNotification());
@@ -422,7 +416,7 @@ static void test_bus_submit_then_tick_drains() {
 }
 
 static void test_auto_rotation() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetSettings, "", "{\"transitionDurationMs\":400}"));
   TEST_ASSERT_EQUAL_STRING("Time", e.currentAppId().c_str());
@@ -447,7 +441,7 @@ static void test_script_app_declining_is_skipped_by_the_rotation() {
   } scripts;
   scripts.quiet = "Silent";
 
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.setScriptService(&scripts);
   e.execute(cmd(CommandType::SetSettings, "", "{\"transitionDurationMs\":400}"));
@@ -479,7 +473,7 @@ static void test_script_app_duration_overrides_global() {
     }
   } scripts;
 
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.setScriptService(&scripts);
   e.execute(cmd(CommandType::SetSettings, "", "{\"transitionDurationMs\":400}"));
@@ -498,7 +492,7 @@ static void test_script_app_duration_overrides_global() {
 }
 
 static void test_script_pause_holds_rotation_until_a_manual_move() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetSettings, "", "{\"transitionDurationMs\":400}"));
   e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Time\",\"Date\"],\"disabled\":[\"Temperature\",\"Humidity\",\"Battery\"]}"));
@@ -529,14 +523,14 @@ static void test_script_pause_holds_rotation_until_a_manual_move() {
 }
 
 static void test_settings_parse_error() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ParseError),
                         rc(e.execute(cmd(CommandType::SetSettings, "", "{bad"))));
 }
 
 static void test_lifetime_expiry() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.tick(1000);
   TEST_ASSERT_EQUAL_INT(
@@ -551,7 +545,7 @@ static void test_lifetime_expiry() {
 }
 
 static void test_expired_array_child_leaves_siblings_alone() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.tick(1000);
   e.execute(cmd(CommandType::SetPushedApp, "arr",
@@ -567,7 +561,7 @@ static void test_expired_array_child_leaves_siblings_alone() {
 }
 
 static void test_pushed_apps_do_not_persist() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(
       rc(DispatchResult::Ok),
@@ -578,7 +572,7 @@ static void test_pushed_apps_do_not_persist() {
 }
 
 static void test_lifetime_mode1_marks_stale() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.tick(1000);
   e.execute(cmd(CommandType::SetPushedApp, "keep",
@@ -590,7 +584,7 @@ static void test_lifetime_mode1_marks_stale() {
 }
 
 static void test_script_sources_stay_writable_without_an_interpreter() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   std::map<std::string, std::string> saved;
   std::vector<std::string> removed;
@@ -612,7 +606,7 @@ static void test_script_sources_stay_writable_without_an_interpreter() {
 }
 
 static void test_apps_json_lists_stored_scripts_without_an_interpreter() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   std::vector<script::StoredScript> stored;
   script::StoredScript s;
@@ -662,7 +656,7 @@ static void test_a_headless_script_runs_without_being_drawn() {
   FHeadless scripts;
   scripts.headless.push_back("Doorbell");
 
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.setScriptService(&scripts);
   e.syncScriptApp("Doorbell");
@@ -678,7 +672,7 @@ static void test_the_app_order_switches_a_headless_script_on_and_off() {
   FHeadless scripts;
   scripts.headless.push_back("Doorbell");
 
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.setScriptService(&scripts);
   e.syncScriptApp("Doorbell");
@@ -699,7 +693,7 @@ static void test_clearing_the_headless_flag_puts_the_script_on_the_panel() {
   FHeadless scripts;
   scripts.headless.push_back("Doorbell");
 
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.setScriptService(&scripts);
   e.syncScriptApp("Doorbell");
@@ -714,7 +708,7 @@ static void test_apps_json_separates_enabled_from_in_loop() {
   FHeadless scripts;
   scripts.headless.push_back("Doorbell");
 
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.setScriptService(&scripts);
   e.syncScriptApp("Doorbell");
@@ -735,7 +729,7 @@ static void test_apps_json_separates_enabled_from_in_loop() {
 }
 
 static void test_a_disabled_pushed_app_stays_disabled_across_a_reboot() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   std::string persisted;
   CoreEngine e(so, di, sy);
   e.setOrderPersist([&](const std::string& j) { persisted = j; });
@@ -752,7 +746,7 @@ static void test_a_disabled_pushed_app_stays_disabled_across_a_reboot() {
 }
 
 static void test_an_explicit_disabled_list_leaves_unmentioned_apps_alone() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Time\"],\"disabled\":[\"Date\"]}"));
   TEST_ASSERT_FALSE(e.isEnabled("Date"));
@@ -764,7 +758,7 @@ static void test_an_explicit_disabled_list_leaves_unmentioned_apps_alone() {
 }
 
 static void test_the_apps_inventory_keeps_a_disabled_app_that_is_gone() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetPushedApp, "wetter", "{\"text\":\"x\"}"));
   e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Time\"],\"disabled\":[\"wetter\"]}"));
@@ -779,7 +773,7 @@ static void test_the_apps_inventory_keeps_a_disabled_app_that_is_gone() {
 }
 
 static void test_deleting_an_app_leaves_unrelated_digit_suffixed_apps_alone() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetPushedApp, "temp", "{\"text\":\"a\"}"));
   e.execute(cmd(CommandType::SetPushedApp, "temp1", "{\"text\":\"b\"}"));
@@ -791,7 +785,7 @@ static void test_deleting_an_app_leaves_unrelated_digit_suffixed_apps_alone() {
 }
 
 static void test_disabled_alone_switches_off_without_resending_the_order() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Battery\",\"Time\",\"Date\"],\"disabled\":[\"Temperature\",\"Humidity\"]}"));
   TEST_ASSERT_EQUAL_UINT(3u, (unsigned)e.appHost().count());
@@ -806,7 +800,7 @@ static void test_disabled_alone_switches_off_without_resending_the_order() {
 }
 
 static void test_an_object_body_with_neither_key_is_rejected() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ParseError),
                         rc(e.execute(cmd(CommandType::SetAppOrder, "", "{\"nope\":[]}"))));
@@ -814,7 +808,7 @@ static void test_an_object_body_with_neither_key_is_rejected() {
 }
 
 static void test_a_reserved_slot_is_listed_while_its_app_is_away() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Time\",\"wetter\"],\"disabled\":[]}"));
   TEST_ASSERT_FALSE(e.isInLoop("wetter"));
@@ -832,7 +826,7 @@ static void test_a_reserved_slot_is_listed_while_its_app_is_away() {
 }
 
 static void test_deleting_a_script_takes_its_name_out_of_the_arrangement() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   std::string persisted;
   e.setOrderPersist([&](const std::string& j) { persisted = j; });
@@ -847,7 +841,7 @@ static void test_deleting_a_script_takes_its_name_out_of_the_arrangement() {
 }
 
 static void test_a_deleted_pushed_app_keeps_the_slot_it_was_given() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetPushedApp, "wetter", "{\"text\":\"21\"}"));
   e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Time\",\"wetter\",\"Date\"],\"disabled\":[]}"));
@@ -860,7 +854,7 @@ static void test_a_deleted_pushed_app_keeps_the_slot_it_was_given() {
 }
 
 static void test_an_arranged_app_reports_its_slot_while_it_is_away() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Time\",\"wetter\",\"Date\"],\"disabled\":[]}"));
 
@@ -877,7 +871,7 @@ static void test_an_arranged_app_reports_its_slot_while_it_is_away() {
 }
 
 static void test_a_body_the_engine_cannot_read_leaves_the_arrangement_alone() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   e.execute(cmd(CommandType::SetAppOrder, "",
                 "{\"order\":[\"Battery\",\"Time\"],\"disabled\":[\"Date\"]}"));
@@ -899,7 +893,7 @@ static void test_a_body_the_engine_cannot_read_leaves_the_arrangement_alone() {
 }
 
 static void test_nothing_is_switched_off_unless_it_is_named() {
-  FSound so; FDisplay di; FSystem sy;
+  sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
   TEST_ASSERT_EQUAL_INT(
       rc(DispatchResult::Ok),

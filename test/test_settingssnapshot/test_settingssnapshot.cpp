@@ -64,7 +64,8 @@ static void test_defaults_serialize_whole() {
       "\"dateShowWeekday\":false,\"dateMonthNames\":false,\"useCelsius\":true,\"blockNavigation\":"
       "false,\"soundEnabled\":true,"
       "\"uppercase\":true,\"timeColor\":null,\"dateColor\":null,"
-      "\"humidityColor\":null,\"temperatureColor\":null,\"batteryColor\":null,\"volume\":25,"
+      "\"humidityColor\":null,\"temperatureColor\":null,\"batteryColor\":null,"
+      "\"buzzerVolume\":80,\"dfplayerVolume\":80,\"mp3Volume\":70,"
       "\"radioVolume\":60,\"radioMeta\":true,\"saturation\":100,\"gamma\":1.899999976,"
       "\"colorCorrection\":null,"
       "\"colorTint\":null,\"scroll\":{\"mode\":\"wrap\",\"direction\":\"left\",\"entry\":\"inline\","
@@ -119,8 +120,8 @@ static void test_reply_writes_an_unset_optional_colour_as_null() {
 static void test_apply_counts_only_the_fields_it_took() {
   TEST_ASSERT_EQUAL_STRING("0 ", applied("{}").c_str());
   TEST_ASSERT_EQUAL_STRING("1 brightness=200;", applied("{\"brightness\":200}").c_str());
-  TEST_ASSERT_EQUAL_STRING("2 brightness=200;volume=7;",
-                           applied("{\"brightness\":200,\"volume\":7}").c_str());
+  TEST_ASSERT_EQUAL_STRING("2 brightness=200;buzzerVolume=7;",
+                           applied("{\"brightness\":200,\"buzzerVolume\":7}").c_str());
   TEST_ASSERT_EQUAL_STRING("0 ", applied("{\"nonesuch\":1}").c_str());
 }
 
@@ -218,12 +219,12 @@ static void test_apply_reads_a_numeric_string_as_a_float() {
 
 static void test_validate_names_the_first_offending_field() {
   TEST_ASSERT_EQUAL_STRING("ok", validated("{}").c_str());
-  TEST_ASSERT_EQUAL_STRING("ok", validated("{\"brightness\":10,\"volume\":3}").c_str());
+  TEST_ASSERT_EQUAL_STRING("ok", validated("{\"brightness\":10,\"mp3Volume\":3}").c_str());
   TEST_ASSERT_EQUAL_STRING("nonesuch|unknown field", validated("{\"nonesuch\":1}").c_str());
   TEST_ASSERT_EQUAL_STRING("brightness|must be an integer",
-                           validated("{\"brightness\":\"x\",\"volume\":\"y\"}").c_str());
-  TEST_ASSERT_EQUAL_STRING("volume|must be an integer",
-                           validated("{\"volume\":\"y\",\"brightness\":\"x\"}").c_str());
+                           validated("{\"brightness\":\"x\",\"mp3Volume\":\"y\"}").c_str());
+  TEST_ASSERT_EQUAL_STRING("mp3Volume|must be an integer",
+                           validated("{\"mp3Volume\":\"y\",\"brightness\":\"x\"}").c_str());
 }
 
 static void test_validate_rejects_a_bool_where_an_integer_belongs() {
@@ -241,7 +242,10 @@ static void test_validate_checks_the_range() {
   TEST_ASSERT_EQUAL_STRING("brightness|out of range", validated("{\"brightness\":256}").c_str());
   TEST_ASSERT_EQUAL_STRING("brightness|out of range", validated("{\"brightness\":-1}").c_str());
   TEST_ASSERT_EQUAL_STRING("ok", validated("{\"brightness\":255}").c_str());
-  TEST_ASSERT_EQUAL_STRING("volume|out of range", validated("{\"volume\":31}").c_str());
+  TEST_ASSERT_EQUAL_STRING("buzzerVolume|out of range",
+                           validated("{\"buzzerVolume\":101}").c_str());
+  // The single 0-30 key is gone, not renamed in place.
+  TEST_ASSERT_EQUAL_STRING("volume|unknown field", validated("{\"volume\":10}").c_str());
   TEST_ASSERT_EQUAL_STRING("appDurationMs|must be a non-negative integer (milliseconds)",
                            validated("{\"appDurationMs\":-1}").c_str());
 }

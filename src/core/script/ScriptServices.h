@@ -126,7 +126,8 @@ class IScriptStoreSink {
   virtual void storeChanged(const std::string& script, const std::string& json) = 0;
 };
 
-enum class SoundAction : uint8_t { Play, Rtttl, Stop };
+// Mirrored by the ordinals the prelude hands to _native_sound; keep the order.
+enum class SoundAction : uint8_t { Play, Mp3, Melody, Track, Rtttl, Stop };
 
 // Everything the script layer may reach outside itself. Any member may be null or empty, and
 // a binding whose service is missing answers "not available" rather than failing.
@@ -150,6 +151,10 @@ struct ScriptServices {
   std::function<const RuntimeState*()> runtime;
   std::function<bool(const std::string& json)> setSettings;
   std::function<bool(SoundAction, const std::string&)> sound;
+  std::function<bool()> soundPlaying;
+  // Which outputs this board actually has, as a bitmask: buzzer 1, track 2, mp3 4,
+  // radio 8. Lets a script pick a sound its hardware can make.
+  std::function<int()> soundSinks;
   std::function<void()> rotateNext;
   std::function<void()> rotatePrevious;
   std::function<bool(const std::string&)> showApp;

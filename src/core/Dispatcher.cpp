@@ -175,7 +175,7 @@ DispatchResult applySleep(const std::string& payload, CommandContext& ctx) {
 }
 
 DispatchResult applyRadioPlay(const Command& cmd, CommandContext& ctx) {
-  if (!ctx.radio || !ctx.stations) {
+  if (!ctx.audio.caps().radio || !ctx.stations) {
     ctx.detail = {"", "this build has no audio output"};
     return DispatchResult::Unavailable;
   }
@@ -224,7 +224,7 @@ DispatchResult applyRadioPlay(const Command& cmd, CommandContext& ctx) {
     return DispatchResult::ValidationError;
   }
 
-  const DispatchResult result = ctx.radio->play(url, label, ctx.detail);
+  const DispatchResult result = ctx.audio.playStream(url, label, ctx.detail);
   if (result == DispatchResult::Ok) {
     RuntimeState& runtime = ctx.state.runtime();
     runtime.radioPlaying = true;
@@ -279,44 +279,36 @@ DispatchResult Dispatcher::dispatch(const Command& cmd, CommandContext& ctx) {
       return applyDisplay(cmd.payload, ctx);
     case CommandType::Sleep:
       return applySleep(cmd.payload, ctx);
-    // The sound commands report Ok while sound is switched off: a muted device is not a failure.
-    case CommandType::PlayRtttl:
-      if (!ctx.state.settings().soundEnabled) return DispatchResult::Ok;
-      if (!ctx.sound.supportsRtttl()) {
-        ctx.detail = {"rtttl", "RTTTL is not supported on this sound backend"};
-        return DispatchResult::ValidationError;
+    // The router owns the muting and writes its own detail message.
+    case CommandType::PlayAudio:
+      switch (ctx.audio.play(static_cast<sound::Source>(cmd.arg), cmd.payload, ctx.detail)) {
+        case sound::PlayResult::Ok:
+        case sound::PlayResult::Muted:
+          return DispatchResult::Ok;
+        case sound::PlayResult::NotFound:
+          return DispatchResult::NotFound;
+        case sound::PlayResult::NoSink:
+          return DispatchResult::Unavailable;
+        case sound::PlayResult::Invalid:
+          return DispatchResult::ValidationError;
       }
-      ctx.sound.playRtttl(cmd.payload);
-      return DispatchResult::Ok;
-    case CommandType::PlaySound:
-      if (!ctx.state.settings().soundEnabled) return DispatchResult::Ok;
-      return ctx.sound.playSound(cmd.payload) ? DispatchResult::Ok : DispatchResult::NotFound;
-    case CommandType::R2D2:
-      if (!ctx.state.settings().soundEnabled) return DispatchResult::Ok;
-      if (!ctx.sound.supportsRtttl()) {
-        ctx.detail = {"builtin", "the built-in melody is not supported on this sound backend"};
-        return DispatchResult::ValidationError;
-      }
-      ctx.sound.r2d2(cmd.payload);
-      return DispatchResult::Ok;
-    case CommandType::StopSound:
-      ctx.sound.stop();
-      return DispatchResult::Ok;
+      return DispatchResult::Failed;
     case CommandType::SetRadioStations:
       if (!ctx.stations) return DispatchResult::Failed;
       return ctx.stations->setStations(cmd.payload, ctx.detail);
-    case CommandType::RadioPlay:
+    case CommandType::PlayStream:
       return applyRadioPlay(cmd, ctx);
-    case CommandType::RadioStop:
-      if (!ctx.radio) {
-        ctx.detail = {"", "this build has no audio output"};
-        return DispatchResult::Unavailable;
+    case CommandType::StopAudio: {
+      const sound::StopScope scope = static_cast<sound::StopScope>(cmd.arg);
+      ctx.audio.stop(scope);
+      // Silencing one-shots leaves the stream, so the reported station survives too.
+      if (scope != sound::StopScope::Sounds) {
+        ctx.state.runtime().radioPlaying = false;
+        ctx.state.runtime().radioTitle.clear();
+        ctx.state.emit(StateEvent::RadioChanged);
       }
-      ctx.radio->stop();
-      ctx.state.runtime().radioPlaying = false;
-      ctx.state.runtime().radioTitle.clear();
-      ctx.state.emit(StateEvent::RadioChanged);
       return DispatchResult::Ok;
+    }
     case CommandType::ScriptSet:
       if (!ctx.scripts) {
         ctx.detail = {"", "scripting is disabled (scriptingEnabled is off)"};

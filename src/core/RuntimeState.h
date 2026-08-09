@@ -42,6 +42,8 @@ struct RuntimeState {
   std::string radioStation;
   std::string radioTitle;
   std::string radioError;
+  bool mp3Playing = false;
+  std::string mp3Name;
   uint8_t brightnessActual = 120;
   std::string globalOverlay;
   EffectSettings globalOverlaySettings;

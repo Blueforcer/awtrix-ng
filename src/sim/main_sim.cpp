@@ -24,10 +24,9 @@
 #include "AppConfig.h"
 #include "core/CoreEngine.h"
 #include "core/FrameClock.h"
-#include "core/SocProfileJson.h"
 #include "core/StrCase.h"
+#include "core/api/CapabilitiesJson.h"
 #include "core/api/StateJson.h"
-#include "core/Transitions.h"
 #include "core/apps/AppRegistry.h"
 #include "core/apps/SpecRenderer.h"
 #include "core/apps/builtin/BatteryApp.h"
@@ -61,19 +60,21 @@
 #include "media/ScriptIcon.h"
 #include "persistence/AppOrderStore.h"
 #include "persistence/RadioStore.h"
-#include "sim/FakeRadioService.h"
+#include "sim/FakePcmSink.h"
 #include "persistence/DeviceConfig.h"
 #include "persistence/Filesystem.h"
 #include "persistence/NvsSettings.h"
 #include "sim/SimBoard.h"
 #include "sim/SimHttpServer.h"
 #include "sim/SimPageServices.h"
+#include "sim/SimAssetProbe.h"
 #include "sim/SimPeriphery.h"
 #include "sim/SimScriptServices.h"
 #include "sim/SimStore.h"
 #include "sim/SimTerminalMatrix.h"
 #include "system/Log.h"
 #include "system/MonotonicClock.h"
+#include "core/script/ScriptSoundCommand.h"
 #include "transport/ScriptMqttBridge.h"
 #include "transport/mqtt/MqttService.h"
 
@@ -81,20 +82,6 @@ using namespace awtrix;
 namespace stdfs = std::filesystem;
 
 namespace {
-
-class SimSoundService : public ISoundService {
- public:
-  explicit SimSoundService(IBoard& board) : board_(board) {}
-  bool playSound(const std::string& payload) override { return board_.sound().playFile(payload); }
-  void playRtttl(const std::string& rtttl) override { board_.sound().playRtttl(rtttl); }
-  void r2d2(const std::string&) override {
-    board_.sound().playRtttl("r2d2:d=4,o=5,b=240:16c6,16g6,16e6,16a6,16g6,16e7");
-  }
-  void stop() override { board_.sound().stop(); }
-
- private:
-  IBoard& board_;
-};
 
 class SimDisplayService : public IDisplayService {
  public:
@@ -154,13 +141,14 @@ MqttService g_mqtt;
 ScriptMqttBridge g_scriptMqtt;
 SimTerminalMatrix g_term;
 SimPeriphery g_periphery;
-std::unique_ptr<sim::FakeRadioService> g_radio;
+std::unique_ptr<sim::FakePcmSink> g_pcm;
+sound::AudioRouter g_audio;
+SimAssetProbe g_assets;
 DeviceConfig g_cfg;
 bool g_settingsDirty = false;
 int64_t g_lastSettingsSaveMs = -100000;
 DevicePageIcon g_pageIcon;
 DevicePageIcon g_pageIconB;
-SimPageSound* g_pageSound = nullptr;
 SimPageClock g_pageClock;
 RenderPipeline* g_pipeline = nullptr;
 render::PowerAnimator* g_power = nullptr;
@@ -239,11 +227,12 @@ int main(int argc, char** argv) {
   g_board.setMatrixLayout(cfg.matrixLayout());
   g_canvas = new Canvas(g_board.matrixWidth(), g_board.matrixHeight());
   g_power = new render::PowerAnimator(g_board.matrixWidth(), g_board.matrixHeight());
-  g_pageSound = new SimPageSound(g_board);
-  static SimSoundService sound(g_board);
+  g_audio.setTone(g_board.toneSink());
+  g_audio.setTrack(g_board.trackSink());
+  g_audio.setAssets(&g_assets);
   static SimDisplayService display;
   static SimSystemService system;
-  g_engine = new CoreEngine(sound, display, system);
+  g_engine = new CoreEngine(g_audio, display, system);
   g_engine->setBatteryAvailable(g_board.hasBattery());
   g_engine->setTemperatureAvailable(g_board.sensors().hasSensor());
   g_engine->setHumidityAvailable(g_board.sensors().hasHumidity());
@@ -264,7 +253,11 @@ int main(int argc, char** argv) {
     if (e != StateEvent::SettingsChanged) return;
     const Settings& s = g_engine->state().settings();
     g_board.applyColorGrade(render::gradeFrom(s));
-    g_board.sound().setVolume(static_cast<uint8_t>(s.volume));
+    g_audio.setVolumes(static_cast<uint8_t>(s.buzzerVolume),
+                       static_cast<uint8_t>(s.dfplayerVolume),
+                       static_cast<uint8_t>(s.mp3Volume),
+                       static_cast<uint8_t>(s.radioVolume));
+    g_audio.setMuted(!s.soundEnabled);
     g_settingsDirty = true;
   });
   // Kick the subscriber once so the settings just loaded from disk reach the board and the sound
@@ -305,7 +298,7 @@ int main(int argc, char** argv) {
   deps.fonts[1] = &awtrixFont(FontId::Large);
   deps.icons = &g_pageIcon;
   deps.iconsB = &g_pageIconB;
-  deps.sound = g_pageSound;
+  deps.audio = &g_audio;
   deps.clock = &g_pageClock;
   g_pipeline = new RenderPipeline(g_board.matrixWidth(), g_board.matrixHeight(), deps);
 
@@ -330,29 +323,14 @@ int main(int argc, char** argv) {
     logbuf::setVerbose(g_cfg.debugMode);
   });
   {
-    auto jsonList = [](const std::vector<std::string>& names) {
-      std::string out = "[";
-      bool first = true;
-      for (const auto& n : names) {
-        if (!first) out += ',';
-        out += '"' + n + '"';
-        first = false;
-      }
-      out += ']';
-      return out;
-    };
-  g_radio = std::unique_ptr<sim::FakeRadioService>(new sim::FakeRadioService(*g_engine));
-  g_engine->setRadioService(g_radio.get());
+  g_pcm = std::unique_ptr<sim::FakePcmSink>(new sim::FakePcmSink(*g_engine));
+  g_engine->setPcmSink(g_pcm.get());
+  g_audio.setPcm(g_pcm.get());
+  // Pushed once the sinks are all attached, so the PCM gains are not left at their defaults.
+  g_engine->state().emit(StateEvent::SettingsChanged);
 
-    std::string caps = "{\"effects\":" + jsonList(g_effects.names()) +
-                       ",\"paletteEffects\":" + jsonList(g_effects.paletteNames()) +
-                       ",\"transitions\":" + transitionsJson() +
-                       ",\"overlays\":" + jsonList(g_overlays.names()) +
-                       ",\"palettes\":[\"Cloud\",\"Lava\",\"Ocean\",\"Forest\",\"Stripe\","
-                       "\"Party\",\"Heat\",\"Rainbow\"]"
-                       ",\"radio\":" +
-                       std::string(g_engine->radioAvailable() ? "true" : "false") +
-                       ",\"gpio\":" + pins::toJson(pins::activeProfile()) + "}";
+    std::string caps = api::capabilitiesJson(
+        g_effects.names(), g_effects.paletteNames(), g_overlays.names(), g_audio.caps());
     g_http.setCapabilitiesJson(caps);
     g_mqtt.setCapabilitiesJson(std::make_shared<const std::string>(caps));
   }
@@ -392,12 +370,14 @@ int main(int argc, char** argv) {
     return g_engine->submit(c);
   };
   g_scriptSvc.sound = [](script::SoundAction a, const std::string& payload) {
-    Command c(a == script::SoundAction::Play    ? CommandType::PlaySound
-              : a == script::SoundAction::Rtttl ? CommandType::PlayRtttl
-                                                : CommandType::StopSound);
-    c.payload = payload;
-    c.source = Source::Internal;
+    Command c = scriptSoundCommand(a, payload);
     return g_engine->submit(c);
+  };
+  g_scriptSvc.soundPlaying = [] { return g_audio.isPlaying(); };
+  g_scriptSvc.soundSinks = [] {
+    const sound::Caps c = g_audio.caps();
+    return (c.buzzer ? 1 : 0) | (c.track ? 2 : 0) | (c.mp3 ? 4 : 0) |
+           (c.radio ? 8 : 0);
   };
   g_scriptSvc.rotateNext = [] { g_engine->scriptNextApp(); };
   g_scriptSvc.rotatePrevious = [] { g_engine->scriptPreviousApp(); };
@@ -499,9 +479,8 @@ int main(int argc, char** argv) {
     g_http.tick();
     g_mqtt.tick();
     g_periphery.tick(now);
-    g_board.sound().tick();
+    g_audio.tick(now);
     g_engine->tick(now);
-    if (g_radio) g_radio->tick(now);
 
     {
       RenderCtx sctx;

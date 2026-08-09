@@ -72,7 +72,7 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -d '{"text":"Doorbell","icon":"1234","soundRtttl":"bell:d=4,o=5,b=120:c,e,g"}'
 ```
 
-**From a file** - `sound` names `/MELODIES/<sound>.txt` on the buzzer, or a track number on DFPlayer hardware:
+**From a file** - `sound` names a stored sound:
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
@@ -80,9 +80,13 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -d '{"text":"Doorbell","sound":"chime"}'
 ```
 
+`sound` is a name, and AWTRIX picks the output: the uploaded MP3 `/MP3/chime.mp3` if there is one,
+else the melody `/MELODIES/chime.txt` on the buzzer, else a DFPlayer track when the name is a plain
+number. Uploading MP3s: [MP3s](sounds.md#mp3s).
+
 The melody plays once, when the notification first appears. Add `"soundLoop": true` to re-trigger it each time it finishes, for as long as the notification is on screen.
 
-Both keys need the global `soundEnabled` setting on, and both fail quietly: a missing melody file or an unreadable RTTTL string plays nothing and still returns `200`. If you send both, only the RTTTL plays. More on melody format, uploading files and DFPlayer wiring: [Sounds & melodies](sounds.md) and [Sound](../reference/payload.md#sound).
+Both keys need the global `soundEnabled` setting on. A name nothing is stored under plays nothing and still returns `200`; an RTTTL string that does not parse is rejected outright with `422 validationFailed` and the notification is not pushed. If you send both, only the RTTTL plays. More on melody format, uploading files and DFPlayer wiring: [MP3s & melodies](sounds.md) and [Sound](../reference/payload.md#sound).
 
 ## How long it stays
 

@@ -69,11 +69,14 @@ class HttpApiServer {
   bool serveSystem(const Request& req);
   bool serveSounds(const Request& req);
   bool serveFiles(const Request& req);
+  bool serveMp3(const Request& req);
+  void listDir(const char* dir);
 
   bool authOk();
   void collectBody(WebServer& server, const String& uri, HTTPRaw& raw);
   void dropRawBody();
   void handleUpdateUpload();
+  void scanImageMarker(const uint8_t* buf, size_t len);
   void handleUpdateDone();
   void handleFileUpload();
   void handleFileUploadDone();
@@ -88,10 +91,17 @@ class HttpApiServer {
   // handle*Done() reads them once the body is in and picks the status code.
   bool uploadAuthed_ = false;
   bool uploadPathOk_ = false;
+  bool uploadNameOk_ = true;
   bool uploadWriteOk_ = false;
   bool uploadContentOk_ = true;
   bool uploadContentChecked_ = false;
   std::string updateImageError_;
+  // The image marker straddles chunk boundaries as readily as it sits inside one, so the match runs
+  // a byte at a time and its progress lives here between chunks.
+  uint8_t markerMatched_ = 0;
+  bool markerCapturing_ = false;
+  bool markerRead_ = false;
+  std::string markerVariant_;
   std::string uploadPath_;
   File uploadFile_;
   BodyArena bodyArena_;

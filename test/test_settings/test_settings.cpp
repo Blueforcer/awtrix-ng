@@ -220,16 +220,27 @@ static void test_validate_brightness_range() {
   TEST_ASSERT_EQUAL_STRING("brightness", e.field.c_str());
 }
 
+// One key per output, all four on the same 0-100 scale.
 static void test_validate_volume_range() {
-  Body dOk;
-  dOk.set("volume", 30);
   SettingsError e;
-  TEST_ASSERT_TRUE_MESSAGE(dOk.validate(e), e.field.c_str());
+  for (const char* key : {"buzzerVolume", "dfplayerVolume", "mp3Volume", "radioVolume"}) {
+    Body dOk;
+    dOk.set(key, 100);
+    TEST_ASSERT_TRUE_MESSAGE(dOk.validate(e), e.field.c_str());
 
-  Body dOver;
-  dOver.set("volume", 31);
-  TEST_ASSERT_FALSE(dOver.validate(e));
-  TEST_ASSERT_EQUAL_STRING("volume", e.field.c_str());
+    Body dOver;
+    dOver.set(key, 101);
+    TEST_ASSERT_FALSE_MESSAGE(dOver.validate(e), key);
+    TEST_ASSERT_EQUAL_STRING(key, e.field.c_str());
+  }
+}
+
+// The old single key is gone rather than quietly accepted, so a stale client hears about it.
+static void test_the_old_volume_key_is_rejected() {
+  Body d;
+  d.set("volume", 20);
+  SettingsError e;
+  TEST_ASSERT_FALSE(d.validate(e));
 }
 
 static void test_validate_type_mismatch() {
@@ -285,12 +296,12 @@ static void test_applyJson_clamps_out_of_range_on_load() {
   Body d;
   d.set("brightness", 9999);
   d.set("timeMode", 99);
-  d.set("volume", -4);
+  d.set("buzzerVolume", -4);
   d.set("saturation", 140);
   d.applyTo(s);
   TEST_ASSERT_EQUAL_INT(255, s.brightness);
   TEST_ASSERT_EQUAL_INT(6, s.timeMode);
-  TEST_ASSERT_EQUAL_INT(0, s.volume);
+  TEST_ASSERT_EQUAL_INT(0, s.buzzerVolume);
   TEST_ASSERT_EQUAL_INT(100, s.saturation);
 }
 
@@ -363,7 +374,10 @@ static void test_json_roundtrip_covers_every_field() {
   a.batteryColor = OptColor{0xAAAAAAu, true};
   a.scrollDefaults.speed = 250;
   a.scrollDefaults.mode = ScrollMode::Bounce;
-  a.volume = 17;
+  a.buzzerVolume = 17;
+  a.dfplayerVolume = 42;
+  a.mp3Volume = 91;
+  a.radioVolume = 33;
   a.saturation = 65;
   a.gamma = 2.4f;
   a.colorCorrection = OptColor{0xBBCCDDu, true};
@@ -466,6 +480,7 @@ int main(int, char**) {
   RUN_TEST(test_validate_brightness_range);
   RUN_TEST(test_validate_saturation_range);
   RUN_TEST(test_validate_volume_range);
+  RUN_TEST(test_the_old_volume_key_is_rejected);
   RUN_TEST(test_validate_type_mismatch);
   RUN_TEST(test_validate_unknown_key_rejected);
   RUN_TEST(test_validate_bad_transition_name);

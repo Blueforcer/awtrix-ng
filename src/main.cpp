@@ -9,9 +9,8 @@
 #include "AppConfig.h"
 #include "core/CoreEngine.h"
 #include "core/FrameClock.h"
-#include "core/SocProfileJson.h"
 #include "core/StrCase.h"
-#include "core/Transitions.h"
+#include "core/api/CapabilitiesJson.h"
 #include "core/script/ScriptHeap.h"
 #include "core/apps/AppRegistry.h"
 #include "core/render/TransitionComposer.h"
@@ -42,6 +41,7 @@
 #include "core/render/TextRenderer.h"
 #include "core/script/ScriptHost.h"
 #include "core/script/ScriptService.h"
+#include "core/script/ScriptSoundCommand.h"
 #include "core/script/ScriptSourceService.h"
 #include "hal/BoardRegistry.h"
 #include "hal/IBoard.h"
@@ -52,9 +52,10 @@
 #include "system/DevicePageServices.h"
 #include "persistence/AppOrderStore.h"
 #include "persistence/RadioStore.h"
-#include "system/RadioAudioEsp32.h"
+#include "system/AudioOutEsp32.h"
 #include "persistence/DeviceConfig.h"
 #include "persistence/Filesystem.h"
+#include "persistence/LittleFsAssetProbe.h"
 #include "persistence/NvsSettings.h"
 #include "persistence/ScriptStore.h"
 #include "system/BootAnimator.h"
@@ -78,7 +79,8 @@ using namespace awtrix;
 namespace {
 IBoard* g_board = nullptr;
 Canvas* g_canvas = nullptr;
-DeviceSound* g_sound = nullptr;
+sound::AudioRouter g_audio;
+LittleFsAssetProbe g_assets;
 DeviceDisplay* g_display = nullptr;
 DeviceSystem* g_system = nullptr;
 CoreEngine* g_engine = nullptr;
@@ -124,14 +126,13 @@ BootAnimator g_bootAnim;
 DiscoveryService g_disco;
 ArtnetService g_artnet;
 #if defined(AWTRIX_SOC_ESP32S3)
-std::unique_ptr<RadioAudioEsp32> g_radio;
+std::unique_ptr<AudioOutEsp32> g_radio;
 #endif
 DeviceConfig g_cfg;
 bool g_settingsDirty = false;
 int64_t g_lastSettingsSaveMs = -100000;
 DevicePageIcon g_pageIcon;
 DevicePageIcon g_pageIconB;
-DevicePageSound* g_pageSound = nullptr;
 DevicePageClock g_pageClock;
 RenderPipeline* g_pipeline = nullptr;
 render::PowerAnimator* g_power = nullptr;
@@ -244,8 +245,9 @@ void setup() {
   g_board->setMatrixLayout(cfg.matrixLayout());
   g_canvas = new Canvas(g_board->matrixWidth(), g_board->matrixHeight());
   g_power = new render::PowerAnimator(g_board->matrixWidth(), g_board->matrixHeight());
-  g_pageSound = new DevicePageSound(*g_board);
-  g_sound = new DeviceSound(*g_board);
+  g_audio.setTone(g_board->toneSink());
+  g_audio.setTrack(g_board->trackSink());
+  g_audio.setAssets(&g_assets);
   g_display = new DeviceDisplay();
   g_system = new DeviceSystem();
   g_system->setWakeButtonPin(cfg.pinBtnSelect);
@@ -253,7 +255,7 @@ void setup() {
     g_canvas->clear(0x000000u);
     g_board->show(*g_canvas);
   });
-  g_engine = new CoreEngine(*g_sound, *g_display, *g_system);
+  g_engine = new CoreEngine(g_audio, *g_display, *g_system);
   g_engine->setBatteryAvailable(g_board->hasBattery());
   g_engine->setTemperatureAvailable(g_board->sensors().hasSensor());
   g_engine->setHumidityAvailable(g_board->sensors().hasHumidity());
@@ -268,17 +270,19 @@ void setup() {
   radiostore::load(*g_engine);
   g_engine->setStationPersist(radiostore::save);
   g_engine->state().runtime().tempDecimals = g_cfg.tempDecimals;
-  g_board->sound().setVolume(static_cast<uint8_t>(g_engine->state().settings().volume));
   // Applies a settings change to the hardware straight away but only flags the save — loop()
   // debounces it, because a slider in the web UI emits dozens of changes a second.
   g_engine->state().subscribe([](StateEvent e) {
     if (e != StateEvent::SettingsChanged) return;
     const Settings& s = g_engine->state().settings();
     g_board->applyColorGrade(render::gradeFrom(s));
-    g_board->sound().setVolume(static_cast<uint8_t>(s.volume));
-#if defined(AWTRIX_SOC_ESP32S3)
-    if (g_radio) g_radio->setVolume(s.radioVolume);
-#endif
+    // One place for all four gains and for the mute, and it drops writes that change nothing:
+    // a slider dragged across the screen must not flood a 9600 baud UART.
+    g_audio.setVolumes(static_cast<uint8_t>(s.buzzerVolume),
+                       static_cast<uint8_t>(s.dfplayerVolume),
+                       static_cast<uint8_t>(s.mp3Volume),
+                       static_cast<uint8_t>(s.radioVolume));
+    g_audio.setMuted(!s.soundEnabled);
     g_settingsDirty = true;
   });
   g_engine->state().emit(StateEvent::SettingsChanged);
@@ -328,7 +332,7 @@ void setup() {
   deps.fonts[1] = &awtrixFont(FontId::Large);
   deps.icons = &g_pageIcon;
   deps.iconsB = &g_pageIconB;
-  deps.sound = g_pageSound;
+  deps.audio = &g_audio;
   deps.clock = &g_pageClock;
   g_pipeline = new RenderPipeline(g_board->matrixWidth(), g_board->matrixHeight(), deps);
 
@@ -393,37 +397,18 @@ void setup() {
     }
   });
   {
-    auto jsonList = [](const std::vector<std::string>& names) {
-      std::string out = "[";
-      bool first = true;
-      for (const auto& n : names) {
-        if (!first) out += ',';
-        out += '"' + n + '"';
-        first = false;
-      }
-      out += ']';
-      return out;
-    };
 #if defined(AWTRIX_SOC_ESP32S3)
-    if (RadioAudioEsp32::usable(g_cfg.pinI2sBclk, g_cfg.pinI2sLrclk, g_cfg.pinI2sDout)) {
-      g_radio.reset(new RadioAudioEsp32(*g_engine, g_cfg.pinI2sBclk, g_cfg.pinI2sLrclk,
-                                        g_cfg.pinI2sDout));
-      g_radio->setVolume(g_engine->state().settings().radioVolume);
-      g_engine->setRadioService(g_radio.get());
+    if (AudioOutEsp32::usable(g_cfg.pinI2sBclk, g_cfg.pinI2sLrclk, g_cfg.pinI2sDout)) {
+      g_radio.reset(new AudioOutEsp32(*g_engine, g_cfg.pinI2sBclk, g_cfg.pinI2sLrclk,
+                                      g_cfg.pinI2sDout));
+      g_engine->setPcmSink(g_radio.get());
+      g_audio.setPcm(g_radio.get());
     }
 #endif
-    // What this build can do never changes at runtime, so the JSON is rendered once and the
-    // HTTP and MQTT sides share the one copy rather than each holding a couple of KB.
-    auto caps = std::make_shared<const std::string>(
-        "{\"effects\":" + jsonList(g_effects.names()) +
-        ",\"paletteEffects\":" + jsonList(g_effects.paletteNames()) +
-        ",\"transitions\":" + transitionsJson() +
-        ",\"overlays\":" + jsonList(g_overlays.names()) +
-        ",\"palettes\":[\"Cloud\",\"Lava\",\"Ocean\",\"Forest\",\"Stripe\","
-        "\"Party\",\"Heat\",\"Rainbow\"]"
-        ",\"radio\":" +
-        std::string(g_engine->radioAvailable() ? "true" : "false") + ",\"gpio\":" +
-        pins::toJson(pins::activeProfile()) + "}");
+    // Pushed once the sinks are all attached, so the PCM gains are not left at their defaults.
+    g_engine->state().emit(StateEvent::SettingsChanged);
+    auto caps = std::make_shared<const std::string>(api::capabilitiesJson(
+        g_effects.names(), g_effects.paletteNames(), g_overlays.names(), g_audio.caps()));
     g_http.setCapabilitiesJson(caps);
     g_mqtt.setCapabilitiesJson(std::move(caps));
   }
@@ -461,12 +446,16 @@ void setup() {
     return g_engine->submit(c);
   };
   g_scriptSvc.sound = [](script::SoundAction a, const std::string& payload) {
-    Command c(a == script::SoundAction::Play    ? CommandType::PlaySound
-              : a == script::SoundAction::Rtttl ? CommandType::PlayRtttl
-                                                : CommandType::StopSound);
-    c.payload = payload;
-    c.source = Source::Internal;
+    Command c = scriptSoundCommand(a, payload);
     return g_engine->submit(c);
+  };
+  // One answer for "is something sounding", MP3, melody or track alike; a script asking must not
+  // get a different answer than a looping notification does.
+  g_scriptSvc.soundPlaying = [] { return g_audio.isPlaying(); };
+  g_scriptSvc.soundSinks = [] {
+    const sound::Caps c = g_audio.caps();
+    return (c.buzzer ? 1 : 0) | (c.track ? 2 : 0) | (c.mp3 ? 4 : 0) |
+           (c.radio ? 8 : 0);
   };
   g_scriptSvc.rotateNext = [] { g_engine->scriptNextApp(); };
   g_scriptSvc.rotatePrevious = [] { g_engine->scriptPreviousApp(); };
@@ -637,10 +626,7 @@ void loop() {
   probe::begin();
   g_mqtt.tick();
   g_periphery.tick(now);
-#if defined(AWTRIX_SOC_ESP32S3)
-  if (g_radio) g_radio->tick(now);
-#endif
-  g_board->sound().tick();
+  g_audio.tick(now);
   probe::report("services", 256);
   probe::begin();
   g_engine->tick(now);

@@ -142,6 +142,29 @@ void test_rejects_path_traversal_entry() {
   TEST_ASSERT_TRUE(r.warnings.size() >= 1);
 }
 
+void test_mp3_restore_and_content_sniff() {
+  MockSink sink;
+  const backup::RestoreResult r = run(awtrix_test::kSoundsBackup, awtrix_test::kSoundsBackup_len,
+                                      sink);
+
+  TEST_ASSERT_TRUE(r.ok);
+  TEST_ASSERT_EQUAL_INT(1, r.mp3);
+
+  const MockSink::File* mp3 = sink.find("/MP3/beep.mp3");
+  TEST_ASSERT_NOT_NULL(mp3);
+  TEST_ASSERT_TRUE(mp3->ended);
+  TEST_ASSERT_EQUAL_HEX8('I', mp3->data[0]);
+
+  // Text smuggled into MP3/ fails the sniff and only leaves a warning behind.
+  const MockSink::File* txt = sink.find("/MP3/readme.txt");
+  TEST_ASSERT_NOT_NULL(txt);
+  TEST_ASSERT_TRUE(txt->aborted);
+  TEST_ASSERT_FALSE(txt->ended);
+  TEST_ASSERT_TRUE(r.warnings.size() >= 1);
+
+  TEST_ASSERT_TRUE(r.toJson().find("\"mp3\":1") != std::string::npos);
+}
+
 void test_result_json_reports_counts() {
   MockSink sink;
   const backup::RestoreResult r = run(awtrix_test::kBackup, awtrix_test::kBackup_len, sink);
@@ -162,6 +185,7 @@ int main(int, char**) {
   RUN_TEST(test_asset_files_written_to_absolute_paths);
   RUN_TEST(test_rejects_foreign_backup_without_touching_anything);
   RUN_TEST(test_rejects_path_traversal_entry);
+  RUN_TEST(test_mp3_restore_and_content_sniff);
   RUN_TEST(test_result_json_reports_counts);
   UNITY_END();
   return 0;

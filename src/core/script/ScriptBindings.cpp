@@ -1021,6 +1021,18 @@ int b_sound(bvm* vm) {
   be_return(vm);
 }
 
+// A bitmask, not a map: building one here would need object plumbing the prelude does in a line.
+int b_sound_sinks(bvm* vm) {
+  be_pushint(vm, g_svc && g_svc->soundSinks ? g_svc->soundSinks() : 0);
+  be_return(vm);
+}
+
+int b_sound_playing(bvm* vm) {
+  const bool playing = g_svc && g_svc->soundPlaying && g_svc->soundPlaying();
+  be_pushbool(vm, playing);
+  be_return(vm);
+}
+
 int b_notify(bvm* vm) {
   bool ok = false;
   if (g_svc && g_svc->notify && be_top(vm) >= 1 && be_isstring(vm, 1))
@@ -1125,6 +1137,8 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "_native_settings_set", b_settings_set);
   be_regfunc(b, "_native_apply_case", b_apply_case);
   be_regfunc(b, "_native_sound", b_sound);
+  be_regfunc(b, "_native_sound_playing", b_sound_playing);
+  be_regfunc(b, "_native_sound_sinks", b_sound_sinks);
   be_regfunc(b, "_native_rotation_next", b_rotation_next);
   be_regfunc(b, "_native_rotation_prev", b_rotation_prev);
   be_regfunc(b, "_native_rotation_show", b_rotation_show);

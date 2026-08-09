@@ -89,6 +89,7 @@ main>.wide{grid-column:1/-1}
   background:var(--card2);border-radius:calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0}
 .section>header .ghelp{color:var(--dim);font-size:12.5px;margin-top:2px}
 .section .rows{padding:2px 18px}
+.section .rows.pad{padding:12px 18px}
 .frow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 20px;align-items:center;padding:12px 0;border-bottom:1px solid var(--brd2)}
 .frow:last-child{border-bottom:none}
 .frow .lab{display:grid;gap:2px;min-width:0}
@@ -289,6 +290,12 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .melorow.bad{outline:1px solid var(--err)}
 .melorow.bad .meta{color:var(--err)}
 .melorow.dirty{border-left:3px solid var(--acc);padding-left:7px}
+.melorow.on{border-left:3px solid var(--ok);padding-left:7px}
+.melorow.mp3{grid-template-columns:1fr auto auto}
+.melorow.mp3 .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.melorow.mp3 .sz{color:var(--dim);font-variant-numeric:tabular-nums}
+.melorow .meta:empty{display:none}
+.audbar{justify-content:flex-end;margin:0 0 8px}
 .applist{display:grid;gap:6px}
 .approw{display:flex;align-items:center;gap:8px;background:var(--card2);border-radius:8px;
   padding:7px 10px;border:1px solid transparent;flex-wrap:wrap}
@@ -425,6 +432,7 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
   overflow:hidden;text-overflow:ellipsis}
 .edbar .end:empty{display:none}
 .edbar .warn{color:var(--warn)}
+.meta .warn{color:var(--warn);font-weight:400}
 .edbar .over{color:var(--err);font-weight:700}
 .edbar .good{color:var(--ok)}
 .edbar .bad{color:var(--err)}
@@ -708,12 +716,15 @@ function armable(btn,fn){
 }
 const I18N={en:{
   dash:'Dashboard',display:'Display',system:'System',icons:'Icons',palettes:'Palettes',log:'Log',
+  audioTab:'Audio',
+  mp3s:'MP3s',
+  mp3shelp:'Your own MP3 files, for notifications and scripts.',
   radioTab:'Radio',
   radioH:'Internet radio stations.',
   radionone:'No stations yet. Add one below.',
   radioname:'Name',radiourl:'Stream URL',
-  radioadd:'Add station',radiosave:'Save stations',
-  radioplaying:'Playing',radiostopped:'Not playing',radiostop:'Stop',
+  radioadd:'Add station',
+  radioplaying:'Playing',radiostopped:'Not playing',
   radiodupe:'name already used',radiobadurl:'must start with http:// or https://',
   radiolong:'name is too long (24 characters)',
 
@@ -739,6 +750,7 @@ const I18N={en:{
   dismiss:'Dismiss notification',dismissed:'Notification dismissed',
   snap:'Save screenshot',rec:'Record GIF',recstop:'Stop recording, save GIF',
   livepre:'Live preview',version:'Version',host:'Hostname',ip:'IP address',wifi:'WiFi',uptime:'Uptime',ram:'Free RAM',psram:'PSRAM',
+  psramnone:'none - if this board has PSRAM, write the -s3-quad- image',
   battery:'Battery',light:'Light level',temp:'Temperature',hum:'Humidity',curapp:'Current app',
   excellent:'excellent',good:'good',fair:'fair',weak:'weak',
   advanced:'Advanced',advhelp:'Fields this firmware reports that this page has no form for. Raw values - change with care.',
@@ -756,7 +768,7 @@ const I18N={en:{
   bkSectionAp:'Restore',bkSectionApH:'Upload a previously created backup .zip.',
   bkTitle:'Create backup',bkDownload:'Download backup',bkDownloadH:'Pick what to include, then save a .zip.',
   bkWorking:'Collecting…',bkDone:'Backup downloaded',bkNone:'Select at least one category',
-  bkWifi:'WiFi',bkSettings:'Settings',bkIcons:'Icons',bkMelodies:'Melodies',bkPalettes:'Palettes',bkScripts:'Scripts',bkApporder:'App order',
+  bkWifi:'WiFi',bkSettings:'Settings',bkIcons:'Icons',bkMelodies:'Melodies',bkPalettes:'Palettes',bkMp3:'MP3s',bkScripts:'Scripts',bkApporder:'App order',
   bkRestoreT:'Restore backup',bkRestore:'Choose backup…',
   bkRestoreH:'Upload a backup .zip.',
   bkCaptiveHint:'The Wi‑Fi sign‑in popup can’t upload files. To restore, open this page in a browser:',
@@ -766,11 +778,11 @@ const I18N={en:{
   editorTab:'Icon Editor',
   edLoading:'Loading the editor…',
   edUnreachable:'The editor did not load.',
-  soundsTab:'Sounds',
-  melodies:'Melodies',
+  melodies:'Melodies',melodieshelp:'Short ringtones, for notifications and scripts.',
   newmelo:'New melody',meloname:'Name',melortttl:'d=4,o=5,b=120:c,e,g',
   melopre:'Preview here',meloplay:'Play on AWTRIX',melostop:'Stop',
   melomuted:'Sound is off - playing on AWTRIX stays silent. Turn it on under System › Audio.',
+  audnone:'No sound output. Set a buzzer or speaker pin under System › GPIO.',
   melonone:'No melodies yet',
   melonotes:'notes',melobroken:'Does not parse - fix it and save',
   meloexists:'A melody with this name already exists',
@@ -850,15 +862,18 @@ const I18N={en:{
   wakeNo:'Cannot wake AWTRIX from deep sleep - only the sleep timer brings it back.',
   grpBtn:'Buttons',grpBtnH:'Physical button behaviour.',
   grpSndHw:'Audio',grpSndHwH:'Sound output, volume and audio hardware.',
-  grpScript:'Scripting',grpScriptH:'Berry scripts on AWTRIX. Write and install them on the Scripts tab.',
+  grpScript:'Scripting',grpScriptH:'Berry scripts on AWTRIX.',
   grpMisc:'Misc',grpMiscH:'Everything else.',
 },de:{
+  audioTab:'Audio',
+  mp3s:'MP3s',
+  mp3shelp:'Eigene MP3-Dateien für Meldungen und Skripte.',
   radioTab:'Radio',
   radioH:'Internetradio-Sender.',
   radionone:'Noch keine Sender. Unten einen anlegen.',
   radioname:'Name',radiourl:'Stream-URL',
-  radioadd:'Sender hinzuf\u00fcgen',radiosave:'Sender speichern',
-  radioplaying:'L\u00e4uft',radiostopped:'Nicht aktiv',radiostop:'Stopp',
+  radioadd:'Sender hinzuf\u00fcgen',
+  radioplaying:'L\u00e4uft',radiostopped:'Nicht aktiv',
   radiodupe:'Name schon vergeben',radiobadurl:'muss mit http:// oder https:// beginnen',
   radiolong:'Name zu lang (24 Zeichen)',
 
@@ -886,6 +901,7 @@ const I18N={en:{
   dismiss:'Benachrichtigung schließen',dismissed:'Benachrichtigung geschlossen',
   snap:'Screenshot speichern',rec:'GIF aufnehmen',recstop:'Aufnahme beenden, GIF speichern',
   livepre:'Live-Vorschau',version:'Version',host:'Hostname',ip:'IP-Adresse',wifi:'WLAN',uptime:'Laufzeit',ram:'Freier RAM',psram:'PSRAM',
+  psramnone:'keins - hat dieses Board PSRAM, dann das -s3-quad- Image aufspielen',
   battery:'Akku',light:'Lichtstärke',temp:'Temperatur',hum:'Luftfeuchte',curapp:'Aktuelle App',
   excellent:'ausgezeichnet',good:'gut',fair:'mäßig',weak:'schwach',
   advanced:'Erweitert',advhelp:'Felder, die diese Firmware meldet und für die diese Seite kein Formular hat. Rohwerte - mit Bedacht ändern.',
@@ -903,7 +919,7 @@ const I18N={en:{
   bkSectionAp:'Wiederherstellen',bkSectionApH:'Ein zuvor erstelltes Backup-.zip einspielen.',
   bkTitle:'Sicherung erstellen',bkDownload:'Backup herunterladen',bkDownloadH:'Auswählen, was rein soll, dann .zip speichern.',
   bkWorking:'Sammle…',bkDone:'Backup heruntergeladen',bkNone:'Mindestens eine Kategorie wählen',
-  bkWifi:'WLAN',bkSettings:'Einstellungen',bkIcons:'Icons',bkMelodies:'Melodien',bkPalettes:'Paletten',bkScripts:'Skripte',bkApporder:'App-Reihenfolge',
+  bkWifi:'WLAN',bkSettings:'Einstellungen',bkIcons:'Icons',bkMelodies:'Melodien',bkPalettes:'Paletten',bkMp3:'MP3s',bkScripts:'Skripte',bkApporder:'App-Reihenfolge',
   bkRestoreT:'Sicherung wiederherstellen',bkRestore:'Sicherung wählen…',
   bkRestoreH:'Backup-.zip hochladen.',
   bkCaptiveHint:'Der WLAN-Anmelde-Dialog kann keine Dateien hochladen. Zum Wiederherstellen diese Seite im Browser öffnen:',
@@ -913,11 +929,11 @@ const I18N={en:{
   editorTab:'Icon-Editor',
   edLoading:'Editor wird geladen…',
   edUnreachable:'Der Editor wurde nicht geladen.',
-  soundsTab:'Sounds',
-  melodies:'Melodien',
+  melodies:'Melodien',melodieshelp:'Kurze Klingeltöne für Meldungen und Skripte.',
   newmelo:'Neue Melodie',meloname:'Name',melortttl:'d=4,o=5,b=120:c,e,g',
   melopre:'Hier anhören',meloplay:'Auf AWTRIX abspielen',melostop:'Stopp',
   melomuted:'Ton ist aus - Abspielen auf AWTRIX bleibt stumm. Einschalten unter System › Audio.',
+  audnone:'Keine Tonausgabe. Buzzer- oder Lautsprecher-Pin unter System › GPIO setzen.',
   melonone:'Noch keine Melodien',
   melonotes:'Noten',melobroken:'Nicht lesbar - korrigieren und speichern',
   meloexists:'Eine Melodie mit diesem Namen gibt es schon',
@@ -998,7 +1014,7 @@ const I18N={en:{
   wakeNo:'Weckt AWTRIX nicht aus dem Tiefschlaf - zurück kommt sie dann nur über den Schlaf-Timer.',
   grpBtn:'Tasten',grpBtnH:'Verhalten der physischen Tasten.',
   grpSndHw:'Audio',grpSndHwH:'Tonausgabe, Lautstärke und Ton-Hardware.',
-  grpScript:'Skripte',grpScriptH:'Berry-Skripte auf AWTRIX. Geschrieben und installiert werden sie im Tab Skripte.',
+  grpScript:'Skripte',grpScriptH:'Berry-Skripte auf AWTRIX.',
   grpMisc:'Sonstiges',grpMiscH:'Alles andere.',
 }};
 let LANG=localStorage.awtrixLang||(navigator.language&&navigator.language.toLowerCase().startsWith('de')?'de':'en');
@@ -1279,14 +1295,16 @@ const SYSF={
  pinI2cScl:F('gpio','number','I2C SCL|I2C SCL','Sensor bus clock.|Sensor-Bus, Takt.',{min:-1,max:39}),
  pinDfRx:F('gpio','number','DFPlayer RX|DFPlayer RX','Only with DFPlayer enabled.|Nur bei aktiviertem DFPlayer.',{min:-1,max:39}),
  pinDfTx:F('gpio','number','DFPlayer TX|DFPlayer TX','Only with DFPlayer enabled.|Nur bei aktiviertem DFPlayer.',{min:-1,max:39}),
- pinI2sBclk:F('gpio','number','I2S BCLK|I2S BCLK','External DAC for internet radio. Set all three I2S pins.|Externer DAC fürs Internetradio. Alle drei I2S-Pins setzen.',{min:-1,max:39}),
+ pinI2sBclk:F('gpio','number','I2S BCLK|I2S BCLK','External DAC for internet radio and MP3s.|Externer DAC für Internetradio und MP3s.',{min:-1,max:39}),
  pinI2sLrclk:F('gpio','number','I2S LRCLK|I2S LRCLK','Same DAC, word select.|Selber DAC, Wortauswahl.',{min:-1,max:39}),
  pinI2sDout:F('gpio','number','I2S DOUT|I2S DOUT','Same DAC, data.|Selber DAC, Daten.',{min:-1,max:39}),
- soundEnabled:F('sndhw','toggle','Sound|Ton','Master switch.|Hauptschalter.',{api:'settings'}),
- volume:F('sndhw','slider','Volume|Lautstärke','Buzzer and DFPlayer.|Buzzer und DFPlayer.',{min:0,max:30,api:'settings'}),
- radioVolume:F('sndhw','slider','Radio volume|Radio-Lautstärke','Internet radio only.|Nur fürs Internetradio.',{min:0,max:100,api:'settings'}),
+ soundEnabled:F('sndhw','toggle','Sound|Ton','Master switch for one-shot sounds. Radio keeps playing.|Hauptschalter für Einzelklänge. Radio läuft weiter.',{api:'settings'}),
+ buzzerVolume:F('sndhw','slider','Buzzer volume|Buzzer-Lautstärke','Melodies.|Melodien.',{min:0,max:100,api:'settings'}),
+ dfplayerVolume:F('sndhw','slider','DFPlayer volume|DFPlayer-Lautstärke','Tracks.|Titel.',{min:0,max:100,api:'settings'}),
+ mp3Volume:F('sndhw','slider','MP3 volume|MP3-Lautstärke','Stored MP3s.|Gespeicherte MP3s.',{min:0,max:100,api:'settings'}),
+ radioVolume:F('sndhw','slider','Radio volume|Radio-Lautstärke','Internet radio.|Internetradio.',{min:0,max:100,api:'settings'}),
  radioMeta:F('sndhw','toggle','Radio track info|Radio-Titelanzeige','Show the station and every new track title.|Sender und jeden neuen Titel anzeigen.',{api:'settings'}),
- dfplayer:F('sndhw','toggle','DFPlayer|DFPlayer','External audio module instead of the buzzer.|Externes Audiomodul statt Buzzer.'),
+ dfplayer:F('sndhw','toggle','DFPlayer|DFPlayer','External audio module on the DFPlayer pins. The buzzer keeps working.|Externes Audiomodul an den DFPlayer-Pins. Der Buzzer bleibt nutzbar.'),
  statsInterval:F('misc','number','Stats interval|Stats-Intervall','How often stats go out over MQTT.|Wie oft Stats per MQTT gesendet werden.',{min:1000,max:600000,unit:'ms'}),
  artnet:F('misc','toggle','Art-Net|Art-Net','Receive Art-Net DMX on UDP 6454.|Art-Net DMX auf UDP 6454 empfangen.'),
  debugMode:F('misc','toggle','Debug mode|Debug-Modus','Verbose serial logging.|Ausführliches serielles Logging.'),
@@ -1299,8 +1317,15 @@ const SYS_GROUPS=[['wifi','grpWifi','grpWifiH'],['web','grpWeb','grpWebH'],['mqt
  ['gpio','grpGpio','grpGpioH'],['btn','grpBtn','grpBtnH'],
  ['sndhw','grpSndHw','grpSndHwH'],['script','grpScript','grpScriptH'],['misc','grpMisc','grpMiscH']];
 const SOUND_KEYS=Object.keys(SYSF).filter(k=>SYSF[k].api==='settings');
-const S={transitions:[],stats:null,ap:false,sysHost:'',sysUid:'',gpio:null,radioCap:null,scriptMax:0,
-  scriptsOff:null};
+const S={transitions:[],stats:null,ap:false,sysHost:'',sysUid:'',gpio:null,aud:null,
+  scriptMax:0,scriptsOff:null};
+function readAudioCaps(caps){
+  const a=caps.audio||{};
+  S.aud={buzzer:a.buzzer===true,track:a.track===true,mp3:a.mp3===true,radio:a.radio===true};
+}
+// Unknown counts as present, so nothing is hidden before the capabilities have arrived.
+const hasSink=(...k)=>!S.aud||k.some(x=>S.aud[x]);
+const anyAudioCap=()=>hasSink('buzzer','track','mp3','radio');
 async function scriptsOff(){
   if(S.scriptsOff===null){
     try{S.scriptsOff=(await api('/api/v1/device',{timeout:4000})).data.scriptingRunning===false;}
@@ -1392,14 +1417,18 @@ async function loadSystemInfo(){
   }catch(e){}
 }
 const TABS=[['','dash',viewDash],['apps','appsTab',viewApps],['scripts','scriptsTab',viewScripts],
-  ['icons','icons',viewIcons],['editor','editorTab',viewEditor],['sounds','soundsTab',viewSounds],
-  ['radio','radioTab',viewRadio],['palettes','palettes',viewPalettes],['display','display',viewDisplay],
+  ['icons','icons',viewIcons],['editor','editorTab',viewEditor],['audio','audioTab',viewAudio],
+  ['palettes','palettes',viewPalettes],['display','display',viewDisplay],
   ['system','system',viewSystem],['log','log',viewLog]];
-function currentRoute(){return S.ap?'system':location.hash.replace(/^#\/?/,'');}
+function currentRoute(){
+  const r=location.hash.replace(/^#\/?/,'');
+  // The Sounds and Radio tabs merged into Audio; old bookmarks still land somewhere sensible.
+  return S.ap?'system':({sounds:'audio',radio:'audio'}[r]||r);
+}
 function nav(){
   const cur=currentRoute();
-  let tabs=S.ap?TABS.filter(([r])=>r==='system'):TABS;
-  if(S.radioCap===false)tabs=tabs.filter(([r])=>r!=='radio');
+  const tabs=S.ap?TABS.filter(([r])=>r==='system')
+    :TABS.filter(([r])=>r!=='audio'||anyAudioCap());
   $('#nav').replaceChildren(...tabs.map(([r,k])=>el('a',{href:'#/'+r,class:cur===r?'on':''},t(k))));
 }
 function render(){
@@ -1614,10 +1643,32 @@ function saveBar(){
   const show=n=>{count.replaceChildren(String(n));bar.style.display=n?'':'none';};
   return{bar,saveBtn,discBtn,show};
 }
-function settingsPage(view,saveFn,afterSave){
+function sectionShell(view){
   const subnav=el('div',{class:'subnav'});
   new ResizeObserver(()=>document.documentElement.style.setProperty('--subnav-h',subnav.offsetHeight+'px')).observe(subnav);
   const panel=el('div',{class:'panel'});
+  const spy=('IntersectionObserver'in window)?new IntersectionObserver(es=>{
+    es.forEach(e=>{
+      if(!e.isIntersecting)return;
+      subnav.querySelectorAll('a').forEach(a=>a.classList.toggle('on',a.dataset.sec===e.target.id));
+    });
+  },{rootMargin:'-15% 0px -70% 0px'}):null;
+  function section(id,title,help,nodes,pad){
+    const sec=el('section',{class:'section',id:'sec-'+id},
+      el('header',null,el('h2',null,title),help?el('div',{class:'ghelp'},help):null),
+      el('div',{class:pad?'rows pad':'rows'},nodes));
+    panel.append(sec);
+    const a=el('a',{'data-sec':'sec-'+id},title);
+    a.addEventListener('click',()=>sec.scrollIntoView({behavior:'smooth',block:'start'}));
+    subnav.append(a);
+    if(spy)spy.observe(sec);
+    return sec;
+  }
+  view.append(el('div',{class:'settings'},subnav,panel));
+  return{section,panel};
+}
+function settingsPage(view,saveFn,afterSave){
+  const{section,panel}=sectionShell(view);
   const allFields=[];
   const onUpdate=[];
   const{bar,saveBtn,discBtn,show}=saveBar();
@@ -1647,23 +1698,6 @@ function settingsPage(view,saveFn,afterSave){
     saveBtn.disabled=false;update();
   });
   discBtn.addEventListener('click',()=>{allFields.filter(f=>f.dirty()).forEach(f=>f.revert());update();});
-  const spy=('IntersectionObserver'in window)?new IntersectionObserver(es=>{
-    es.forEach(e=>{
-      if(!e.isIntersecting)return;
-      subnav.querySelectorAll('a').forEach(a=>a.classList.toggle('on',a.dataset.sec===e.target.id));
-    });
-  },{rootMargin:'-15% 0px -70% 0px'}):null;
-  function section(id,title,help,nodes){
-    const sec=el('section',{class:'section',id:'sec-'+id},
-      el('header',null,el('h2',null,title),help?el('div',{class:'ghelp'},help):null),
-      el('div',{class:'rows'},nodes));
-    panel.append(sec);
-    const a=el('a',{'data-sec':'sec-'+id},title);
-    a.addEventListener('click',()=>sec.scrollIntoView({behavior:'smooth',block:'start'}));
-    subnav.append(a);
-    if(spy)spy.observe(sec);
-    return sec;
-  }
   function addFields(fields){
     fields.forEach(f=>{
       allFields.push(f);
@@ -1671,7 +1705,7 @@ function settingsPage(view,saveFn,afterSave){
     });
     update();
   }
-  view.append(el('div',{class:'settings'},subnav,panel),bar);
+  view.append(bar);
   return{section,addFields,panel,update,onUpdate};
 }
 function renderSettingsInto(page,data,meta,groups){
@@ -1839,7 +1873,7 @@ function vitalTile(d){
       el('i',{style:'width:'+d.bar.toFixed(1)+'%;background:'+TONE[d.tone]})),
     d.s?el('div',{class:'s'},d.s):null);
 }
-const metaItem=(k,v)=>el('span',null,k+' ',el('b',null,String(v)));
+const metaItem=(k,v,cls)=>el('span',null,k+' ',el('b',cls?{class:cls}:null,String(v)));
 function viewDash(view){
   const SC=10;
   const cv=el('canvas',{id:'screen',width:32*SC,height:8*SC,role:'img','aria-label':t('livepre')});
@@ -1910,7 +1944,8 @@ function viewDash(view){
       metaItem(t('version'),st.version),metaItem(t('host'),st.hostname||S.sysHost),metaItem(t('ip'),st.ipAddress),
       metaItem(t('uptime'),uptimeStr(st.uptimeSeconds)),
       metaItem(t('ram'),fmtBytes(st.freeHeapBytes)),
-      ...(st.psramTotalBytes?[metaItem(t('psram'),fmtBytes(st.psramFreeBytes)+' / '+fmtBytes(st.psramTotalBytes))]:[]),
+      ...(st.psramTotalBytes?[metaItem(t('psram'),fmtBytes(st.psramFreeBytes)+' / '+fmtBytes(st.psramTotalBytes))]
+        :st.soc==='esp32s3'?[metaItem(t('psram'),t('psramnone'),'warn')]:[]),
       metaItem(t('curapp'),st.currentApp));
   }
   if(S.stats)renderVitals(S.stats);
@@ -2275,9 +2310,10 @@ async function collectBackup(cats){
     entries.push({name:'config/settings.json',data:JSON.stringify((await api('/api/v1/settings')).data)});
     included.push('settings');}
   if(cats.icons){await grab('/ICONS');included.push('icons');}
-  if(cats.melodies){for(const m of((await api('/api/v1/sounds')).data.melodies||[]))
+  if(cats.melodies){for(const m of((await api('/api/v1/audio/melodies')).data.melodies||[]))
     entries.push({name:'MELODIES/'+m.name+'.txt',data:m.rtttl});included.push('melodies');}
   if(cats.palettes){await grab('/PALETTES');included.push('palettes');}
+  if(cats.mp3){await grab('/MP3');included.push('mp3');}
   if(cats.scripts){await grab('/SCRIPTS');included.push('scripts');}
   if(cats.apporder){try{entries.unshift({name:'apploop.json',data:await text('/apploop.json')});included.push('apporder');}catch(e){}}
   entries.unshift({name:'manifest.json',data:JSON.stringify(
@@ -2311,7 +2347,7 @@ window.addEventListener('beforeunload',e=>{if(scrDraft&&scrDraft.dirty)e.prevent
    Device API from ScriptBindings.cpp + Prelude.h; language builtins from
    Berry's be_baselib.c and the modules berry_conf.h enables. Regenerated on
    every build, so adding a binding is all it takes to teach the editor. */
-const BERRY_API=["bar_chart(list, paint?, autoscale?)","circle(cx, cy, r, color)","circle_fill(cx, cy, r, color)","clear(color?)","day()","effect(name, settings?)","epoch_ms()","font(name)","height()","hour()","hsv(h, s, v)","icon(name, x, y)","line(x0, y0, x1, y1, color)","line_chart(list, paint?, autoscale?)","log(value)","minute()","month()","now_ms()","overlay(name, settings?)","pixel(x, y, color)","progress(pct, paint?, bg?)","ramp_text(x, y, str, palette, span?, speed?)","rect(x, y, w, h, color)","rect_fill(x, y, w, h, color)","rgb(r, g, b)","scroll_text(txt, color?, opts?)","second()","text(x, y, txt, color?)","text_ink_width(txt)","text_width(txt)","version()","weekday()","width()","year()","clamp(v, lo, hi)","http.delete(url, cb, opts?)","http.get(url, cb, opts?)","http.patch(url, body, cb, opts?)","http.post(url, body, cb, opts?)","http.put(url, body, cb, opts?)","http.request(method, url, cb, opts?)","max(a, b)","min(a, b)","mqtt.publish(topic, payload)","mqtt.subscribe(topic, cb)","notify(spec)","num(v, dflt?)","re.match(pattern, text)","re.matchall(pattern, text)","re.search(pattern, text)","rotation.next()","rotation.pause()","rotation.previous()","rotation.resume()","rotation.show()","round(v, digits?)","sensor.battery()","sensor.battery_volts()","sensor.humidity()","sensor.light()","sensor.pressure()","sensor.temperature()","settings.apply_case(str)","settings.get(key)","settings.set(key, value)","shared.age(key)","shared.get(key, dflt?)","shared.keys(owner?)","shared.set(key, value)","sound.play(name)","sound.rtttl(melody)","sound.stop()","store.get(k, dflt?)","store.set(k, v)"];
+const BERRY_API=["bar_chart(list, paint?, autoscale?)","circle(cx, cy, r, color)","circle_fill(cx, cy, r, color)","clear(color?)","day()","effect(name, settings?)","epoch_ms()","font(name)","height()","hour()","hsv(h, s, v)","icon(name, x, y)","line(x0, y0, x1, y1, color)","line_chart(list, paint?, autoscale?)","log(value)","minute()","month()","now_ms()","overlay(name, settings?)","pixel(x, y, color)","progress(pct, paint?, bg?)","ramp_text(x, y, str, palette, span?, speed?)","rect(x, y, w, h, color)","rect_fill(x, y, w, h, color)","rgb(r, g, b)","scroll_text(txt, color?, opts?)","second()","text(x, y, txt, color?)","text_ink_width(txt)","text_width(txt)","version()","weekday()","width()","year()","clamp(v, lo, hi)","http.delete(url, cb, opts?)","http.get(url, cb, opts?)","http.patch(url, body, cb, opts?)","http.post(url, body, cb, opts?)","http.put(url, body, cb, opts?)","http.request(method, url, cb, opts?)","max(a, b)","min(a, b)","mqtt.publish(topic, payload)","mqtt.subscribe(topic, cb)","notify(spec)","num(v, dflt?)","re.match(pattern, text)","re.matchall(pattern, text)","re.search(pattern, text)","rotation.next()","rotation.pause()","rotation.previous()","rotation.resume()","rotation.show()","round(v, digits?)","sensor.battery()","sensor.battery_volts()","sensor.humidity()","sensor.light()","sensor.pressure()","sensor.temperature()","settings.apply_case(str)","settings.get(key)","settings.set(key, value)","shared.age(key)","shared.get(key, dflt?)","shared.keys(owner?)","shared.set(key, value)","sound.melody(name)","sound.mp3(name)","sound.play(name)","sound.playing()","sound.rtttl(melody)","sound.sinks()","sound.stop()","sound.track(number)","store.get(k, dflt?)","store.set(k, v)"];
 const BERRY_MODS=["http","mqtt","re","rotation","sensor","settings","shared","sound","store"];
 const BERRY_CORE=["assert","bool","call","classname","classof","compile","format","gc","global","input","int","isinstance","issubclass","json","math","module","number","print","real","size","str","strict","string","super","type"];
 const BERRY_MAXBYTES=8192;
@@ -2933,10 +2969,10 @@ function mergeDisplayData(settings,display){
 async function viewDisplay(view){
   let data;
   try{
-    if(!S.transitions.length||S.radioCap===null){
+    if(!S.transitions.length||!S.aud){
       const caps=(await api('/api/v1/capabilities')).data||{};
       if(!S.transitions.length)S.transitions=caps.transitions||[];
-      if(S.radioCap===null)S.radioCap=caps.radio===true;
+      if(!S.aud)readAudioCaps(caps);
     }
     data=mergeDisplayData((await api('/api/v1/settings')).data,(await api('/api/v1/display')).data);
   }catch(e){view.append(el('div',{class:'card wide'},t('neterr')));return;}
@@ -2963,17 +2999,27 @@ async function viewSystem(view){
   try{data=(await api('/api/v1/system')).data;}
   catch(e){view.append(el('div',{class:'card wide'},t('neterr')));return;}
   if(!S.sysHost){try{setStats((await api('/api/v1/device',{timeout:4000})).data);}catch(e){}}
+  if(!S.gpio||!S.aud){
+    try{
+      const caps=(await api('/api/v1/capabilities')).data||{};
+      readAudioCaps(caps);
+      S.gpio=caps.gpio||null;
+    }catch(e){}
+    if(S.gpio)applyGpioCaps(S.gpio);
+  }
   if(!S.ap){
     try{
       const set=(await api('/api/v1/settings')).data;
       SOUND_KEYS.forEach(k=>{if(k in set)data[k]=set[k];});
     }catch(e){}
-    const radioG=S.radioCap===false?'hidden':'sndhw';
-    SYSF.radioVolume.g=radioG;SYSF.radioMeta.g=radioG;
-  }
-  if(!S.gpio){
-    try{S.gpio=((await api('/api/v1/capabilities')).data||{}).gpio||null;}catch(e){}
-    if(S.gpio)applyGpioCaps(S.gpio);
+    // One slider per output, each shown only where that output exists.
+    const g=on=>on?'sndhw':'hidden';
+    SYSF.buzzerVolume.g=g(hasSink('buzzer'));
+    SYSF.dfplayerVolume.g=g(hasSink('track'));
+    SYSF.mp3Volume.g=g(hasSink('mp3'));
+    SYSF.radioVolume.g=g(hasSink('radio'));
+    SYSF.radioMeta.g=g(hasSink('radio'));
+    SYSF.soundEnabled.g=g(hasSink('buzzer','track','mp3'));
   }
   ['wifiPass','mqttPass','authPass'].forEach(k=>{if(!(k in data))data[k]='';});
   (S.ap?provisioningPage:systemPage)(view,data);
@@ -3141,19 +3187,22 @@ function maintenanceSection(page){
   ]);
 }
 const BK_CATS=[['wifi','bkWifi'],['settings','bkSettings'],['icons','bkIcons'],
-  ['melodies','bkMelodies'],['palettes','bkPalettes'],['scripts','bkScripts'],['apporder','bkApporder']];
+  ['melodies','bkMelodies'],['palettes','bkPalettes'],['mp3','bkMp3'],
+  ['scripts','bkScripts'],['apporder','bkApporder']];
 function backupSection(page,allowBackup){
   const rows=[];
   if(allowBackup){
     const checks={};
-    const boxes=BK_CATS.map(([id,lbl])=>{
+    const avail=BK_CATS.filter(([id])=>
+      (id!=='melodies'||hasSink('buzzer'))&&(id!=='mp3'||hasSink('mp3')));
+    const boxes=avail.map(([id,lbl])=>{
       const cb=el('input',{type:'checkbox'});checks[id]=cb;
       return el('label',{style:'display:inline-flex;align-items:center;gap:.3rem;margin-right:1rem'},cb,t(lbl));
     });
     const dl=el('button',{class:'pri'},t('bkDownload'));
     dl.addEventListener('click',async()=>{
       const cats={};let any=false;
-      BK_CATS.forEach(([id])=>{cats[id]=checks[id].checked;if(cats[id])any=true;});
+      avail.forEach(([id])=>{cats[id]=checks[id].checked;if(cats[id])any=true;});
       if(!any){toast(t('bkNone'),false);return;}
       dl.disabled=true;dl.replaceChildren(t('bkWorking'));
       try{
@@ -3228,7 +3277,8 @@ function uploadZone(dir,accept,hint,onDone,asGif){
 }
 let assetRev=0;
 async function uploadFile(file,dir,name,onProgress){
-  const x=await xhrPost('/api/v1/files?dir='+encodeURIComponent(dir),'file',file,name,onProgress);
+  const url=dir.startsWith('/api/')?dir:'/api/v1/files?dir='+encodeURIComponent(dir);
+  const x=await xhrPost(url,'file',file,name,onProgress);
   if(x.status>=300)throw new Error('HTTP '+x.status);
   assetRev++;
 }
@@ -3496,23 +3546,18 @@ function previewPlay(p){
     gain.gain.setValueAtTime(0,audioCtx.currentTime);osc.stop();}catch(e){}};
   osc.onended=()=>{audioStop=null;};
 }
-function viewSounds(view){
+function melodiesSection(){
   const list=el('div',{class:'melolist'});
-  const muted=el('div',{class:'ghelp',style:'display:none;color:var(--warn)'},t('melomuted'));
   let saved=[];
 
   async function reload(){
     try{
-      const{data}=await api('/api/v1/sounds');
+      const{data}=await api('/api/v1/audio/melodies');
       const melodies=(data.melodies||[]).sort((a,b)=>a.name.localeCompare(b.name));
       saved=melodies.map(m=>m.name);
       list.replaceChildren(...melodies.map(m=>meloRow(m)));
       if(!melodies.length)list.replaceChildren(el('div',{class:'empty'},t('melonone')));
     }catch(e){toast(e.message,false);}
-    try{
-      const{data}=await api('/api/v1/settings');
-      muted.style.display=data.soundEnabled===false?'':'none';
-    }catch(e){}
   }
 
   function meloRow(m){
@@ -3526,13 +3571,13 @@ function viewSounds(view){
     const meta=el('div',{class:'meta'});
     const row=el('div',{class:'melorow'+(isNew?' dirty':'')});
 
-    const pre=el('button',{class:'icon',title:t('melopre'),'aria-label':t('melopre')},'🔊');
+    const pre=el('button',{class:'icon',title:t('melopre'),'aria-label':t('melopre')},'🎧');
     const play=el('button',{class:'icon',title:t('meloplay'),'aria-label':t('meloplay')},'▶');
     const save=el('button',{class:'icon pri',title:t('save'),'aria-label':t('save'),disabled:true},'💾');
     const del=armable(el('button',{class:'danger icon',title:t('del'),'aria-label':t('del')},icon('trash')),
       async()=>{
         if(isNew){row.remove();return;}
-        try{await api('/api/v1/sounds/'+encodeURIComponent(orig),{method:'DELETE'});
+        try{await api('/api/v1/audio/melodies/'+encodeURIComponent(orig),{method:'DELETE'});
           toast(t('deleted'));reload();}
         catch(e){toast(e.message,false);}
       });
@@ -3569,16 +3614,16 @@ function viewSounds(view){
 
     pre.addEventListener('click',()=>{const p=check();if(p.ok)previewPlay(p);});
     play.addEventListener('click',async()=>{
-      try{await post('/api/v1/sounds/play',{rtttl:full()});toast(t('playing'));}
+      try{await post('/api/v1/audio/play',{rtttl:full()});toast(t('playing'));}
       catch(e){toast(e.message,false);}
     });
     save.addEventListener('click',async()=>{
       const name=nameIn.value.trim();
       save.disabled=true;
       try{
-        await req('PUT','/api/v1/sounds/'+encodeURIComponent(name),{rtttl:rtIn.value.trim()});
+        await req('PUT','/api/v1/audio/melodies/'+encodeURIComponent(name),{rtttl:rtIn.value.trim()});
         if(!isNew&&name!==orig)
-          await api('/api/v1/sounds/'+encodeURIComponent(orig),{method:'DELETE'});
+          await api('/api/v1/audio/melodies/'+encodeURIComponent(orig),{method:'DELETE'});
         toast(t('saved'));reload();
       }catch(e){toast(e.message,false);save.disabled=false;}
     });
@@ -3597,104 +3642,223 @@ function viewSounds(view){
     list.append(row);
     row.querySelector('input').focus();
   });
-  const stopBtn=el('button',null,'■ '+t('melostop'));
-  stopBtn.addEventListener('click',async()=>{
-    previewStop();
-    try{await post('/api/v1/sounds/stop',{});}catch(e){toast(e.message,false);}
-  });
-
-  view.append(el('div',{class:'card wide'},
-    el('h2',null,t('melodies')),
-    muted,
-    list,
-    el('div',{class:'row',style:'margin-top:10px'},addBtn,stopBtn)));
   reload();
+  return[list,el('div',{class:'row',style:'margin:10px 0 0'},addBtn)];
 }
-function viewRadio(view){
-  const status=el('div',{class:'ghelp'},t('radiostopped'));
+function radioSection(onState){
+  const status=el('div',{class:'ghelp',style:'margin-left:auto'},t('radiostopped'));
   const list=el('div',{class:'melolist'});
-  const stop=el('button',null,t('radiostop'));
   let stations=[];
 
   function rows(){return[...list.querySelectorAll('.melorow')];}
   function read(){
     return rows().map(r=>({name:r.querySelector('.rn').value.trim(),
-                           url:r.querySelector('.ru').value.trim()}));
+                           url:r.querySelector('.ru').value.trim()}))
+                 .filter(s=>s.name&&s.url);
   }
-  function check(){
-    const seen={};let ok=true;
-    rows().forEach(r=>{
-      const n=r.querySelector('.rn').value.trim(),u=r.querySelector('.ru').value.trim();
-      let bad='';
-      if(!n||!u)bad=' ';
-      else if(n.length>24)bad=t('radiolong');
-      else if(!/^https?:\/\//i.test(u))bad=t('radiobadurl');
-      else if(seen[n])bad=t('radiodupe');
-      seen[n]=1;
-      r.classList.toggle('bad',!!bad);
-      r.querySelector('.rm').replaceChildren(bad.trim());
-      if(bad)ok=false;
-    });
-    save.disabled=!ok;
+  // The API takes the whole list, so a row's save sends every row - unfinished ones excluded.
+  async function put(){
+    await req('PUT','/api/v1/audio/stations',{stations:read()});
   }
+  function checkAll(){rows().forEach(r=>r.check&&r.check());}
   function row(st){
-    const r=el('div',{class:'melorow'});
-    const name=el('input',{class:'rn',value:(st&&st.name)||'',placeholder:t('radioname')});
-    const url=el('input',{class:'ru',value:(st&&st.url)||'',placeholder:t('radiourl')});
-    const acts=el('div',{class:'acts'});
-    const play=el('button',null,'▶');
-    const del=el('button',null,'✕');
+    const isNew=!st;
+    const orig=st||{name:'',url:''};
+    const r=el('div',{class:'melorow'+(isNew?' dirty':'')});
+    const name=el('input',{class:'rn',value:orig.name,placeholder:t('radioname'),
+      maxlength:'24','aria-label':t('radioname')});
+    const url=el('input',{class:'ru',value:orig.url,placeholder:t('radiourl'),
+      'aria-label':t('radiourl')});
+    const msg=el('div',{class:'rm meta'});
+    const play=el('button',{class:'icon',title:t('meloplay'),'aria-label':t('meloplay')},'▶');
+    const save=el('button',{class:'icon pri',title:t('save'),'aria-label':t('save'),disabled:true},'💾');
+    const del=armable(el('button',{class:'danger icon',title:t('del'),'aria-label':t('del')},icon('trash')),
+      async()=>{
+        if(isNew){r.remove();checkAll();return;}
+        r.remove();
+        try{await put();toast(t('deleted'));reload();}
+        catch(e){toast(e.message,false);reload();}
+      });
+
+    const dirty=()=>isNew||name.value.trim()!==orig.name||url.value.trim()!==orig.url;
+    r.check=function(){
+      const n=name.value.trim(),u=url.value.trim();
+      const dup=rows().some(o=>o!==r&&o.querySelector('.rn').value.trim()===n&&n);
+      let bad='';
+      if(n.length>24)bad=t('radiolong');
+      else if(u&&!/^https?:\/\//i.test(u))bad=t('radiobadurl');
+      else if(dup)bad=t('radiodupe');
+      r.classList.toggle('bad',!!bad);
+      r.classList.toggle('dirty',dirty());
+      msg.replaceChildren(bad);
+      save.disabled=!(n&&u&&!bad&&dirty());
+      play.disabled=!(n&&u)||!!bad;
+      return !bad;
+    };
+
+    // An edited row plays by URL so a station can be tried before it is saved.
     play.addEventListener('click',async()=>{
       const n=name.value.trim();
-      try{await post('/api/v1/radio/play',n?{station:n}:{url:url.value.trim()});refresh();}
+      try{await post('/api/v1/audio/play',dirty()?{url:url.value.trim()}:{station:n});refresh();}
       catch(e){toast(e.message,false);}
     });
-    del.addEventListener('click',()=>{r.remove();check();});
-    acts.replaceChildren(play,del);
-    const msg=el('div',{class:'rm meta'});
-    [name,url].forEach(i=>i.addEventListener('input',debounce(check,150)));
-    r.replaceChildren(name,url,acts,msg);
+    save.addEventListener('click',async()=>{
+      save.disabled=true;
+      try{await put();toast(t('saved'));reload();}
+      catch(e){toast(e.message,false);save.disabled=false;}
+    });
+    const recheck=debounce(()=>checkAll(),150);
+    [name,url].forEach(i=>i.addEventListener('input',recheck));
+    r.replaceChildren(name,url,el('div',{class:'acts'},play,save,del),msg);
     return r;
   }
   function paint(){
     list.replaceChildren(...(stations.length?stations.map(row)
                                             :[el('div',{class:'empty'},t('radionone'))]));
-    check();
+    checkAll();
   }
 
   const add=el('button',null,t('radioadd'));
   add.addEventListener('click',()=>{
     const empty=list.querySelector('.empty');
     if(empty)list.replaceChildren();
-    list.appendChild(row(null));check();
+    const r=row(null);
+    list.appendChild(r);
+    checkAll();
+    r.querySelector('input').focus();
   });
-  const save=el('button',null,t('radiosave'));
-  save.addEventListener('click',async()=>{
-    try{await req('PUT','/api/v1/radio/stations',{stations:read()});toast('OK',true);refresh();}
-    catch(e){toast(e.message,false);}
-  });
-  stop.addEventListener('click',async()=>{
-    try{await post('/api/v1/radio/stop',{});refresh();}catch(e){toast(e.message,false);}
-  });
-
+  async function reload(){
+    try{
+      const{data}=await api('/api/v1/audio');
+      stations=data.stations||[];
+      paint();
+    }catch(e){}
+  }
   async function refresh(){
     try{
-      const{data}=await api('/api/v1/radio');
-      status.replaceChildren(data.playing
-        ?t('radioplaying')+': '+data.station+(data.title?' - '+data.title:'')
-        :(data.error||t('radiostopped')));
+      const{data}=await api('/api/v1/audio');
+      status.replaceChildren(data.radio.playing
+        ?t('radioplaying')+': '+data.radio.station+(data.radio.title?' - '+data.radio.title:'')
+        :(data.radio.error||t('radiostopped')));
       if(!list.childElementCount){stations=data.stations||[];paint();}
+      if(onState)onState(data);
     }catch(e){}
   }
 
-  view.replaceChildren(
-    el('div',{class:'card wide'},
-      el('h2',{},t('radioTab')),
-      el('div',{class:'ghelp'},t('radioH')),
-      status,list,
-      el('div',{class:'row'},add,save,stop)));
   refresh();
   poller(refresh,4000);
+  return[list,el('div',{class:'row',style:'margin:10px 0 0'},add,status)];
+}
+function mp3Section(){
+  const storSlot=el('div');
+  const list=el('div',{class:'melolist'});
+  let playing='';
+
+  function mark(name){
+    playing=name||'';
+    list.querySelectorAll('.melorow').forEach(r=>{
+      const on=r.dataset.mp3===playing&&playing!=='';
+      r.classList.toggle('on',on);
+      // Cleared with no argument, not with '': .meta:empty is what keeps idle rows compact.
+      const m=r.querySelector('.meta');
+      if(on)m.replaceChildren('▶ '+t('radioplaying'));else m.replaceChildren();
+    });
+  }
+
+  function mp3Row(f){
+    const base=f.name.replace(/\.mp3$/i,'');
+    const pre=el('button',{class:'icon',title:t('melopre'),'aria-label':t('melopre')},'🎧');
+    // Through the shared preview handle, so Stopp reaches it and a second click cannot stack.
+    pre.addEventListener('click',()=>{
+      previewStop();
+      const a=new Audio('/MP3/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev);
+      audioStop=()=>a.pause();
+      a.play().catch(()=>{});
+    });
+    const play=el('button',{class:'icon',title:t('meloplay'),'aria-label':t('meloplay')},'▶');
+    play.addEventListener('click',async()=>{
+      try{await post('/api/v1/audio/play',{mp3:base});toast(t('playing'));}
+      catch(e){toast(e.message,false);}
+    });
+    const del=armable(el('button',{class:'danger icon',title:t('del'),'aria-label':t('del')},icon('trash')),
+      async()=>{
+        try{await api('/api/v1/audio/mp3/'+encodeURIComponent(base),{method:'DELETE'});toast(t('deleted'));reload();}
+        catch(e){toast(e.message,false);}
+      });
+    const row=el('div',{class:'melorow mp3','data-mp3':base},
+      el('span',{class:'nm',title:f.name},base),
+      el('span',{class:'sz'},fmtBytes(f.size)),
+      el('div',{class:'acts'},pre,play,del),
+      el('div',{class:'meta'}));
+    return row;
+  }
+
+  async function reload(){
+    try{
+      const{data}=await api('/api/v1/audio/mp3',{cache:'no-store'});
+      const files=(data.files||[]).filter(f=>/\.mp3$/i.test(f.name))
+        .sort((a,b)=>a.name.localeCompare(b.name));
+      storSlot.replaceChildren(storageCard(data));
+      list.replaceChildren(...files.map(mp3Row));
+      if(!files.length)list.replaceChildren(el('div',{class:'empty'},t('nofiles')));
+      mark(playing);
+    }catch(e){toast(e.message,false);}
+  }
+
+  reload();
+  const nodes=[
+    uploadZone('/api/v1/audio/mp3','.mp3,audio/mpeg','⬆ '+t('upload')+' (.mp3)',reload,false),
+    list];
+  return{nodes,mark,storSlot};
+}
+async function viewAudio(view){
+  const g=gen;
+  if(!S.aud){
+    try{readAudioCaps((await api('/api/v1/capabilities')).data||{});}
+    catch(e){view.append(el('div',{class:'card wide'},t('neterr')));return;}
+    if(g!==gen)return;
+  }
+  if(!anyAudioCap()){view.append(el('div',{class:'card wide'},t('audnone')));return;}
+  const{section,panel}=sectionShell(view);
+  const muted=el('div',{class:'ghelp',style:'display:none;color:var(--warn)'},t('melomuted'));
+  // One transport control for the page: the browser preview, the device sound and the stream.
+  const stopAll=el('button',null,'■ '+t('melostop'));
+  stopAll.addEventListener('click',async()=>{
+    previewStop();
+    try{await post('/api/v1/audio/stop',{});}catch(e){toast(e.message,false);}
+  });
+  panel.prepend(el('div',{class:'row audbar'},stopAll));
+  panel.prepend(muted);
+  (async()=>{
+    try{
+      const{data}=await api('/api/v1/settings');
+      muted.style.display=data.soundEnabled===false?'':'none';
+    }catch(e){}
+  })();
+
+  let markMp3=()=>{},storage=null;
+  if(hasSink('mp3')){
+    const mp3s=mp3Section();
+    markMp3=mp3s.mark;
+    section('mp3',t('mp3s'),t('mp3shelp'),mp3s.nodes,1);
+    storage=mp3s.storSlot;
+  }
+  if(hasSink('radio')){
+    section('radio',t('radioTab'),t('radioH'),
+      radioSection(d=>markMp3(d.mp3.playing?d.mp3.name:'')),1);
+  }else if(hasSink('mp3')){
+    // No radio section polling on this build, so the MP3 indicator needs its own timer.
+    const refresh=async()=>{
+      try{
+        const{data}=await api('/api/v1/audio');
+        markMp3(data.mp3.playing?data.mp3.name:'');
+      }catch(e){}
+    };
+    refresh();
+    poller(refresh,4000);
+  }
+  if(hasSink('buzzer'))section('melodies',t('melodies'),t('melodieshelp'),melodiesSection(),1);
+  if(storage)panel.prepend(storage);
 }
 const PAL_MAX=16;
 const PAL_BUILTIN=[
@@ -4224,8 +4388,8 @@ new ResizeObserver(setChromeH).observe(topbar);
   try{
     const caps=(await api('/api/v1/capabilities')).data||{};
     if(!S.transitions.length)S.transitions=caps.transitions||[];
-    S.radioCap=caps.radio===true;
-    if(!S.radioCap)nav();
+    readAudioCaps(caps);
+    if(!anyAudioCap())nav();
   }catch(e){}
   await loadSystemInfo();
 })();

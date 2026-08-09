@@ -388,6 +388,14 @@ export function transformSettingsPayload(obj, ctx) {
         out[spec.to] = v === 0 ? null : v;
         change(ctx, "key", k, spec.to, v === 0 ? "0 meant the global color; NG spells that null" : undefined);
         break;
+      case "volume": {
+        const pct = Math.round(Math.max(0, Math.min(30, Number(v) || 0)) * 100 / 30);
+        out.buzzerVolume = pct;
+        out.dfplayerVolume = pct;
+        change(ctx, "key", k, "buzzerVolume + dfplayerVolume",
+          "NG has one volume per output, each 0-100; the old 0-30 value is rescaled");
+        break;
+      }
       case "nested":
         setNested(out, spec.to, v);
         change(ctx, "key", k, spec.to);
@@ -455,14 +463,15 @@ export function transformBody(bodyKind, v, ctx) {
     case "sound": {
       const out = {};
       for (const [k, val] of Object.entries(v)) {
-        if (k === "sound") { out.name = val; change(ctx, "key", "sound", "name"); }
+        if (k === "sound") out.sound = val;
         else { out[k] = val; warn(ctx, "unmappedKey", { key: k }); }
       }
       return out;
     }
     case "r2d2":
-      change(ctx, "structure", "/api/r2d2", '{"builtin": "r2d2"}');
-      return { builtin: "r2d2" };
+      change(ctx, "structure", "/api/r2d2", '{"rtttl": "r2d2:d=4,o=5,b=240:..."}',
+        "NG has no built-in melody; the same notes go out as an inline RTTTL string");
+      return { rtttl: "r2d2:d=4,o=5,b=240:16c6,16g6,16e6,16a6,16g6,16e7" };
     case "power":
     case "moodlight": {
       if (bodyKind === "moodlight" && (!v || Object.keys(v).length === 0)) {

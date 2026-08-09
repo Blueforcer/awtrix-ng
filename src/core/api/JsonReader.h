@@ -87,7 +87,11 @@ struct Member {
   JsonReader* value;
 };
 
-bool readMembers(std::string_view text, std::initializer_list<Member> members);
+bool readMembers(std::string_view text, const Member* members, std::size_t count);
+
+inline bool readMembers(std::string_view text, std::initializer_list<Member> members) {
+  return readMembers(text, members.begin(), members.size());
+}
 
 bool parseDouble(const char* begin, const char* end, double& out);
 

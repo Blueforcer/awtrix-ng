@@ -5,8 +5,8 @@
 #include "core/render/Canvas.h"
 #include "core/render/ColorGrade.h"
 #include "core/render/MatrixLayout.h"
+#include "core/sound/AudioSinks.h"
 #include "hal/ISensorBus.h"
-#include "hal/ISoundBackend.h"
 
 namespace awtrix {
 
@@ -38,7 +38,10 @@ class IBoard {
   virtual int readLdrRaw() = 0;
   virtual void pollButtons(ButtonState& out) = 0;
 
-  virtual ISoundBackend& sound() = 0;
+  // Null means "not wired on this board". Both can be live at once: LEDC and a UART share nothing,
+  // and adding a DFPlayer must not cost the buzzer.
+  virtual sound::IToneSink* toneSink() = 0;
+  virtual sound::ITrackSink* trackSink() = 0;
   virtual ISensorBus& sensors() = 0;
 };
 

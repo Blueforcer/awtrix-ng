@@ -200,7 +200,7 @@ Every AWTRIX 3 custom-app key, and where it went. The full definition of each ne
 | `hold` | `hold` | Unchanged |
 | `stack` | `stack` | Unchanged |
 | `wakeup` | `wakeup` | Unchanged |
-| `sound` | `sound` | Unchanged - melody file name or DFPlayer track |
+| `sound` | `sound` | Unchanged as a key. NG resolves the name against every output it has: an uploaded MP3 first, then a melody file, then a DFPlayer track when the name is a plain number |
 | `rtttl` | `soundRtttl` | Rename |
 | `loopSound` | `soundLoop` | Rename |
 | `clients` | - | No equivalent; have your automation send to each device itself |

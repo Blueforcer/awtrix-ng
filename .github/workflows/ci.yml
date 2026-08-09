@@ -59,7 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        env: [awtrix, awtrix_s3]
+        env: [awtrix, awtrix_s3_octal, awtrix_s3_quad]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -173,15 +173,18 @@ jobs:
           node-version: "22"
       - name: Install PlatformIO
         run: pip install -U platformio esptool
-      - name: Build both firmware images
-        run: pio run -e awtrix -e awtrix_s3
+      - name: Build every firmware image
+        run: pio run -e awtrix -e awtrix_s3_octal -e awtrix_s3_quad
       - name: Stage OTA assets
-        # The file a user uploads to /update, one per SoC. These are app images
-        # only: OTA writes the app slot and never the partition table, so one
-        # file serves every flash size of its chip.
+        # The file a user uploads to /update. One per SoC, and one more for the
+        # S3's quad-PSRAM boards, whose PSRAM mode is compiled into the framework
+        # libraries rather than detected. These are app images only: OTA writes
+        # the app slot and never the partition table, so one file serves every
+        # flash size of its chip.
         run: |
           cp .pio/build/awtrix/firmware.bin firmware-awtrix-ng.bin
-          cp .pio/build/awtrix_s3/firmware.bin firmware-awtrix-ng-s3.bin
+          cp .pio/build/awtrix_s3_octal/firmware.bin firmware-awtrix-ng-s3-octal.bin
+          cp .pio/build/awtrix_s3_quad/firmware.bin firmware-awtrix-ng-s3-quad.bin
       - name: Stage the USB install images
         # What a user flashes over USB: bootloader, partition table, app. The
         # table is the only part that varies with flash size, which is why one
@@ -190,8 +193,16 @@ jobs:
         # readers took factory-awtrix-ng-4mb.bin for the update file of a 4 MB
         # board, which is the one asset name that names a flash size.
         run: |
-          python scripts/factory_image.py --env awtrix    --all
-          python scripts/factory_image.py --env awtrix_s3 --all
+          python scripts/factory_image.py --env awtrix                --all
+          python scripts/factory_image.py --env awtrix_s3_octal       --all
+          python scripts/factory_image.py --env awtrix_s3_quad        --all
+      - name: Bundle the USB install images
+        # Seven usb-*.bin would drown the three update files on the release
+        # page, and most readers never need them by hand -- the browser flasher
+        # picks from inside this zip (the Docs workflow unpacks it). The update
+        # images stay separate assets on purpose: the device names the exact
+        # file to upload, and that name should be a direct click.
+        run: zip usb-awtrix-ng.zip usb-awtrix-ng-*.bin
       - name: Stage license notices
         # LGPL-2.1 section 6 and the Apache, MIT and BSD terms all require their
         # text to accompany a binary distribution. A release of bare .bin files
@@ -212,8 +223,9 @@ jobs:
           body_path: RELEASE_NOTES.md
           files: |
             firmware-awtrix-ng.bin
-            firmware-awtrix-ng-s3.bin
-            usb-awtrix-ng-*.bin
+            firmware-awtrix-ng-s3-octal.bin
+            firmware-awtrix-ng-s3-quad.bin
+            usb-awtrix-ng.zip
             licenses-awtrix-ng.zip
       - name: Flip the release live, now that every asset is attached
         env:

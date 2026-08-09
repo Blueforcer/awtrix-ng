@@ -234,6 +234,22 @@ static void test_sound_without_service_is_false_not_a_crash() {
   TEST_ASSERT_EQUAL_INT(0, static_cast<int>(g_sounds.size()));
 }
 
+static void test_sound_playing_reports_the_service_state() {
+  g_svc.soundPlaying = [] { return true; };
+  run("log(str(sound.playing()))");
+  TEST_ASSERT_TRUE(logged("true"));
+  g_log.clear();
+  g_svc.soundPlaying = [] { return false; };
+  run("log(str(sound.playing()))");
+  TEST_ASSERT_TRUE(logged("false"));
+}
+
+static void test_sound_playing_without_service_is_false() {
+  g_svc.soundPlaying = nullptr;
+  run("log(str(sound.playing()))");
+  TEST_ASSERT_TRUE(logged("false"));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_get_answers_the_api_keys);
@@ -255,5 +271,7 @@ int main(int, char**) {
   RUN_TEST(test_sound_actions_reach_the_service);
   RUN_TEST(test_sound_reports_whether_it_was_accepted);
   RUN_TEST(test_sound_without_service_is_false_not_a_crash);
+  RUN_TEST(test_sound_playing_reports_the_service_state);
+  RUN_TEST(test_sound_playing_without_service_is_false);
   return UNITY_END();
 }

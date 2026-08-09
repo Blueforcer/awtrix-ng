@@ -29,7 +29,8 @@ except ImportError:
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-REMOVED_KEYS = {"bootSound", "updateCheck", "colorTemperature", "clients", "save", "matrixWidth",
+REMOVED_KEYS = {"bootSound", "updateCheck", "colorTemperature", "clients", "save", "volume",
+                "matrixWidth",
                 "matrixLayout", "matrixTileWidth", "matrixOrientation", "matrixSerpentine",
                 "matrixFlipX", "matrixFlipY"}
 HISTORICAL_MENTIONS_OK = {
@@ -176,12 +177,12 @@ def check_caps(problems):
 def stock_palettes():
     """The palette names the firmware advertises in GET /api/v1/capabilities.
 
-    The array is a hand-written literal in main.cpp rather than generated from
-    the palette table, so it is exactly the kind of list that drifts: `Rainbow`
-    was a working palette that five doc pages described as missing from the API
-    long after it had been added to the literal.
+    The array is a hand-written literal in the capabilities builder rather than
+    generated from the palette table, so it is exactly the kind of list that
+    drifts: `Rainbow` was a working palette that five doc pages described as
+    missing from the API long after it had been added to the literal.
     """
-    src = read("src/main.cpp")
+    src = read("src/core/api/CapabilitiesJson.h")
     m = re.search(r'\\"palettes\\":\[(.*?)\]', src, re.S)
     if not m:
         return None
@@ -191,7 +192,8 @@ def stock_palettes():
 def check_palettes(problems):
     truth = stock_palettes()
     if truth is None:
-        problems.append("check_docs_sync: could not find the palettes literal in src/main.cpp")
+        problems.append("check_docs_sync: could not find the palettes literal in "
+                        "src/core/api/CapabilitiesJson.h")
         return
     for page in ("docs/reference/http.md", "docs/reference/mqtt.md", "docs/reference/visuals.md",
                  "docs/reference/payload.md", "docs/guides/effects.md"):

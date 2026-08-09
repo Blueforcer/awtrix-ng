@@ -26,8 +26,8 @@ Chrome, Edge or Opera on a desktop. Nothing to install:
 <div id="awtrix-flasher"></div>
 <script type="module" src="../../assets/awtrix-flasher.js"></script>
 
-Pick your board's port when the browser asks. It detects the chip and the flash size, then writes
-the newest release for it.
+Pick your board's port when the browser asks. It detects the chip, the flash size and - on an S3 -
+whether the PSRAM is quad or octal, then writes the newest release for it.
 
 **Fresh install** is the first time you put AWTRIX NG on a board. It clears settings, Wi-Fi
 credentials, icons, melodies, palettes and scripts, and the device comes up as its own access
@@ -67,13 +67,16 @@ included.
 
 The manual route, for a browser without Web Serial or a board the flasher refuses.
 
-Download from the [releases page](https://github.com/Blueforcer/awtrix-ng/releases):
+Download `usb-awtrix-ng.zip` from the
+[releases page](https://github.com/Blueforcer/awtrix-ng/releases) and unpack it. It holds one
+image per board and flash size:
 
 | File | For |
 |---|---|
 | `usb-awtrix-ng-4mb.bin` | 4 MB ESP32 boards, the Ulanzi TC001 among them |
 | `usb-awtrix-ng-8mb.bin`, `usb-awtrix-ng-16mb.bin` | ESP32 boards with more flash |
-| `usb-awtrix-ng-s3-8mb.bin`, `usb-awtrix-ng-s3-16mb.bin` | ESP32-S3 boards |
+| `usb-awtrix-ng-s3-octal-*.bin` | ESP32-S3 boards - start here |
+| `usb-awtrix-ng-s3-quad-*.bin` | ESP32-S3 boards whose PSRAM the one above does not find |
 
 Take the one matching your board's flash size. If you are unsure how much it has, ask the chip:
 
@@ -81,11 +84,32 @@ Take the one matching your board's flash size. If you are unsure how much it has
 python -m esptool --port COM5 flash_id
 ```
 
-The `firmware-awtrix-ng.bin` and `firmware-awtrix-ng-s3.bin` assets on the same page are **not** for
-this - they are for [updating a device](../guides/updating.md) that already runs AWTRIX NG.
+### Which of the two S3 images
 
-Releases up to v1.0.14 named these images `factory-awtrix-ng-4mb.bin` and so on. Same file, older
-name.
+An S3 reaches its PSRAM over one of two wirings, quad or octal, and the image has to match. Nothing
+printed on the board tells you reliably which one it is: `R8` and `R2` describe the size, sellers
+use them loosely, and a board can carry its PSRAM as a separate chip that no tool sees from outside.
+
+So do not guess - **write the `-octal-` image first**. It starts on every S3, with or without PSRAM,
+and then the device itself answers the question: open its page and look at **PSRAM**.
+
+| What the device shows | What it means |
+|---|---|
+| A size, usually 8 MB | Right image, nothing more to do |
+| `none`, and your board has no PSRAM | Right image. No radio on this board, that is the hardware |
+| `none`, but your board is advertised with PSRAM | It is wired quad - write the `-quad-` image |
+
+!!! warning "Only in that order"
+    The `-quad-` image does not start at all on a board that is not quad - the panel stays dark
+    until you write the other one over USB. The `-octal-` image always starts, at worst without
+    PSRAM. That is why it goes first.
+
+The `firmware-awtrix-ng*.bin` assets on the same page are **not** for this - they are for
+[updating a device](../guides/updating.md) that already runs AWTRIX NG.
+
+Older releases carried these images under other names: loose files on the releases page rather
+than one zip up to v1.0.15, with the S3 one called `usb-awtrix-ng-s3-<size>.bin` before it named
+its PSRAM type, and `factory-awtrix-ng-<size>.bin` up to v1.0.14. Same images.
 
 ---
 

@@ -1,18 +1,18 @@
 #pragma once
 
-#include "hal/ISoundBackend.h"
+#include "core/sound/AudioSinks.h"
 
 class MelodyPlayer;
 
 namespace awtrix {
 
-class BuzzerBackend : public ISoundBackend {
+class BuzzerSink : public sound::IToneSink {
  public:
   void setPin(int pin) { pin_ = pin; }
   void begin() override;
-  void setVolume(uint8_t volume) override;
-  bool playFile(const std::string& id) override;
-  void playRtttl(const std::string& rtttl) override;
+  void setVolume(uint8_t percent) override;
+  bool playRtttl(const std::string& rtttl) override;
+  bool playMelodyFile(const std::string& name) override;
   void stop() override;
   void tick() override {}
   bool isPlaying() const override;
@@ -20,7 +20,7 @@ class BuzzerBackend : public ISoundBackend {
  private:
   int pin_ = 15;
   MelodyPlayer* player_ = nullptr;
-  uint8_t volume_ = 25;
+  uint8_t volume_ = 80;
 };
 
 }

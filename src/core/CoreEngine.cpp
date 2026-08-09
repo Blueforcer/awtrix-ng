@@ -12,8 +12,8 @@
 
 namespace awtrix {
 
-CoreEngine::CoreEngine(ISoundService& sound, IDisplayService& display, ISystemService& system)
-    : notifs_(kMaxNotifications), bus_(kCommandQueueDepth), sound_(sound), display_(display),
+CoreEngine::CoreEngine(sound::AudioRouter& audio, IDisplayService& display, ISystemService& system)
+    : notifs_(kMaxNotifications), bus_(kCommandQueueDepth), audio_(audio), display_(display),
       system_(system) {
   // A script app may decline its turn, so the rotation skips past it instead of showing a blank.
   appHost_.setShowGate([this](const std::string& id) {
@@ -23,9 +23,8 @@ CoreEngine::CoreEngine(ISoundService& sound, IDisplayService& display, ISystemSe
 }
 
 DispatchResult CoreEngine::execute(const Command& c) {
-  CommandContext ctx{state_, *this, *this, sound_, display_, system_};
+  CommandContext ctx{state_, *this, *this, audio_, display_, system_};
   ctx.scripts = scripts_;
-  ctx.radio = radio_;
   ctx.stations = this;
   ctx.overlays = overlays_;
   const DispatchResult r = dispatcher_.dispatch(c, ctx);

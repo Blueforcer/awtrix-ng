@@ -58,7 +58,7 @@ return Hello()
 | **Apps** | Five built-in apps (time, date, temperature, humidity, battery), plus your own - [pushed apps](guides/pushed-apps.md) fed from outside and [scripts](guides/scripting.md) running on AWTRIX - all in one rotation. |
 | **Notifications** | Interrupt the rotation with a one-shot message. See [Your first notification](guides/notifications.md). |
 | **Visuals** | Colored text fragments, scrolling, JPEG and base64 icons, bar/line/progress charts, draw primitives, background effects and weather overlays. See [Visual reference](reference/visuals.md). |
-| **Sound** | RTTTL melodies via the on-board buzzer or a DFPlayer. See [Sounds & melodies](guides/sounds.md). |
+| **Sound** | RTTTL melodies on the buzzer, your own MP3s on a speaker, numbered tracks on a DFPlayer - each with its own volume. See [MP3s & melodies](guides/sounds.md). |
 | **Sensors** | Auto-detected I²C temperature/humidity sensors, LDR auto-brightness, battery monitoring. See [Brightness & sensors](guides/brightness.md). |
 | **Integrations** | HTTP, MQTT (with Home Assistant auto-discovery), Art-Net, mDNS + UDP discovery. |
 

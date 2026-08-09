@@ -2,10 +2,15 @@
 
 AWTRIX can play an MP3 internet radio stream and show what is on air. It needs
 an ESP32-S3 with PSRAM and an external I²S DAC. Without all three the **Radio**
-tab is hidden. `POST /api/v1/radio/play` and `POST /api/v1/radio/stop` answer
-`503 unavailable`; `GET /api/v1/radio` still works and reports
-`"available": false`, and editing the station list (`PUT /api/v1/radio/stations`)
+tab is hidden. `POST /api/v1/audio/play` and `POST /api/v1/audio/stop` answer
+`503 unavailable`; `GET /api/v1/audio` still works and reports
+`"available": false`, and editing the station list (`PUT /api/v1/audio/stations`)
 works on every build.
+
+There is one image per PSRAM wiring, and the wrong one hides the radio: the
+device page then shows **PSRAM: none** although the board has some. That is the
+signal to write `firmware-awtrix-ng-s3-quad.bin` - see
+[Flashing](../getting-started/flashing.md#which-of-the-two-s3-images).
 
 ## What you need
 
@@ -36,14 +41,14 @@ all three to turn the output off. A half-configured set is rejected with a `422`
 
 ## Adding stations
 
-The [**Radio** tab](../getting-started/web-ui.md#radio) in the web UI is the
+The [**Audio** tab's Radio section](../getting-started/web-ui.md#radio) in the web UI is the
 quickest way in: give each station a name and its stream URL, then save. Up to 32
 stations, names up to 24 characters, URLs up to 255.
 
 The same list over the API:
 
 ```bash
-curl -X PUT http://<awtrix-ip>/api/v1/radio/stations \
+curl -X PUT http://<awtrix-ip>/api/v1/audio/stations \
   -H 'Content-Type: application/json' \
   -d '{"stations":[{"name":"SWR3","url":"https://liveradio.swr.de/sw282p3/swr3/"}]}'
 ```
@@ -67,40 +72,44 @@ playlist is reported as an error.
 ## Playing
 
 ```bash
-curl -X POST http://<awtrix-ip>/api/v1/radio/play \
+curl -X POST http://<awtrix-ip>/api/v1/audio/play \
   -H 'Content-Type: application/json' -d '{"station":"SWR3"}'
 ```
 
 `{"index":0}` picks by position, and `{"url":"http://..."}` plays something that
-is not in the list at all. Stop with `POST /api/v1/radio/stop`.
+is not in the list at all. Stop with `POST /api/v1/audio/stop`.
 
-Over MQTT the same three commands are `cmd/radio/play`, `cmd/radio/stop` and
-`cmd/radio/stations`.
+Over MQTT the same three commands are `cmd/audio/play`, `cmd/audio/stop` and
+`cmd/audio/stations`.
 
-`GET /api/v1/radio` reports what is happening and returns the station list in
+`GET /api/v1/audio` reports what is happening and returns the station list in
 the same read:
 
 ```json
 {
   "available": true,
-  "playing": true,
-  "station": "SWR3",
-  "title": "Kraftwerk - Das Model",
-  "error": "",
-  "underruns": 0,
-  "decodeUs": 4180,
-  "starvedMs": 0,
-  "bufferBytes": 12288,
+  "mp3": {"playing": false, "name": ""},
+  "radio": {
+    "playing": true,
+    "station": "SWR3",
+    "title": "Kraftwerk - Das Model",
+    "error": "",
+    "underruns": 0,
+    "decodeUs": 4180,
+    "starvedMs": 0,
+    "bufferBytes": 12288
+  },
   "stations": [{"name":"SWR3","url":"https://liveradio.swr.de/sw282p3/swr3/"}]
 }
 ```
 
-The same document is published retained on `<prefix>/state/radio`.
+The same document is published retained on `<prefix>/state/audio`.
 
-`underruns`, `starvedMs`, `decodeUs` and `bufferBytes` report playback health rather
-than settings - `underruns` counts audible dropouts and `starvedMs` the time spent
-waiting for data, so a rising pair of those means the stream is not keeping up.
-Field-by-field: [HTTP API - GET /api/v1/radio](../reference/http.md#get-apiv1radio).
+The four numbers under `radio` say how well playback is going, not what is set:
+`underruns` counts the dropouts you can hear, `starvedMs` the time spent waiting
+for the station to deliver. If those two climb while music plays, the stream is
+not arriving fast enough - usually the Wi-Fi, occasionally the station.
+Field-by-field: [HTTP API - GET /api/v1/audio](../reference/http.md#get-apiv1audio).
 
 ## On the matrix
 
@@ -108,17 +117,17 @@ With `radioMeta` on - the default - each new track title appears as it arrives,
 for about seven seconds, then the normal rotation continues. Turn it off to have
 the radio play without ever taking over the display.
 
-Titles come from the stream's ICY metadata. Stations resend the same title every
-few seconds; only actual changes are shown.
+The title comes from the station itself. Stations repeat it every few seconds;
+AWTRIX shows it only when it actually changes.
 
-Volume is `radioVolume`, `0`–`100`. It is separate from `volume`, which drives
-the buzzer or a DFPlayer - different hardware, and different scales.
+Volume is `radioVolume`, `0`–`100`. Stored [MP3s](sounds.md#mp3s) come out of the same amplifier
+but have their own `mp3Volume`, so a station turned down to sit in the background does not also
+turn down your doorbell. See [Sound](../reference/settings.md#sound).
 
 ## Limits
 
-**MPEG-1 Layer III only.** That is what internet radio overwhelmingly is, but a
-station that only offers AAC will not play - the API reports the stream as
-unusable. 44.1, 48 and 32 kHz, mono or stereo, any bitrate including variable.
+**MP3 stations only.** That is what internet radio overwhelmingly is, but a
+station that offers AAC instead will not play, and says so. 44.1, 48 and 32 kHz, mono or stereo, any bitrate including variable.
 
 **One stream at a time.** Starting a new station stops the current one.
 
@@ -136,7 +145,7 @@ HTTPS streams work, and their certificates are not verified.
 
 | Symptom | Cause |
 |---|---|
-| Radio tab missing, play/stop answer `503` | Not an ESP32-S3 image, no PSRAM, or the I²S pins are `-1` (station editing and `GET /api/v1/radio` still work) |
+| Radio section missing, play/stop answer `503` | Not an ESP32-S3 image, the I²S pins are `-1`, or the device page shows **PSRAM: none** - then the board either has none or wants the `-quad-` image (station editing and `GET /api/v1/audio` still work) |
 | `422` on the pins | One of the three is set and the others are not |
 | "this stream is not MPEG-1 Layer III audio" | An AAC or otherwise unsupported mount |
 | "could not connect to the station" | Wrong URL, station offline, or DNS is not resolving |
@@ -145,7 +154,7 @@ HTTPS streams work, and their certificates are not verified.
 
 ## Related
 
-- [Web UI tour - Radio](../getting-started/web-ui.md#radio) - the tab, and what each control does
-- [HTTP API - Radio](../reference/http.md#radio) - every route, field and status code
+- [Web UI tour - Radio](../getting-started/web-ui.md#radio) - the Audio tab's Radio section, and what each control does
+- [HTTP API - Audio](../reference/http.md#audio) - every route, field and status code
 - [GPIO & boards](../reference/gpio.md) - the I²S pins and what else can sit on them
-- [Sounds & melodies](sounds.md) - the buzzer, for alerts rather than music
+- [MP3s & melodies](sounds.md) - the buzzer, for alerts rather than music

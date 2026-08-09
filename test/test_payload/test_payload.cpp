@@ -310,11 +310,24 @@ static void test_notification_key_on_an_app_is_rejected() {
 static void test_notification_keys_pass_on_a_notification() {
   AppSpec s;
   TEST_ASSERT_TRUE(payload::parse(
-      "{\"wakeup\":true,\"hold\":true,\"soundLoop\":true,\"soundRtttl\":\"a:d=4;\"}", true, s));
+      "{\"wakeup\":true,\"hold\":true,\"soundLoop\":true,"
+      "\"soundRtttl\":\"a:d=4,o=5,b=120:c\"}",
+      true, s));
   TEST_ASSERT_TRUE(s.wakeup);
   TEST_ASSERT_TRUE(s.hold);
   TEST_ASSERT_TRUE(s.loopSound);
-  TEST_ASSERT_EQUAL_STRING("a:d=4;", s.extras().rtttl.c_str());
+  TEST_ASSERT_EQUAL_STRING("a:d=4,o=5,b=120:c", s.extras().rtttl.c_str());
+}
+
+// A melody that cannot be played is a mistake in the request, not something to discover as
+// silence once the notification is already on screen.
+static void test_an_unparsable_sound_rtttl_is_rejected() {
+  AppSpec s;
+  DispatchDetail err;
+  TEST_ASSERT_FALSE(
+      payload::parse("{\"soundRtttl\":\"a:d=4;\"}", true, s, nullptr, nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("soundRtttl", err.field.c_str());
+  TEST_ASSERT_FALSE(err.message.empty());
 }
 
 static void test_effect_overlay_names() {
@@ -630,6 +643,7 @@ int main(int, char**) {
   RUN_TEST(test_unknown_key_is_rejected);
   RUN_TEST(test_notification_key_on_an_app_is_rejected);
   RUN_TEST(test_notification_keys_pass_on_a_notification);
+  RUN_TEST(test_an_unparsable_sound_rtttl_is_rejected);
   RUN_TEST(test_effect_overlay_names);
   RUN_TEST(test_bad_json_returns_false);
   RUN_TEST(test_array_payload_parses_first);

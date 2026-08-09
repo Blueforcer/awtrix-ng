@@ -6,8 +6,8 @@
 #include "hal/IBoard.h"
 #include "hal/SensorBus.h"
 #include "media/MatrixRenderer.h"
-#include "sound/BuzzerBackend.h"
-#include "sound/DFPlayerBackend.h"
+#include "sound/BuzzerSink.h"
+#include "sound/DfTrackSink.h"
 
 namespace awtrix {
 
@@ -37,7 +37,8 @@ class Esp32Board : public IBoard {
   int readLdrRaw() override;
   void pollButtons(ButtonState& out) override;
 
-  ISoundBackend& sound() override { return *sound_; }
+  sound::IToneSink* toneSink() override { return pins_.buzzer >= 0 ? &buzzer_ : nullptr; }
+  sound::ITrackSink* trackSink() override { return dfplayerWired_ ? &dfplayer_ : nullptr; }
   ISensorBus& sensors() override { return sensors_; }
 
  private:
@@ -46,10 +47,11 @@ class Esp32Board : public IBoard {
   bool layoutWasInvalid_ = false;
   MatrixLayout layout_;
   MatrixRenderer renderer_;
-  BuzzerBackend buzzer_;
-  DFPlayerBackend dfplayer_;
-  // Points at the buzzer unless the config wires up and enables a DFPlayer; both stay alive.
-  ISoundBackend* sound_ = &buzzer_;
+  BuzzerSink buzzer_;
+  DfTrackSink dfplayer_;
+  // The ESP32 defaults name dfRx/dfTx even with no module attached, so the gate is what keeps two
+  // GPIOs free on every board that has not switched one on.
+  bool dfplayerWired_ = false;
   SensorBus sensors_;
 };
 

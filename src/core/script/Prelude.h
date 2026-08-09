@@ -264,23 +264,55 @@ settings.apply_case = _settings_apply_case
 
 # ---- sound -----------------------------------------------------------------
 # Queued for the device to play, not played inside your draw call: the request
-# takes the same route POST /api/v1/sounds/play does, so the "sound is switched
-# off" and "this backend has no RTTTL" rules are the device's, decided once.
+# takes the same route POST /api/v1/audio/play does, so the "sound is switched
+# off" rule is the device's, decided once.
 # True means the request was accepted, not that a file of that name exists.
-# The action numbers are script::SoundAction (Play, Rtttl, Stop) in that order.
+# The action numbers are script::SoundAction (Play, Mp3, Melody, Track, Rtttl,
+# Stop) in that order.
 sound = module('sound')
+# A name, and the device decides: a stored MP3 first, then a melody, then a
+# DFPlayer track if the name is a plain number.
 def _sound_play(name) # sound.play(name)
   return _native_sound(0, str(name))
 end
-def _sound_rtttl(melody) # sound.rtttl(melody)
-  return _native_sound(1, str(melody))
+# The three explicit ones never fall back -- a name that is not there stays
+# silent instead of turning into something else.
+def _sound_mp3(name) # sound.mp3(name)
+  return _native_sound(1, str(name))
 end
+def _sound_melody(name) # sound.melody(name)
+  return _native_sound(2, str(name))
+end
+def _sound_track(number) # sound.track(number)
+  return _native_sound(3, str(number))
+end
+def _sound_rtttl(melody) # sound.rtttl(melody)
+  return _native_sound(4, str(melody))
+end
+# Stops the one-shots only. A radio stream the user started keeps playing.
 def _sound_stop() # sound.stop()
-  return _native_sound(2, '')
+  return _native_sound(5, '')
+end
+# Whether the device is making sound right now -- an MP3, a melody or a
+# DFPlayer track alike. Lets a script wait for one sound before the next.
+def _sound_playing() # sound.playing()
+  return _native_sound_playing()
+end
+# Which outputs this board has, so a script can pick a sound it can actually
+# make: {'buzzer': bool, 'track': bool, 'mp3': bool, 'radio': bool}.
+def _sound_sinks() # sound.sinks()
+  var b = _native_sound_sinks()
+  return {'buzzer': (b & 1) != 0, 'track': (b & 2) != 0,
+          'mp3': (b & 4) != 0, 'radio': (b & 8) != 0}
 end
 sound.play = _sound_play
+sound.mp3 = _sound_mp3
+sound.melody = _sound_melody
+sound.track = _sound_track
 sound.rtttl = _sound_rtttl
 sound.stop = _sound_stop
+sound.playing = _sound_playing
+sound.sinks = _sound_sinks
 
 # ---- sensor ----------------------------------------------------------------
 # What the device measures, straight from the reading the built-in apps draw.

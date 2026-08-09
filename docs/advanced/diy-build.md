@@ -22,7 +22,7 @@ Everything else follows from it. Both are supported first-class, with their own 
 
 | | ESP32 (classic) | **ESP32-S3** |
 |---|---|---|
-| Firmware image | `usb-awtrix-ng-4mb.bin` (or 8/16 MB) | `usb-awtrix-ng-s3-8mb.bin` / `-16mb.bin` |
+| Firmware image | `usb-awtrix-ng-4mb.bin` (or 8/16 MB) | `usb-awtrix-ng-s3-octal-<flash>.bin`, or the `-s3-quad-` one if that finds no PSRAM |
 | Usable GPIO | 0-39, of which 34-39 are input-only | 0-48 except 22-25, **no input-only pins** |
 | ADC for battery + LDR | GPIO 32-39 | GPIO 1-10 |
 | Panel, apps, scripting, MQTT, Art-Net | yes | yes |
@@ -36,9 +36,14 @@ makes [Internet radio](../guides/radio.md) available. A classic ESP32 with 4 MB 
 for a clock that never plays a stream.
 
 !!! warning "Buy an S3 board with PSRAM if you want radio"
-    An `N16R8`/`N8R8` has it, a plain `N16` does not - and the radio tab stays hidden without it.
+    An `N16R8`/`N8R8` has it, a plain `N16` does not - and the Radio section stays hidden without it.
     The firmware reserves GPIO 26-37 for flash and PSRAM on every S3 build regardless, so a
     PSRAM-less board buys you no extra pins.
+
+    An S3 reaches its PSRAM over one of two wirings, and the image has to match - what is printed
+    on the board does not settle it. Write the `-octal-` image, then look at **PSRAM** on the device
+    page: a size means done, `none` on a board that has PSRAM means write the `-quad-` one. Details:
+    [Flashing](../getting-started/flashing.md#which-of-the-two-s3-images).
 
 ---
 
@@ -62,9 +67,9 @@ for a clock that never plays a stream.
 | 3 x momentary push button | App navigation, menus, deep-sleep wake | [Buttons](../reference/system.md#buttons) |
 | LDR (e.g. GL5528) + 10 k resistor | Auto-brightness | [Brightness & sensors](../guides/brightness.md) |
 | BME280 / BMP280 / HTU21DF / SHT31 | Temperature, humidity, pressure apps | [Sensor bus](../reference/gpio.md#sensor-bus) |
-| Passive piezo buzzer | RTTTL melodies and beeps | [Sounds & melodies](../guides/sounds.md) |
+| Passive piezo buzzer | RTTTL melodies and beeps | [MP3s & melodies](../guides/sounds.md) |
 | **MAX98357A** I2S DAC + 4-8 ohm speaker | Internet radio (S3 + PSRAM only) | [Internet radio](../guides/radio.md) |
-| DFPlayer Mini + microSD + speaker | MP3 playback instead of the buzzer | [DFPlayer boards](../guides/sounds.md#dfplayer-boards) |
+| DFPlayer Mini + microSD + speaker | numbered tracks alongside the buzzer | [DFPlayer boards](../guides/sounds.md#dfplayer-boards) |
 | Li-Ion cell + TP4056 charger + 2 x 100 k | Battery operation and reporting | [Power & battery](../guides/power.md) |
 | 74AHCT125 level shifter | Reliable 5 V data on long runs | [section 4](#4-power-the-panel-first) |
 
@@ -596,7 +601,7 @@ Work down this list; each step isolates one part of the hardware.
 | Panel stuck dim with `autoBrightness` on | No LDR, or `ldrOnGround` set the wrong way |
 | Percentage nonsense | `batteryDividerRatio` still at the default |
 | No temperature | Sensor not on the bus, missing pull-ups, or a second chip answering first |
-| Radio tab missing, `/radio/play` returns `503` | Not an S3 image, no PSRAM, or the I2S pins are `-1` |
+| Radio section missing, `/api/v1/audio/play` returns `503` | Not an S3 image, the I2S pins are `-1`, or the device page shows **PSRAM: none** - no PSRAM, or the `-quad-` image is the one this board needs |
 | `invalidPinConfig` on a write | The message names the field and the rule - [Errors](../reference/errors.md#gpio-validation-invalidpinconfig) |
 
 ---

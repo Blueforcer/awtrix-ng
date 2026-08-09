@@ -6,6 +6,7 @@
 #include "core/api/ApiRouter.h"
 #include "core/api/JsonReader.h"
 #include "core/script/ScriptServices.h"
+#include "core/sound/AudioRouter.h"
 
 using namespace awtrix;
 
@@ -25,14 +26,18 @@ static Command routed(const char* method, const char* path, const char* body = "
 
 
 static void test_http_radio_routes() {
-  Command c = routed("POST", "/api/v1/radio/play", "{\"station\":\"SWR3\"}");
-  TEST_ASSERT_EQUAL_INT(ct(CommandType::RadioPlay), ct(c.type));
+  // A stream keeps its payload whole: the dispatch reads station, index or url from it.
+  Command c = routed("POST", "/api/v1/audio/play", "{\"station\":\"SWR3\"}");
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::PlayStream), ct(c.type));
   TEST_ASSERT_EQUAL_STRING("{\"station\":\"SWR3\"}", c.payload.c_str());
 
-  c = routed("POST", "/api/v1/radio/stop");
-  TEST_ASSERT_EQUAL_INT(ct(CommandType::RadioStop), ct(c.type));
+  c = routed("POST", "/api/v1/audio/play", "{\"url\":\"http://s/x\"}");
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::PlayStream), ct(c.type));
 
-  c = routed("PUT", "/api/v1/radio/stations", "{\"stations\":[]}");
+  c = routed("POST", "/api/v1/audio/stop");
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::StopAudio), ct(c.type));
+
+  c = routed("PUT", "/api/v1/audio/stations", "{\"stations\":[]}");
   TEST_ASSERT_EQUAL_INT(ct(CommandType::SetRadioStations), ct(c.type));
 }
 
@@ -40,20 +45,20 @@ static void test_http_radio_read_falls_through_to_the_transport() {
   Command c;
   api::HttpResult imm;
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::NoMatch),
-                        ro(api::routeHttp("GET", "/api/v1/radio", "", c, imm)));
+                        ro(api::routeHttp("GET", "/api/v1/audio", "", c, imm)));
 }
 
 static void test_http_radio_wrong_methods_are_405_not_404() {
   Command c;
   api::HttpResult imm;
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
-                        ro(api::routeHttp("POST", "/api/v1/radio", "", c, imm)));
+                        ro(api::routeHttp("POST", "/api/v1/audio", "", c, imm)));
   TEST_ASSERT_EQUAL_INT(405, imm.status);
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
-                        ro(api::routeHttp("GET", "/api/v1/radio/stop", "", c, imm)));
+                        ro(api::routeHttp("GET", "/api/v1/audio/stop", "", c, imm)));
   TEST_ASSERT_EQUAL_INT(405, imm.status);
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
-                        ro(api::routeHttp("POST", "/api/v1/radio/stations", "", c, imm)));
+                        ro(api::routeHttp("POST", "/api/v1/audio/stations", "", c, imm)));
   TEST_ASSERT_EQUAL_INT(405, imm.status);
 }
 
@@ -61,7 +66,7 @@ static void test_http_radio_play_needs_a_body() {
   Command c;
   api::HttpResult imm;
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
-                        ro(api::routeHttp("POST", "/api/v1/radio/play", "{}", c, imm)));
+                        ro(api::routeHttp("POST", "/api/v1/audio/play", "{}", c, imm)));
   TEST_ASSERT_EQUAL_INT(422, imm.status);
 }
 
@@ -69,16 +74,16 @@ static void test_mqtt_radio_ops() {
   Command c;
   std::string result;
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Routed),
-                        ro(api::routeMqtt("cmd/radio/play", "{\"index\":0}", c, result)));
-  TEST_ASSERT_EQUAL_INT(ct(CommandType::RadioPlay), ct(c.type));
+                        ro(api::routeMqtt("cmd/audio/play", "{\"index\":0}", c, result)));
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::PlayStream), ct(c.type));
   TEST_ASSERT_EQUAL_INT((int)Source::Mqtt, (int)c.source);
 
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Routed),
-                        ro(api::routeMqtt("cmd/radio/stop", "", c, result)));
-  TEST_ASSERT_EQUAL_INT(ct(CommandType::RadioStop), ct(c.type));
+                        ro(api::routeMqtt("cmd/audio/stop", "", c, result)));
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::StopAudio), ct(c.type));
 
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Routed),
-                        ro(api::routeMqtt("cmd/radio/stations", "[]", c, result)));
+                        ro(api::routeMqtt("cmd/audio/stations", "[]", c, result)));
   TEST_ASSERT_EQUAL_INT(ct(CommandType::SetRadioStations), ct(c.type));
 }
 
@@ -223,62 +228,135 @@ static void test_http_indicators() {
   TEST_ASSERT_EQUAL_INT(422, imm.status);
 }
 
+// One command now, with the source it names in arg - the router downstream reads nothing else.
 static void test_http_sounds_play_variants() {
-  Command c = routed("POST", "/api/v1/sounds/play", "{\"name\":\"alarm\"}");
-  TEST_ASSERT_EQUAL_INT(ct(CommandType::PlaySound), ct(c.type));
+  Command c = routed("POST", "/api/v1/audio/play", "{\"mp3\":\"alarm\"}");
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::PlayAudio), ct(c.type));
+  TEST_ASSERT_EQUAL_INT((int)sound::Source::Mp3, c.arg);
   TEST_ASSERT_EQUAL_STRING("alarm", c.payload.c_str());
 
-  c = routed("POST", "/api/v1/sounds/play", "{\"rtttl\":\"x:d=4:c\"}");
-  TEST_ASSERT_EQUAL_INT(ct(CommandType::PlayRtttl), ct(c.type));
-  TEST_ASSERT_EQUAL_STRING("x:d=4:c", c.payload.c_str());
+  c = routed("POST", "/api/v1/audio/play", "{\"melody\":\"alarm\"}");
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::PlayAudio), ct(c.type));
+  TEST_ASSERT_EQUAL_INT((int)sound::Source::Melody, c.arg);
+  TEST_ASSERT_EQUAL_STRING("alarm", c.payload.c_str());
 
-  c = routed("POST", "/api/v1/sounds/play", "{\"builtin\":\"r2d2\"}");
-  TEST_ASSERT_EQUAL_INT(ct(CommandType::R2D2), ct(c.type));
+  c = routed("POST", "/api/v1/audio/play", "{\"rtttl\":\"x:d=4:c\"}");
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::PlayAudio), ct(c.type));
+  TEST_ASSERT_EQUAL_INT((int)sound::Source::Rtttl, c.arg);
+  TEST_ASSERT_EQUAL_STRING("x:d=4:c", c.payload.c_str());
 
   Command r;
   api::HttpResult imm;
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
-                        ro(api::routeHttp("POST", "/api/v1/sounds/play", "{bad", r, imm)));
+                        ro(api::routeHttp("POST", "/api/v1/audio/play", "{bad", r, imm)));
   TEST_ASSERT_EQUAL_INT(400, imm.status);
 
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
-                        ro(api::routeHttp("POST", "/api/v1/sounds/play", "{}", r, imm)));
+                        ro(api::routeHttp("POST", "/api/v1/audio/play", "{}", r, imm)));
   TEST_ASSERT_EQUAL_INT(422, imm.status);
 
   TEST_ASSERT_EQUAL_INT(
       ro(api::RouteOutcome::Respond),
-      ro(api::routeHttp("POST", "/api/v1/sounds/play", "{\"name\":\"a\",\"rtttl\":\"x:d=4:c\"}", r,
+      ro(api::routeHttp("POST", "/api/v1/audio/play", "{\"mp3\":\"a\",\"rtttl\":\"x:d=4:c\"}", r,
                         imm)));
   TEST_ASSERT_EQUAL_INT(422, imm.status);
 }
 
-static void test_http_sounds_play_rejects_unparseable_rtttl() {
+// A bare name is left to the device to resolve; the explicit keys are promises about a sink.
+static void test_http_sounds_play_names_its_source() {
+  Command c = routed("POST", "/api/v1/audio/play", "{\"sound\":\"ding\"}");
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::PlayAudio), ct(c.type));
+  TEST_ASSERT_EQUAL_INT((int)sound::Source::Auto, c.arg);
+  TEST_ASSERT_EQUAL_STRING("ding", c.payload.c_str());
+}
+
+static void test_http_sounds_play_takes_a_track_number() {
+  Command c = routed("POST", "/api/v1/audio/play", "{\"track\":7}");
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::PlayAudio), ct(c.type));
+  TEST_ASSERT_EQUAL_INT((int)sound::Source::Track, c.arg);
+  TEST_ASSERT_EQUAL_STRING("7", c.payload.c_str());
+
+  Command r;
+  api::HttpResult imm;
+  for (const char* body : {"{\"track\":0}", "{\"track\":3000}", "{\"track\":\"7\"}",
+                           "{\"track\":1.5}"}) {
+    TEST_ASSERT_EQUAL_INT_MESSAGE(ro(api::RouteOutcome::Respond),
+                                  ro(api::routeHttp("POST", "/api/v1/audio/play", body, r, imm)),
+                                  body);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(422, imm.status, body);
+    TEST_ASSERT_TRUE_MESSAGE(imm.body.find("\"field\":\"track\"") != std::string::npos, body);
+  }
+}
+
+// The reported field used to be a fixed "mp3" whatever the sender had actually written.
+static void test_http_sounds_play_names_the_key_that_was_sent() {
   Command r;
   api::HttpResult imm;
   TEST_ASSERT_EQUAL_INT(
       ro(api::RouteOutcome::Respond),
-      ro(api::routeHttp("POST", "/api/v1/sounds/play",
-                        "{\"rtttl\":\"d=4,o=5,b=120:c,e,g\"}", r, imm)));
+      ro(api::routeHttp("POST", "/api/v1/audio/play",
+                        "{\"melody\":\"a\",\"station\":\"b\"}", r, imm)));
   TEST_ASSERT_EQUAL_INT(422, imm.status);
-  TEST_ASSERT_TRUE(imm.body.find("rtttl") != std::string::npos);
+  TEST_ASSERT_TRUE(imm.body.find("\"field\":\"melody\"") != std::string::npos);
 
+  // Nothing was sent, so there is no field to blame and none is claimed.
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
+                        ro(api::routeHttp("POST", "/api/v1/audio/play", "{}", r, imm)));
+  TEST_ASSERT_EQUAL_INT(422, imm.status);
+  TEST_ASSERT_TRUE(imm.body.find("\"field\"") == std::string::npos);
+}
+
+// r2d2 is gone, and with it the key that ignored its own value.
+static void test_http_sounds_play_no_longer_knows_builtin() {
+  Command r;
+  api::HttpResult imm;
   TEST_ASSERT_EQUAL_INT(
       ro(api::RouteOutcome::Respond),
-      ro(api::routeHttp("POST", "/api/v1/sounds/play",
-                        "{\"rtttl\":\"x:d=4,o=5,b=120:c,e,h\"}", r, imm)));
+      ro(api::routeHttp("POST", "/api/v1/audio/play", "{\"builtin\":\"r2d2\"}", r, imm)));
   TEST_ASSERT_EQUAL_INT(422, imm.status);
-  TEST_ASSERT_TRUE(imm.body.find("not a note") != std::string::npos);
-  TEST_ASSERT_TRUE(imm.body.find("offset") != std::string::npos);
+}
+
+static void test_http_sounds_stop_takes_a_scope() {
+  Command c = routed("POST", "/api/v1/audio/stop", "{\"scope\":\"sounds\"}");
+  TEST_ASSERT_EQUAL_INT((int)sound::StopScope::Sounds, c.arg);
+
+  c = routed("POST", "/api/v1/audio/stop", "{\"scope\":\"stream\"}");
+  TEST_ASSERT_EQUAL_INT((int)sound::StopScope::Stream, c.arg);
+
+  c = routed("POST", "/api/v1/audio/stop", "{\"scope\":\"all\"}");
+  TEST_ASSERT_EQUAL_INT((int)sound::StopScope::All, c.arg);
+
+  Command r;
+  api::HttpResult imm;
+  TEST_ASSERT_EQUAL_INT(
+      ro(api::RouteOutcome::Respond),
+      ro(api::routeHttp("POST", "/api/v1/audio/stop", "{\"scope\":\"melody\"}", r, imm)));
+  TEST_ASSERT_EQUAL_INT(422, imm.status);
+  TEST_ASSERT_TRUE(imm.body.find("\"field\":\"scope\"") != std::string::npos);
+}
+
+static void test_mqtt_stop_shares_the_scope() {
+  Command c;
+  std::string res;
+  TEST_ASSERT_EQUAL_INT(
+      ro(api::RouteOutcome::Routed),
+      ro(api::routeMqtt("cmd/audio/stop", "{\"scope\":\"stream\"}", c, res)));
+  TEST_ASSERT_EQUAL_INT((int)sound::StopScope::Stream, c.arg);
+
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
+                        ro(api::routeMqtt("cmd/audio/stop", "{\"scope\":\"x\"}", c, res)));
+  TEST_ASSERT_TRUE(res.find("\"ok\":false") != std::string::npos);
 }
 
 static void test_http_sounds_stop() {
-  Command c = routed("POST", "/api/v1/sounds/stop");
-  TEST_ASSERT_EQUAL_INT(ct(CommandType::StopSound), ct(c.type));
+  Command c = routed("POST", "/api/v1/audio/stop");
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::StopAudio), ct(c.type));
+  TEST_ASSERT_EQUAL_INT((int)sound::StopScope::All, c.arg);
 
   Command r;
   api::HttpResult imm;
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
-                        ro(api::routeHttp("GET", "/api/v1/sounds/stop", "", r, imm)));
+                        ro(api::routeHttp("GET", "/api/v1/audio/stop", "", r, imm)));
   TEST_ASSERT_EQUAL_INT(405, imm.status);
 }
 
@@ -286,14 +364,16 @@ static void test_mqtt_sounds_share_the_http_validation() {
   Command c;
   std::string res;
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Routed),
-                        ro(api::routeMqtt("cmd/sounds/stop", "", c, res)));
-  TEST_ASSERT_EQUAL_INT(ct(CommandType::StopSound), ct(c.type));
+                        ro(api::routeMqtt("cmd/audio/stop", "", c, res)));
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::StopAudio), ct(c.type));
 
+  // The route's own rules reach MQTT senders as a result payload, not only HTTP callers.
   TEST_ASSERT_EQUAL_INT(
       ro(api::RouteOutcome::Respond),
-      ro(api::routeMqtt("cmd/sounds/play", "{\"rtttl\":\"x:d=4,o=5,b=120:zz\"}", c, res)));
+      ro(api::routeMqtt("cmd/audio/play", "{\"melody\":\"a\",\"mp3\":\"b\"}", c, res)));
   TEST_ASSERT_TRUE(res.find("\"ok\":false") != std::string::npos);
   TEST_ASSERT_TRUE(res.find("validationFailed") != std::string::npos);
+  TEST_ASSERT_TRUE(res.find("\"field\":\"mp3\"") != std::string::npos);
 }
 
 static void test_http_device_actions() {
@@ -631,7 +711,7 @@ static void test_mqtt_bad_body_responds_error() {
   Command c;
   std::string res;
   TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
-                        ro(api::routeMqtt("cmd/sounds/play", "{bad", c, res)));
+                        ro(api::routeMqtt("cmd/audio/play", "{bad", c, res)));
   TEST_ASSERT_TRUE(res.find("invalidJson") != std::string::npos);
 }
 
@@ -684,7 +764,7 @@ static void test_http_response_busy_is_503_with_retry_after() {
 }
 
 static void test_error_envelope_is_valid_json() {
-  const std::string e = api::errorJson("validationFailed", "out of range", "volume");
+  const std::string e = api::errorJson("validationFailed", "out of range", "buzzerVolume");
   api::JsonReader probe{std::string_view(e)};
   TEST_ASSERT_TRUE(probe.skipValue() && probe.atEnd());
   const api::JsonReader err = api::memberValue(api::JsonReader(e), "error");
@@ -695,17 +775,17 @@ static void test_error_envelope_is_valid_json() {
   };
   TEST_ASSERT_EQUAL_STRING("validationFailed", field("code").c_str());
   TEST_ASSERT_EQUAL_STRING("out of range", field("message").c_str());
-  TEST_ASSERT_EQUAL_STRING("volume", field("field").c_str());
+  TEST_ASSERT_EQUAL_STRING("buzzerVolume", field("field").c_str());
 }
 
 static void test_mqtt_result_payloads() {
   DispatchDetail none;
   TEST_ASSERT_EQUAL_STRING("{\"ok\":true}", api::mqttResult(DispatchResult::Ok, none).c_str());
-  DispatchDetail d{"volume", "out of range"};
+  DispatchDetail d{"buzzerVolume", "out of range"};
   const std::string r = api::mqttResult(DispatchResult::ValidationError, d);
   TEST_ASSERT_TRUE(r.find("\"ok\":false") != std::string::npos);
   TEST_ASSERT_TRUE(r.find("validationFailed") != std::string::npos);
-  TEST_ASSERT_TRUE(r.find("volume") != std::string::npos);
+  TEST_ASSERT_TRUE(r.find("buzzerVolume") != std::string::npos);
 }
 
 static void test_delete_named_notification_routes_with_the_name() {
@@ -826,7 +906,12 @@ int main(int, char**) {
   RUN_TEST(test_http_apps);
   RUN_TEST(test_http_indicators);
   RUN_TEST(test_http_sounds_play_variants);
-  RUN_TEST(test_http_sounds_play_rejects_unparseable_rtttl);
+  RUN_TEST(test_http_sounds_play_names_its_source);
+  RUN_TEST(test_http_sounds_play_takes_a_track_number);
+  RUN_TEST(test_http_sounds_play_names_the_key_that_was_sent);
+  RUN_TEST(test_http_sounds_play_no_longer_knows_builtin);
+  RUN_TEST(test_http_sounds_stop_takes_a_scope);
+  RUN_TEST(test_mqtt_stop_shares_the_scope);
   RUN_TEST(test_http_sounds_stop);
   RUN_TEST(test_mqtt_sounds_share_the_http_validation);
   RUN_TEST(test_http_device_actions);

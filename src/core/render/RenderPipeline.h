@@ -12,6 +12,7 @@
 #include "core/render/Canvas.h"
 #include "core/render/Font.h"
 #include "core/render/ScrollController.h"
+#include "core/sound/NotificationSound.h"
 
 namespace awtrix {
 
@@ -25,13 +26,6 @@ class IPageIcon {
   virtual void advance(int64_t nowMs) = 0;
   virtual void blit(Canvas& dst, int xOffset) const = 0;
   virtual int width() const = 0;
-};
-
-class IPageSound {
- public:
-  virtual ~IPageSound() = default;
-  virtual void play(const AppSpec& spec) = 0;
-  virtual bool isPlaying() const = 0;
 };
 
 class IPageClock {
@@ -50,7 +44,7 @@ struct RenderPipelineDeps {
   const GfxFont* fonts[kFontCount] = {nullptr, nullptr};
   IPageIcon* icons = nullptr;
   IPageIcon* iconsB = nullptr;
-  IPageSound* sound = nullptr;
+  sound::AudioRouter* audio = nullptr;
   IPageClock* clock = nullptr;
 };
 
@@ -79,6 +73,7 @@ class RenderPipeline {
   void renderPage(Canvas& dst, const std::string& id, int64_t nowMs, bool isNotif, PageSlot* slot);
   void drawIndicators(Canvas& out, int64_t nowMs) const;
   void onPageChanged(int64_t nowMs, bool isNotif);
+  void playPageSound(const AppSpec& spec);
   void refreshPageContent(int64_t nowMs, bool isNotif);
   const GfxFont& fontFor(const AppSpec* spec) const;
 

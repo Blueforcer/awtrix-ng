@@ -4,6 +4,10 @@
 #include <Update.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
+// Included by name rather than left to the Arduino headers: the image marker below reads
+// CONFIG_SPIRAM_MODE_QUAD out of it, and an absent macro reads as octal - which is the wrong
+// answer to be arriving at by accident.
+#include <sdkconfig.h>
 
 #include <algorithm>
 
@@ -13,7 +17,7 @@
 #include "core/CoreEngine.h"
 #include "core/ProvisioningPolicy.h"
 #include "core/api/ApiRouter.h"
-#include "core/api/SoundsApi.h"
+#include "core/api/MelodiesApi.h"
 #include "core/api/JsonWriter.h"
 #include "core/api/StateJson.h"
 #include "core/backup/RestoreApplier.h"
@@ -121,11 +125,51 @@ constexpr uint8_t kEspFlashErasedByte = 0xFF;
 constexpr uint32_t kEspAppDescMagic = 0xABCD5432;
 #if defined(AWTRIX_SOC_ESP32S3)
 constexpr uint16_t kExpectedChipId = 0x0009;
-constexpr const char* kUpdateImageName = "firmware-awtrix-ng-s3.bin";
+#if defined(CONFIG_SPIRAM_MODE_QUAD)
+constexpr const char* kUpdateImageName = "firmware-awtrix-ng-s3-quad.bin";
+#else
+constexpr const char* kUpdateImageName = "firmware-awtrix-ng-s3-octal.bin";
+#endif
 #else
 constexpr uint16_t kExpectedChipId = 0x0000;
 constexpr const char* kUpdateImageName = "firmware-awtrix-ng.bin";
 #endif
+
+// The S3 ships as two images - octal PSRAM and quad - and the header above cannot tell them apart:
+// same chip id, same app descriptor. Getting it wrong is not symmetric. The octal image on a quad
+// board boots with its PSRAM invisible, but the quad image on an octal board fails its PSRAM init
+// and aborts, so the device boot-loops until someone reaches it with a USB cable.
+//
+// Every build therefore carries this marker in its .rodata, and an upload is scanned for it. The
+// variant follows the prefix in the same string so exactly one copy of the prefix exists in the
+// binary: a second one would be found first about half the time, with whatever bytes happen to
+// follow it read as the variant.
+#if defined(AWTRIX_SOC_ESP32S3)
+#if defined(CONFIG_SPIRAM_MODE_QUAD)
+#define AWTRIX_IMAGE_VARIANT "esp32s3-psram-quad"
+#else
+#define AWTRIX_IMAGE_VARIANT "esp32s3-psram-octal"
+#endif
+#else
+#define AWTRIX_IMAGE_VARIANT "esp32"
+#endif
+#define AWTRIX_IMAGE_MARKER_PREFIX "AWTRIX-NG-IMAGE/"
+// Referenced by the scan below, which is what keeps it in the binary; `used` covers the day that
+// reference moves behind a build flag. The prefix length comes from a sizeof, which emits nothing:
+// this array is the only copy of those bytes in the image.
+__attribute__((used)) const char kImageMarker[] =
+    AWTRIX_IMAGE_MARKER_PREFIX AWTRIX_IMAGE_VARIANT;
+constexpr size_t kImageMarkerPrefixLen = sizeof(AWTRIX_IMAGE_MARKER_PREFIX) - 1;
+constexpr const char* kImageVariant = kImageMarker + kImageMarkerPrefixLen;
+constexpr size_t kImageVariantMaxLen = 31;
+
+// A friendlier name for the variant an image announces, for the message the upload is refused with.
+const char* variantName(const std::string& variant) {
+  if (variant == "esp32") return "a classic ESP32";
+  if (variant == "esp32s3-psram-octal") return "an ESP32-S3 with octal PSRAM";
+  if (variant == "esp32s3-psram-quad") return "an ESP32-S3 with quad PSRAM";
+  return "a board this firmware does not know";
+}
 
 const char* chipIdName(uint16_t id) {
   switch (id) {
@@ -146,6 +190,7 @@ const char* mimeFor(const std::string& path) {
   if (ext == ".gif") return "image/gif";
   if (ext == ".png") return "image/png";
   if (ext == ".txt") return "text/plain";
+  if (ext == ".mp3") return "audio/mpeg";
   return "application/octet-stream";
 }
 
@@ -205,6 +250,9 @@ void HttpApiServer::begin(uint16_t port, CoreEngine& engine, IBoard& board, Canv
       "/api/v1/files", HTTP_POST, [this]() { handleFileUploadDone(); },
       [this]() { handleFileUpload(); });
   server_->on(
+      "/api/v1/audio/mp3", HTTP_POST, [this]() { handleFileUploadDone(); },
+      [this]() { handleFileUpload(); });
+  server_->on(
       "/api/v1/restore", HTTP_POST, [this]() { handleRestoreDone(); },
       [this]() { handleRestoreUpload(); });
   server_->addHandler(new BodyHandler(*this));
@@ -221,6 +269,7 @@ void HttpApiServer::handleFileUpload() {
   if (up.status == UPLOAD_FILE_START) {
     if (uploadFile_) uploadFile_.close();
     uploadPathOk_ = false;
+    uploadNameOk_ = true;
     uploadWriteOk_ = false;
     uploadPath_.clear();
     if (apMode_) { uploadAuthed_ = false; return; }
@@ -229,12 +278,17 @@ void HttpApiServer::handleFileUpload() {
     if (!uploadAuthed_) return;
     String fn = up.filename;
     if (!fn.startsWith("/")) {
-      String dir = server_->hasArg("dir") ? server_->arg("dir") : String("/ICONS");
+      String dir = server_->uri() == "/api/v1/audio/mp3" ? String("/MP3")
+                   : server_->hasArg("dir")                  ? server_->arg("dir")
+                                                             : String("/ICONS");
       if (!dir.startsWith("/")) dir = "/" + dir;
       fn = dir + "/" + fn;
     }
     uploadPathOk_ = assets::isWritable(std::string(fn.c_str()));
     if (!uploadPathOk_) return;
+    // Refused before the file is opened, so an unplayable name never reaches flash at all.
+    uploadNameOk_ = assets::uploadNameOk(std::string(fn.c_str()));
+    if (!uploadNameOk_) return;
     const int slash = fn.lastIndexOf('/');
     if (slash > 0) {
       const String dir = fn.substring(0, slash);
@@ -276,7 +330,13 @@ void HttpApiServer::handleFileUploadDone() {
   if (!uploadAuthed_) { sendUnauthorized(); return; }
   if (!uploadPathOk_) {
     sendError(400, "invalidPath",
-              "filename must be under /ICONS, /MELODIES or /PALETTES and contain no '..'");
+              "filename must be under /ICONS, /MELODIES, /PALETTES or /MP3 and contain no '..'");
+    return;
+  }
+  if (!uploadNameOk_) {
+    sendError(400, "invalidName",
+              "a sound is played by its file name: use 1-32 characters of A-Z, a-z, 0-9, _ or - "
+              "and the .mp3 suffix");
     return;
   }
   if (!uploadContentOk_) {
@@ -328,12 +388,12 @@ void HttpApiServer::handleRestoreDone() {
     return;
   }
   const backup::RestoreResult r = restoreApplier_->result();
-  if ((r.icons || r.melodies || r.palettes) && onAssetsChanged_) onAssetsChanged_();
+  if ((r.icons || r.melodies || r.palettes || r.mp3) && onAssetsChanged_) onAssetsChanged_();
   if (r.ok) {
     logf("restore: applied wifi=%d system=%d settings=%d apploop=%d icons=%d melodies=%d "
-         "palettes=%d scripts=%d (%u warning(s))",
-         r.wifi, r.system, r.settings, r.appLoop, r.icons, r.melodies, r.palettes, r.scripts,
-         static_cast<unsigned>(r.warnings.size()));
+         "palettes=%d mp3=%d scripts=%d (%u warning(s))",
+         r.wifi, r.system, r.settings, r.appLoop, r.icons, r.melodies, r.palettes, r.mp3,
+         r.scripts, static_cast<unsigned>(r.warnings.size()));
   } else {
     logf("restore: rejected - %s", r.error.c_str());
   }
@@ -380,6 +440,35 @@ void HttpApiServer::collectBody(WebServer& server, const String& uri, HTTPRaw& r
   }
 }
 
+// Walks the upload for the marker every AWTRIX NG image carries, a byte at a time so one split
+// across two chunks is still found. It stops at the first: a firmware image holds exactly one, and
+// an image from before the marker existed holds none - which is read as "says nothing" and let
+// through, so a downgrade to an older release still works.
+void HttpApiServer::scanImageMarker(const uint8_t* buf, size_t len) {
+  for (size_t i = 0; i < len; ++i) {
+    const char c = static_cast<char>(buf[i]);
+    if (markerCapturing_) {
+      // The variant ends at the string terminator. Anything else unprintable ends it too, so a
+      // corrupt marker cannot pull the rest of the image into the name.
+      if (c > 0x20 && markerVariant_.size() < kImageVariantMaxLen) {
+        markerVariant_ += c;
+        continue;
+      }
+      markerRead_ = true;
+      return;
+    }
+    if (c == kImageMarker[markerMatched_]) {
+      if (++markerMatched_ == kImageMarkerPrefixLen) {
+        markerCapturing_ = true;
+        markerVariant_.reserve(kImageVariantMaxLen);
+      }
+    } else {
+      // Restart, but not blindly at zero: the byte that broke the match may open the next one.
+      markerMatched_ = (c == kImageMarker[0]) ? 1 : 0;
+    }
+  }
+}
+
 void HttpApiServer::handleUpdateUpload() {
   HTTPUpload& up = server_->upload();
   if (apMode_) return;
@@ -392,6 +481,10 @@ void HttpApiServer::handleUpdateUpload() {
     if (contentLen > 0 && contentLen > ESP.getFreeSketchSpace()) return;
     updateImageError_.clear();
     uploadContentChecked_ = false;
+    markerMatched_ = 0;
+    markerCapturing_ = false;
+    markerRead_ = false;
+    markerVariant_.clear();
     uploadWriteOk_ = Update.begin(UPDATE_SIZE_UNKNOWN);
   } else if (up.status == UPLOAD_FILE_WRITE) {
     // Catch an image that does not belong in the OTA slot from the very first chunk, before any of
@@ -421,6 +514,18 @@ void HttpApiServer::handleUpdateUpload() {
               kUpdateImageName + " instead";
       }
       if (!updateImageError_.empty()) {
+        logf("update: refused - %s", updateImageError_.c_str());
+        uploadWriteOk_ = false;
+        Update.abort();
+        return;
+      }
+    }
+    if (uploadWriteOk_ && !markerRead_) {
+      scanImageMarker(up.buf, up.currentSize);
+      if (markerRead_ && markerVariant_ != kImageVariant) {
+        updateImageError_ = std::string("this image is built for ") + variantName(markerVariant_) +
+                            ", this device is " + variantName(kImageVariant) + " - upload " +
+                            kUpdateImageName + " instead";
         logf("update: refused - %s", updateImageError_.c_str());
         uploadWriteOk_ = false;
         Update.abort();
@@ -554,6 +659,7 @@ void HttpApiServer::dispatch() {
   if (serveDiagnostics(req)) return;
   if (serveSystem(req)) return;
   if (serveSounds(req)) return;
+  if (serveMp3(req)) return;
   if (serveFiles(req)) return;
 
   sendError(404, "notFound", "unknown route");
@@ -766,9 +872,9 @@ bool HttpApiServer::serveState(const Request& req) {
     return true;
   }
 
-  if (path == "/api/v1/radio") {
+  if (path == "/api/v1/audio") {
     respBuf_.clear();
-    appendRadioJson(respBuf_, *engine_);
+    appendAudioJson(respBuf_, *engine_);
     sendJson(200, respBuf_);
     return true;
   }
@@ -900,7 +1006,7 @@ bool HttpApiServer::serveSystem(const Request& req) {
 bool HttpApiServer::serveSounds(const Request& req) {
   const std::string& path = req.path;
 
-  if (path == "/api/v1/sounds") {
+  if (path == "/api/v1/audio/melodies") {
     if (!req.get) {
       sendError(405, "methodNotAllowed", "allowed method(s): GET");
       return true;
@@ -914,14 +1020,14 @@ bool HttpApiServer::serveSounds(const Request& req) {
     bool first = true;
     if (root && root.isDirectory())
       for (File f = root.openNextFile(); f; f = root.openNextFile()) {
-        const std::string name = api::sounds::nameFromFile(std::string(f.name()));
+        const std::string name = api::melodies::nameFromFile(std::string(f.name()));
         if (name.empty()) continue;
         std::string content;
         content.reserve(f.size());
         while (f.available()) content.push_back(static_cast<char>(f.read()));
         const std::string entry =
             (first ? "" : ",") +
-            api::sounds::entryJson(name, content, static_cast<uint32_t>(f.size()));
+            api::melodies::entryJson(name, content, static_cast<uint32_t>(f.size()));
         server_->sendContent(entry.c_str());
         first = false;
       }
@@ -932,12 +1038,12 @@ bool HttpApiServer::serveSounds(const Request& req) {
     return true;
   }
 
-  if (path.rfind("/api/v1/sounds/", 0) == 0) {
-    const std::string name = path.substr(sizeof("/api/v1/sounds/") - 1);
-    const String file = String(api::sounds::pathFor(name).c_str());
+  if (path.rfind("/api/v1/audio/melodies/", 0) == 0) {
+    const std::string name = path.substr(sizeof("/api/v1/audio/melodies/") - 1);
+    const String file = String(api::melodies::pathFor(name).c_str());
 
     if (req.method == "PUT") {
-      const api::sounds::PutResult r = api::sounds::prepareWrite(name, req.body);
+      const api::melodies::PutResult r = api::melodies::prepareWrite(name, req.body);
       if (!r.ok) {
         sendJson(r.status, api::errorJson(r.code.c_str(), r.message, r.field));
         return true;
@@ -956,7 +1062,7 @@ bool HttpApiServer::serveSounds(const Request& req) {
     }
 
     if (req.method == "DELETE") {
-      if (!api::sounds::nameFromFile(name + ".txt").empty() && LittleFS.remove(file)) {
+      if (!api::melodies::nameFromFile(name + ".txt").empty() && LittleFS.remove(file)) {
         if (onAssetsChanged_) onAssetsChanged_();
         sendJson(200, "{\"ok\":true}");
       } else {
@@ -971,31 +1077,64 @@ bool HttpApiServer::serveSounds(const Request& req) {
   return false;
 }
 
+// MP3s are files, but they are addressed by name everywhere else, so they get their own routes
+// rather than making a caller know which folder they live in.
+bool HttpApiServer::serveMp3(const Request& req) {
+  if (req.path == "/api/v1/audio/mp3") {
+    if (req.get) return listDir("/MP3"), true;
+    sendError(405, "methodNotAllowed", "allowed method(s): GET, POST");
+    return true;
+  }
+  if (req.path.rfind("/api/v1/audio/mp3/", 0) != 0) return false;
+  const std::string name = req.path.substr(sizeof("/api/v1/audio/mp3/") - 1);
+  const std::string path = sound::mp3PathFor(name);
+  if (path.empty()) {
+    sendError(400, "invalidName",
+              "an MP3 is named with 1-32 characters of A-Z, a-z, 0-9, _ or -");
+    return true;
+  }
+  if (req.method != "DELETE") {
+    sendError(405, "methodNotAllowed", "allowed method(s): DELETE");
+    return true;
+  }
+  if (!LittleFS.remove(path.c_str())) {
+    sendError(404, "notFound", "no MP3 of that name");
+    return true;
+  }
+  if (onAssetsChanged_) onAssetsChanged_();
+  sendJson(200, "{\"ok\":true}");
+  return true;
+}
+
+void HttpApiServer::listDir(const char* dir) {
+  server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server_->send(200, "application/json", "");
+  server_->sendContent("{\"files\":[");
+  File root = LittleFS.open(dir);
+  bool first = true;
+  if (root && root.isDirectory())
+    for (File f = root.openNextFile(); f; f = root.openNextFile()) {
+      std::string entry = first ? "" : ",";
+      first = false;
+      api::JsonWriter ew(entry);
+      ew.beginObject();
+      ew.member("name", std::string(f.name()));
+      ew.member("size", static_cast<unsigned long>(f.size()));
+      ew.endObject();
+      server_->sendContent(entry.c_str());
+    }
+  const String tail = String("],\"usedBytes\":") + LittleFS.usedBytes() +
+                      ",\"totalBytes\":" + LittleFS.totalBytes() + "}";
+  server_->sendContent(tail);
+  server_->sendContent("");
+}
+
 bool HttpApiServer::serveFiles(const Request& req) {
   if (req.path != "/api/v1/files") return false;
 
   if (req.get) {
     const String dir = server_->hasArg("dir") ? server_->arg("dir") : String("/ICONS");
-    server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
-    server_->send(200, "application/json", "");
-    server_->sendContent("{\"files\":[");
-    File root = LittleFS.open(dir);
-    bool first = true;
-    if (root && root.isDirectory())
-      for (File f = root.openNextFile(); f; f = root.openNextFile()) {
-        std::string entry = first ? "" : ",";
-        first = false;
-        api::JsonWriter ew(entry);
-        ew.beginObject();
-        ew.member("name", std::string(f.name()));
-        ew.member("size", static_cast<unsigned long>(f.size()));
-        ew.endObject();
-        server_->sendContent(entry.c_str());
-      }
-    const String tail = String("],\"usedBytes\":") + LittleFS.usedBytes() +
-                        ",\"totalBytes\":" + LittleFS.totalBytes() + "}";
-    server_->sendContent(tail);
-    server_->sendContent("");
+    listDir(dir.c_str());
     return true;
   }
 
@@ -1003,7 +1142,7 @@ bool HttpApiServer::serveFiles(const Request& req) {
     const String fn = server_->hasArg("path") ? server_->arg("path") : String("");
     if (!assets::isWritable(std::string(fn.c_str()))) {
       sendError(400, "invalidPath",
-                "path must be under /ICONS, /MELODIES or /PALETTES and contain no '..'");
+                "path must be under /ICONS, /MELODIES, /PALETTES or /MP3 and contain no '..'");
       return true;
     }
     if (LittleFS.remove(fn)) {

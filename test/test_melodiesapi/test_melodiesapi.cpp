@@ -4,7 +4,7 @@
 #include <string_view>
 
 #include "core/api/JsonReader.h"
-#include "core/api/SoundsApi.h"
+#include "core/api/MelodiesApi.h"
 
 using namespace awtrix;
 using namespace awtrix::api;
@@ -38,26 +38,26 @@ static bool boolAt(const std::string& json, const char* key) {
 }
 
 static void test_name_from_file() {
-  TEST_ASSERT_EQUAL_STRING("doorbell", sounds::nameFromFile("doorbell.txt").c_str());
-  TEST_ASSERT_EQUAL_STRING("doorbell", sounds::nameFromFile("/MELODIES/doorbell.txt").c_str());
-  TEST_ASSERT_EQUAL_STRING("a-b_1", sounds::nameFromFile("a-b_1.txt").c_str());
+  TEST_ASSERT_EQUAL_STRING("doorbell", melodies::nameFromFile("doorbell.txt").c_str());
+  TEST_ASSERT_EQUAL_STRING("doorbell", melodies::nameFromFile("/MELODIES/doorbell.txt").c_str());
+  TEST_ASSERT_EQUAL_STRING("a-b_1", melodies::nameFromFile("a-b_1.txt").c_str());
 }
 
 static void test_name_from_file_rejects_the_rest() {
-  TEST_ASSERT_TRUE(sounds::nameFromFile("doorbell.gif").empty());
-  TEST_ASSERT_TRUE(sounds::nameFromFile("doorbell").empty());
-  TEST_ASSERT_TRUE(sounds::nameFromFile(".txt").empty());
-  TEST_ASSERT_TRUE(sounds::nameFromFile("has space.txt").empty());
-  TEST_ASSERT_TRUE(sounds::nameFromFile("").empty());
+  TEST_ASSERT_TRUE(melodies::nameFromFile("doorbell.gif").empty());
+  TEST_ASSERT_TRUE(melodies::nameFromFile("doorbell").empty());
+  TEST_ASSERT_TRUE(melodies::nameFromFile(".txt").empty());
+  TEST_ASSERT_TRUE(melodies::nameFromFile("has space.txt").empty());
+  TEST_ASSERT_TRUE(melodies::nameFromFile("").empty());
 }
 
 static void test_path_for() {
-  TEST_ASSERT_EQUAL_STRING("/MELODIES/doorbell.txt", sounds::pathFor("doorbell").c_str());
+  TEST_ASSERT_EQUAL_STRING("/MELODIES/doorbell.txt", melodies::pathFor("doorbell").c_str());
 }
 
 static void test_entry_json_carries_the_derived_facts() {
   const std::string j =
-      sounds::entryJson("doorbell", "doorbell:d=4,o=5,b=100:e,c", 26);
+      melodies::entryJson("doorbell", "doorbell:d=4,o=5,b=100:e,c", 26);
   const std::string d = parseJson(j);
   TEST_ASSERT_EQUAL_STRING("doorbell", strAt(d, "name").c_str());
   TEST_ASSERT_EQUAL_STRING("doorbell:d=4,o=5,b=100:e,c", strAt(d, "rtttl").c_str());
@@ -69,7 +69,7 @@ static void test_entry_json_carries_the_derived_facts() {
 }
 
 static void test_entry_json_reports_a_broken_file_instead_of_hiding_it() {
-  const std::string j = sounds::entryJson("broken", "d=4,o=5,b=120:c,e,g", 19);
+  const std::string j = melodies::entryJson("broken", "d=4,o=5,b=120:c,e,g", 19);
   const std::string d = parseJson(j);
   TEST_ASSERT_EQUAL_STRING("broken", strAt(d, "name").c_str());
   TEST_ASSERT_FALSE(boolAt(d, "valid"));
@@ -79,39 +79,39 @@ static void test_entry_json_reports_a_broken_file_instead_of_hiding_it() {
 }
 
 static void test_entry_json_escapes_the_content() {
-  const std::string j = sounds::entryJson("odd", "a\"b\\c\nd", 7);
+  const std::string j = melodies::entryJson("odd", "a\"b\\c\nd", 7);
   const std::string d = parseJson(j);
   TEST_ASSERT_EQUAL_STRING("a\"b\\c\nd", strAt(d, "rtttl").c_str());
   TEST_ASSERT_FALSE(boolAt(d, "valid"));
 }
 
 static void test_prepare_write_accepts_a_two_part_string() {
-  sounds::PutResult r = sounds::prepareWrite("doorbell", "{\"rtttl\":\"d=4,o=5,b=100:e,c\"}");
+  melodies::PutResult r = melodies::prepareWrite("doorbell", "{\"rtttl\":\"d=4,o=5,b=100:e,c\"}");
   TEST_ASSERT_TRUE_MESSAGE(r.ok, r.message.c_str());
   TEST_ASSERT_EQUAL_STRING("doorbell:d=4,o=5,b=100:e,c", r.content.c_str());
 }
 
 static void test_prepare_write_retitles_a_three_part_string() {
-  sounds::PutResult r =
-      sounds::prepareWrite("doorbell", "{\"rtttl\":\"something-else:d=4,o=5,b=100:e,c\"}");
+  melodies::PutResult r =
+      melodies::prepareWrite("doorbell", "{\"rtttl\":\"something-else:d=4,o=5,b=100:e,c\"}");
   TEST_ASSERT_TRUE_MESSAGE(r.ok, r.message.c_str());
   TEST_ASSERT_EQUAL_STRING("doorbell:d=4,o=5,b=100:e,c", r.content.c_str());
 }
 
 static void test_prepare_write_rejects_a_bad_name() {
-  sounds::PutResult r = sounds::prepareWrite("has space", "{\"rtttl\":\"d=4,o=5,b=100:e,c\"}");
+  melodies::PutResult r = melodies::prepareWrite("has space", "{\"rtttl\":\"d=4,o=5,b=100:e,c\"}");
   TEST_ASSERT_FALSE(r.ok);
   TEST_ASSERT_EQUAL_INT(422, r.status);
   TEST_ASSERT_EQUAL_STRING("name", r.field.c_str());
 }
 
 static void test_prepare_write_rejects_traversal_in_the_name() {
-  TEST_ASSERT_FALSE(sounds::prepareWrite("../evil", "{\"rtttl\":\"d=4:c\"}").ok);
-  TEST_ASSERT_FALSE(sounds::prepareWrite("a/b", "{\"rtttl\":\"d=4:c\"}").ok);
+  TEST_ASSERT_FALSE(melodies::prepareWrite("../evil", "{\"rtttl\":\"d=4:c\"}").ok);
+  TEST_ASSERT_FALSE(melodies::prepareWrite("a/b", "{\"rtttl\":\"d=4:c\"}").ok);
 }
 
 static void test_prepare_write_rejects_unparseable_rtttl() {
-  sounds::PutResult r = sounds::prepareWrite("x", "{\"rtttl\":\"d=4,o=5,b=120:c,e,h\"}");
+  melodies::PutResult r = melodies::prepareWrite("x", "{\"rtttl\":\"d=4,o=5,b=120:c,e,h\"}");
   TEST_ASSERT_FALSE(r.ok);
   TEST_ASSERT_EQUAL_INT(422, r.status);
   TEST_ASSERT_EQUAL_STRING("rtttl", r.field.c_str());
@@ -121,13 +121,13 @@ static void test_prepare_write_rejects_unparseable_rtttl() {
 }
 
 static void test_prepare_write_rejects_a_missing_or_wrong_typed_key() {
-  TEST_ASSERT_FALSE(sounds::prepareWrite("x", "{}").ok);
-  TEST_ASSERT_FALSE(sounds::prepareWrite("x", "{\"rtttl\":42}").ok);
-  TEST_ASSERT_FALSE(sounds::prepareWrite("x", "{\"rtttl\":\"\"}").ok);
+  TEST_ASSERT_FALSE(melodies::prepareWrite("x", "{}").ok);
+  TEST_ASSERT_FALSE(melodies::prepareWrite("x", "{\"rtttl\":42}").ok);
+  TEST_ASSERT_FALSE(melodies::prepareWrite("x", "{\"rtttl\":\"\"}").ok);
 }
 
 static void test_prepare_write_rejects_a_broken_body() {
-  sounds::PutResult r = sounds::prepareWrite("x", "{not json");
+  melodies::PutResult r = melodies::prepareWrite("x", "{not json");
   TEST_ASSERT_FALSE(r.ok);
   TEST_ASSERT_EQUAL_INT(400, r.status);
   TEST_ASSERT_EQUAL_STRING("invalidJson", r.code.c_str());
@@ -136,16 +136,16 @@ static void test_prepare_write_rejects_a_broken_body() {
 static void test_prepare_write_rejects_an_overlong_melody() {
   std::string notes = "c";
   while (notes.size() < 600) notes += ",c";
-  sounds::PutResult r = sounds::prepareWrite("x", "{\"rtttl\":\"d=4,o=5,b=120:" + notes + "\"}");
+  melodies::PutResult r = melodies::prepareWrite("x", "{\"rtttl\":\"d=4,o=5,b=120:" + notes + "\"}");
   TEST_ASSERT_FALSE(r.ok);
   TEST_ASSERT_EQUAL_INT(422, r.status);
 }
 
 static void test_prepare_write_round_trips_through_entry_json() {
-  sounds::PutResult r = sounds::prepareWrite("bell", "{\"rtttl\":\"d=8,o=5,b=120:16c,16e\"}");
+  melodies::PutResult r = melodies::prepareWrite("bell", "{\"rtttl\":\"d=8,o=5,b=120:16c,16e\"}");
   TEST_ASSERT_TRUE(r.ok);
   const std::string d =
-      parseJson(sounds::entryJson("bell", r.content, (uint32_t)r.content.size()));
+      parseJson(melodies::entryJson("bell", r.content, (uint32_t)r.content.size()));
   TEST_ASSERT_TRUE(boolAt(d, "valid"));
   TEST_ASSERT_EQUAL_UINT32(2u, uintAt(d, "notes"));
 }

@@ -221,12 +221,13 @@ static void test_enum_errors_name_the_field() {
 
 static void test_notification_extras() {
   const std::string got = run("{\"name\":\"alarm\",\"hold\":true,\"stack\":false,\"wakeup\":true,"
-                              "\"sound\":7,\"soundLoop\":true,\"soundRtttl\":\"a:d=4\"}",
+                              "\"sound\":7,\"soundLoop\":true,\"soundRtttl\":\"a:d=4,o=5,b=120:c\"}",
                               true);
   TEST_ASSERT_TRUE_MESSAGE(got.find("name=alarm;notif=1;") != std::string::npos, got.c_str());
   TEST_ASSERT_TRUE_MESSAGE(got.find("hold=1;stack=0;wake=1;sound=7;loopSnd=1;") != std::string::npos,
                            got.c_str());
-  TEST_ASSERT_TRUE_MESSAGE(got.find("rtttl=a:d=4;") != std::string::npos, got.c_str());
+  TEST_ASSERT_TRUE_MESSAGE(got.find("rtttl=a:d=4,o=5,b=120:c;") != std::string::npos,
+                           got.c_str());
 }
 
 static void test_sound_accepts_string_and_number() {

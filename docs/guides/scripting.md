@@ -110,7 +110,7 @@ row that sounds like the app you have in mind, and follow it.
 | [Handing values to another app](#talking-to-other-apps) | `shared.set()` `shared.get()` `shared.age()` `shared.keys()` |
 | [Sharing code between apps](#sharing-code-between-scripts) | a `# @module` file, then `import` |
 | [Interrupting with an alert](#notifications) | `notify()` |
-| [Making a noise](#sound) | `sound.play()` `sound.rtttl()` `sound.stop()` |
+| [Making a noise](#sound) | `sound.play()` `sound.mp3()` `sound.melody()` `sound.track()` `sound.rtttl()` `sound.stop()` `sound.playing()` `sound.sinks()` |
 | [What the device measures](#reading-the-sensors) | `sensor.temperature()` `sensor.humidity()` `sensor.pressure()` `sensor.light()` `sensor.battery()` |
 | [What the owner configured](#device-settings) | `settings.get()` `settings.set()` `settings.apply_case()` |
 | [Moving the rotation along](#driving-the-rotation) | `rotation.show()` `rotation.next()` `rotation.previous()` `rotation.pause()` `rotation.resume()` |
@@ -1300,15 +1300,54 @@ end
 
 | Call | Does |
 |---|---|
-| `sound.play(name)` | plays an uploaded file or DFPlayer track |
-| `sound.rtttl(melody)` | plays an [RTTTL](sounds.md#writing-rtttl) string |
-| `sound.stop()` | stops whatever is playing |
+| `sound.play(name)` | a name, and the device decides: a stored [MP3](sounds.md#mp3s), else a melody, else a DFPlayer track if the name is a plain number |
+| `sound.mp3(name)` | only an MP3 - never falls back to a melody |
+| `sound.melody(name)` | only a stored melody |
+| `sound.track(number)` | only a DFPlayer track, 1-2999 |
+| `sound.rtttl(melody)` | plays an [RTTTL](sounds.md#writing-rtttl) string on the buzzer |
+| `sound.stop()` | stops the one-shots; a radio stream the user started keeps playing |
+| `sound.playing()` | `true` while the device is making a one-shot sound - an MP3, a melody or a track alike |
+| `sound.sinks()` | which outputs this panel has: `{'buzzer': bool, 'track': bool, 'mp3': bool, 'radio': bool}` |
 
-All three return `true` when the request was **accepted**, which is not the same
-as "a file of that name exists" or "you will hear it": the request is queued and
-AWTRIX answers it a frame later. If sound is switched off device-wide, your
-call is accepted and nothing plays - `settings.get("soundEnabled")` is how you
-find out beforehand.
+Every one of them returns `true` when the request was **accepted**, which
+is not the same as "a file of that name exists" or "you will hear it": the
+request is queued and AWTRIX answers it a frame later. If sound is switched off
+device-wide, your call is accepted and nothing plays -
+`settings.get("soundEnabled")` is how you find out beforehand.
+
+`sound.sinks()` is how a script stays honest on hardware it was not written for:
+
+```berry
+  def on_button(btn)
+    if sound.sinks()['mp3'] sound.mp3("doorbell")
+    else sound.rtttl("bell:d=4,o=5,b=100:e,c") end
+  end
+```
+
+`sound.playing()` lets a script wait for one sound to finish before starting
+the next, or hold a frame while an alarm is still sounding. A button that plays
+an MP3 wants exactly that, or a quick double press stacks two of them:
+
+```berry
+  def on_button(btn)
+    if btn == "select" && !sound.playing()
+      sound.play("doorbell")            # /MP3/doorbell.mp3, else the melody
+    end
+  end
+```
+
+Playing one after another belongs in `loop()`, never in `draw()` - the panel
+must keep painting while the queue drains:
+
+```berry
+  var queue                             # ["chime", "alarm"], filled elsewhere
+
+  def loop()
+    if size(self.queue) > 0 && !sound.playing()
+      sound.play(self.queue.pop(0))
+    end
+  end
+```
 
 Use `notify()` instead when the sound belongs to an *event* that should also
 interrupt the rotation and show something. Use `sound` when you only want the

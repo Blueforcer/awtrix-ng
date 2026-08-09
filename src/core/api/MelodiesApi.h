@@ -6,7 +6,7 @@
 
 namespace awtrix {
 namespace api {
-namespace sounds {
+namespace melodies {
 
 std::string nameFromFile(const std::string& fileName);
 

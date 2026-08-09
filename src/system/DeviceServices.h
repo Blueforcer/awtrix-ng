@@ -20,21 +20,6 @@ namespace awtrix {
 using Publisher = std::function<void(const std::string& suffix, const std::string& payload)>;
 
 
-class DeviceSound : public ISoundService {
- public:
-  explicit DeviceSound(IBoard& board) : board_(board) {}
-  bool playSound(const std::string& payload) override { return board_.sound().playFile(payload); }
-  void playRtttl(const std::string& rtttl) override { board_.sound().playRtttl(rtttl); }
-  void r2d2(const std::string& ) override {
-    board_.sound().playRtttl("r2d2:d=4,o=5,b=240:16c6,16g6,16e6,16a6,16g6,16e7");
-  }
-  void stop() override { board_.sound().stop(); }
-  bool supportsRtttl() const override { return board_.sound().supportsRtttl(); }
-
- private:
-  IBoard& board_;
-};
-
 class DeviceDisplay : public IDisplayService {
  public:
   void setPublisher(Publisher pub) { pub_ = std::move(pub); }

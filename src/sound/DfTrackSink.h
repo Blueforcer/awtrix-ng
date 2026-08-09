@@ -3,15 +3,13 @@
 #include <Arduino.h>
 #include <HardwareSerial.h>
 
-#include <cstdlib>
-
-#include "hal/ISoundBackend.h"
+#include "core/sound/AudioSinks.h"
 
 namespace awtrix {
 
 // Drives a DFPlayer Mini over a 9600 baud UART. Every exchange is a 10-byte frame and the module
 // answers asynchronously, so commands are fired from tick() and never block the render loop.
-class DFPlayerBackend : public ISoundBackend {
+class DfTrackSink : public sound::ITrackSink {
  public:
   void setPins(int rx, int tx) { rx_pin_ = rx; tx_pin_ = tx; }
   void begin() override {
@@ -22,17 +20,18 @@ class DFPlayerBackend : public ISoundBackend {
     // is the only place this driver is allowed to stall.
     sendCmd(0x3F, 0x0000, 0x00);
     delay(200);
-    setVolume(volume_);
+    sendVolume();
   }
-  void setVolume(uint8_t volume) override {
-    volume_ = volume > 30 ? 30 : volume;
-    sendCmd(0x06, volume_, 0x00);
+  // The module's own scale is 0-30, which is why a percentage cannot be handed straight over.
+  void setVolume(uint8_t percent) override {
+    const uint8_t clamped = percent > 100 ? 100 : percent;
+    volume_ = static_cast<uint8_t>((clamped * 30 + 50) / 100);
+    sendVolume();
   }
   // The module drops a play command that arrives while a track is still running, so this stops
   // first (0x16) and holds the track back until the stop is acknowledged or the timeout expires.
-  bool playFile(const std::string& id) override {
-    const int track = std::atoi(id.c_str());
-    if (track <= 0) return false;
+  bool playTrack(int track) override {
+    if (track < sound::kMinTrack || track > sound::kMaxTrack) return false;
     retries_ = kMaxRetries;
     sendCmd(0x16, 0);
     pendingTrack_ = track;
@@ -40,15 +39,15 @@ class DFPlayerBackend : public ISoundBackend {
     playing_ = true;
     return true;
   }
-  void playRtttl(const std::string& ) override {}
-  bool supportsRtttl() const override { return false; }
   void stop() override {
     pendingTrack_ = 0;
     sendCmd(0x16, 0, 0x00);
     playing_ = false;
   }
   void tick() override {
-    while (serial_.available()) {
+    // Bounded per tick: a floating RX line is common on these boards, and this runs once a frame
+    // beside a buzzer and an I2S task that both want their share of the loop.
+    for (int budget = kRxBytesPerTick; budget > 0 && serial_.available(); --budget) {
       const int b = serial_.read();
       if (b < 0) break;
       // Resynchronise on the 0x7E start byte and only trust a frame that ends with 0xEF, since
@@ -89,10 +88,11 @@ class DFPlayerBackend : public ISoundBackend {
   void sendPending() {
     const int track = pendingTrack_;
     pendingTrack_ = 0;
-    // 0x12 plays track N from the /MP3 folder, so the sound id is just the file number.
+    // 0x12 plays track N from the /MP3 folder, so the track number is the file number.
     sendCmd(0x12, static_cast<uint16_t>(track));
     playing_ = true;
   }
+  void sendVolume() { sendCmd(0x06, volume_, 0x00); }
 
   // Frame layout: 7E FF 06 cmd ack paramHi paramLo csumHi csumLo EF, where the checksum is the
   // two's complement of bytes 1..6. ack 0x01 asks the module to confirm, which enables retries.
@@ -114,10 +114,11 @@ class DFPlayerBackend : public ISoundBackend {
   static constexpr uint32_t kStopReplyTimeoutMs = 150;
   static constexpr uint32_t kPostStopMs = 50;
   static constexpr uint8_t kMaxRetries = 2;
+  static constexpr int kRxBytesPerTick = 40;
 
   HardwareSerial& serial_ = Serial1;
   int rx_pin_ = 23, tx_pin_ = 18;
-  uint8_t volume_ = 25;
+  uint8_t volume_ = 24;
   bool playing_ = false;
   int pendingTrack_ = 0;
   uint32_t playAtMs_ = 0;

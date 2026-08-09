@@ -5,13 +5,13 @@ over USB has to carry the partition table too -- and that table depends on the
 flash size, while the app image does not. One build therefore yields several
 factory images, differing only in their table and in the trailing free space.
 
-    python scripts/factory_image.py --env awtrix_s3 --flash-size 8MB \\
-        -o usb-awtrix-ng-s3-8mb.bin
+    python scripts/factory_image.py --env awtrix_s3_octal --flash-size 8MB \\
+        -o usb-awtrix-ng-s3-octal-8mb.bin
 
 Or every flash variant that SoC ships in, named the way the release assets are
 (gen_partitions.FACTORY_FLASH_SIZES is the list):
 
-    python scripts/factory_image.py --env awtrix_s3 --all
+    python scripts/factory_image.py --env awtrix_s3_octal --all
 
 The plain firmware.bin stays the OTA payload: OTA writes only the app slot, so it
 needs no table and works across every flash size of its SoC.
@@ -49,7 +49,14 @@ def find_one(pattern, what):
     return hits[0]
 
 
-ASSET_NAME = {"awtrix": "awtrix-ng", "awtrix_s3": "awtrix-ng-s3"}
+# Both S3 images name their PSRAM type. The octal one was plain -s3- up to v1.0.15, when it was
+# the only one; naming just its counterpart would read as if -s3- were the general case and quad a
+# variant of it, and they are two equal halves.
+ASSET_NAME = {
+    "awtrix": "awtrix-ng",
+    "awtrix_s3_octal": "awtrix-ng-s3-octal",
+    "awtrix_s3_quad": "awtrix-ng-s3-quad",
+}
 
 
 def asset_base(env):
@@ -57,7 +64,7 @@ def asset_base(env):
 
 
 def default_name(env, flash_size):
-    """The release-asset name for one image, e.g. usb-awtrix-ng-s3-8mb.bin."""
+    """The release-asset name for one image, e.g. usb-awtrix-ng-s3-octal-8mb.bin."""
     return "usb-%s-%s.bin" % (asset_base(env), flash_size.lower())
 
 
@@ -106,15 +113,18 @@ def build_one(env, soc, flash_size, output):
 
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--env", required=True, help="PlatformIO env, e.g. awtrix_s3")
-    ap.add_argument("--soc", help="defaults to esp32s3 for envs ending in _s3, else esp32")
+    ap.add_argument("--env", required=True, help="PlatformIO env, e.g. awtrix_s3_octal")
+    ap.add_argument("--soc", help="defaults to esp32s3 for envs carrying _s3, else esp32")
     ap.add_argument("--flash-size", help="e.g. 4MB, 8MB, 16MB")
     ap.add_argument("--all", action="store_true",
                     help="build every flash variant this SoC ships in")
     ap.add_argument("-o", "--output", help="output file, or output directory with --all")
     args = ap.parse_args(argv)
 
-    soc = args.soc or ("esp32s3" if args.env.endswith("_s3") else "esp32")
+    # Matched anywhere in the name, not at the end: the S3 has variant envs
+    # behind it (awtrix_s3_quad, awtrix_s3_octal_probe), and a suffix test would call
+    # every one of them an esp32 and merge an image no S3 can boot.
+    soc = args.soc or ("esp32s3" if "_s3" in args.env else "esp32")
     if soc not in BOOTLOADER_OFFSET:
         raise SystemExit("factory_image: unknown SoC %r" % soc)
 

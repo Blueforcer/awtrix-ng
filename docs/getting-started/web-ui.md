@@ -16,7 +16,7 @@ it works fully offline - including in provisioning mode, before it has ever seen
 
 ## The tabs
 
-The navigation bar carries eleven tabs (a bottom bar on phones, a top row on desktop). Each is a URL
+The navigation bar carries ten tabs (a bottom bar on phones, a top row on desktop). Each is a URL
 hash, so you can bookmark or link any of them directly:
 
 | Tab | URL | What it is for |
@@ -26,12 +26,13 @@ hash, so you can bookmark or link any of them directly:
 | **Scripts** | `#/scripts` | Write, install and debug Berry apps |
 | **Icons** | `#/icons` | Icon files, storage, LaMetric downloader |
 | **Icon Editor** | `#/editor` | Draw 8×8/32×8 icons in an embedded editor and save them to AWTRIX |
-| **Sounds** | `#/sounds` | Write, hear and store RTTTL melodies |
-| **Radio** | `#/radio` | Internet radio stations - only on builds that can play a stream |
+| **Audio** | `#/audio` | MP3s, melodies and internet radio |
 | **Palettes** | `#/palettes` | Build colour ramps for effects, text and charts |
 | **Display** | `#/display` | Everything about what the matrix shows |
 | **System** | `#/system` | Wi-Fi, MQTT, time, hardware, GPIO, maintenance |
 | **Log** | `#/log` | Live device log |
+
+The old `#/sounds` and `#/radio` bookmarks still work - they land on the Audio tab.
 
 ## Dashboard
 
@@ -236,9 +237,12 @@ Eleven sections: **WiFi**, **Web server**, **MQTT**, **Time**, **Panel**,
 **Brightness & sensors**, **GPIO**, **Buttons**, **Audio**, **Scripting**, **Misc** -
 plus maintenance and backup.
 
-**Audio** is the one section that spans both APIs: the sound switch, the two volumes and the radio
-track info live in `/api/v1/settings`, `dfplayer` in `/api/v1/system`. The page splits a save
-between the two endpoints for you.
+**Audio** is the one section that spans both APIs: the sound switch, the four volumes and the
+radio track info live in `/api/v1/settings`, `dfplayer` in `/api/v1/system`. The page splits a save
+between the two endpoints for you. There is one volume slider per output - buzzer, DFPlayer, MP3
+and radio - and each is shown only when the panel has that output, so a Ulanzi sees one slider
+rather than four. No radio track info without radio, and no sound switch on a device with no
+output at all. The DFPlayer toggle always stays - it is how a board gets one.
 
 The MQTT section carries a live connection badge above its fields: whether the broker answered, the
 endpoint it connected to, and the reason if it did not.
@@ -340,8 +344,9 @@ See [Persistence and resets](../reference/system.md#persistence-and-resets) and
 ### Backup and restore
 
 **Create backup** downloads a `.zip` of whatever you tick: Wi-Fi, settings, icons, melodies,
-palettes, scripts, app order. The file is assembled in your browser, so nothing is stored on
-AWTRIX and nothing leaves your network.
+palettes, MP3s, scripts, app order. Melodies and MP3s are only offered on a device that has the
+hardware for them. The file is assembled in your browser, so nothing is stored on AWTRIX and
+nothing leaves your network.
 
 **Restore backup** takes a `.zip` back. Anything that could not be applied is reported as a warning,
 and if the restore touched Wi-Fi, system config, settings or the app loop you are offered a reboot.
@@ -391,28 +396,62 @@ not load; everything else in the web UI is served by AWTRIX and keeps working.
 
 More: [Guides → Icon editor](../guides/icon-editor.md).
 
-## Sounds
+## Audio
 
-An editor, not a file list. One row per melody on AWTRIX, each one a `/MELODIES/<name>.txt` you
-can change in place. **+ New melody** adds an empty row.
+Everything that makes noise, in one tab with three sections: **MP3s**, **Radio** and
+**Melodies**. Sections only appear when the device can use them - one without a speaker shows just
+the melodies, and one with the buzzer pin unset drops the melodies. A device with neither a buzzer nor
+a speaker has no Audio tab at all. When sound is switched off in the settings, a line at the top of
+the tab says so.
+
+### MP3s
+
+Your own MP3 files, managed like icons: drag them onto the upload zone or click it to choose, and
+each one appears as a row with its size. Only on a device with a speaker.
+
+| Button | What it does |
+|---|---|
+| **🎧** | Plays the MP3 **in your browser** |
+| **▶** | Plays it **on AWTRIX** - the row is marked while it plays |
+| **Bin** | Deletes it (two-step confirm) |
+
+The file name without `.mp3` is the name you use elsewhere: `ding.mp3` plays as `sound:"ding"` in a
+notification. Names may only use letters, digits, `_` and `-`, so a file called `My Song (2024).mp3`
+is refused - rename it before uploading. An MP3 interrupts a running radio stream, which comes back
+by itself afterwards. More: [MP3s & melodies](../guides/sounds.md).
+
+**■ Stop** at the top right of the tab silences everything at once - the browser preview, an MP3 and
+the radio.
+
+### Radio
+
+One list of internet radio stations, each a name and a stream URL. Every row has three buttons:
+**▶** starts the station, **💾** saves that row, and the bin removes it.
+A row you have edited plays the URL you typed, so a station can be tried before it is kept. What is
+playing, and the track title when the station sends one, stands to the right of the buttons.
+
+The section is only there on a device that can play a stream. Wiring, station formats and limits:
+[Internet radio](../guides/radio.md).
+
+### Melodies
+
+An editor, not a file list. One row per melody stored on AWTRIX, each one editable in place. **+ New melody** adds an empty row. Only on a device with a buzzer pin set.
 
 | Field or button | What it does |
 |---|---|
 | **Name** | The melody's address - what `sound:"<name>"` in a notification refers to. 1–24 characters of `A-Z`, `a-z`, `0-9`, `_`, `-` |
 | **RTTTL** | Only the part *after* the name: `d=4,o=5,b=100:e,c`. AWTRIX puts the name back on when it saves |
-| **🔊** | Plays it **in your browser**, through WebAudio |
+| **🎧** | Plays it **in your browser** |
 | **▶** | Plays it **on AWTRIX** |
 | **💾** | Saves that one row. Lights up once the row is changed and valid |
 | **Bin** | Deletes it (two-step confirm) |
-| **■ Stop** | Silences the browser and AWTRIX |
 
 The melody is checked while you type. A row that does not parse is outlined, and the line beneath it
 names the problem - `'h' is not a note` - instead of just calling it invalid. When it does parse,
 that same line reads `2 notes · 2.4 s`.
 
 Both play buttons send **what is in the fields right now**, so you can hear an edit before you commit
-it. Since 🔊 never leaves the browser, you can write a melody with AWTRIX muted or out of earshot.
-When sound is switched off in the settings, a line at the top of the card says so.
+it. Since 🎧 never leaves the browser, you can write a melody with AWTRIX muted or out of earshot.
 
 Drop a complete three-part string - `jackpot:d=8,o=5,b=120:16c,16e,16g,c6` - into the RTTTL field
 and it is split for you: the name goes to the name field, the rest stays put.
@@ -421,16 +460,7 @@ and it is split for you: the name goes to the name field, the rest stays put.
 
 A melody that does not parse is still shown, with the parser's complaint, so you can fix it.
 
-More: [Sounds & melodies](../guides/sounds.md) · [HTTP API → Sounds](../reference/http.md#sounds).
-
-## Radio
-
-One list of internet radio stations, each a name and a stream URL. **▶** on a row starts it,
-**Stop** stops playback, and **Save stations** writes the whole list at once. A line above the list
-says what is playing, including the track title when the stream sends one.
-
-The tab is only there on builds that can decode a stream. Wiring, station formats and limits:
-[Internet radio](../guides/radio.md).
+More: [MP3s & melodies](../guides/sounds.md) · [HTTP API → Audio](../reference/http.md#audio).
 
 ## Palettes
 

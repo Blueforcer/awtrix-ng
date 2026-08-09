@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "core/Command.h"
+#include "core/sound/AudioRouter.h"
 
 namespace awtrix {
 
@@ -32,16 +33,6 @@ class INotifyService {
   virtual bool dismissNamed(const std::string& name) = 0;
 };
 
-class ISoundService {
- public:
-  virtual ~ISoundService() = default;
-  virtual bool playSound(const std::string& payload) = 0;
-  virtual void playRtttl(const std::string& rtttl) = 0;
-  virtual void r2d2(const std::string& payload) = 0;
-  virtual void stop() = 0;
-  virtual bool supportsRtttl() const { return true; }
-};
-
 class IDisplayService {
  public:
   virtual ~IDisplayService() = default;
@@ -57,20 +48,6 @@ class ISystemService {
   virtual void sleep(uint64_t durationMs) = 0;
   virtual void factoryReset() = 0;
   virtual void resetSettings() = 0;
-};
-
-class IRadioService {
- public:
-  virtual ~IRadioService() = default;
-  virtual DispatchResult play(const std::string& url, const std::string& label,
-                              DispatchDetail& detail) = 0;
-  virtual void stop() = 0;
-  virtual void setVolume(int percent) = 0;
-  virtual bool isPlaying() const = 0;
-  virtual uint32_t underruns() const { return 0; }
-  virtual uint32_t decodeUs() const { return 0; }
-  virtual uint32_t starvedMs() const { return 0; }
-  virtual uint32_t bufferBytes() const { return 0; }
 };
 
 class IRadioStations {
@@ -122,11 +99,10 @@ struct CommandContext {
   StateStore& state;
   IAppService& apps;
   INotifyService& notify;
-  ISoundService& sound;
+  sound::AudioRouter& audio;
   IDisplayService& display;
   ISystemService& system;
   IScriptService* scripts = nullptr;
-  IRadioService* radio = nullptr;
   IRadioStations* stations = nullptr;
   const EffectRegistry* overlays = nullptr;
   DispatchDetail detail{};

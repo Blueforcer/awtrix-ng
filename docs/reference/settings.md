@@ -34,7 +34,7 @@ curl http://<awtrix-ip>/api/v1/settings
   "appDurationMs": 7000,
   "timeMode": 1,
   "timeColor": null,
-  "volume": 25,
+  "buzzerVolume": 80,
   "gamma": 1.9,
   "colorCorrection": null
 }
@@ -364,14 +364,26 @@ seven-segment bar, the second prefixes a three-letter weekday name to the date *
 
 | Key | Type | Range | Default | Units | Meaning |
 |---|---|---|---|---|---|
-| `soundEnabled` | boolean | - | `true` | - | Global mute switch. |
-| `volume` | integer | 0–30 | `25` | - | Buzzer / DFPlayer volume. |
-| `radioVolume` | integer | 0–100 | `60` | - | Internet radio volume, on its own scale and independent of `volume`. |
+One gain per output, each on the same 0–100 scale. Which of them a panel actually has is
+reported by `audio` in [`GET /api/v1/capabilities`](http.md#get-apiv1capabilities), and the web UI
+shows a slider only for the outputs that are there.
+
+| Key | Type | Range | Default | Units | Meaning |
+|---|---|---|---|---|---|
+| `soundEnabled` | boolean | - | `true` | - | Mute switch for one-shot sounds. A radio stream keeps playing. |
+| `buzzerVolume` | integer | 0–100 | `80` | % | Melodies on the buzzer at `pinBuzzer`. |
+| `dfplayerVolume` | integer | 0–100 | `80` | % | Tracks on a DFPlayer Mini. |
+| `mp3Volume` | integer | 0–100 | `70` | % | Stored MP3s on the I2S speaker. |
+| `radioVolume` | integer | 0–100 | `60` | % | Internet radio on the I2S speaker. |
 | `radioMeta` | boolean | - | `true` | - | Show the station on tune-in and each new track title on the panel. Off leaves the rotation untouched while the radio plays. |
 
+`mp3Volume` and `radioVolume` drive the same amplifier but are applied per source, so a station
+turned down to sit in the background does not also turn down the doorbell.
+
 With `soundEnabled: false`, sound and melody commands are still **accepted and answered with a
-success response** - they simply produce no sound. A mute is not an error. See
-[Sounds & melodies](../guides/sounds.md).
+success response** - they simply produce no sound. A mute is not an error. The switch covers
+one-shot sounds only: a stream is something you asked for out loud, a notification arrives
+uninvited. See [MP3s & melodies](../guides/sounds.md).
 
 ---
 

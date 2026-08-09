@@ -143,7 +143,7 @@ Write routes answer synchronously, and the outcome maps to HTTP as:
 | Ok | 200 | `{"ok":true}` |
 | Parse error | 400 | `invalidJson`, message `request body is not valid JSON` |
 | Validation error | 422 | `validationFailed`, message + `field` from the validator |
-| Not found | 404 | `notFound` - `app not found` / `sound not found` / `not found` |
+| Not found | 404 | `notFound` - `app not found` / `no MP3 of that name` / `no melody of that name` / `not found` |
 | Capacity | 507 | `insufficientStorage`, message `storage capacity reached` |
 | Unavailable | 503 | `unavailable`, message `not available on this device` |
 | Busy | 503 | `serviceBusy`, message `device is busy, try again` (with `Retry-After: 2`) |
@@ -352,9 +352,10 @@ Notes:
   default.
 * Panel size and wiring are **not** here: they are
   [system configuration](system.md#panel-and-orientation).
-* `soundEnabled: false` mutes **all** of `POST /api/v1/sounds/play` - melody files, RTTTL and the
-  `builtin` melody alike. [`POST /api/v1/sounds/stop`](#post-apiv1soundsstop) is the one sound
-  route it does not affect. See [Sounds](#post-apiv1soundsplay).
+* `soundEnabled: false` mutes the one-shot keys of `POST /api/v1/audio/play` - melody files,
+  stored MP3s, DFPlayer tracks and inline RTTTL alike. A radio stream is not muted by it, and
+  [`POST /api/v1/audio/stop`](#post-apiv1audiostop) ignores it. See
+  [Sounds](#post-apiv1audioplay).
 * `transitionEffect` is matched **case-insensitively** against the names from
   [`GET /api/v1/capabilities`](#get-apiv1capabilities) - `"slide"`, `"Slide"` and `"SLIDE"` are the
   same transition. The other name strings (`timeSeparatorMode`, `dateOrder`, `dateSeparator`,
@@ -1176,9 +1177,12 @@ curl -X DELETE http://<awtrix-ip>/api/v1/indicators/1
 
 ---
 
-## Sounds
+## Audio
 
-### GET /api/v1/sounds
+Everything the speaker and the buzzer do, under one address: stored MP3s, melodies,
+the built-in chirp and internet radio.
+
+### GET /api/v1/audio/melodies
 
 Every melody on AWTRIX, with its stored contents and what falls out of parsing it. One request
 for the whole list.
@@ -1208,7 +1212,7 @@ reason in `error`, so the editor can open it and repair it.
 | 200 | the listing |
 | 405 | wrong method - `allowed method(s): GET` |
 
-### PUT /api/v1/sounds/{name}
+### PUT /api/v1/audio/melodies/{name}
 
 Saves a melody. Body: `{"rtttl": "d=4,o=5,b=100:e,c"}`.
 
@@ -1229,12 +1233,12 @@ name it is filed under.
 | 507 | `insufficientStorage` - the flash is full |
 
 ```bash
-curl -X PUT http://<awtrix-ip>/api/v1/sounds/doorbell \
+curl -X PUT http://<awtrix-ip>/api/v1/audio/melodies/doorbell \
   -H "Content-Type: application/json" \
   -d '{"rtttl":"d=4,o=5,b=100:e,c"}'
 ```
 
-### DELETE /api/v1/sounds/{name}
+### DELETE /api/v1/audio/melodies/{name}
 
 | Status | Condition |
 |---|---|
@@ -1244,7 +1248,7 @@ curl -X PUT http://<awtrix-ip>/api/v1/sounds/doorbell \
 
 There is no rename route: PUT the new name, then DELETE the old one.
 
-### POST /api/v1/sounds/stop
+### POST /api/v1/audio/stop
 
 Stops whatever is playing. `{"ok":true}`, always.
 
@@ -1253,71 +1257,94 @@ Stops whatever is playing. `{"ok":true}`, always.
 | Status | Condition |
 |---|---|
 | 200 | `{"ok":true}` |
+| 422 | `field: "scope"` - `must be "sounds", "stream" or "all"` |
 | 405 | wrong method - `allowed method(s): POST` |
 
-### POST /api/v1/sounds/play
+An optional body narrows what is stopped: `{"scope":"sounds"}` silences melodies, MP3s and tracks
+but leaves a radio stream running, `{"scope":"stream"}` does the reverse, and `{"scope":"all"}` -
+the default with no body - stops both.
 
-| Key | Type | Meaning |
+### POST /api/v1/audio/play
+
+Every source of sound the device has, one key each. The key chooses the output.
+
+| Key | Type | Plays |
 |---|---|---|
-| `name` | string | melody file - plays `/MELODIES/<name>.txt`, or a DFPlayer track |
-| `rtttl` | string | inline RTTTL melody |
-| `builtin` | string | plays the built-in R2D2 melody |
+| `sound` | string | a name, resolved against every output - see below |
+| `mp3` | string | the stored MP3 `/MP3/<name>.mp3` |
+| `melody` | string | the stored melody `/MELODIES/<name>.txt` |
+| `track` | integer | a DFPlayer track, 1–2999 |
+| `rtttl` | string | an inline RTTTL melody |
+| `station` | string | a station from the stored list, by name |
+| `index` | number | a station from the stored list, by position |
+| `url` | string | a stream URL, without storing it |
 
-**Send exactly one of the three.** Any of them counts as present whatever its type, and a body
-carrying more than one is rejected whole - nothing plays.
+**Send exactly one.** A key counts as present whatever its type, and a body carrying more than one
+is rejected whole - nothing plays. `sound`, `mp3`, `melody`, `track` and `rtttl` are one-shots;
+`station`, `index` and `url` start the radio and answer like the stream routes below.
+
+`sound` is the only key that consults more than one output, and it is what a notification's
+`sound` and a script's `sound.play()` mean: a stored MP3 first, then a stored melody, then a
+DFPlayer track if the name is a plain number in range. The DFPlayer comes last because it is the
+only one that cannot be checked before playing - the module owns its SD card.
+
+The other four never fall back: a `melody` that is not stored answers `404` rather than reaching an
+MP3 of the same name, and a key whose output the panel does not have answers `503`.
 
 | Status | Condition |
 |---|---|
 | 200 | `{"ok":true}` |
 | 400 | body is not valid JSON (`invalidJson`) |
-| 404 | `notFound`, `sound not found` - `name` only: the melody file is missing or unparseable, or there is no buzzer |
-| 422 | `field: "name"`, `exactly one of "name", "rtttl" or "builtin" is allowed` - more than one of the three keys is present |
-| 422 | `field: "name"`, `one of "name", "rtttl" or "builtin" is required` - none of the three keys held a string |
+| 404 | `notFound`, `no MP3 called "x"` / `no melody called "x"` / `nothing called "x"` - nothing stored under that name |
+| 422 | `field` names the first key sent, `exactly one of "sound", "mp3", "melody", "track", "rtttl", "station", "index" or "url" is allowed` |
+| 422 | the same list `is required` - the body named none of them, and no `field` is claimed |
 | 422 | `field: "rtttl"` - the inline melody does not parse; `message` carries the reason and the byte offset |
-| 422 | `field: "rtttl"` / `"builtin"` - the DFPlayer backend supports neither RTTTL nor the built-in melody |
+| 422 | `field: "track"` - `must be a number between 1 and 2999` |
+| 503 | `unavailable` - this panel has no such output: `this device has no buzzer` / `no DFPlayer` / `no MP3 output`. The payload is checked first, so a malformed `rtttl` or `track` still answers `422` here |
 | 405 | wrong method - `allowed method(s): POST` |
 
-`builtin` plays the same built-in R2D2 melody for **any** string - the value is discarded.
-
-When `settings.soundEnabled` is `false`, all three keys are muted alike: `name`, `rtttl` and
-`builtin` each return `200` without producing sound, and the 404 for an unknown melody does not
-appear. On a **DFPlayer** board, `rtttl` and `builtin` return `422 validationFailed`
-(`RTTTL is not supported on this sound backend` / `the built-in melody is not supported on this
-sound backend`).
+When `settings.soundEnabled` is `false`, the one-shot keys are muted alike: each returns `200`
+without producing sound, and the 404 for an unknown name does not appear. A radio stream is not
+muted by that switch. Which outputs a panel has is in `audio` in
+[`GET /api/v1/capabilities`](#get-apiv1capabilities).
 
 ```bash
-curl -X POST http://<awtrix-ip>/api/v1/sounds/play \
+curl -X POST http://<awtrix-ip>/api/v1/audio/play \
   -H "Content-Type: application/json" \
   -d '{"rtttl":"beep:d=4,o=5,b=120:c,e,g"}'
 ```
 
 ---
 
-## Radio
+### Radio
 
 Internet radio over an I²S DAC. **ESP32-S3 only.** Every route here answers `503 unavailable` on a
 classic ESP32, on an S3 without PSRAM, and on an S3 with the I²S pins unset.
-`capabilities.radio` says which it is, and the web UI hides its Radio tab when it is `false`.
+`capabilities.audio.radio` says which it is, and the web UI hides the Audio tab's Radio section
+when it is `false`.
 
 Editing the station list is the exception - that works on every build.
 
 Wiring, limits and troubleshooting are in **[Internet radio](../guides/radio.md)**.
 
-### GET /api/v1/radio
+### GET /api/v1/audio
 
 Playback status and the station list in one read.
 
 ```json
 {
   "available": true,
-  "playing": true,
-  "station": "SWR3",
-  "title": "Kraftwerk - Das Model",
-  "error": "",
-  "underruns": 0,
-  "decodeUs": 4180,
-  "starvedMs": 0,
-  "bufferBytes": 12288,
+  "mp3": {"playing": false, "name": ""},
+  "radio": {
+    "playing": true,
+    "station": "SWR3",
+    "title": "Kraftwerk - Das Model",
+    "error": "",
+    "underruns": 0,
+    "decodeUs": 4180,
+    "starvedMs": 0,
+    "bufferBytes": 12288
+  },
   "stations": [{"name": "SWR3", "url": "https://liveradio.swr.de/sw282p3/swr3/"}]
 }
 ```
@@ -1325,14 +1352,16 @@ Playback status and the station list in one read.
 | Key | Type | Meaning |
 |---|---|---|
 | `available` | boolean | Whether this build and this hardware can play at all |
-| `playing` | boolean | A stream is running |
-| `station` | string | The label that was tuned to - a station name, or the URL for an ad-hoc play |
-| `title` | string | Last track title the stream reported, UTF-8, empty until one arrives |
-| `error` | string | Why playback stopped, cleared on the next successful play |
-| `underruns` | integer | Times the output fell more than one buffer behind real time - each one is a dropout you hear |
-| `decodeUs` | integer | Rolling average microseconds to decode one MP3 frame; a frame is 26100 µs of audio |
-| `starvedMs` | integer | Milliseconds the audio task waited with nothing to decode - separates a slow network from a slow decoder |
-| `bufferBytes` | integer | Undecoded bytes still buffered - how long a network stall playback can absorb |
+| `mp3.playing` | boolean | A stored [MP3](../guides/sounds.md#mp3s) is playing right now |
+| `mp3.name` | string | Which one, without the `.mp3`; empty when none |
+| `radio.playing` | boolean | A stream is running |
+| `radio.station` | string | The label that was tuned to - a station name, or the URL for an ad-hoc play |
+| `radio.title` | string | Last track title the stream reported, UTF-8, empty until one arrives |
+| `radio.error` | string | Why playback stopped, cleared on the next successful play |
+| `radio.underruns` | integer | Times the output fell more than one buffer behind real time - each one is a dropout you hear |
+| `radio.decodeUs` | integer | Rolling average microseconds to decode one MP3 frame; a frame is 26100 µs of audio |
+| `radio.starvedMs` | integer | Milliseconds the audio task waited with nothing to decode - separates a slow network from a slow decoder |
+| `radio.bufferBytes` | integer | Undecoded bytes still buffered - how long a network stall playback can absorb |
 | `stations` | array | The stored list |
 
 The four counters are playback health, not settings. `underruns` and `starvedMs` accumulate for as
@@ -1341,37 +1370,49 @@ between two polls. All four are `0` when `available` is `false`.
 
 Non-GET methods → 405, `allowed method(s): GET`.
 
-### POST /api/v1/radio/play
+Starting a stream is [`POST /api/v1/audio/play`](#post-apiv1audioplay) with `station`, `index` or
+`url`, and stopping it is [`POST /api/v1/audio/stop`](#post-apiv1audiostop) like any other sound.
+A URL that points at an `.m3u` or `.pls` playlist is resolved to its first playable entry. Those
+three keys add two answers of their own: `404` when no station carries that name or position, and
+`503` `unavailable` on a build without an output - `serviceBusy` when an HTTPS stream is asked for
+with too little free heap.
 
-Send one of three keys:
+### GET /api/v1/audio/mp3
 
-| Key | Type | Meaning |
-|---|---|---|
-| `station` | string | A name from the stored list |
-| `index` | integer | A position in the stored list |
-| `url` | string | A stream that is not in the list; `http://` or `https://` |
+The stored MP3s, with the same shape the file listing uses.
 
-`station` wins when more than one is given. A URL that points at an `.m3u` or `.pls` playlist is
-resolved to its first playable entry.
+```json
+{"files":[{"name":"ding.mp3","size":40118}],"usedBytes":176128,"totalBytes":13107200}
+```
 
-| Status | Condition |
-|---|---|
-| 200 | `{"ok":true}` - tuning has started; a stream that turns out to be unplayable reports later through `error` |
-| 404 | no station by that name or at that index |
-| 422 | `{}`, or a `url` with an unsupported scheme |
-| 503 | `unavailable` - no audio output on this build; or `serviceBusy` when an HTTPS stream is asked for with too little free heap |
+`usedBytes` and `totalBytes` are the whole filesystem, shared with icons, melodies and scripts.
 
-### POST /api/v1/radio/stop
+### POST /api/v1/audio/mp3
 
-Stops playback. `{"ok":true}`.
+`multipart/form-data` upload of one MP3. No `?dir=` - the route says where it goes.
+
+The file name is the name the MP3 is played by, so it must be **1-32 characters of `A-Za-z0-9_-`
+plus `.mp3`**; anything else is refused with `400 invalidName` before a byte is written. Content is
+sniffed from the first chunk and must look like MPEG-1 Layer III.
 
 | Status | Condition |
 |---|---|
 | 200 | `{"ok":true}` |
-| 405 | wrong method - `allowed method(s): POST` |
-| 503 | `unavailable` - no audio output on this build |
+| 400 | `invalidName` - the file name cannot be an MP3 name |
+| 415 | `unsupportedMediaType` - the content is not an MP3 |
+| 500 | `internalError` - the write failed, storage full |
 
-### PUT /api/v1/radio/stations
+### DELETE /api/v1/audio/mp3/{name}
+
+Removes one MP3, addressed by name without the `.mp3`.
+
+| Status | Condition |
+|---|---|
+| 200 | `{"ok":true}` |
+| 400 | `invalidName` - not a possible MP3 name |
+| 404 | `notFound`, `no MP3 of that name` |
+
+### PUT /api/v1/audio/stations
 
 Replaces the whole list. There is no per-station route.
 
@@ -1404,8 +1445,25 @@ Validation is all-or-nothing, and the error names the offending row:
 The name lists this firmware build supports. Fetch this rather than hardcoding names.
 
 ```json
-{"effects":[...],"transitions":[...],"overlays":[...],"palettes":[...],"radio":bool,"gpio":{...}}
+{"effects":[...],"transitions":[...],"overlays":[...],"palettes":[...],"audio":{...},"gpio":{...}}
 ```
+
+`audio` is one flag per sound output, so a client can tell "no buzzer" from "no speaker":
+
+```json
+"audio":{"buzzer":true,"track":false,"mp3":true,"radio":true}
+```
+
+| Flag | `true` when |
+|---|---|
+| `buzzer` | `pinBuzzer` is wired - melodies and inline RTTTL have somewhere to go |
+| `track` | `dfplayer` is on and both DFPlayer pins are set |
+| `mp3` | stored MP3s can be played: an ESP32-S3 with PSRAM and the I²S pins set |
+| `radio` | internet radio can be streamed - the same amplifier as `mp3` |
+
+The web UI shows the matching Audio-tab sections only when their flag is `true`, hides the Audio
+tab itself when all four are `false`, and shows exactly one volume slider per flag under
+System › Audio.
 
 | Key | Count | Values |
 |---|---|---|
@@ -1575,7 +1633,7 @@ Behaviour to know:
 | `mirror` | boolean | `false` | mirrors the displayed image, not the wiring |
 | `rotate` | boolean | `false` | rotates the displayed image 180°; also swaps left/right buttons |
 | `swapButtons` | boolean | `false` | |
-| `dfplayer` | boolean | `false` | DFPlayer Mini instead of the buzzer; selects the sound backend only - it does **not** gate DF-pin validation |
+| `dfplayer` | boolean | `false` | Talk to a DFPlayer Mini on the DF pins. The buzzer keeps working alongside it; the flag does **not** gate DF-pin validation |
 | `buttonCallback` | string | `""` | HTTP webhook URL fired on button press |
 | `artnet` | boolean | `false` | opt-in Art-Net DMX receiver (UDP 6454); the socket stays closed while `false` |
 | `statsInterval` | integer | `10000` | ms, 1000–600000 |
@@ -1682,7 +1740,7 @@ curl "http://<awtrix-ip>/api/v1/logs?after=0"
 
 ## Files
 
-The filesystem holds your icons, melodies and palettes. How much room it has depends on the flash
+The filesystem holds your icons, melodies, palettes and MP3s. How much room it has depends on the flash
 size of the board - see [Limits](limits.md#storage). `GET /api/v1/files` reports the real figures
 as `usedBytes` and `totalBytes`.
 
@@ -1719,8 +1777,11 @@ Path resolution:
 
 * filename starts with `/` → used as the absolute path, `?dir=` ignored
 * otherwise → `<dir>/<filename>`, with a leading `/` prepended to `dir` if missing
-* the resolved path must be under `/ICONS`, `/MELODIES` or `/PALETTES` and contain no `..` -
-  anything else is rejected with `400 invalidPath` before a byte is written
+* the resolved path must be under `/ICONS`, `/MELODIES`, `/PALETTES` or `/MP3` and contain no
+  `..` - anything else is rejected with `400 invalidPath` before a byte is written
+* a file for `/MP3` must be named the way an MP3 is played: 1-32 characters of `A-Za-z0-9_-`
+  plus `.mp3`. Anything else is rejected with `400 invalidName`, also before a byte is written -
+  an MP3 whose name the play route cannot form could never be played back
 * the parent directory is created if it does not exist
 
 The multipart **field name is irrelevant** - any file part is accepted.
@@ -1728,10 +1789,11 @@ The multipart **field name is irrelevant** - any file part is accepted.
 | Status | Condition |
 |---|---|
 | 200 | `{"ok":true}` |
-| 400 | `invalidPath` - the target escapes the three asset folders, or contains `..` |
+| 400 | `invalidPath` - the target escapes the four asset folders, or contains `..` |
+| 400 | `invalidName` - a `/MP3` upload whose file name is not `[A-Za-z0-9_-]{1,32}.mp3` |
 | 401 | auth failed - returned only *after* the entire body has been consumed |
 | 403 | `forbidden` - file upload is disabled in AP/provisioning mode |
-| 415 | `unsupportedMediaType` - the content does not match the target folder: `/ICONS` needs GIF or JPEG magic bytes, `/MELODIES` must parse as RTTTL text, `/PALETTES` must be plain `RRGGBB`-per-line text |
+| 415 | `unsupportedMediaType` - the content does not match the target folder: `/ICONS` needs GIF or JPEG magic bytes, `/MELODIES` must parse as RTTTL text, `/PALETTES` must be plain `RRGGBB`-per-line text, `/MP3` needs MP3 magic bytes (an ID3 tag or a frame sync) |
 | 500 | `internalError` - the write failed (storage full); nothing is left behind |
 
 PNG is served correctly once on AWTRIX, but it is not accepted by the `/ICONS` upload check -
@@ -1750,13 +1812,13 @@ curl -X POST "http://<awtrix-ip>/api/v1/files?dir=/ICONS" \
 |---|---|---|---|
 | `path` | string | yes | full path of the file to remove |
 
-Deletion is confined to `/ICONS`, `/MELODIES` and `/PALETTES`: `path` must be under one of those
-folders and contain no `..`.
+Deletion is confined to `/ICONS`, `/MELODIES`, `/PALETTES` and `/MP3`: `path` must be under one
+of those folders and contain no `..`.
 
 | Status | Condition |
 |---|---|
 | 200 | `{"ok":true}` |
-| 400 | `invalidPath` - missing `path`, a `..` traversal, or a path outside the three asset folders |
+| 400 | `invalidPath` - missing `path`, a `..` traversal, or a path outside the four asset folders |
 | 404 | `notFound`, `file not found` - the path is valid but no such file exists |
 | 405 | wrong method - `allowed method(s): GET, POST, DELETE` |
 
@@ -1776,12 +1838,14 @@ network, and what the web UI uses. Auth is re-checked inside the upload handler.
 | Status | Condition |
 |---|---|
 | 200 | `{"ok":true}` - AWTRIX then reboots into the new image |
-| 400 | `wrongChip` - the image was built for the other chip (esp32 vs esp32s3), is a `usb-*.bin` for a first flash over USB, or carries no valid firmware header |
+| 400 | `wrongChip` - the image was built for the other chip (esp32 vs esp32s3), for the other kind of ESP32-S3 PSRAM (quad vs octal), is a `usb-*.bin` for a first flash over USB, or carries no valid firmware header |
 | 401 | auth failed |
 | 403 | `forbidden` - firmware upload is disabled in AP/provisioning mode |
 | 500 | `internalError`, `firmware update failed (bad image or storage full)` - the OTA slot could not be written |
 
-The image is size-checked against the free firmware slot before any byte is written.
+The image is size-checked against the free firmware slot before any byte is written, and a refused
+image never replaces the running one: AWTRIX switches slots only after a whole image has arrived
+and verified.
 
 ```bash
 curl -X POST http://<awtrix-ip>/update -F "firmware=@firmware-awtrix-ng.bin"
@@ -1809,7 +1873,7 @@ supported `backupFormat` - before anything else in the archive is touched.
 | `config/system.json` | the rest of device configuration, validated like [`PUT /api/v1/system`](#put-apiv1system) |
 | `config/settings.json` | display/behaviour settings, validated like [`PATCH /api/v1/settings`](#patch-apiv1settings) - applied to the running device immediately |
 | `apploop.json` | app rotation order and the switched-off list, same shape as [`PUT /api/v1/apps/order`](#put-apiv1appsorder) |
-| `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `SCRIPTS/*` | written to LittleFS under the matching directory |
+| `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `MP3/*`, `SCRIPTS/*` | written under the matching directory |
 
 Content is checked per folder exactly like [`POST /api/v1/files`](#post-apiv1files): a path that
 escapes its folder, an entry whose CRC does not check out, or a file whose content does not match
@@ -1825,7 +1889,7 @@ restore. An unrecognized entry name is skipped and warned about too.
 A restore can partially succeed, so this route answers its own JSON shape instead of the
 [error body](#errors) used everywhere else: `ok`, an `applied` object counting how many entries
 of each kind were actually applied (`wifi`, `system`, `settings`, `appLoop`, `radioStations`,
-`icons`, `melodies`, `palettes`, `scripts`, plus `skipped` for rejected entries), and a `warnings` array with one
+`icons`, `melodies`, `palettes`, `MP3s`, `scripts`, plus `skipped` for rejected entries), and a `warnings` array with one
 string per skipped or rejected entry.
 
 Config changes that only take effect at boot - new Wi-Fi credentials, `config/system.json` - need
@@ -1851,10 +1915,10 @@ The gzipped web UI, embedded in the firmware. Served for `/` and `/index.html`.
 
 Authentication applies. This branch is not method-gated: any method reaches it.
 
-### GET /ICONS/*, /MELODIES/*, /PALETTES/*, /SCRIPTS/*, /apploop.json
+### GET /ICONS/*, /MELODIES/*, /PALETTES/*, /MP3/*, /SCRIPTS/*, /apploop.json
 
-Static files from LittleFS. **GET only**. `/ICONS/`, `/MELODIES/` and `/PALETTES/` are served
-in every mode; `/SCRIPTS/*` and `/apploop.json` are served over GET **only outside provisioning
+Static files from LittleFS. **GET only**. `/ICONS/`, `/MELODIES/`, `/PALETTES/` and `/MP3/`
+are served in every mode; `/SCRIPTS/*` and `/apploop.json` are served over GET **only outside provisioning
 AP mode** (they are part of the backup-readable set). Any path containing `..` is rejected before
 the filesystem is touched. Everything else falls through to the 404 below.
 
@@ -1864,7 +1928,8 @@ the filesystem is touched. Everything else falls through to the 404 below.
 | 404 | `notFound`, `file not found` - missing file, or the path is a directory |
 
 MIME type by extension: `.jpg`/`.jpeg` → `image/jpeg`, `.gif` → `image/gif`, `.png` →
-`image/png`, `.txt` → `text/plain`, anything else → `application/octet-stream`.
+`image/png`, `.txt` → `text/plain`, `.mp3` → `audio/mpeg`, anything else →
+`application/octet-stream`.
 
 Authentication applies.
 
@@ -1911,15 +1976,16 @@ Anything not matched above answers **404** `notFound` with message `unknown rout
 | DELETE | `/api/v1/notifications/{name}` | [dismiss by name, anywhere in the queue](#delete-apiv1notificationsname) |
 | PUT | `/api/v1/indicators/{id}` | [corner pixels](#put-apiv1indicatorsid) |
 | DELETE | `/api/v1/indicators/{id}` | [clears the indicator](#delete-apiv1indicatorsid) |
-| GET | `/api/v1/sounds` | [every melody, parsed](#get-apiv1sounds) |
-| PUT | `/api/v1/sounds/{name}` | [save; the title is normalised to `{name}`](#put-apiv1soundsname) |
-| DELETE | `/api/v1/sounds/{name}` | [404 if absent](#delete-apiv1soundsname) |
-| POST | `/api/v1/sounds/play` | [exactly one of name/rtttl/builtin](#post-apiv1soundsplay) |
-| POST | `/api/v1/sounds/stop` | [ignores the mute](#post-apiv1soundsstop) |
-| GET | `/api/v1/radio` | [status and station list](#get-apiv1radio) |
-| POST | `/api/v1/radio/play` | [station, index or url](#post-apiv1radioplay) |
-| POST | `/api/v1/radio/stop` | [stop](#post-apiv1radiostop) |
-| PUT | `/api/v1/radio/stations` | [replaces the whole list](#put-apiv1radiostations) |
+| GET | `/api/v1/audio/melodies` | [every melody, parsed](#get-apiv1audiomelodies) |
+| PUT | `/api/v1/audio/melodies/{name}` | [save; the title is normalised to `{name}`](#put-apiv1audiomelodiesname) |
+| DELETE | `/api/v1/audio/melodies/{name}` | [404 if absent](#delete-apiv1audiomelodiesname) |
+| POST | `/api/v1/audio/play` | [exactly one of sound/mp3/melody/track/rtttl/station/index/url](#post-apiv1audioplay) |
+| POST | `/api/v1/audio/stop` | [optional `scope`; ignores the mute](#post-apiv1audiostop) |
+| GET | `/api/v1/audio` | [what is sounding, and the station list](#get-apiv1audio) |
+| GET | `/api/v1/audio/mp3` | [stored MP3s](#get-apiv1audiomp3) |
+| POST | `/api/v1/audio/mp3` | [upload an MP3](#post-apiv1audiomp3) |
+| DELETE | `/api/v1/audio/mp3/{name}` | [remove an MP3](#delete-apiv1audiomp3name) |
+| PUT | `/api/v1/audio/stations` | [replaces the whole list](#put-apiv1audiostations) |
 | GET | `/api/v1/capabilities` | [names this build supports](#get-apiv1capabilities) |
 | GET | `/api/v1/system` | [64 of 67 fields](#get-apiv1system) |
 | PUT | `/api/v1/system` | [partial merge + pin validation](#put-apiv1system) |
@@ -1931,4 +1997,4 @@ Anything not matched above answers **404** `notFound` with message `unknown rout
 | POST | `/update` | [firmware image](#post-update) |
 | POST | `/api/v1/restore` | [backup ZIP; available in AP mode](#post-apiv1restore) |
 | GET | `/`, `/index.html` | [web UI](#get) |
-| GET | `/ICONS/*`, `/MELODIES/*`, `/PALETTES/*`, `/SCRIPTS/*`, `/apploop.json` | [static assets](#web-ui-and-static-assets) |
+| GET | `/ICONS/*`, `/MELODIES/*`, `/PALETTES/*`, `/MP3/*`, `/SCRIPTS/*`, `/apploop.json` | [static assets](#web-ui-and-static-assets) |

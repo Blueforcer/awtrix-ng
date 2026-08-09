@@ -166,7 +166,7 @@ paths:
         | `config/wifi.json` | `{wifiSsid, wifiPass}` merged into the config |
         | `config/system.json` | rest of the device config (validated like PUT /system) |
         | `config/settings.json` | display/behaviour settings (applied live + persisted) |
-        | `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `SCRIPTS/*` | written to LittleFS |
+        | `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `MP3/*`, `SCRIPTS/*` | written to LittleFS |
         | `apploop.json` | app rotation order |
 
         Content is checked per folder exactly like `POST /api/v1/files`; a
@@ -204,6 +204,7 @@ paths:
                       icons: { type: integer }
                       melodies: { type: integer }
                       palettes: { type: integer }
+                      sounds: { type: integer }
                       scripts: { type: integer }
                       skipped: { type: integer }
                   warnings: { type: array, items: { type: string } }
@@ -766,7 +767,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200": { $ref: "#/components/responses/Ok" }
 
-  /api/v1/sounds:
+  /api/v1/audio/melodies:
     get:
       tags: [sounds]
       summary: Every melody on the device
@@ -800,7 +801,7 @@ paths:
                   usedBytes: { type: integer }
                   totalBytes: { type: integer }
 
-  /api/v1/sounds/{name}:
+  /api/v1/audio/melodies/{name}:
     parameters:
       - name: name
         in: path
@@ -842,7 +843,7 @@ paths:
         "200": { $ref: "#/components/responses/Ok" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /api/v1/radio:
+  /api/v1/audio:
     get:
       tags: [radio]
       summary: Playback status and the station list
@@ -861,39 +862,82 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RadioState" }
 
-  /api/v1/radio/play:
+  /api/v1/audio/play:
     post:
-      tags: [radio]
-      summary: Tune to a station
+      tags: [sounds, radio]
+      summary: Play a sound or tune to a station
       description: |
-        Give a `station` name, an `index` into the stored list, or a bare `url`.
-        `station` wins when more than one is present. A URL pointing at an .m3u
-        or .pls playlist is resolved to its first playable entry.
+        Exactly one key, and the key chooses the output. `sound`, `mp3`,
+        `melody`, `track` and `rtttl` are one-shots; `station`, `index` and
+        `url` start the radio.
 
-        A 200 means tuning started. A stream that turns out to be unplayable is
-        reported afterwards through `error` on `GET /api/v1/radio`.
+        `sound` is the only key that consults more than one output, and it is
+        what a notification's `sound` and a script's `sound.play()` mean: a
+        stored MP3 `/MP3/<name>.mp3` first, then a melody
+        `/MELODIES/<name>.txt`, then a DFPlayer track when the name is a plain
+        number in range. The DFPlayer comes last because it is the only one
+        that cannot be checked before playing - the module owns its SD card.
+
+        The other four never fall back. A `melody` that is not stored answers
+        404 rather than reaching an MP3 of the same name, and a key whose output
+        the panel does not have answers 503 - the request was not wrong, the
+        hardware is not there. `capabilities.audio` says which outputs exist.
+
+        An inline `rtttl` that does not parse is rejected with 422 carrying the
+        reason and the byte offset. A `track` outside 1-2999 is rejected the
+        same way; a track that is simply not on the card cannot be detected and
+        answers 200.
+
+        Supplying more than one key is rejected with 422, and `field` names the
+        first key that was sent. A stored MP3 interrupts a playing radio stream,
+        which reconnects afterwards.
+
+        For the stream keys: `station` wins when more than one is present, and a
+        URL pointing at an .m3u or .pls playlist is resolved to its first
+        playable entry. A 200 means tuning started; a stream that turns out to
+        be unplayable is reported afterwards through `error` on
+        `GET /api/v1/audio`.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/RadioPlay" }
+            schema: { $ref: "#/components/schemas/AudioPlay" }
       responses:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadJson" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Invalid" }
         "503": { $ref: "#/components/responses/Unavailable" }
 
-  /api/v1/radio/stop:
+  /api/v1/audio/stop:
     post:
-      tags: [radio]
-      summary: Stop playback
+      tags: [sounds, radio]
+      summary: Stop whatever is playing
+      description: |
+        With no body this stops everything, the radio stream included. An
+        optional `scope` narrows it: `sounds` silences melodies, MP3s and tracks
+        but leaves a stream running, `stream` does the reverse, `all` is the
+        default.
+
+        Ignores `soundEnabled`. Every other sound route returns early on a muted
+        device; refusing to go quiet because the device is already meant to be
+        quiet would strand a running melody.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope: { type: string, enum: [sounds, stream, all], default: all }
       responses:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200": { $ref: "#/components/responses/Ok" }
-        "503": { $ref: "#/components/responses/Unavailable" }
+        "400": { $ref: "#/components/responses/BadJson" }
+        "422": { $ref: "#/components/responses/Invalid" }
 
-  /api/v1/radio/stations:
+  /api/v1/audio/stations:
     put:
       tags: [radio]
       summary: Replace the station list
@@ -913,46 +957,6 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/BadJson" }
-        "422": { $ref: "#/components/responses/Invalid" }
-
-  /api/v1/sounds/stop:
-    post:
-      tags: [sounds]
-      summary: Stop whatever is playing
-      description: |
-        Ignores `soundEnabled`. Every other sound route returns early on a muted
-        device; refusing to go quiet because the device is already meant to be
-        quiet would strand a running melody.
-      responses:
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "200": { $ref: "#/components/responses/Ok" }
-
-  /api/v1/sounds/play:
-    post:
-      tags: [sounds]
-      summary: Play a sound
-      description: |
-        Exactly one of `name` (melody file), `rtttl` (inline melody) or
-        `builtin` ("r2d2"). Supplying more than one is rejected with `422`
-        (`field: "name"`). On a DFPlayer board `rtttl` and `builtin` are not
-        supported and are rejected with `422`.
-
-        An inline `rtttl` that does not parse is rejected with `422` carrying
-        the reason and the byte offset - the same parser the buzzer plays from.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name: { type: string }
-                rtttl: { type: string }
-                builtin: { type: string, enum: [r2d2] }
-      responses:
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "200": { $ref: "#/components/responses/Ok" }
-        "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Invalid" }
 
   /api/v1/apps/script/{name}:
@@ -1288,6 +1292,17 @@ paths:
                       interpolates between palette entries.
                   transitions: { type: array, items: { type: string } }
                   overlays: { type: array, items: { type: string } }
+                  audio:
+                    type: object
+                    description: >
+                      One flag per sound output, so a client can tell "no
+                      buzzer" from "no speaker". All four false means the panel
+                      is silent.
+                    properties:
+                      buzzer: { type: boolean, description: pinBuzzer is wired - melodies and inline RTTTL have an output }
+                      track: { type: boolean, description: dfplayer is on and both DFPlayer pins are set }
+                      mp3: { type: boolean, description: Stored MP3s can be played - an ESP32-S3 with PSRAM and the I2S pins set }
+                      radio: { type: boolean, description: Internet radio can be streamed - the same amplifier as mp3 }
                   palettes:
                     type: array
                     items: { type: string }
@@ -1498,7 +1513,7 @@ paths:
   /api/v1/files:
     get:
       tags: [files]
-      summary: List files (icons, melodies, palettes)
+      summary: List files (icons, melodies, palettes, sounds)
       parameters:
         - { name: dir, in: query, schema: { type: string, default: /ICONS } }
       responses:
@@ -1709,7 +1724,7 @@ components:
                 - invalidPinConfig      # 400, PUT /api/v1/system only
                 - invalidName           # 400, any route naming an app - name outside [A-Za-z0-9_-]{1,32}
                 - invalidMethodOverride # 400, X-HTTP-Method-Override on a non-POST, naming anything but PUT/PATCH/DELETE, or aimed at the script upload
-                - wrongChip             # 400, POST /update only - image built for a different SoC, or a factory image, refused before anything was written
+                - wrongChip             # 400, POST /update only - image built for a different SoC or the other ESP32-S3 PSRAM type, or a factory image; the running firmware is untouched
                 - unauthorized          # 401
                 - forbidden             # 403, disabled during provisioning
                 - notFound              # 404
@@ -1879,10 +1894,17 @@ components:
           maxItems: 32
           items: { $ref: "#/components/schemas/RadioStation" }
 
-    RadioPlay:
+    AudioPlay:
       type: object
-      description: Exactly one of station, index or url. station wins if several are given.
+      description: >
+        Exactly one key. The one-shot keys name an output; `sound` lets the
+        device choose. Among the stream keys, station wins if several are given.
       properties:
+        sound: { type: string, description: A name - a stored MP3, else a melody, else a DFPlayer track }
+        mp3: { type: string, description: A stored MP3, /MP3/<name>.mp3; never falls back to a melody }
+        melody: { type: string, description: A stored melody, /MELODIES/<name>.txt; never falls back to an MP3 }
+        track: { type: integer, minimum: 1, maximum: 2999, description: A DFPlayer track number }
+        rtttl: { type: string, description: An inline RTTTL melody, played on the buzzer }
         station: { type: string, description: A name from the stored list }
         index: { type: integer, description: A position in the stored list }
         url: { type: string, description: A stream that is not in the list }
@@ -1891,6 +1913,12 @@ components:
       type: object
       properties:
         available: { type: boolean, description: Whether this build and hardware can play at all }
+        mp3:
+          type: object
+          description: The stored MP3 playing right now, under its own key so it is never mistaken for a station.
+          properties:
+            playing: { type: boolean }
+            name: { type: string, description: The playing MP3's name without the .mp3; empty when none }
         playing: { type: boolean }
         station: { type: string, description: The label tuned to }
         title: { type: string, description: Last track title from the stream, UTF-8 }
@@ -1962,8 +1990,10 @@ components:
           description: >
             Device-wide text motion. Every field is concrete here; a payload's
             own `scroll` overrides it field by field.
-        volume: { type: integer, minimum: 0, maximum: 30 }
-        radioVolume: { type: integer, minimum: 0, maximum: 100, description: Internet radio volume; separate from volume, which drives the buzzer or DFPlayer. }
+        buzzerVolume: { type: integer, minimum: 0, maximum: 100, description: Melodies on the buzzer at pinBuzzer. }
+        dfplayerVolume: { type: integer, minimum: 0, maximum: 100, description: Tracks on a DFPlayer Mini. }
+        mp3Volume: { type: integer, minimum: 0, maximum: 100, description: Stored MP3s on the I2S speaker; separate from radioVolume so a quiet station does not also quieten a doorbell. }
+        radioVolume: { type: integer, minimum: 0, maximum: 100, description: Internet radio on the I2S speaker. }
         radioMeta: { type: boolean, description: Announce the station and each new track title on the matrix. }
         saturation: { type: integer, minimum: 0, maximum: 100, description: Colour saturation of the whole panel in percent; 100 leaves colours untouched, 0 renders greys. }
         gamma: { type: number, exclusiveMinimum: 0 }

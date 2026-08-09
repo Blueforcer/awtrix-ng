@@ -35,10 +35,14 @@ jobs:
             assets=$(gh release view "$RELEASE_TAG" --repo "$REPO" \
               --json assets --jq '.assets[] | select(.size > 0) | .name')
             missing=
-            for want in firmware-awtrix-ng.bin firmware-awtrix-ng-s3.bin licenses-awtrix-ng.zip; do
+            for want in firmware-awtrix-ng.bin firmware-awtrix-ng-s3-octal.bin \
+                        firmware-awtrix-ng-s3-quad.bin licenses-awtrix-ng.zip; do
               grep -qx "$want" <<<"$assets" || missing="$missing $want"
             done
-            grep -q '^usb-.*\.bin$' <<<"$assets" || missing="$missing usb-*.bin"
+            # One bundle since v1.0.16; loose usb-*.bin satisfy the check so an
+            # older tag can still be re-announced by hand.
+            grep -qx 'usb-awtrix-ng.zip' <<<"$assets" || grep -q '^usb-.*\.bin$' <<<"$assets" \
+              || missing="$missing usb-awtrix-ng.zip"
             [ -z "$missing" ] && break
             echo "attempt $attempt: still waiting for:$missing"
             [ "$attempt" -eq 20 ] && {

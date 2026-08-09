@@ -3,34 +3,42 @@
 #include <cstdint>
 
 #include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <memory>
+#include <string>
 
 #include "core/render/MatrixLayout.h"
+#include "core/sound/Rtttl.h"
 #include "hal/IBoard.h"
+#include "sim/SimStore.h"
 #include "system/Log.h"
 
 namespace awtrix {
 
-// No audio on the host: every request is logged and reported as finished immediately, so apps that
-// wait for a melody to end never block.
-class SimSound : public ISoundBackend {
+// No buzzer on the host: logged and reported finished at once, so apps that wait never block.
+// The lookup is real, or the simulator would answer "no melody called x" with a sound.
+class SimToneSink : public sound::IToneSink {
  public:
   void begin() override {}
-  void setVolume(uint8_t volume) override { volume_ = volume; }
-  bool playFile(const std::string& id) override {
-    logf("sim sound: play file '%s'", id.c_str());
+  void setVolume(uint8_t percent) override { volume_ = percent; }
+  bool playMelodyFile(const std::string& name) override {
+    if (!rtttl::validName(name)) return false;
+    const std::string path = sim::hostPath("/MELODIES/" + name + ".txt");
+    if (!std::filesystem::exists(std::filesystem::u8path(path))) return false;
+    logf("sim sound: melody '%s'", name.c_str());
     return true;
   }
-  void playRtttl(const std::string& rtttl) override {
+  bool playRtttl(const std::string& rtttl) override {
     logf("sim sound: rtttl '%.60s%s'", rtttl.c_str(), rtttl.size() > 60 ? "..." : "");
+    return true;
   }
   void stop() override {}
   void tick() override {}
   bool isPlaying() const override { return false; }
 
  private:
-  uint8_t volume_ = 25;
+  uint8_t volume_ = 80;
 };
 
 // Always "present" with whatever values the /sim/sensors route last wrote into the public fields.
@@ -104,7 +112,9 @@ class SimBoard : public IBoard {
     out.right = now < rightUntilMs;
   }
 
-  ISoundBackend& sound() override { return sound_; }
+  sound::IToneSink* toneSink() override { return &tone_; }
+  // No DFPlayer is simulated: a fake that always says yes would teach the resolution order a lie.
+  sound::ITrackSink* trackSink() override { return nullptr; }
   ISensorBus& sensors() override { return sensors_; }
 
   void setNow(int64_t nowMs) { nowMs_ = nowMs; }
@@ -128,7 +138,7 @@ class SimBoard : public IBoard {
   render::GradeParams baseGrade_;
   render::ColorGrade grade_;
   std::unique_ptr<Canvas> graded_;
-  SimSound sound_;
+  SimToneSink tone_;
   SimSensors sensors_;
   uint8_t brightness_ = 120;
   int64_t nowMs_ = 0;

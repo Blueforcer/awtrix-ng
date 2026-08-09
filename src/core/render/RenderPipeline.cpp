@@ -178,8 +178,14 @@ void RenderPipeline::onPageChanged(int64_t nowMs, bool isNotif) {
     slotA_.scroll.restart(nowMs);
     slotA_.iconPushed = false;
   }
-  if (isNotif && d_.engine->state().settings().soundEnabled)
-    d_.sound->play(d_.engine->notifications().current());
+  if (isNotif) playPageSound(d_.engine->notifications().current());
+}
+
+void RenderPipeline::playPageSound(const AppSpec& spec) {
+  const sound::Request req = sound::requestForSpec(spec);
+  if (!req.present) return;
+  DispatchDetail detail;
+  d_.audio->play(req.source, req.value, detail);
 }
 
 // The three status indicators are fixed pixel clusters on the right-hand edge: top corner, middle
@@ -223,9 +229,9 @@ void RenderPipeline::renderFrame(Canvas& out, int64_t nowMs) {
     refreshPageContent(nowMs, isNotif);
   }
 
-  if (isNotif && s.soundEnabled && !d_.sound->isPlaying()) {
+  if (isNotif && !d_.audio->isPlaying()) {
     const AppSpec& n = d_.engine->notifications().current();
-    if (n.loopSound) d_.sound->play(n);
+    if (n.loopSound) playPageSound(n);
   }
 
   const AppSpec* spec = pageSpec(renderId, isNotif);

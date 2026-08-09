@@ -22,12 +22,6 @@ const FontGlyph kWideG[] = {W, W, W, W, W, W, W, W, W, W,
 #undef W
 const GfxFont kWideFont = {kB, kWideG, '.', 'A', 8};
 
-struct FSound : ISoundService {
-  bool playSound(const std::string&) override { return true; }
-  void playRtttl(const std::string&) override {}
-  void r2d2(const std::string&) override {}
-  void stop() override {}
-};
 struct FDisplay : IDisplayService {
   void sendScreen() override {}
 };
@@ -76,10 +70,22 @@ struct SlowCaptureEffect : CaptureEffect {
   float rate() const override { return rate::kSteady; }
 };
 
-struct FakeSound : IPageSound {
+// The pipeline no longer owns any sound policy, so the counter sits where the sound really lands.
+struct FakeTone : sound::IToneSink {
   int plays = 0;
   bool playing = false;
-  void play(const AppSpec&) override { ++plays; }
+  void begin() override {}
+  void setVolume(uint8_t) override {}
+  bool playRtttl(const std::string&) override {
+    ++plays;
+    return true;
+  }
+  bool playMelodyFile(const std::string&) override {
+    ++plays;
+    return true;
+  }
+  void stop() override {}
+  void tick() override {}
   bool isPlaying() const override { return playing; }
 };
 
@@ -97,18 +103,20 @@ struct FakeClock : IPageClock {
 };
 
 struct Rig {
-  FSound so; FDisplay di; FSystem sy;
-  CoreEngine engine{so, di, sy};
+  FDisplay di; FSystem sy;
+  FakeTone tone;
+  sound::AudioRouter audio;
+  CoreEngine engine{audio, di, sy};
   AppRegistry apps;
   EffectRegistry effects, overlays;
   FakeIcon icons;
-  FakeSound sound;
   FakeClock clock;
   Canvas canvas{32, 8};
   FakeIcon iconsB;
   RenderPipeline* pipe = nullptr;
 
   Rig() {
+    audio.setTone(&tone);
     RenderPipelineDeps d;
     d.engine = &engine;
     d.apps = &apps;
@@ -118,7 +126,7 @@ struct Rig {
     d.fonts[1] = &kWideFont;
     d.icons = &icons;
     d.iconsB = &iconsB;
-    d.sound = &sound;
+    d.audio = &audio;
     d.clock = &clock;
     pipe = new RenderPipeline(32, 8, d);
   }
@@ -492,7 +500,7 @@ static void test_notification_sound_plays_once_on_appear() {
   r.pipe->renderFrame(r.canvas, 0);
   r.pipe->renderFrame(r.canvas, 20);
   r.pipe->renderFrame(r.canvas, 40);
-  TEST_ASSERT_EQUAL_INT(1, r.sound.plays);
+  TEST_ASSERT_EQUAL_INT(1, r.tone.plays);
 }
 
 static void test_loopsound_retriggers_only_when_finished() {
@@ -501,15 +509,15 @@ static void test_loopsound_retriggers_only_when_finished() {
       cmd(CommandType::Notify, "", "{\"text\":\"A\",\"soundRtttl\":\"x:d=8,o=5,b=120:c\",\"soundLoop\":true}"));
   r.engine.tick(0);
 
-  r.sound.playing = true;
+  r.tone.playing = true;
   r.pipe->renderFrame(r.canvas, 0);
-  TEST_ASSERT_EQUAL_INT(1, r.sound.plays);
+  TEST_ASSERT_EQUAL_INT(1, r.tone.plays);
   r.pipe->renderFrame(r.canvas, 20);
-  TEST_ASSERT_EQUAL_INT(1, r.sound.plays);
+  TEST_ASSERT_EQUAL_INT(1, r.tone.plays);
 
-  r.sound.playing = false;
+  r.tone.playing = false;
   r.pipe->renderFrame(r.canvas, 40);
-  TEST_ASSERT_EQUAL_INT(2, r.sound.plays);
+  TEST_ASSERT_EQUAL_INT(2, r.tone.plays);
 }
 
 static void test_repeat_holds_rotation_until_cycles_done() {
