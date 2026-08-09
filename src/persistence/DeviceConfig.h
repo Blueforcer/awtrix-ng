@@ -59,7 +59,7 @@ struct DeviceConfig {
 
   bool scriptingEnabled = true;
   int scriptLimit = 16;
-  int scriptMaxBytes = 8192;
+  int scriptMaxBytes = 16384;
 
   // Defaults come from the SoC profile at construction; load() then overwrites whatever the user
   // has actually stored. A profile change therefore only affects pins nobody has pinned down.

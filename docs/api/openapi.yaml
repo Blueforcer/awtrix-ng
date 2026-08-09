@@ -974,7 +974,7 @@ paths:
         matrix is showing as `ERR:<name>`, and it STICKS - a script that
         raised once stays broken until it is replaced. The source is
         deliberately not part of that listing: it can be as large as
-        `scriptMaxBytes` allows (8192 bytes by default, up to 32768).
+        `scriptMaxBytes` allows (16384 bytes by default, up to 32768).
       parameters:
         - name: name
           in: path
@@ -1049,7 +1049,7 @@ paths:
               type: string
               maxLength: 32768
               description: >
-                Berry source. The accepted size is `scriptMaxBytes` (8192 by
+                Berry source. The accepted size is `scriptMaxBytes` (16384 by
                 default); 32768 is the highest that setting can be raised to.
       responses:
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -2228,7 +2228,7 @@ components:
             keep running and stay replaceable, and only a new name is refused.
         scriptMaxBytes:
           type: integer
-          default: 8192
+          default: 16384
           minimum: 1024
           maximum: 32768
           description: >

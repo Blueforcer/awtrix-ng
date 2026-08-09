@@ -1125,7 +1125,7 @@ a script. Anything that waits, waits by returning and being called again.
 | Cap | Value | What happens at the edge |
 |---|---|---|
 | Instructions per call into script code | 200 000 | script stops and stays broken until replaced |
-| Script source | 8 KB by default (`scriptMaxBytes`, up to 32 KB) | upload refused |
+| Script source | 16 KB by default (`scriptMaxBytes`, up to 32 KB) | upload refused |
 | Scripts installed | 16 by default (`scriptLimit`, 0–32) | upload refused |
 | **Shared Berry heap, all scripts together** | **96 KB** without PSRAM; half the free PSRAM with it | **new installs refused** until something is freed; nothing running is removed |
 | Free memory to install | ~8 KB plus the source (~4 KB plus the source to re-save) | install refused, `507` |

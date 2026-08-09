@@ -811,7 +811,7 @@ const I18N={en:{
   scrpreview:'Show on AWTRIX',scrpreviewed:'Switched the panel to it',
   scrline:'Ln',scrreload:'Reloaded',
   scrinhook:'runtime error in',
-  scrtoobig:'Over the 8 KB AWTRIX accepts - shorten the script to save it.',
+  scrtoobig:'Over what AWTRIX accepts - shorten the script to save it.',
   palhelp:'Colour ramps for effects, text, charts and the progress bar.',
   paledit:'Palette editor',name:'Name',tryit:'Try on AWTRIX',newpal:'New palette',
   palsaved:'Palette saved',palname:'Letters/digits only',
@@ -962,7 +962,7 @@ const I18N={en:{
   scrpreview:'Auf AWTRIX zeigen',scrpreviewed:'Panel darauf umgeschaltet',
   scrline:'Zl',scrreload:'Neu geladen',
   scrinhook:'Laufzeitfehler in',
-  scrtoobig:'Über den 8 KB, die AWTRIX annimmt - zum Speichern kürzen.',
+  scrtoobig:'Über dem, was AWTRIX annimmt - zum Speichern kürzen.',
   palhelp:'Farbverläufe für Effekte, Text, Diagramme und den Fortschrittsbalken.',
   paledit:'Paletten-Editor',name:'Name',tryit:'Auf AWTRIX testen',newpal:'Neue Palette',
   palsaved:'Palette gespeichert',palname:'Nur Buchstaben/Ziffern',
@@ -1299,12 +1299,12 @@ const SYSF={
  pinI2sLrclk:F('gpio','number','I2S LRCLK|I2S LRCLK','Same DAC, word select.|Selber DAC, Wortauswahl.',{min:-1,max:39}),
  pinI2sDout:F('gpio','number','I2S DOUT|I2S DOUT','Same DAC, data.|Selber DAC, Daten.',{min:-1,max:39}),
  soundEnabled:F('sndhw','toggle','Sound|Ton','Master switch for one-shot sounds. Radio keeps playing.|Hauptschalter für Einzelklänge. Radio läuft weiter.',{api:'settings'}),
- buzzerVolume:F('sndhw','slider','Buzzer volume|Buzzer-Lautstärke','Melodies.|Melodien.',{min:0,max:100,api:'settings'}),
+ buzzerVolume:F('sndhw','slider','Buzzer volume|Buzzer-Lautstärke','RTTTL melodies.|RTTTL-Melodien.',{min:0,max:100,api:'settings'}),
  dfplayerVolume:F('sndhw','slider','DFPlayer volume|DFPlayer-Lautstärke','Tracks.|Titel.',{min:0,max:100,api:'settings'}),
  mp3Volume:F('sndhw','slider','MP3 volume|MP3-Lautstärke','Stored MP3s.|Gespeicherte MP3s.',{min:0,max:100,api:'settings'}),
  radioVolume:F('sndhw','slider','Radio volume|Radio-Lautstärke','Internet radio.|Internetradio.',{min:0,max:100,api:'settings'}),
  radioMeta:F('sndhw','toggle','Radio track info|Radio-Titelanzeige','Show the station and every new track title.|Sender und jeden neuen Titel anzeigen.',{api:'settings'}),
- dfplayer:F('sndhw','toggle','DFPlayer|DFPlayer','External audio module on the DFPlayer pins. The buzzer keeps working.|Externes Audiomodul an den DFPlayer-Pins. Der Buzzer bleibt nutzbar.'),
+ dfplayer:F('sndhw','toggle','DFPlayer|DFPlayer','External audio module on the DFPlayer pins. |Externes Audiomodul an den DFPlayer-Pins.'),
  statsInterval:F('misc','number','Stats interval|Stats-Intervall','How often stats go out over MQTT.|Wie oft Stats per MQTT gesendet werden.',{min:1000,max:600000,unit:'ms'}),
  artnet:F('misc','toggle','Art-Net|Art-Net','Receive Art-Net DMX on UDP 6454.|Art-Net DMX auf UDP 6454 empfangen.'),
  debugMode:F('misc','toggle','Debug mode|Debug-Modus','Verbose serial logging.|Ausführliches serielles Logging.'),
@@ -3829,10 +3829,27 @@ async function viewAudio(view){
   });
   panel.prepend(el('div',{class:'row audbar'},stopAll));
   panel.prepend(muted);
+
+  // Each section carries the volume of the output it belongs to, so a level is set where the
+  // sound is, not two tabs away. No help line here - the section heading already says which
+  // output this is.
+  const vols=[];
+  const withVol=(key,nodes)=>{
+    let timer=null;
+    const f=mkField(key,Object.assign({},SYSF[key],{h:''}),0,()=>{
+      clearTimeout(timer);
+      timer=setTimeout(()=>req('PATCH','/api/v1/settings',{[key]:f.get()})
+        .catch(e=>toast(e.message,false)),300);
+    });
+    vols.push([key,f]);
+    return [f.row].concat(nodes);
+  };
+
   (async()=>{
     try{
       const{data}=await api('/api/v1/settings');
       muted.style.display=data.soundEnabled===false?'':'none';
+      vols.forEach(([k,f])=>{if(k in data)f.set(data[k]);});
     }catch(e){}
   })();
 
@@ -3840,12 +3857,12 @@ async function viewAudio(view){
   if(hasSink('mp3')){
     const mp3s=mp3Section();
     markMp3=mp3s.mark;
-    section('mp3',t('mp3s'),t('mp3shelp'),mp3s.nodes,1);
+    section('mp3',t('mp3s'),t('mp3shelp'),withVol('mp3Volume',mp3s.nodes),1);
     storage=mp3s.storSlot;
   }
   if(hasSink('radio')){
     section('radio',t('radioTab'),t('radioH'),
-      radioSection(d=>markMp3(d.mp3.playing?d.mp3.name:'')),1);
+      withVol('radioVolume',radioSection(d=>markMp3(d.mp3.playing?d.mp3.name:''))),1);
   }else if(hasSink('mp3')){
     // No radio section polling on this build, so the MP3 indicator needs its own timer.
     const refresh=async()=>{
@@ -3857,7 +3874,8 @@ async function viewAudio(view){
     refresh();
     poller(refresh,4000);
   }
-  if(hasSink('buzzer'))section('melodies',t('melodies'),t('melodieshelp'),melodiesSection(),1);
+  if(hasSink('buzzer'))
+    section('melodies',t('melodies'),t('melodieshelp'),withVol('buzzerVolume',melodiesSection()),1);
   if(storage)panel.prepend(storage);
 }
 const PAL_MAX=16;

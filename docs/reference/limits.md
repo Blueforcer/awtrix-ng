@@ -9,7 +9,7 @@ one you can raise yourself; everything else is fixed.
 | --- | --- | --- |
 | JSON request body (HTTP) | 8192 bytes | `413 payloadTooLarge`, nothing is applied |
 | MQTT command payload | 8192 bytes | dropped before it is parsed: no error, no `/result` reply |
-| Script upload body | [`scriptMaxBytes`](system.md#miscellaneous), default 8192, range 1024–32768 | `413 payloadTooLarge`, never truncated |
+| Script upload body | [`scriptMaxBytes`](system.md#miscellaneous), default 16384, range 1024–32768 | `413 payloadTooLarge`, never truncated |
 | App and script names | 1–32 characters of `A–Z`, `a–z`, `0–9`, `_`, `-` | `400 invalidName` |
 
 The byte-count cap is not the only limit: nested objects and arrays may go at most **16** levels
@@ -40,7 +40,7 @@ Berry scripts run under their own caps. How each one behaves in practice is in
 | Limit | Value | At the edge |
 | --- | --- | --- |
 | Instructions per entry | 200 000 | the script stops and stays broken until you replace it; nothing else is affected |
-| Script source | [`scriptMaxBytes`](system.md#miscellaneous), default 8 KB, up to 32 KB | upload refused, `413` |
+| Script source | [`scriptMaxBytes`](system.md#miscellaneous), default 16 KB, up to 32 KB | upload refused, `413` |
 | Scripts installed | [`scriptLimit`](system.md#miscellaneous), default 16, range 0–32; [modules](../guides/scripting.md#sharing-code-between-scripts) count too | upload refused, `507` |
 | Shared script memory | 96 KB on a board without PSRAM; half the free PSRAM on a board with it | **new** installs refused until it drops; nothing already installed is removed |
 | Free memory to install | about 8 KB plus the source; re-saving an existing script, about 4 KB plus the source | install refused, `507` - [what helps](../guides/scripting.md#not-enough-free-memory-to-compile) |

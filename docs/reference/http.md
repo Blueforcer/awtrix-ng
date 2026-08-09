@@ -859,7 +859,7 @@ that name.
 | 200 | `{"ok":true,"name":"X","error":{...}}` - installed but broken; see [the error object](#the-error-object) |
 | 400 | `invalidName` - the name is malformed, or the tail is empty (`/api/v1/apps/script/`) |
 | 403 | `forbidden` - the write API is closed in AP/provisioning mode |
-| 413 | `payloadTooLarge` - over [`scriptMaxBytes`](system.md#miscellaneous) (`8192` by default); refused, never truncated |
+| 413 | `payloadTooLarge` - over [`scriptMaxBytes`](system.md#miscellaneous) (`16384` by default); refused, never truncated |
 | 422 | `validationFailed`, `request body must be the script source`, `field: "source"` - empty body |
 | 507 | `insufficientStorage`, `field: "name"` - see the four refusals below |
 
@@ -1641,7 +1641,7 @@ Behaviour to know:
 | `debugMode` | boolean | `false` | gates verbose request/command tracing |
 | `scriptingEnabled` | boolean | `true` | whether the Berry stack exists at all; off frees ~40 KB RAM, script routes answer `503`. Applies after reboot - see [System](system.md#miscellaneous) |
 | `scriptLimit` | integer | `16` | 0–32; how many Berry scripts may be resident. Lowering it below the number installed refuses new names without removing any |
-| `scriptMaxBytes` | integer | `8192` | 1024–32768; largest script source accepted. Lowering it refuses larger new installs but never drops a stored script |
+| `scriptMaxBytes` | integer | `16384` | 1024–32768; largest script source accepted. Lowering it refuses larger new installs but never drops a stored script |
 | `pinMatrix` | integer | `32` | always treated as enabled |
 | `pinBtnLeft` | integer | `26` | `-1` = disabled |
 | `pinBtnSelect` | integer | `27` | `-1` = disabled |

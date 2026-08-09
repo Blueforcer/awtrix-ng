@@ -64,6 +64,35 @@ async function sectionsFollowTheSinks() {
   }
 }
 
+// The Audio tab carries the volume of the output each section belongs to.
+async function sectionVolumeSliders() {
+  console.log('audio: every section carries its own volume slider');
+  const { window, store } = await boot();
+  await goto(window, '#/audio');
+
+  const inSection = id => {
+    const sec = window.document.querySelector('#sec-' + id);
+    return sec ? [...sec.querySelectorAll('input[type=range]')] : [];
+  };
+  assert(inSection('mp3').length === 1, 'the MP3 section has one slider');
+  assert(inSection('radio').length === 1, 'the radio section has one slider');
+  assert(inSection('melodies').length === 1, 'the melody section has one slider');
+
+  const rowText = id => window.document.querySelector('#sec-' + id + ' .frow').textContent;
+  assert(/mp3Volume/.test(rowText('mp3')), 'the MP3 slider is mp3Volume');
+  assert(/radioVolume/.test(rowText('radio')), 'the radio slider is radioVolume');
+  assert(/buzzerVolume/.test(rowText('melodies')), 'the melody slider is buzzerVolume');
+
+  const slider = inSection('mp3')[0];
+  assert(Number(slider.value) === store.settings.mp3Volume, 'it loads the stored value');
+  assert(!window.document.querySelector('#sec-mp3 .frow .help'),
+    'no help line here - the section heading already names the output');
+  slider.value = '42';
+  slider.dispatchEvent(new window.Event('input', { bubbles: true }));
+  await flush(400); // debounce(300)
+  assert(store.settings.mp3Volume === 42, 'moving it PATCHes its own key');
+}
+
 async function oneSliderPerSink() {
   console.log('audio: System shows a volume slider per sink');
   {
@@ -204,6 +233,7 @@ async function radioIntact() {
 (async () => {
   await tabRedirects();
   await sectionsFollowTheSinks();
+  await sectionVolumeSliders();
   await oneSliderPerSink();
   await volumeSaves();
   await mp3Upload();

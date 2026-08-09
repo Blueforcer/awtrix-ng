@@ -71,7 +71,7 @@ by completion (**Ctrl-Space**, or just keep typing), so a misspelled `pixel` sta
 and is visible before you save, and the list always matches whichever AWTRIX you are
 talking to. **Ctrl-S** saves, **Ctrl-/** toggles comments, **Tab** / **Shift-Tab** indent a
 selection, and the status line counts the bytes you have left of what AWTRIX accepts
-(8 KB by default).
+(16 KB by default).
 
 If the panel shows **`ERR:`** in red, your script hit an error - a typo, a bad index,
 anything. Nothing is harmed: open the **Scripts** tab and the message is right there
