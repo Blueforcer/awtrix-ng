@@ -258,7 +258,7 @@ everything at once.
 ### audio/play
 
 Send **exactly one** key, and the key chooses which output answers. Sending more than one is
-refused whole - `field` names the first key you sent - and nothing plays. Only `sound` looks at
+refused whole - `field` names the first of them in the order above - and nothing plays. Only `sound` looks at
 more than one output; the rest never fall back. Full rules:
 [HTTP API - POST /api/v1/audio/play](http.md#post-apiv1audioplay).
 

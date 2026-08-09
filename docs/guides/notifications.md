@@ -86,7 +86,7 @@ number. Uploading MP3s: [MP3s](sounds.md#mp3s).
 
 The melody plays once, when the notification first appears. Add `"soundLoop": true` to re-trigger it each time it finishes, for as long as the notification is on screen.
 
-Both keys need the global `soundEnabled` setting on. A name nothing is stored under plays nothing and still returns `200`; an RTTTL string that does not parse is rejected outright with `422 validationFailed` and the notification is not pushed. If you send both, only the RTTTL plays. More on melody format, uploading files and DFPlayer wiring: [MP3s & melodies](sounds.md) and [Sound](../reference/payload.md#sound).
+Both keys need the global `soundEnabled` setting on. A name nothing is stored under plays nothing and still returns `200`; an RTTTL string that does not parse is rejected outright with `422 validationFailed` and the notification is not pushed. If you send both, only the RTTTL plays. More on melody format, uploading files and DFPlayer wiring: [Sound](sounds.md) and [Sound](../reference/payload.md#sound).
 
 ## How long it stays
 

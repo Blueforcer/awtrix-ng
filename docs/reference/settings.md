@@ -383,7 +383,7 @@ turned down to sit in the background does not also turn down the doorbell.
 With `soundEnabled: false`, sound and melody commands are still **accepted and answered with a
 success response** - they simply produce no sound. A mute is not an error. The switch covers
 one-shot sounds only: a stream is something you asked for out loud, a notification arrives
-uninvited. See [MP3s & melodies](../guides/sounds.md).
+uninvited. See [Sound](../guides/sounds.md).
 
 ---
 

@@ -189,5 +189,5 @@ path, or anything resolving outside `/ICONS`, `/MELODIES` or `/PALETTES` is reje
 
 * [Payload reference → Icon](../reference/payload.md#icon) - every icon key, with ranges and defaults
 * [HTTP reference → Files](../reference/http.md#files) - the three file routes in full
-* [MP3s & melodies](sounds.md) - `/MELODIES` and the RTTTL format
+* [Sound](sounds.md) - `/MELODIES` and the RTTTL format
 * [Text & colors](text.md) - the 9px column an icon takes from your text

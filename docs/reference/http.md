@@ -1296,7 +1296,7 @@ MP3 of the same name, and a key whose output the panel does not have answers `50
 | 200 | `{"ok":true}` |
 | 400 | body is not valid JSON (`invalidJson`) |
 | 404 | `notFound`, `no MP3 called "x"` / `no melody called "x"` / `nothing called "x"` - nothing stored under that name |
-| 422 | `field` names the first key sent, `exactly one of "sound", "mp3", "melody", "track", "rtttl", "station", "index" or "url" is allowed` |
+| 422 | `field` names the first of them in the order above, `exactly one of "sound", "mp3", "melody", "track", "rtttl", "station", "index" or "url" is allowed` |
 | 422 | the same list `is required` - the body named none of them, and no `field` is claimed |
 | 422 | `field: "rtttl"` - the inline melody does not parse; `message` carries the reason and the byte offset |
 | 422 | `field: "track"` - `must be a number between 1 and 2999` |

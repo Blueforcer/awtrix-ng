@@ -791,7 +791,7 @@ paths:
                       type: object
                       properties:
                         name: { type: string }
-                        rtttl: { type: string, description: the file contents, verbatim }
+                        rtttl: { type: string, description: "The stored melody, verbatim" }
                         bytes: { type: integer }
                         notes: { type: integer }
                         durationMs: { type: integer }
@@ -1294,15 +1294,12 @@ paths:
                   overlays: { type: array, items: { type: string } }
                   audio:
                     type: object
-                    description: >
-                      One flag per sound output, so a client can tell "no
-                      buzzer" from "no speaker". All four false means the panel
-                      is silent.
+                    description: What this panel can play. All four false means it makes no sound.
                     properties:
-                      buzzer: { type: boolean, description: pinBuzzer is wired - melodies and inline RTTTL have an output }
-                      track: { type: boolean, description: dfplayer is on and both DFPlayer pins are set }
-                      mp3: { type: boolean, description: Stored MP3s can be played - an ESP32-S3 with PSRAM and the I2S pins set }
-                      radio: { type: boolean, description: Internet radio can be streamed - the same amplifier as mp3 }
+                      buzzer: { type: boolean, description: Melodies and inline RTTTL can be played }
+                      track: { type: boolean, description: DFPlayer tracks can be played }
+                      mp3: { type: boolean, description: Stored MP3s can be played }
+                      radio: { type: boolean, description: Internet radio can be streamed }
                   palettes:
                     type: array
                     items: { type: string }
@@ -1320,7 +1317,7 @@ paths:
                       ADC1 on 1-10. Ranges are inclusive `[lo, hi]` pairs.
                     properties:
                       soc: { type: string, enum: [esp32, esp32s3] }
-                      label: { type: string, description: display name, e.g. "ESP32-S3" }
+                      label: { type: string, description: "Display name of the chip, e.g. ESP32-S3" }
                       max: { type: integer, description: highest GPIO number that exists }
                       missing:
                         type: array
@@ -1900,11 +1897,11 @@ components:
         Exactly one key. The one-shot keys name an output; `sound` lets the
         device choose. Among the stream keys, station wins if several are given.
       properties:
-        sound: { type: string, description: A name - a stored MP3, else a melody, else a DFPlayer track }
-        mp3: { type: string, description: A stored MP3, /MP3/<name>.mp3; never falls back to a melody }
-        melody: { type: string, description: A stored melody, /MELODIES/<name>.txt; never falls back to an MP3 }
+        sound: { type: string, description: "A name: a stored MP3, else a melody, else a DFPlayer track" }
+        mp3: { type: string, description: The stored MP3 of that name }
+        melody: { type: string, description: The stored melody of that name }
         track: { type: integer, minimum: 1, maximum: 2999, description: A DFPlayer track number }
-        rtttl: { type: string, description: An inline RTTTL melody, played on the buzzer }
+        rtttl: { type: string, description: An inline RTTTL melody }
         station: { type: string, description: A name from the stored list }
         index: { type: integer, description: A position in the stored list }
         url: { type: string, description: A stream that is not in the list }
@@ -1921,12 +1918,12 @@ components:
             name: { type: string, description: The playing MP3's name without the .mp3; empty when none }
         playing: { type: boolean }
         station: { type: string, description: The label tuned to }
-        title: { type: string, description: Last track title from the stream, UTF-8 }
+        title: { type: string, description: "Last track title from the stream, UTF-8" }
         error: { type: string, description: Why playback stopped; cleared on the next successful play }
-        underruns: { type: integer, description: Times the output fell more than one DMA buffer behind real time. Counts dropouts a listener would hear. Accumulates for as long as the radio service is up; it does not reset per station, so read it as a difference across two polls. }
-        decodeUs: { type: integer, description: Mean microseconds to decode one frame. A frame is 26.1 ms of audio, so this over 26100 is the share of one core the decoder uses. }
+        underruns: { type: integer, description: "Audible dropouts since boot; read it as a difference across two polls" }
+        decodeUs: { type: integer, description: "Mean microseconds to decode one frame" }
         starvedMs: { type: integer, description: Milliseconds the audio task spent with nothing to decode. Separates a slow network from a slow decoder. Accumulates from boot like underruns; it does not reset per station. }
-        bufferBytes: { type: integer, description: Unplayed bytes in the stream buffer, sampled after each decode pass. How long a network stall playback can absorb; divide by the stream's byte rate. }
+        bufferBytes: { type: integer, description: "Unplayed bytes in the stream buffer" }
         stations:
           type: array
           items: { $ref: "#/components/schemas/RadioStation" }
@@ -1990,12 +1987,12 @@ components:
           description: >
             Device-wide text motion. Every field is concrete here; a payload's
             own `scroll` overrides it field by field.
-        buzzerVolume: { type: integer, minimum: 0, maximum: 100, description: Melodies on the buzzer at pinBuzzer. }
-        dfplayerVolume: { type: integer, minimum: 0, maximum: 100, description: Tracks on a DFPlayer Mini. }
-        mp3Volume: { type: integer, minimum: 0, maximum: 100, description: Stored MP3s on the I2S speaker; separate from radioVolume so a quiet station does not also quieten a doorbell. }
-        radioVolume: { type: integer, minimum: 0, maximum: 100, description: Internet radio on the I2S speaker. }
-        radioMeta: { type: boolean, description: Announce the station and each new track title on the matrix. }
-        saturation: { type: integer, minimum: 0, maximum: 100, description: Colour saturation of the whole panel in percent; 100 leaves colours untouched, 0 renders greys. }
+        buzzerVolume: { type: integer, minimum: 0, maximum: 100, description: Volume of melodies on the buzzer }
+        dfplayerVolume: { type: integer, minimum: 0, maximum: 100, description: Volume of DFPlayer tracks }
+        mp3Volume: { type: integer, minimum: 0, maximum: 100, description: Volume of stored MP3s }
+        radioVolume: { type: integer, minimum: 0, maximum: 100, description: Volume of internet radio }
+        radioMeta: { type: boolean, description: Show the station and each new track title on the matrix }
+        saturation: { type: integer, minimum: 0, maximum: 100, description: "Colour saturation of the whole panel in percent; 100 leaves colours untouched, 0 renders greys" }
         gamma: { type: number, exclusiveMinimum: 0 }
         colorCorrection:
           $ref: "#/components/schemas/NullableColor"
@@ -2194,7 +2191,7 @@ components:
         dfplayer:
           type: boolean
           default: false
-          description: DFPlayer Mini instead of the buzzer; also gates pinDfRx/pinDfTx validation.
+          description: Use a DFPlayer Mini on the DF pins
         buttonCallback: { type: string, default: "", description: HTTP webhook URL fired on button press }
         artnet:
           type: boolean
@@ -2253,11 +2250,11 @@ components:
         pinBuzzer: { type: integer, default: 15, description: "-1 = disabled; output-capable pin required" }
         pinI2cSda: { type: integer, default: 21, description: "-1 = disabled; output-capable pin required" }
         pinI2cScl: { type: integer, default: 22, description: "-1 = disabled; output-capable pin required" }
-        pinDfRx: { type: integer, default: 23, description: Validated only while dfplayer is true. }
-        pinDfTx: { type: integer, default: 18, description: Validated only while dfplayer is true; output-capable pin required. }
-        pinI2sBclk: { type: integer, default: -1, description: I2S bit clock for an external DAC. ESP32-S3 only; -1 on the ESP32. All three pinI2s* fields must be set together or all left at -1. }
-        pinI2sLrclk: { type: integer, default: -1, description: I2S word-select clock. ESP32-S3 only; -1 on the ESP32. }
-        pinI2sDout: { type: integer, default: -1, description: I2S serial data out. ESP32-S3 only; -1 on the ESP32. }
+        pinDfRx: { type: integer, default: 23, description: "DFPlayer Mini serial RX; -1 = disabled" }
+        pinDfTx: { type: integer, default: 18, description: "DFPlayer Mini serial TX; -1 = disabled, output-capable pin required" }
+        pinI2sBclk: { type: integer, default: -1, description: "I2S bit clock to an external DAC. ESP32-S3 only; set all three pinI2s* together or all to -1" }
+        pinI2sLrclk: { type: integer, default: -1, description: "I2S word-select clock. ESP32-S3 only" }
+        pinI2sDout: { type: integer, default: -1, description: "I2S serial data out. ESP32-S3 only" }
     SystemConfigRead:
       description: >
         The configuration as returned by GET/PUT - identical to SystemConfig

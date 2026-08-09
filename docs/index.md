@@ -6,6 +6,10 @@ Or write the app yourself, directly on AWTRIX, and let it run on the clock.
 
 AWTRIX NG is a complete new development - firmware written from scratch, the successor to the well-known AWTRIX 3.
 
+* :material-github: **[Source code](https://github.com/Blueforcer/awtrix-ng)** - the firmware, the web UI and these pages
+* :material-sitemap: **[AWTRIX Flows](https://flows.blueforcer.de/)** - user-made scripts and automations for your AWTRIX
+* :material-forum: **[Discord](https://discord.gg/5pbmeCrs3a)** - ask, report, show what you built
+
 ## Two ways to make it yours
 
 ### 1 · Push to it from outside
@@ -58,7 +62,7 @@ return Hello()
 | **Apps** | Five built-in apps (time, date, temperature, humidity, battery), plus your own - [pushed apps](guides/pushed-apps.md) fed from outside and [scripts](guides/scripting.md) running on AWTRIX - all in one rotation. |
 | **Notifications** | Interrupt the rotation with a one-shot message. See [Your first notification](guides/notifications.md). |
 | **Visuals** | Colored text fragments, scrolling, JPEG and base64 icons, bar/line/progress charts, draw primitives, background effects and weather overlays. See [Visual reference](reference/visuals.md). |
-| **Sound** | RTTTL melodies on the buzzer, your own MP3s on a speaker, numbered tracks on a DFPlayer - each with its own volume. See [MP3s & melodies](guides/sounds.md). |
+| **Sound** | RTTTL melodies on the buzzer, your own MP3s on a speaker, numbered tracks on a DFPlayer - each with its own volume. See [the sound guide](guides/sounds.md). |
 | **Sensors** | Auto-detected I²C temperature/humidity sensors, LDR auto-brightness, battery monitoring. See [Brightness & sensors](guides/brightness.md). |
 | **Integrations** | HTTP, MQTT (with Home Assistant auto-discovery), Art-Net, mDNS + UDP discovery. |
 

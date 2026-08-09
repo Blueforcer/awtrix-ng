@@ -408,7 +408,7 @@ The debounce time and the double-press window are fixed and cannot be configured
 The flag is what keeps two GPIOs free on every board that has no module: the ESP32 defaults name
 `pinDfRx` and `pinDfTx` whether or not one is attached.
 
-See [MP3s & melodies](../guides/sounds.md).
+See [Sound](../guides/sounds.md).
 
 ## Art-Net
 

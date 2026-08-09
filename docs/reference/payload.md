@@ -544,7 +544,7 @@ These 7 keys are accepted **only** by `POST /api/v1/notifications`. A pushed app
 | `hold` | bool | - | `false` | Never auto-expire; stay until dismissed |
 | `stack` | bool | - | `true` | Queue behind existing notifications, else replace the current one |
 | `wakeup` | bool | - | `false` | Render even while the matrix is powered off |
-| `sound` | string \| int | - | `""` | MP3 sound or melody file name, or DFPlayer track |
+| `sound` | string \| int | - | `""` | A name: a stored MP3, else a melody, else a DFPlayer track |
 | `soundRtttl` | string | - | `""` | Inline RTTTL melody |
 | `soundLoop` | bool | - | `false` | Re-trigger the melody when it finishes |
 
@@ -571,15 +571,17 @@ Renders the notification even while the matrix is powered off via `PATCH /api/v1
 
 Both `sound` and `soundRtttl` are gated on the global `soundEnabled` setting, and play once when the notification first appears.
 
-`sound` accepts a **string or an integer** - an integer is converted to its decimal string, so `"sound": 5` becomes `"5"`. Bools, floats and objects are ignored. Its meaning depends on the sound hardware:
+`sound` accepts a **string or an integer** - an integer is converted to its decimal string, so `"sound": 5` becomes `"5"`. Bools, floats and objects are ignored. It is a name, and the device picks the output, in this order:
 
-- **Speaker (I2S DAC)** - `/MP3/<sound>.mp3` plays if it exists, else the melody below. A playing radio stream is interrupted and reconnects afterwards.
-- **Buzzer** - names `/MELODIES/<sound>.txt`, an RTTTL file. A missing file plays nothing.
-- **DFPlayer** - parsed as a track number, which must be greater than 0.
+1. the stored MP3 `/MP3/<sound>.mp3`, on a panel with a speaker - a playing radio stream is interrupted and reconnects afterwards;
+2. the stored melody `/MELODIES/<sound>.txt`, on a panel with a buzzer;
+3. a DFPlayer track, when the name is a plain number from 1 to 2999 and a DFPlayer is wired.
 
-`soundRtttl` is an inline melody string played directly, with no filesystem access. It is parsed when the notification arrives, so an unparseable melody is rejected with `422 validationFailed` (`field: "soundRtttl"`) and nothing is pushed - the same check [`POST /api/v1/audio/play`](http.md#post-apiv1audioplay) makes. A melody that plays there works here.
+A name nothing is stored under plays nothing; the notification is still shown. The same rule applies to `sound` on [`POST /api/v1/audio/play`](http.md#post-apiv1audioplay) and to `sound.play()` in a script - see [Letting AWTRIX choose](../guides/sounds.md#letting-awtrix-choose).
 
-When both `sound` and `soundRtttl` are present, only the `soundRtttl` melody plays. On DFPlayer hardware, `soundRtttl` is not supported at all.
+`soundRtttl` is an inline melody string played directly, with no filesystem access. It is parsed when the notification arrives, so an unparseable melody is rejected with `422 validationFailed` (`field: "soundRtttl"`) and nothing is pushed - the same check `POST /api/v1/audio/play` makes. A melody that plays there works here. It needs a buzzer: with `pinBuzzer` unset there is no output for the notes and the notification is shown silently.
+
+When both `sound` and `soundRtttl` are present, only the `soundRtttl` melody plays.
 
 **`soundLoop: true`** re-triggers whichever of `soundRtttl`/`sound` applies once it finishes, for as long as the notification is shown. Combined with `hold`, this gives an indefinite alarm:
 

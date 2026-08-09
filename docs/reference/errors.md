@@ -72,7 +72,7 @@ counts for.
 | `validationFailed` | 422 | write routes | The JSON parsed, but a value is invalid. Usually carries `field`. **Nothing was applied.** |
 | `insufficientStorage` | 507 | pushed apps, notification queue, script store, or a large request body | A store or queue is full ([Limits](limits.md#apps-and-notifications)); the request was rejected instead of silently dropped. Also returned when AWTRIX is too low on memory to act on a large body - a small body (a bare reboot, a short JSON) is never refused this way. Carries `field: "name"` when a script install hit `scriptLimit`, `field: "source"` when there was not enough memory to receive the source at all. |
 | `internalError` | 500 | dispatch fallback, OTA, uploads | The command reached AWTRIX and failed. A failed firmware flash reads `firmware update failed (bad image or storage full)`. |
-| `unavailable` | 503 | `GET /api/v1/apps/script/{name}`, `GET /api/v1/scripts/shared`, `POST /api/v1/audio/play`, `POST /api/v1/audio/stop` | The build has no scripting platform (so there is no source to answer with) or no audio output. A `PUT` on the script path answers `500 internalError` instead. |
+| `unavailable` | 503 | `GET /api/v1/apps/script/{name}`, `GET /api/v1/scripts/shared`, `POST /api/v1/audio/play` | The build has no scripting platform (so there is no source to answer with), or the panel has no output for what was asked. `POST /api/v1/audio/stop` never answers 503. A `PUT` on the script path answers `500 internalError` instead. |
 | `serviceBusy` | 503 | script install, radio play | A transient refusal, distinct from a hard `insufficientStorage` capacity limit; retry shortly. The response carries `Retry-After: 2`. Carries `field: "name"` on a script install and `field: "url"` when a radio stream is refused for lack of memory. |
 
 `field` appears on five codes only, so do not write clients that require it. `invalidName` always
@@ -112,7 +112,7 @@ normally.
 | Route or cause | `message` |
 | --- | --- |
 | `PUT /api/v1/apps/active` with an unknown name | `app not found` |
-| `POST /api/v1/audio/play` with an unknown `mp3` or `melody` | `no MP3 of that name` / `no melody of that name` |
+| `POST /api/v1/audio/play` with an unknown `mp3`, `melody` or `sound` | `no MP3 called "x"` / `no melody called "x"` / `nothing called "x"` |
 | `GET /api/v1/apps/script/{name}` for a script that does not exist | `no such script` |
 | `DELETE /api/v1/audio/melodies/{name}` for a melody that does not exist | `melody not found` |
 | Anything else not found | `not found` |
@@ -271,7 +271,7 @@ JSON, while `{}` is a well-formed object with nothing in it.
 | `PUT /api/v1/apps/pushed/{name}` | `422` - `a JSON body is required; use DELETE /api/v1/apps/{name} to remove the app` | same `422` |
 | `PUT /api/v1/display/moodlight` | `422` - `a JSON body is required; use DELETE to turn the mood light off` | same `422` |
 | `PUT /api/v1/indicators/{id}` | `422` - `a JSON body is required; use DELETE to turn the indicator off` | same `422` |
-| `POST /api/v1/audio/play` | `422` - `a JSON body is required; name a station, an index or a url` | same `422` |
+| `POST /api/v1/audio/play` | `422` - `a JSON body is required; name a sound, an MP3, a melody, a track, a station or a url` | same `422` |
 | `PUT /api/v1/audio/stations` | `422` - `a JSON body is required; send {"stations":[...]}` | `422 validationFailed`, `field: "stations"`, `must be an array` |
 | `POST /api/v1/notifications` | `400 invalidJson` | `200` - an empty notification is queued |
 | `PATCH /api/v1/settings` | `400 invalidJson` | `200` - nothing changed |
@@ -338,7 +338,7 @@ curl -i -X PATCH http://<awtrix-ip>/api/v1/settings \
 | `POST /api/v1/device/sleep` | `durationMs` | `must be a positive integer (milliseconds)` |
 | `POST /api/v1/notifications` | *(none)* | `send one notification per request; an array of more than one is not accepted` |
 | `POST /api/v1/audio/play` | *(none)* | `exactly one of "sound", "mp3", "melody", "track", "rtttl", "station", "index" or "url" is required` - no field is claimed, because none was sent |
-| `POST /api/v1/audio/play` | the first key sent | the same list, `is allowed` - more than one supplied |
+| `POST /api/v1/audio/play` | the first key in that list | the same list, `is allowed` - more than one supplied |
 | `POST /api/v1/audio/play` | `track` | `must be a number between 1 and 2999` |
 | `POST /api/v1/audio/stop` | `scope` | `must be "sounds", "stream" or "all"` |
 | `POST /api/v1/notifications` | `soundRtttl` | the RTTTL parser's reason and byte offset |

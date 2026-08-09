@@ -1,4 +1,4 @@
-# MP3s & melodies
+# Sound
 
 AWTRIX has up to three sound outputs, and a panel may have any combination of them:
 
@@ -71,11 +71,16 @@ Three ascending notes, and:
 | `rtttl` | string | the melody string in the request |
 
 Send **exactly one** key. A body carrying more than one is rejected with `422 validationFailed`
-and nothing plays; the `field` in the reply names the first key you sent.
+and nothing plays; the `field` in the reply names the first of them in the order above.
 
 The four explicit keys never fall back. Asking for a `melody` will not play an MP3 of the same
 name, and a key whose output your panel does not have answers `503 unavailable` - the request was
-not wrong, the hardware is simply not there.
+not wrong, the hardware is simply not there. A malformed `rtttl` or `track` is still `422`, on
+every panel: what you sent is checked before the hardware is.
+
+The `Content-Type` header is
+[mandatory on every write](../reference/conventions.md#content-type-is-mandatory).
+Full status-code table: [Audio](../reference/http.md#audio).
 
 ## Letting AWTRIX choose
 
@@ -90,10 +95,6 @@ not wrong, the hardware is simply not there.
 The DFPlayer comes last because it is the only one AWTRIX cannot check first: the module owns its
 SD card and there is no way to ask it what is on there. Putting it earlier would swallow every
 numeric name and make `/MP3/7.mp3` unreachable by name.
-
-The `Content-Type` header is
-[mandatory on every write](../reference/conventions.md#content-type-is-mandatory).
-Full status-code table: [Audio](../reference/http.md#audio).
 
 ## Writing RTTTL
 
@@ -267,12 +268,6 @@ valid volume, not a mute. The web UI shows a slider only for the outputs your pa
 `soundEnabled` (default `true`) mutes one-shot sounds - MP3s, melodies, tracks and a
 notification's own melody. A **radio stream keeps playing**: you started that one deliberately,
 while a notification arrives uninvited.
-
-```bash
-curl -X PATCH http://<awtrix-ip>/api/v1/settings \
-  -H 'Content-Type: application/json' \
-  -d '{"soundEnabled":false}'
-```
 
 ```bash
 curl -X PATCH http://<awtrix-ip>/api/v1/settings \

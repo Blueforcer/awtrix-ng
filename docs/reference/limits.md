@@ -74,6 +74,8 @@ can catch.
 | --- | --- | --- |
 | Melody source | 512 characters | `422 validationFailed` |
 | Melody name | 1–24 characters of `A–Z`, `a–z`, `0–9`, `_`, `-` | `422 validationFailed` |
+| MP3 name | 1–32 characters of `A–Z`, `a–z`, `0–9`, `_`, `-` | refused at upload |
+| DFPlayer track | 1–2999 | `422 validationFailed` |
 | Radio stations | 32 | `422 validationFailed`, the whole list is rejected |
 | Station name | 1–24 characters | `422 validationFailed`, naming the row that failed |
 | Station URL | at most 255 characters, `http://` or `https://` | `422 validationFailed`, naming the row that failed |

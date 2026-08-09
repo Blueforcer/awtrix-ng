@@ -2,10 +2,11 @@
 
 AWTRIX can play an MP3 internet radio stream and show what is on air. It needs
 an ESP32-S3 with PSRAM and an external I²S DAC. Without all three the **Radio**
-tab is hidden. `POST /api/v1/audio/play` and `POST /api/v1/audio/stop` answer
+tab is hidden. Asking for a station with `POST /api/v1/audio/play` answers
 `503 unavailable`; `GET /api/v1/audio` still works and reports
 `"available": false`, and editing the station list (`PUT /api/v1/audio/stations`)
-works on every build.
+works on every build. `POST /api/v1/audio/stop` always answers `200`: stopping
+something that cannot play is not an error.
 
 There is one image per PSRAM wiring, and the wrong one hides the radio: the
 device page then shows **PSRAM: none** although the board has some. That is the
@@ -124,6 +125,10 @@ Volume is `radioVolume`, `0`–`100`. Stored [MP3s](sounds.md#mp3s) come out of 
 but have their own `mp3Volume`, so a station turned down to sit in the background does not also
 turn down your doorbell. See [Sound](../reference/settings.md#sound).
 
+The `soundEnabled` switch does **not** touch the radio. It mutes one-shot sounds - melodies, MP3s,
+a notification's own melody - because those arrive uninvited, while a station is something you
+started. Use `POST /api/v1/audio/stop` to end it.
+
 ## Limits
 
 **MP3 stations only.** That is what internet radio overwhelmingly is, but a
@@ -145,7 +150,7 @@ HTTPS streams work, and their certificates are not verified.
 
 | Symptom | Cause |
 |---|---|
-| Radio section missing, play/stop answer `503` | Not an ESP32-S3 image, the I²S pins are `-1`, or the device page shows **PSRAM: none** - then the board either has none or wants the `-quad-` image (station editing and `GET /api/v1/audio` still work) |
+| Radio section missing, tuning answers `503` | Not an ESP32-S3 image, the I²S pins are `-1`, or the device page shows **PSRAM: none** - then the board either has none or wants the `-quad-` image (station editing and `GET /api/v1/audio` still work) |
 | `422` on the pins | One of the three is set and the others are not |
 | "this stream is not MPEG-1 Layer III audio" | An AAC or otherwise unsupported mount |
 | "could not connect to the station" | Wrong URL, station offline, or DNS is not resolving |
@@ -157,4 +162,4 @@ HTTPS streams work, and their certificates are not verified.
 - [Web UI tour - Radio](../getting-started/web-ui.md#radio) - the Audio tab's Radio section, and what each control does
 - [HTTP API - Audio](../reference/http.md#audio) - every route, field and status code
 - [GPIO & boards](../reference/gpio.md) - the I²S pins and what else can sit on them
-- [MP3s & melodies](sounds.md) - the buzzer, for alerts rather than music
+- [Sound](sounds.md) - the buzzer, for alerts rather than music

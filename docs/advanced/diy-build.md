@@ -67,8 +67,8 @@ for a clock that never plays a stream.
 | 3 x momentary push button | App navigation, menus, deep-sleep wake | [Buttons](../reference/system.md#buttons) |
 | LDR (e.g. GL5528) + 10 k resistor | Auto-brightness | [Brightness & sensors](../guides/brightness.md) |
 | BME280 / BMP280 / HTU21DF / SHT31 | Temperature, humidity, pressure apps | [Sensor bus](../reference/gpio.md#sensor-bus) |
-| Passive piezo buzzer | RTTTL melodies and beeps | [MP3s & melodies](../guides/sounds.md) |
-| **MAX98357A** I2S DAC + 4-8 ohm speaker | Internet radio (S3 + PSRAM only) | [Internet radio](../guides/radio.md) |
+| Passive piezo buzzer | RTTTL melodies and beeps | [Sound](../guides/sounds.md) |
+| **MAX98357A** I2S DAC + 4-8 ohm speaker | Your own MP3s and internet radio (S3 + PSRAM only) | [Internet radio](../guides/radio.md) |
 | DFPlayer Mini + microSD + speaker | numbered tracks alongside the buzzer | [DFPlayer boards](../guides/sounds.md#dfplayer-boards) |
 | Li-Ion cell + TP4056 charger + 2 x 100 k | Battery operation and reporting | [Power & battery](../guides/power.md) |
 | 74AHCT125 level shifter | Reliable 5 V data on long runs | [section 4](#4-power-the-panel-first) |

@@ -404,6 +404,10 @@ the melodies, and one with the buzzer pin unset drops the melodies. A device wit
 a speaker has no Audio tab at all. When sound is switched off in the settings, a line at the top of
 the tab says so.
 
+Each section starts with the volume of the output it belongs to - the MP3 section sets `mp3Volume`,
+the radio section `radioVolume`, the melody section `buzzerVolume`. They are the same four sliders
+as under [System › Audio](#system), so a level can be set where the sound is.
+
 ### MP3s
 
 Your own MP3 files, managed like icons: drag them onto the upload zone or click it to choose, and
@@ -418,7 +422,7 @@ each one appears as a row with its size. Only on a device with a speaker.
 The file name without `.mp3` is the name you use elsewhere: `ding.mp3` plays as `sound:"ding"` in a
 notification. Names may only use letters, digits, `_` and `-`, so a file called `My Song (2024).mp3`
 is refused - rename it before uploading. An MP3 interrupts a running radio stream, which comes back
-by itself afterwards. More: [MP3s & melodies](../guides/sounds.md).
+by itself afterwards. More: [Sound](../guides/sounds.md).
 
 **■ Stop** at the top right of the tab silences everything at once - the browser preview, an MP3 and
 the radio.
@@ -460,7 +464,7 @@ and it is split for you: the name goes to the name field, the rest stays put.
 
 A melody that does not parse is still shown, with the parser's complaint, so you can fix it.
 
-More: [MP3s & melodies](../guides/sounds.md) · [HTTP API → Audio](../reference/http.md#audio).
+More: [Sound](../guides/sounds.md) · [HTTP API → Audio](../reference/http.md#audio).
 
 ## Palettes
 
