@@ -4,7 +4,7 @@
 - **ESP32-S3 boards with quad PSRAM** (`N8R2`, `N16R2`, `N4R2`) have their own image. The browser flasher recognises which PSRAM a board has and picks for you; the wrong image is refused instead of installed.
 - **Every sound output has its own volume.** Buzzer, DFPlayer, stored MP3s and the radio are four separate sliders now, each 0-100. 
 - **A DFPlayer no longer costs you the buzzer.** The two are separate outputs and both stay live, so a board with an added MP3 module keeps its melodies, its melody editor and its `soundRtttl` in notifications.
-- New keys on `POST /api/v1/audio/play`: `sound` for "a name, you decide where it comes from" - the same rule a notification's `sound` follows - and `track` for a DFPlayer track number. `mp3`, `melody`, `track` and `rtttl` each name one output and never quietly fall back to another.
+- **Two new keys on `POST /api/v1/audio/play`.** `sound` takes a name and lets AWTRIX pick the output - a stored MP3, else a melody, else a DFPlayer track when the name is a plain number - which is the rule a notification's `sound` has always followed. `track` plays a DFPlayer track by number. The explicit keys - `mp3`, `melody`, `track`, `rtttl` - each name one output and never fall back to another.
 - `POST /api/v1/audio/stop` takes an optional `{"scope":"sounds"|"stream"|"all"}`, so a script can silence its own chime without killing the radio someone is listening to.
 - Scripts can ask whether the device is still making a sound, with `sound.playing()`, which output it has, with `sound.sinks()`, and name one directly with `sound.mp3()`, `sound.melody()` and `sound.track()`.
 - A **converter for AWTRIX 3 flows** on the documentation site turns an old configuration into the AWTRIX NG equivalent.
