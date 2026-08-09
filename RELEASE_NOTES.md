@@ -1,4 +1,5 @@
 **Added**
+
 - **MP3s.** Boards with a connected I2S DAC play your own MP3 files: drop them into the new **Audio** tab, then play one by name - `sound:"ding"` in a notification, from a script, or over the API. 
 - **ESP32-S3 boards with quad PSRAM** (`N8R2`, `N16R2`, `N4R2`) have their own image. The browser flasher recognises which PSRAM a board has and picks for you; the wrong image is refused instead of installed.
 - **Every sound output has its own volume.** Buzzer, DFPlayer, stored MP3s and the radio are four separate sliders now, each 0-100. 
@@ -25,7 +26,7 @@
 - The **LookingEyes** effect drew small square eyes instead of the full-size ones AWTRIX 3 has. They are back to size, look around properly and blink again.
 - Uploading a script reserved memory for the largest script allowed rather than the one being sent, so a save could be refused on a busy device.
 - An MP3 whose file name cannot be played back - spaces, brackets, accents, over 32 characters - is refused at upload instead of sitting there unplayable.
-
+- **Fixes internet radio streaming buffer.
 ---
 
 **Which file do I need?**
