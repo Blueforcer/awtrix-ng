@@ -18,6 +18,13 @@ language built for microcontrollers. Nothing is compiled and nothing is flashed.
 You paste source into the web UI, hit save, and the app is on the panel a moment
 later.
 
+!!! tip "Would rather be shown than told?"
+    This page is a reference: it explains every call, and you look things up in it.
+    [**Learn by building**](../tutorials/first-draw.md) is the other half, three
+    tutorials that grow one app from a blank panel to a live weather chart, four
+    standalone recipes, and a chapter on [going easy on
+    memory](../tutorials/going-easy-on-memory.md).
+
 !!! tip "Not a programmer?"
     [**Build an app with AI**](ai-prompt.md) is this page compressed into a system
     prompt you hand a chatbot. Paste it in, describe the app you want in plain
@@ -1797,6 +1804,7 @@ The sandbox protects AWTRIX and stops *accidental* interference. It is not a def
 
 ## Related
 
+- [Learn by building](../tutorials/first-draw.md) - the same material as three tutorials that build one app, four standalone recipes and a chapter on writing for a small heap
 - [Build an app with AI](ai-prompt.md) - this API as a system prompt, for when you would rather describe an app than write one
 - [Icons & assets](icons.md) - what `icon()` can draw, and how to upload more
 - [App & notification payload](../reference/payload.md) - the schema `notify()`, `effect()` and the charts mirror

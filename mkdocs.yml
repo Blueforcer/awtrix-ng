@@ -81,6 +81,15 @@ nav:
       - Run your own app:
           - App scripting: guides/scripting.md
           - Build an app with AI: guides/ai-prompt.md
+      - Learn by building:
+          - 1. Draw something: tutorials/first-draw.md
+          - 2. Give it a memory: tutorials/state-and-time.md
+          - 3. Feed it real data: tutorials/real-data.md
+          - "Recipe: Countdown": tutorials/recipe-countdown.md
+          - "Recipe: MQTT status": tutorials/recipe-mqtt-status.md
+          - "Recipe: Sensor chart": tutorials/recipe-sensor-chart.md
+          - "Recipe: Headless doorbell": tutorials/recipe-doorbell.md
+          - Going easy on memory: tutorials/going-easy-on-memory.md
       - Web UI editors:
           - Icon editor: guides/icon-editor.md
           - Palette editor: guides/palette-editor.md
