@@ -9,6 +9,7 @@ AWTRIX NG is a complete new development - firmware written from scratch, the suc
 * :material-github: **[Source code](https://github.com/Blueforcer/awtrix-ng)** - the firmware, the web UI and these pages
 * :material-sitemap: **[AWTRIX Flows](https://flows.blueforcer.de/)** - user-made scripts and automations for your AWTRIX
 * :material-forum: **[Discord](https://discord.gg/5pbmeCrs3a)** - ask, report, show what you built
+* :material-heart: **[Support](https://ko-fi.com/blueforcer)** - support the development
 
 ## Two ways to make it yours
 
