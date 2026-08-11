@@ -84,9 +84,6 @@ red and stays in its own frame - everything else keeps running.
 2. **Wi-Fi** - the device opens its own access point on first boot and the setup page pops up by itself.
 3. **Say hello** - send the `curl` above to `awtrix-ng.local`, then open `http://awtrix-ng.local/` and look around.
 
-> [!IMPORTANT]
-> Always send `Content-Type: application/json` on requests with a body - `curl -d` defaults to form
-> encoding, which arrives empty.
 
 > **Coming from AWTRIX 3?** This is a from-scratch rewrite with its own **API v1**. Nothing carries
 > over and v3 integrations must be reworked. Set the device up fresh.
