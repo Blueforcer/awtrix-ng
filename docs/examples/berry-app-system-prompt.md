@@ -262,15 +262,19 @@ Each spans the full panel width and is capped at **16 values** (extras dropped).
 
 | Call | Does |
 |---|---|
-| `bar_chart(list, paint?, autoscale?)` | one bar per value; negatives hang below zero |
-| `line_chart(list, paint?, autoscale?)` | a polyline across the values; needs at least 2 |
-| `progress(pct, paint?, bg?)` | a bottom-row progress bar, `0`–`100` |
+| `bar_chart(list, paint?, autoscale?, x0?)` | one bar per value; negatives hang below zero |
+| `line_chart(list, paint?, autoscale?, x0?)` | a polyline across the values; needs at least 2 |
+| `progress(pct, paint?, bg?, x0?)` | a bottom-row progress bar, `0`–`100` |
 
 `paint` is a colour integer or a palette (a name or a list of stops, 5.4); `bar_chart(vals, "Heat")`
 colours each bar by its value. Charts default to white, `progress` to a green fill on a white
 track. `autoscale` defaults to `true` (the chart scales to the data's own min/max; `false` fixes
 the range at 0–8). Keep a rolling window by pushing and trimming **in place**, never by building a
 new list: `self.samples.push(v)` then `if size(self.samples) > 16 self.samples.remove(0) end`.
+
+`x0` is the column the drawing starts at, `0` by default. Nothing is set aside for an icon, so
+`icon("wifi", 0, 0)` followed by `progress(64, "Rainbow", 0x101010, 9)` keeps the bar clear of it.
+Fill and palette are measured across what is left of the width.
 
 ### 5.4 Effects and overlays
 

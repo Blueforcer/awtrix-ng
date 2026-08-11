@@ -712,14 +712,13 @@ state rather than as a value that looks plausible and is not.
 ### Charts and progress
 
 The pushed-app decorations, drawn imperatively. Each spans the full panel width
-(a script owns its canvas - there is no reserved icon column) and takes the same
-values a pushed app's `bar` / `line` / `progress` keys do.
+and takes the same values a pushed app's `bar` / `line` / `progress` keys do.
 
 | Call | Does | Example |
 |---|---|---|
-| `bar_chart(list, color?, autoscale?)` | a bar per value; negatives hang below zero | `bar_chart([3,5,2,8,6], 0x00FF00)` |
-| `line_chart(list, color?, autoscale?)` | a polyline across the values | `line_chart(self.history, 0x00AAFF)` |
-| `progress(pct, color?, bg?)` | a bottom-row progress bar, 0–100 | `progress(64)` |
+| `bar_chart(list, color?, autoscale?, x0?)` | a bar per value; negatives hang below zero | `bar_chart([3,5,2,8,6], 0x00FF00)` |
+| `line_chart(list, color?, autoscale?, x0?)` | a polyline across the values | `line_chart(self.history, 0x00AAFF)` |
+| `progress(pct, color?, bg?, x0?)` | a bottom-row progress bar, 0–100 | `progress(64)` |
 
 `color` defaults to white for the charts; `progress` defaults to a green fill on
 a white track, the pushed-app defaults. All three take a
@@ -727,6 +726,17 @@ a white track, the pushed-app defaults. All three take a
 its value: `bar_chart(vals, "Heat")`. `autoscale` (default `true`) scales the
 chart to the data's own min/max; `false` fixes the range at 0–8. Both charts are
 capped at 16 values, extras dropped - the same cap the pushed-app payload has.
+
+`x0` is the column the drawing starts at, `0` by default. A script owns its
+canvas, so nothing is set aside for an icon: draw one at `0, 0` and pass `9` to
+keep the bar clear of it. Everything is measured across what is left, so the
+fill still ends halfway at `50` and a palette still runs its full range over the
+shortened bar.
+
+```berry
+    icon("wifi", 0, 0)
+    progress(64, "Rainbow", 0x101010, 9)
+```
 
 ```berry
 class Cpu

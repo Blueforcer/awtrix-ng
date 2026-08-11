@@ -587,7 +587,7 @@ int b_progress(bvm* vm) {
   render::ColorRamp ramp;
   if (g_ctx.canvas && be_top(vm) >= 1)
     render::drawProgress(*g_ctx.canvas, argInt(vm, 1), argPaintOr(vm, 2, 0x00FF00u, ramp),
-                         argColorOr(vm, 3, 0xFFFFFFu), 0);
+                         argColorOr(vm, 3, 0xFFFFFFu), argInt(vm, 4));
   be_return_nil(vm);
 }
 
@@ -595,7 +595,7 @@ int b_bar_chart(bvm* vm) {
   render::ColorRamp ramp;
   if (g_ctx.canvas)
     render::drawBars(*g_ctx.canvas, argIntList(vm, 1), argPaintOr(vm, 2, 0xFFFFFFu, ramp),
-                     argBoolOr(vm, 3, true), 0);
+                     argBoolOr(vm, 3, true), argInt(vm, 4));
   be_return_nil(vm);
 }
 
@@ -603,7 +603,7 @@ int b_line_chart(bvm* vm) {
   render::ColorRamp ramp;
   if (g_ctx.canvas)
     render::drawLineChart(*g_ctx.canvas, argIntList(vm, 1), argPaintOr(vm, 2, 0xFFFFFFu, ramp),
-                          argBoolOr(vm, 3, true), 0);
+                          argBoolOr(vm, 3, true), argInt(vm, 4));
   be_return_nil(vm);
 }
 
@@ -1110,9 +1110,9 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "hsv", b_hsv);                      // hsv(h, s, v)
   be_regfunc(b, "ramp_text", b_ramp_text);          // ramp_text(x, y, str, palette, span?, speed?)
   be_regfunc(b, "scroll_text", b_scroll_text);      // scroll_text(txt, color?, opts?)
-  be_regfunc(b, "progress", b_progress);            // progress(pct, paint?, bg?)
-  be_regfunc(b, "bar_chart", b_bar_chart);          // bar_chart(list, paint?, autoscale?)
-  be_regfunc(b, "line_chart", b_line_chart);        // line_chart(list, paint?, autoscale?)
+  be_regfunc(b, "progress", b_progress);            // progress(pct, paint?, bg?, x0?)
+  be_regfunc(b, "bar_chart", b_bar_chart);          // bar_chart(list, paint?, autoscale?, x0?)
+  be_regfunc(b, "line_chart", b_line_chart);        // line_chart(list, paint?, autoscale?, x0?)
   be_regfunc(b, "effect", b_effect);                // effect(name, settings?)
   be_regfunc(b, "overlay", b_overlay);              // overlay(name, settings?)
 
