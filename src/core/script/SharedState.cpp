@@ -1,5 +1,7 @@
 #include "core/script/SharedState.h"
 
+#include "core/script/ScriptHeap.h"
+
 namespace awtrix::script {
 namespace {
 
@@ -59,27 +61,18 @@ void SharedState::splitQualified(const std::string& qualified, const std::string
   key = qualified.substr(dot + 1);
 }
 
+// A published value is copied out of the script heap and into this map, where nothing frees it
+// again until the app is removed. So the write is weighed against what is free: what this app
+// already holds here, plus what it is adding, has to still fit.
 SharedState::Status SharedState::set(const std::string& owner, const std::string& key, Value v,
                                      int64_t nowMs) {
   if (owner.empty() || !validKey(key)) return Status::InvalidKey;
 
-  // The key being written is left out of `used`, so overwriting a value is measured against
-  // its new size only. Otherwise a script at its budget could never shrink an entry.
-  auto it = ns_.find(owner);
-  std::size_t used = 0;
-  if (it != ns_.end()) {
-    bool replacing = false;
-    for (const auto& kv : it->second) {
-      if (kv.first == key) {
-        replacing = true;
-        continue;
-      }
-      used += kv.first.size() + kv.second.s.size();
-    }
-    if (!replacing && it->second.size() >= kMaxSharedKeysPerApp) return Status::KeyLimit;
-  }
-
-  if (used + key.size() + v.s.size() > kMaxSharedBytesPerApp) return Status::ByteLimit;
+  // Overwriting a key hands its own bytes back, so only the difference is new.
+  std::size_t replaced = 0;
+  if (const Value* prev = find(owner, key)) replaced = key.size() + prev->s.size();
+  const std::size_t held = bytes(owner) - replaced;
+  if (held + key.size() + v.s.size() > heap::growthBudget()) return Status::NoRoom;
 
   v.writtenMs = nowMs;
   ns_[owner][key] = std::move(v);

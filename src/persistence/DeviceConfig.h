@@ -58,8 +58,6 @@ struct DeviceConfig {
   bool debugMode = false;
 
   bool scriptingEnabled = true;
-  int scriptLimit = 16;
-  int scriptMaxBytes = 16384;
 
   // Defaults come from the SoC profile at construction; load() then overwrites whatever the user
   // has actually stored. A profile change therefore only affects pins nobody has pinned down.
@@ -77,6 +75,8 @@ struct DeviceConfig {
   int pinI2sBclk = pins::activeProfile().defaults.i2sBclk;
   int pinI2sLrclk = pins::activeProfile().defaults.i2sLrclk;
   int pinI2sDout = pins::activeProfile().defaults.i2sDout;
+  int pinI2sMclk = pins::activeProfile().defaults.i2sMclk;
+  int pinAmpEnable = pins::activeProfile().defaults.ampEnable;
 
   void load();
   void save() const;
@@ -105,6 +105,7 @@ struct DeviceConfig {
     p.i2cSda = pinI2cSda; p.i2cScl = pinI2cScl;
     p.dfRx = pinDfRx; p.dfTx = pinDfTx;
     p.i2sBclk = pinI2sBclk; p.i2sLrclk = pinI2sLrclk; p.i2sDout = pinI2sDout;
+    p.i2sMclk = pinI2sMclk; p.ampEnable = pinAmpEnable;
     p.dfplayerEnabled = dfplayer;
     return p;
   }

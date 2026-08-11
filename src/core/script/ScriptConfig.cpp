@@ -9,6 +9,7 @@
 #include "core/api/JsonText.h"
 #include "core/api/JsonWriter.h"
 #include "core/render/Color.h"
+#include "core/script/ScriptHeap.h"
 #include "core/script/ScriptMeta.h"
 
 namespace awtrix::script {
@@ -20,10 +21,8 @@ constexpr std::size_t kMaxKeyLen = 24;
 constexpr std::size_t kMaxLabelLen = 48;
 constexpr std::size_t kMaxHelpLen = 96;
 constexpr std::size_t kMaxUnitLen = 8;
-constexpr std::size_t kMaxOptions = 12;
 constexpr std::size_t kMaxOptionLen = 24;
 constexpr std::size_t kMaxTextLen = 256;
-static_assert(kMaxConfigFields == 12, "the overflow warning spells the number out");
 
 constexpr const char* kTypeNames[] = {"bool", "text", "number", "slider", "select", "color"};
 
@@ -207,7 +206,7 @@ std::string splitOptions(const std::string& value) {
   std::string out;
   std::size_t at = 0;
   std::size_t count = 0;
-  while (at <= value.size() && count < kMaxOptions) {
+  while (at <= value.size()) {
     const std::size_t comma = value.find(',', at);
     std::string one = detail::trim(
         value.substr(at, comma == std::string::npos ? std::string::npos : comma - at));
@@ -308,9 +307,9 @@ bool coerce(const ConfigField& f, const JsonReader& r, std::string& out, std::st
 // Rewrites the stored JSON with replace[i] (a JSON fragment, empty meaning "leave alone")
 // substituted for field i. Keys the schema knows nothing about are copied through untouched.
 std::string mergeStore(const ConfigSchema& schema, const std::string& storeJson,
-                       const std::string* replace) {
-  // One bit per schema field, so a value already rewritten in place is not appended again.
-  uint32_t written = 0;
+                       const std::vector<std::string>& replace) {
+  // One flag per schema field, so a value already rewritten in place is not appended again.
+  std::vector<bool> written(schema.fields.size(), false);
   std::string out;
   out += '{';
   bool first = true;
@@ -325,7 +324,7 @@ std::string mergeStore(const ConfigSchema& schema, const std::string& storeJson,
       out += "\":";
       if (i != schema.fields.size() && !replace[i].empty()) {
         out += replace[i];
-        written |= 1u << i;
+        written[i] = true;
       } else {
         out.append(r.valueText());
       }
@@ -333,7 +332,7 @@ std::string mergeStore(const ConfigSchema& schema, const std::string& storeJson,
     }
   }
   for (std::size_t i = 0; i < schema.fields.size(); ++i) {
-    if ((written & (1u << i)) || replace[i].empty()) continue;
+    if (written[i] || replace[i].empty()) continue;
     if (!first) out += ',';
     first = false;
     api::appendJsonString(out, schema.fields[i].key);
@@ -463,8 +462,7 @@ void parseLine(const std::string& value, int line, ConfigSchema& schema) {
         if (!toNumber(attr, v) || v <= 0)
           warn(schema, line, f.key, ": maxlen is not a length");
         else
-          f.maxLen = static_cast<std::size_t>(v) > kMaxTextLen ? kMaxTextLen
-                                                              : static_cast<std::size_t>(v);
+          f.maxLen = static_cast<std::size_t>(v);
         break;
       }
       default:
@@ -495,20 +493,9 @@ void parseLine(const std::string& value, int line, ConfigSchema& schema) {
 
 ConfigSchema parseConfig(const std::string& source) {
   ConfigSchema schema;
-  bool overflowed = false;
-
   forEachHeaderTag(source, [&](const std::string& key, const std::string& value, int line) {
-    if (key != "config") return;
-    if (schema.fields.size() >= kMaxConfigFields) {
-      if (!overflowed) {
-        overflowed = true;
-        warn(schema, line, "only 12 settings per script");
-      }
-      return;
-    }
-    parseLine(value, line, schema);
+    if (key == "config") parseLine(value, line, schema);
   });
-
   return schema;
 }
 
@@ -518,7 +505,7 @@ bool seedConfigDefaults(const ConfigSchema& schema, const std::string& storeJson
                         std::string& out) {
   if (schema.fields.empty()) return false;
 
-  std::string replace[kMaxConfigFields];
+  std::vector<std::string> replace(schema.fields.size());
   for (std::size_t i = 0; i < schema.fields.size(); ++i) replace[i] = schema.fields[i].defJson;
 
   JsonReader r(storeJson);
@@ -580,10 +567,14 @@ bool dropUndeclaredValues(const ConfigSchema& before, const ConfigSchema& after,
 
 // Builds what the settings UI renders: the schema plus each field's current value, falling
 // back to the default. `warnings` is how an author learns a @config line was ignored.
-void appendConfigJson(std::string& out, const std::string& name, const ConfigSchema& schema,
+// Returns false and leaves `out` incomplete if building the response would grow past the
+// heap's growth budget -- the caller discards `out` and answers 507 in that case.
+bool appendConfigJson(std::string& out, const std::string& name, const ConfigSchema& schema,
                       const std::string& storeJson) {
+  const std::size_t budget = heap::growthBudget();
+
   // Views into storeJson, so it must outlive this call -- it does, it is the argument.
-  std::string_view values[kMaxConfigFields];
+  std::vector<std::string_view> values(schema.fields.size());
   JsonReader r(storeJson);
   if (r.isObject() && r.enterObject()) {
     while (r.nextMember()) {
@@ -624,6 +615,8 @@ void appendConfigJson(std::string& out, const std::string& name, const ConfigSch
     w.key("value");
     w.raw(values[i].empty() ? std::string_view(f.defJson) : values[i]);
     w.endObject();
+    // Stop while there is still room: the caller discards `out` and answers 507.
+    if (out.size() > budget) return false;
   }
   w.endArray();
   w.key("warnings");
@@ -631,6 +624,7 @@ void appendConfigJson(std::string& out, const std::string& name, const ConfigSch
   for (const std::string& warning : schema.warnings) w.value(warning);
   w.endArray();
   w.endObject();
+  return true;
 }
 
 ConfigPatch applyConfigPatch(const ConfigSchema& schema, const std::string& storeJson,
@@ -651,7 +645,7 @@ ConfigPatch applyConfigPatch(const ConfigSchema& schema, const std::string& stor
     return res;
   }
 
-  std::string replace[kMaxConfigFields];
+  std::vector<std::string> replace(schema.fields.size());
   JsonReader r(patchJson);
   r.enterObject();
   while (r.nextMember()) {
@@ -697,7 +691,11 @@ int configResponse(const std::string& name, const ConfigTextFn& readSource,
   std::string storeJson;
   if (readStore) readStore(name, storeJson);
   body.clear();
-  appendConfigJson(body, name, parseConfig(source), storeJson);
+  if (!appendConfigJson(body, name, parseConfig(source), storeJson)) {
+    body = api::errorJson("insufficientStorage",
+                          "not enough free memory to build the settings list", "name");
+    return 507;
+  }
   return 200;
 }
 

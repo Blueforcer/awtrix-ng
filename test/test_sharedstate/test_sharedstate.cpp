@@ -2,12 +2,13 @@
 #include <unity.h>
 
 #include "core/api/StateJson.h"
+#include "core/script/ScriptHeapTesting.h"
 #include "core/script/SharedState.h"
 
 using namespace awtrix::script;
 
 void setUp() {}
-void tearDown() {}
+void tearDown() { heap::testing::resetGrowthBudget(); }
 
 static SharedState::Status set(SharedState& s, const char* owner, const char* key,
                                SharedState::Value v, int64_t nowMs = 0) {
@@ -141,35 +142,6 @@ static void test_owner_must_not_be_empty() {
                    SharedState::Status::InvalidKey);
 }
 
-static void test_key_count_is_capped_per_owner() {
-  SharedState s;
-  for (std::size_t i = 0; i < kMaxSharedKeysPerApp; ++i) {
-    const std::string k = "k" + std::to_string(i);
-    TEST_ASSERT_TRUE(set(s, "a", k.c_str(), SharedState::Value::ofInt(1)) ==
-                     SharedState::Status::Ok);
-  }
-  TEST_ASSERT_TRUE(set(s, "a", "overflow", SharedState::Value::ofInt(1)) ==
-                   SharedState::Status::KeyLimit);
-  TEST_ASSERT_EQUAL_UINT32(kMaxSharedKeysPerApp, s.entries());
-}
-
-static void test_overwriting_at_the_key_cap_still_works() {
-  SharedState s;
-  for (std::size_t i = 0; i < kMaxSharedKeysPerApp; ++i)
-    set(s, "a", ("k" + std::to_string(i)).c_str(), SharedState::Value::ofInt(1));
-  TEST_ASSERT_TRUE(set(s, "a", "k0", SharedState::Value::ofInt(99)) ==
-                   SharedState::Status::Ok);
-  TEST_ASSERT_EQUAL_INT64(99, s.find("a", "k0")->i);
-}
-
-static void test_the_key_cap_is_per_owner_not_global() {
-  SharedState s;
-  for (std::size_t i = 0; i < kMaxSharedKeysPerApp; ++i)
-    set(s, "a", ("k" + std::to_string(i)).c_str(), SharedState::Value::ofInt(1));
-  TEST_ASSERT_TRUE(set(s, "b", "k0", SharedState::Value::ofInt(1)) ==
-                   SharedState::Status::Ok);
-}
-
 static void test_byte_budget_counts_keys_and_strings() {
   SharedState s;
   set(s, "a", "k", SharedState::Value::ofStr("1234"));
@@ -178,34 +150,67 @@ static void test_byte_budget_counts_keys_and_strings() {
   TEST_ASSERT_EQUAL_UINT32(6, s.bytes("a"));
 }
 
-static void test_oversized_string_is_refused_and_changes_nothing() {
+static void test_many_shared_keys_are_accepted() {
   SharedState s;
-  set(s, "a", "k", SharedState::Value::ofStr("keep"));
-  const std::string big(kMaxSharedBytesPerApp + 1, 'x');
-  TEST_ASSERT_TRUE(set(s, "a", "k", SharedState::Value::ofStr(big)) ==
-                   SharedState::Status::ByteLimit);
-  TEST_ASSERT_EQUAL_STRING("keep", s.find("a", "k")->s.c_str());
+  for (int i = 0; i < 64; ++i) {
+    const std::string k = "k" + std::to_string(i);
+    TEST_ASSERT_EQUAL(static_cast<int>(SharedState::Status::Ok),
+                      static_cast<int>(s.set("app", k, SharedState::Value::ofInt(i), 0)));
+  }
+  TEST_ASSERT_EQUAL_size_t(64u, s.keys("app").size());
 }
 
-static void test_the_byte_budget_frees_when_a_value_shrinks() {
+// Published values are copied into a map the script heap never reclaims, so a write that would
+// not fit is refused instead of taken.
+static void test_a_write_that_does_not_fit_is_refused() {
   SharedState s;
-  const std::string big(kMaxSharedBytesPerApp - 8, 'x');
-  TEST_ASSERT_TRUE(set(s, "a", "big", SharedState::Value::ofStr(big)) ==
-                   SharedState::Status::Ok);
-  TEST_ASSERT_TRUE(set(s, "a", "more", SharedState::Value::ofStr("0123456789")) ==
-                   SharedState::Status::ByteLimit);
-  set(s, "a", "big", SharedState::Value::ofStr("small"));
-  TEST_ASSERT_TRUE(set(s, "a", "more", SharedState::Value::ofStr("0123456789")) ==
-                   SharedState::Status::Ok);
+  heap::testing::setGrowthBudget(100);
+  const std::string big(200, 'x');
+  TEST_ASSERT_EQUAL(static_cast<int>(SharedState::Status::NoRoom),
+                    static_cast<int>(s.set("a", "k", SharedState::Value::ofStr(big), 0)));
+  TEST_ASSERT_NULL(s.find("a", "k"));
+  TEST_ASSERT_EQUAL_UINT32(0u, static_cast<uint32_t>(s.bytes("a")));
 }
 
-static void test_the_byte_cap_is_per_owner_not_global() {
+// The refusal weighs what the app already published too: three writes that each fit on their own
+// still have to fit together, which is the case a script builds up one string at a time.
+static void test_writes_are_weighed_against_what_the_app_already_holds() {
   SharedState s;
-  const std::string big(kMaxSharedBytesPerApp - 4, 'x');
-  TEST_ASSERT_TRUE(set(s, "a", "k", SharedState::Value::ofStr(big)) ==
-                   SharedState::Status::Ok);
-  TEST_ASSERT_TRUE(set(s, "b", "k", SharedState::Value::ofStr(big)) ==
-                   SharedState::Status::Ok);
+  heap::testing::setGrowthBudget(100);
+  const std::string chunk(40, 'x');
+  TEST_ASSERT_EQUAL(static_cast<int>(SharedState::Status::Ok),
+                    static_cast<int>(s.set("a", "a1", SharedState::Value::ofStr(chunk), 0)));
+  TEST_ASSERT_EQUAL(static_cast<int>(SharedState::Status::Ok),
+                    static_cast<int>(s.set("a", "a2", SharedState::Value::ofStr(chunk), 0)));
+  TEST_ASSERT_EQUAL(static_cast<int>(SharedState::Status::NoRoom),
+                    static_cast<int>(s.set("a", "a3", SharedState::Value::ofStr(chunk), 0)));
+  TEST_ASSERT_EQUAL_UINT32(2u, static_cast<uint32_t>(s.entries()));
+}
+
+// Replacing a value hands the old one back, so a script that refreshes the same key every minute
+// keeps working at the edge instead of being refused for bytes it is about to release.
+static void test_replacing_a_value_is_not_charged_twice() {
+  SharedState s;
+  heap::testing::setGrowthBudget(100);
+  const std::string big(90, 'x');
+  TEST_ASSERT_EQUAL(static_cast<int>(SharedState::Status::Ok),
+                    static_cast<int>(s.set("a", "k", SharedState::Value::ofStr(big), 0)));
+  for (int i = 0; i < 5; ++i)
+    TEST_ASSERT_EQUAL(static_cast<int>(SharedState::Status::Ok),
+                      static_cast<int>(s.set("a", "k", SharedState::Value::ofStr(big), 0)));
+  TEST_ASSERT_EQUAL_UINT32(91u, static_cast<uint32_t>(s.bytes("a")));
+}
+
+// Each app is weighed on its own: one that has published a lot does not lock out the others.
+static void test_one_app_filling_up_does_not_refuse_another() {
+  SharedState s;
+  heap::testing::setGrowthBudget(100);
+  TEST_ASSERT_EQUAL(static_cast<int>(SharedState::Status::Ok),
+                    static_cast<int>(s.set("a", "k", SharedState::Value::ofStr(std::string(90, 'x')),
+                                           0)));
+  TEST_ASSERT_EQUAL(static_cast<int>(SharedState::Status::Ok),
+                    static_cast<int>(s.set("b", "k", SharedState::Value::ofStr(std::string(90, 'y')),
+                                           0)));
 }
 
 static void test_keys_are_qualified_and_sorted() {
@@ -333,13 +338,12 @@ int main(int, char**) {
   RUN_TEST(test_key_accepts_alnum_underscore_and_dash);
   RUN_TEST(test_key_length_is_capped);
   RUN_TEST(test_owner_must_not_be_empty);
-  RUN_TEST(test_key_count_is_capped_per_owner);
-  RUN_TEST(test_overwriting_at_the_key_cap_still_works);
-  RUN_TEST(test_the_key_cap_is_per_owner_not_global);
   RUN_TEST(test_byte_budget_counts_keys_and_strings);
-  RUN_TEST(test_oversized_string_is_refused_and_changes_nothing);
-  RUN_TEST(test_the_byte_budget_frees_when_a_value_shrinks);
-  RUN_TEST(test_the_byte_cap_is_per_owner_not_global);
+  RUN_TEST(test_many_shared_keys_are_accepted);
+  RUN_TEST(test_a_write_that_does_not_fit_is_refused);
+  RUN_TEST(test_writes_are_weighed_against_what_the_app_already_holds);
+  RUN_TEST(test_replacing_a_value_is_not_charged_twice);
+  RUN_TEST(test_one_app_filling_up_does_not_refuse_another);
   RUN_TEST(test_keys_are_qualified_and_sorted);
   RUN_TEST(test_keys_can_be_filtered_by_owner);
   RUN_TEST(test_keys_of_an_unknown_owner_is_empty);

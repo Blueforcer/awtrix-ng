@@ -52,6 +52,14 @@ def _http_keep(opts)
   return k == nil ? 0 : int(k)
 end
 
+# How large the kept response may grow. Absent or non-positive falls back to
+# the 8 KB default -- 0 travels as "not set", the same sentinel `keep` uses.
+def _http_cap(opts)
+  if opts == nil return 0 end
+  var c = opts.find('cap')
+  return c == nil ? 0 : int(c)
+end
+
 def _http_send(method, url, body, cb, opts)
   var id = _http_next
   _http_next += 1
@@ -60,12 +68,12 @@ def _http_send(method, url, body, cb, opts)
   end
   if body == nil body = "" end
   if _native_http_request(id, method, url, str(body), _http_headers(opts),
-                          _http_find(opts), _http_keep(opts))
+                          _http_find(opts), _http_keep(opts), _http_cap(opts))
     _http_cbs[id] = [_native_app(), cb]
   else
-    # No transport, a rejected request (bad method, oversized body, malformed
-    # headers) or a full platform queue. Soft-fail exactly the way a network
-    # error does, but immediately: the script needs no capability check.
+    # No transport, a rejected request (bad method, malformed headers) or a
+    # full platform queue. Soft-fail exactly the way a network error does,
+    # but immediately: the script needs no capability check.
     cb(nil, 0)
   end
 end

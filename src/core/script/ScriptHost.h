@@ -32,8 +32,6 @@ class ScriptHost {
   ScriptHost(const ScriptHost&) = delete;
   ScriptHost& operator=(const ScriptHost&) = delete;
 
-  void setLimit(std::size_t n) { limit_ = n; }
-
   const ScriptServices& services() const { return svc_; }
 
   void setRunningScripts(std::vector<std::string> running);
@@ -144,8 +142,6 @@ class ScriptHost {
   SharedState shared_;
   std::string vmError_;
 
-  // Counts apps and modules together, so a module occupies one of the installable slots.
-  std::size_t limit_ = 16;
   std::vector<std::string> running_;
   bool runningKnown_ = false;
   std::map<std::string, std::unique_ptr<ScriptApp>> apps_;

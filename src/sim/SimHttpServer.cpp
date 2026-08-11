@@ -281,7 +281,7 @@ void SimHttpServer::Impl::handleSounds(const httplib::Request& req, const std::s
          !ec && it != end; ++it)
       if (it->is_regular_file()) used += it->file_size(ec);
     out += "],\"usedBytes\":" + std::to_string(used);
-    out += ",\"totalBytes\":" + std::to_string(8u * 1024u * 1024u) + "}";
+    out += ",\"totalBytes\":" + std::to_string(sim::kFsTotalBytes) + "}";
     sendJson(res, 200, out);
     return;
   }
@@ -351,7 +351,7 @@ void SimHttpServer::Impl::handleFiles(const httplib::Request& req, const std::st
          !ec && it != end; ++it)
       if (it->is_regular_file()) used += it->file_size(ec);
     out += "],\"usedBytes\":" + std::to_string(used);
-    out += ",\"totalBytes\":" + std::to_string(8u * 1024u * 1024u) + "}";
+    out += ",\"totalBytes\":" + std::to_string(sim::kFsTotalBytes) + "}";
     sendJson(res, 200, out);
     return;
   }

@@ -5,7 +5,6 @@
 
 #include "core/api/JsonReader.h"
 #include "core/api/JsonText.h"
-#include "core/script/ScriptServices.h"
 #include "core/sound/AudioRouter.h"
 
 namespace awtrix {
@@ -309,13 +308,6 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
       if (!isValidAppName(name)) return badName();
       if (body.empty()) {
         immediate = errorResult(422, "validationFailed", "request body must be the script source",
-                                "source");
-        return RouteOutcome::Respond;
-      }
-      if (body.size() > script::maxSourceBytes()) {
-        immediate = errorResult(413, "payloadTooLarge",
-                                "script source exceeds " +
-                                    std::to_string(script::maxSourceBytes()) + " bytes",
                                 "source");
         return RouteOutcome::Respond;
       }

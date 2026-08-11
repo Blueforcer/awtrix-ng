@@ -3,6 +3,7 @@
 #include <unity.h>
 
 #include "core/script/ScriptConfig.h"
+#include "core/script/ScriptHeapTesting.h"
 #include "core/script/ScriptMeta.h"
 
 using namespace awtrix;
@@ -92,13 +93,53 @@ static void test_a_typo_in_a_range_is_reported_not_swallowed() {
   TEST_ASSERT_EQUAL_STRING("line 2: b: maxlen is not a length", s.warnings[1].c_str());
 }
 
-static void test_field_count_is_capped() {
+static void test_many_config_fields_are_all_kept() {
+  std::string src;
+  for (int i = 0; i < 40; ++i)
+    src += "# @config key" + std::to_string(i) + " text \"L" + std::to_string(i) + "\"\n";
+  const script::ConfigSchema s = script::parseConfig(src);
+  TEST_ASSERT_EQUAL_size_t(40u, s.fields.size());
+  TEST_ASSERT_EQUAL_size_t(0u, s.warnings.size());
+}
+
+static void test_config_json_stops_when_the_heap_is_tight() {
   std::string src;
   for (int i = 0; i < 20; ++i)
-    src += "# @config k" + std::to_string(i) + " text\n";
-  const ConfigSchema s = script::parseConfig(src);
-  TEST_ASSERT_EQUAL_size_t(script::kMaxConfigFields, s.fields.size());
-  TEST_ASSERT_EQUAL_size_t(1, s.warnings.size());
+    src += "# @config key" + std::to_string(i) + " text \"L" + std::to_string(i) + "\"\n";
+  const script::ConfigSchema s = script::parseConfig(src);
+
+  script::heap::testing::setGrowthBudget(64);
+  std::string out;
+  const bool complete = script::appendConfigJson(out, "demo", s, "{}");
+  script::heap::testing::resetGrowthBudget();
+
+  TEST_ASSERT_FALSE(complete);
+}
+
+// Whatever the reason, a failing request answers in the one error shape every client parses;
+// an empty body reads to them as a broken device rather than as a reason they can act on.
+static void test_a_settings_list_that_cannot_be_built_still_names_its_reason() {
+  std::string src;
+  for (int i = 0; i < 20; ++i)
+    src += "# @config key" + std::to_string(i) + " text \"L" + std::to_string(i) + "\"\n";
+  const script::ConfigTextFn readSource = [&](const std::string&, std::string& out) {
+    out = src;
+    return true;
+  };
+  const script::ConfigTextFn readStore = [](const std::string&, std::string& out) {
+    out = "{}";
+    return true;
+  };
+
+  script::heap::testing::setGrowthBudget(64);
+  std::string body;
+  const int status = script::configResponse("demo", readSource, readStore, body);
+  script::heap::testing::resetGrowthBudget();
+
+  TEST_ASSERT_EQUAL_INT(507, status);
+  TEST_ASSERT_TRUE(body.find("\"code\":\"insufficientStorage\"") != std::string::npos);
+  TEST_ASSERT_TRUE(body.find("\"message\":") != std::string::npos);
+  TEST_ASSERT_TRUE(body.find("\"field\":\"name\"") != std::string::npos);
 }
 
 // A module owns settings the same way an app does -- that is how several apps
@@ -151,6 +192,21 @@ static void test_seeding_survives_a_corrupt_store() {
   std::string out;
   TEST_ASSERT_TRUE(script::seedConfigDefaults(s, "not json", out));
   TEST_ASSERT_EQUAL_STRING("{\"a\":\"x\"}", out.c_str());
+}
+
+// Field 32 sits past a 32-bit bitmask. If the merge marks "already written" with a
+// shift that wraps at 32 bits, field 32 aliases field 0 and field 0's default goes missing.
+static void test_seeding_past_32_fields_does_not_drop_field_zero() {
+  std::string src;
+  for (int i = 0; i < 40; ++i)
+    src += "# @config key" + std::to_string(i) + " text default=\"d" + std::to_string(i) + "\"\n";
+  const ConfigSchema s = script::parseConfig(src);
+
+  // key32 has the wrong type, so seeding replaces it with its own default -- the
+  // condition that marks field 32 written in the merge.
+  std::string out;
+  TEST_ASSERT_TRUE(script::seedConfigDefaults(s, "{\"key32\":true}", out));
+  TEST_ASSERT_TRUE(out.find("\"key0\":\"d0\"") != std::string::npos);
 }
 
 static void test_a_setting_the_source_dropped_is_cleared_from_the_store() {
@@ -244,6 +300,46 @@ static void test_patch_rejects_text_over_its_length() {
   TEST_ASSERT_EQUAL_STRING("a", r.field.c_str());
 }
 
+static void test_a_select_may_offer_many_choices() {
+  std::string line = "# @config pick select label=P options=";
+  for (int i = 0; i < 30; ++i) line += (i ? "," : "") + std::string("o") + std::to_string(i);
+  const ConfigSchema s = script::parseConfig(line + "\n");
+  TEST_ASSERT_EQUAL_size_t(1u, s.fields.size());
+
+  std::string out;
+  script::appendConfigJson(out, "S", s, "{}");
+  const std::size_t start = out.find("\"options\":[");
+  TEST_ASSERT_TRUE(start != std::string::npos);
+  const std::size_t end = out.find(']', start);
+  TEST_ASSERT_TRUE(end != std::string::npos);
+  const std::string list = out.substr(start, end - start);
+  std::size_t n = 1, at = 0;
+  while ((at = list.find(',', at)) != std::string::npos) {
+    ++n;
+    ++at;
+  }
+  TEST_ASSERT_EQUAL_size_t(30u, n);
+}
+
+static void test_a_declared_maxlen_above_the_default_is_honored() {
+  const ConfigSchema s = script::parseConfig("# @config a text maxlen=4096\n");
+  TEST_ASSERT_EQUAL_size_t(4096u, s.fields[0].maxLen);
+  const std::string value(300, 'x');
+  const script::ConfigPatch r = script::applyConfigPatch(s, "{}", "{\"a\":\"" + value + "\"}");
+  TEST_ASSERT_TRUE(r.ok);
+}
+
+static void test_text_without_maxlen_still_defaults_to_256() {
+  const ConfigSchema s = script::parseConfig("# @config a text\n");
+  TEST_ASSERT_EQUAL_size_t(0u, s.fields[0].maxLen);
+  const script::ConfigPatch ok =
+      script::applyConfigPatch(s, "{}", "{\"a\":\"" + std::string(256, 'x') + "\"}");
+  TEST_ASSERT_TRUE(ok.ok);
+  const script::ConfigPatch bad =
+      script::applyConfigPatch(s, "{}", "{\"a\":\"" + std::string(257, 'x') + "\"}");
+  TEST_ASSERT_FALSE(bad.ok);
+}
+
 static void test_patch_rejects_a_body_that_is_not_an_object() {
   const ConfigSchema s = script::parseConfig(kWeather);
   TEST_ASSERT_FALSE(script::applyConfigPatch(s, "{}", "[1,2]").ok);
@@ -258,13 +354,16 @@ int main() {
   RUN_TEST(test_quoted_attribute_keeps_its_spaces);
   RUN_TEST(test_bad_lines_warn_and_do_not_stop_the_rest);
   RUN_TEST(test_a_typo_in_a_range_is_reported_not_swallowed);
-  RUN_TEST(test_field_count_is_capped);
+  RUN_TEST(test_many_config_fields_are_all_kept);
+  RUN_TEST(test_config_json_stops_when_the_heap_is_tight);
+  RUN_TEST(test_a_settings_list_that_cannot_be_built_still_names_its_reason);
   RUN_TEST(test_a_module_keeps_its_settings);
   RUN_TEST(test_colour_accepts_hash_and_0x_and_decimal);
   RUN_TEST(test_seeding_fills_only_what_is_missing);
   RUN_TEST(test_seeding_is_skipped_when_the_store_is_complete);
   RUN_TEST(test_seeding_replaces_a_value_of_the_wrong_type);
   RUN_TEST(test_seeding_survives_a_corrupt_store);
+  RUN_TEST(test_seeding_past_32_fields_does_not_drop_field_zero);
   RUN_TEST(test_a_setting_the_source_dropped_is_cleared_from_the_store);
   RUN_TEST(test_a_key_the_script_owns_is_never_cleared);
   RUN_TEST(test_renaming_a_setting_clears_the_old_one);
@@ -275,6 +374,9 @@ int main() {
   RUN_TEST(test_patch_rejects_an_unknown_key);
   RUN_TEST(test_patch_rejects_a_wrong_type_and_an_unoffered_option);
   RUN_TEST(test_patch_rejects_text_over_its_length);
+  RUN_TEST(test_a_select_may_offer_many_choices);
+  RUN_TEST(test_a_declared_maxlen_above_the_default_is_honored);
+  RUN_TEST(test_text_without_maxlen_still_defaults_to_256);
   RUN_TEST(test_patch_rejects_a_body_that_is_not_an_object);
   return UNITY_END();
 }

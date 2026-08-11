@@ -1,6 +1,7 @@
 **Added**
 
 - **MP3s.** Boards with a connected I2S DAC play your own MP3 files: drop them into the new **Audio** tab, then play one by name - `sound:"ding"` in a notification, from a script, or over the API. 
+- **Amplifiers with an enable input.** Boards that only play once that input is high - CTRL on an NS4168, SD on a MAX98357A - now have a pin for it, `pinAmpEnable`. DACs that need a master clock get one from `pinI2sMclk`.
 - **ESP32-S3 boards with quad PSRAM** (`N8R2`, `N16R2`, `N4R2`) have their own image. The browser flasher recognises which PSRAM a board has and picks for you; the wrong image is refused instead of installed.
 - **Every sound output has its own volume.** Buzzer, DFPlayer, stored MP3s and the radio are four separate sliders now, each 0-100. 
 - **A DFPlayer no longer costs you the buzzer.** The two are separate outputs and both stay live, so a board with an added MP3 module keeps its melodies, its melody editor and its `soundRtttl` in notifications.
@@ -19,13 +20,12 @@
 - **`GET /api/v1/capabilities` reports one `audio` object** - `{"buzzer":…,"track":…,"mp3":…,"radio":…}` - in place of the four loose `radio`/`audio`/`melodies`/`sound` flags, two of which could never disagree.
 - A notification whose `soundRtttl` does not parse is now rejected with `422` instead of being accepted and then silently playing nothing.
 - A melody or MP3 you ask for by name on a panel that has no such output answers `503` rather than `422`: the request was fine, the hardware is not there.
-- **Scripts may be twice as long**: `scriptMaxBytes` now defaults to 16 KB instead of 8 KB, still adjustable up to 32 KB.
+- **The memory in your AWTRIX decides how far scripts go.** How large a script may be, how many run alongside each other and how many settings one offers all come down to the room the device has. **`scriptLimit` and `scriptMaxBytes` are gone with it** - the two fields are off the System page and out of `/api/v1/system`, and sending them is ignored rather than refused, so a stored backup or an automation that still writes them needs looking at.
 - The USB install images come as a single `usb-awtrix-ng.zip`, so the update files are what you see first on this page.
 - Both ESP32-S3 images now say which PSRAM they are for: `firmware-awtrix-ng-s3-octal.bin` for `N8R8`/`N16R8` boards, `firmware-awtrix-ng-s3-quad.bin` for the quad ones. The plain `-s3` name is gone.
 
 **Fixed**
 - The **LookingEyes** effect drew small square eyes instead of the full-size ones AWTRIX 3 has. They are back to size, look around properly and blink again.
-- Uploading a script reserved memory for the largest script allowed rather than the one being sent, so a save could be refused on a busy device.
 - An MP3 whose file name cannot be played back - spaces, brackets, accents, over 32 characters - is refused at upload instead of sitting there unplayable.
 - **Internet radio threw away pieces of every stream.** A station that runs ahead of real time keeps the buffer at its limit, and getting back under it meant discarding audio the decoder had not seen yet - two or three gaps a second, for as long as the station played. Nothing is discarded now.
 - **A sound played over the radio stuttered as it ended.** The output was left running unfed while the stream reconnected, so the tail of the sound repeated until the music came back.

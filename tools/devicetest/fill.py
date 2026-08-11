@@ -60,7 +60,6 @@ def main():
     ap.add_argument("--host", default="awtrix-ng.local")
     ap.add_argument("--scripts", type=int, default=10)
     ap.add_argument("--modules", type=int, default=6)
-    ap.add_argument("--limit", type=int, default=32, help="raise scriptLimit to this first")
     ap.add_argument("--clean", action="store_true", help="delete every fill* file instead")
     args = ap.parse_args()
     base = "http://" + args.host
@@ -77,14 +76,6 @@ def main():
             print("delete %-16s HTTP %s" % (name, s))
         print("%d removed" % len(mine))
         return 0
-
-    st, sysinfo = call(base, "GET", "/api/v1/system")
-    have = len([a for a in apps if a.get("origin") in ("script", "module")])
-    need = have + args.scripts + args.modules
-    if sysinfo.get("scriptLimit", 16) < min(need, args.limit):
-        st, res = call(base, "PUT", "/api/v1/system",
-                       json.dumps({"scriptLimit": args.limit}), "application/json")
-        print("scriptLimit %s -> %s (HTTP %s)" % (sysinfo.get("scriptLimit"), args.limit, st))
 
     plan = [("%smod%d" % (PREFIX, i), module_src(i)) for i in range(1, args.modules + 1)]
     plan += [("%s%02d" % (PREFIX, i), script_src(i)) for i in range(1, args.scripts + 1)]

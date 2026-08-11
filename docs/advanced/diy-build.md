@@ -102,6 +102,8 @@ all** - flash it and it works.
     | I2S BCLK | 5 | out | To the DAC's BCLK. |
     | I2S LRCLK | 6 | out | To the DAC's LRC / WS. |
     | I2S DOUT | 4 | out | To the DAC's DIN. |
+    | I2S MCLK | -1 | out | Only for DACs with an MCLK input. |
+    | Amplifier enable | -1 | out | Only for amplifiers with an enable input. |
 
 === "ESP32 (classic)"
 
@@ -260,6 +262,8 @@ Required blocks are the panel and its supply; everything to the left and below i
 | MAX98357A | BCLK | GPIO 5 | not available | - |
 | MAX98357A | LRC / WS | GPIO 6 | not available | - |
 | MAX98357A | DIN | GPIO 4 | not available | - |
+| MAX98357A | SD | free pin, `pinAmpEnable` | not available | only if the breakout needs it |
+| NS4168 | CTRL | free pin, `pinAmpEnable` | not available | - |
 | DFPlayer Mini | RX | GPIO 18 (TX) | GPIO 18 (TX) | 1 k in series |
 | DFPlayer Mini | TX | GPIO 17 (RX) | GPIO 23 (RX) | - |
 
@@ -471,6 +475,10 @@ board needs no separate amplifier. The three I2S pins are validated as a **set**
 assigned, or all three `-1`; a partial set is rejected with a `422`. A UDA1334A or PCM5102A works
 identically.
 
+Two optional pins go with it. A DAC with an **MCLK** input takes `pinI2sMclk`. An amplifier with
+an enable input - **CTRL** on an NS4168, **SD** on a MAX98357A - takes `pinAmpEnable`, which
+AWTRIX holds high from startup so the amplifier plays.
+
 ---
 
 ## 6. Describe the panel
@@ -538,6 +546,8 @@ curl -X PUT http://<awtrix-ip>/api/v1/system \
         "pinI2sBclk": 5,
         "pinI2sLrclk": 6,
         "pinI2sDout": 4,
+        "pinI2sMclk": -1,
+        "pinAmpEnable": -1,
         "dfplayer": false,
         "panelWidth": 32,
         "panels": 1
@@ -602,6 +612,7 @@ Work down this list; each step isolates one part of the hardware.
 | Percentage nonsense | `batteryDividerRatio` still at the default |
 | No temperature | Sensor not on the bus, missing pull-ups, or a second chip answering first |
 | Radio section missing, `/api/v1/audio/play` returns `503` | Not an S3 image, the I2S pins are `-1`, or the device page shows **PSRAM: none** - no PSRAM, or the `-quad-` image is the one this board needs |
+| Radio plays, speaker silent | The amplifier has an enable input - wire it and set `pinAmpEnable` |
 | `invalidPinConfig` on a write | The message names the field and the rule - [Errors](../reference/errors.md#gpio-validation-invalidpinconfig) |
 
 ---

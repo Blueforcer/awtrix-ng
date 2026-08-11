@@ -414,9 +414,8 @@ paths:
                         outside and held in RAM only; `script` is Berry source
                         stored on the device. `module` is a stored Berry file
                         that other scripts import: it is listed here because it
-                        shares the file collection and the script limit, but it
-                        never draws, so it carries no `enabled`, `inLoop` or
-                        `slot`.
+                        shares the file collection, but it never draws, so it
+                        carries no `enabled`, `inLoop` or `slot`.
                     import:
                       type: string
                       description: >
@@ -973,8 +972,7 @@ paths:
         `""` while the script is healthy; anything else is the message the
         matrix is showing as `ERR:<name>`, and it STICKS - a script that
         raised once stays broken until it is replaced. The source is
-        deliberately not part of that listing: it can be as large as
-        `scriptMaxBytes` allows (16384 bytes by default, up to 32768).
+        deliberately not part of that listing.
       parameters:
         - name: name
           in: path
@@ -1022,10 +1020,9 @@ paths:
         dropped, the persisted store is not. The script keeps its position in
         the rotation.
 
-        The device holds `scriptLimit` scripts (default 16, see
-        `PUT /api/v1/system`). A NEW name beyond that -- or past the shared-heap
-        soft limit -- is rejected with `507` and nothing is stored; replacing an
-        existing one always works. Modules count against the same limit.
+        A NEW name past the shared-heap soft limit is rejected with `507` and
+        nothing is stored; replacing an existing one always works. Modules
+        share the same limit.
 
         A source whose header carries `@module` installs as a module instead of
         an app: it is stored and listed the same way, but it never draws and is
@@ -1047,10 +1044,7 @@ paths:
           text/plain:
             schema:
               type: string
-              maxLength: 32768
-              description: >
-                Berry source. The accepted size is `scriptMaxBytes` (16384 by
-                default); 32768 is the highest that setting can be raised to.
+              description: Berry source.
       responses:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200":
@@ -1071,11 +1065,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "403": { $ref: "#/components/responses/Forbidden" }
-        "413":
-          description: Source exceeds `scriptMaxBytes` (refused, never truncated)
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
         "415": { $ref: "#/components/responses/WrongContentType" }
         "422": { $ref: "#/components/responses/Invalid" }
         "500":
@@ -1104,8 +1093,7 @@ paths:
         The values themselves are ordinary entries in the script's persisted
         store, which is why `value` can differ from `default` without anyone
         having used this API: the script may have written it. Installing a
-        source that no longer declares a setting drops its stored value, so
-        nothing invisible accumulates against the store's 2 KB.
+        source that no longer declares a setting drops its stored value.
       parameters:
         - name: name
           in: path
@@ -1129,6 +1117,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "507": { $ref: "#/components/responses/InsufficientStorage" }
     patch:
       tags: [scripts]
       summary: Change a script's settings
@@ -1216,7 +1205,7 @@ paths:
 
         Nothing here survives a reboot, and nothing survives its author:
         removing a script - or re-saving it, which restarts it - drops
-        everything it had published. Each app may publish 8 keys / 256 bytes.
+        everything it had published.
 
         Read-only on purpose: the space belongs to the scripts, and a value with
         no app behind it would have nobody left to keep it true. The path sits
@@ -1426,8 +1415,6 @@ paths:
         | `minBrightness`, `maxBrightness` | 0..255 |
         | `panelWidth` | 1..128 |
         | `panels` | 1..128 |
-        | `scriptLimit` | 0..32 |
-        | `scriptMaxBytes` | 1024..32768 |
         | `tempOffset` | -20..20 |
         | `humOffset` | -50..50 |
         | `batteryDividerRatio` | 0.1..10 |
@@ -2210,26 +2197,6 @@ components:
             interpreter and its HTTP worker at boot (frees ~40 KB internal RAM);
             script endpoints then answer 503. Stored scripts survive on flash.
             Applies after a reboot.
-        scriptLimit:
-          type: integer
-          default: 16
-          minimum: 0
-          maximum: 32
-          description: >
-            How many Berry scripts may be resident at once. All scripts share
-            one VM, so this is a memory budget on their combined data rather than
-            a policy: 0 refuses every install. Applied immediately, no reboot.
-            Installing past it -- or past the 96 KB shared-heap soft limit --
-            answers `507` from `PUT /api/v1/apps/script/{name}`. Lowering it
-            below the number already installed removes nothing: those scripts
-            keep running and stay replaceable, and only a new name is refused.
-        scriptMaxBytes:
-          type: integer
-          default: 16384
-          minimum: 1024
-          maximum: 32768
-          description: >
-            Largest script source the device accepts, in bytes. Bigger scripts cost more memory to compile, and how much more depends on how many functions they define rather than on their length. Lowering it refuses new installs at the new size but never removes or stops loading a script already stored -- those load up to the 32768-byte ceiling regardless.
         # --- GPIO map (-1 = disabled; validated as a whole, see PUT description) ---
         pinMatrix:
           type: integer
@@ -2255,6 +2222,8 @@ components:
         pinI2sBclk: { type: integer, default: -1, description: "I2S bit clock to an external DAC. ESP32-S3 only; set all three pinI2s* together or all to -1" }
         pinI2sLrclk: { type: integer, default: -1, description: "I2S word-select clock. ESP32-S3 only" }
         pinI2sDout: { type: integer, default: -1, description: "I2S serial data out. ESP32-S3 only" }
+        pinI2sMclk: { type: integer, default: -1, description: "I2S master clock, only for DACs that need one. ESP32-S3 only; needs the three pinI2s* lines set" }
+        pinAmpEnable: { type: integer, default: -1, description: "Amplifier enable, held HIGH from boot (NS4168 CTRL, MAX98357A SD). ESP32-S3 only; needs the three pinI2s* lines set" }
     SystemConfigRead:
       description: >
         The configuration as returned by GET/PUT - identical to SystemConfig

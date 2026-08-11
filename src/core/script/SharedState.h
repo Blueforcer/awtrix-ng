@@ -8,8 +8,6 @@
 
 namespace awtrix::script {
 
-constexpr std::size_t kMaxSharedKeysPerApp = 8;
-constexpr std::size_t kMaxSharedBytesPerApp = 256;
 constexpr std::size_t kMaxSharedKeyChars = 24;
 
 // The volatile noticeboard scripts publish to and read from each other. Scalars only: in one
@@ -31,7 +29,7 @@ class SharedState {
     static Value ofStr(std::string v);
   };
 
-  enum class Status { Ok, InvalidKey, KeyLimit, ByteLimit };
+  enum class Status { Ok, InvalidKey, NoRoom };
 
   Status set(const std::string& owner, const std::string& key, Value v, int64_t nowMs);
   void erase(const std::string& owner, const std::string& key);
@@ -43,6 +41,8 @@ class SharedState {
   void clear();
 
   std::size_t entries() const;
+  // Keys and string values one app is holding here. The guard in set() weighs an incoming write
+  // against it, because this map lives outside the script heap and nothing collects it.
   std::size_t bytes(const std::string& owner) const;
 
   const std::map<std::string, std::map<std::string, Value>>& all() const { return ns_; }

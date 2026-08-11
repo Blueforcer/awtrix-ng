@@ -88,8 +88,6 @@ bool parseHeaderBlock(const std::string& block, HttpHeaders& out) {
     std::size_t end = block.find(kHeaderSeparator, pos);
     if (end == std::string::npos) end = block.size();
 
-    if (end - pos > kMaxHttpHeaderBytes) return false;
-
     const std::string line = trim(block, pos, end);
     pos = end + 1;
     if (line.empty()) continue;
@@ -102,7 +100,6 @@ bool parseHeaderBlock(const std::string& block, HttpHeaders& out) {
     if (!nameIsToken(name) || !valueIsClean(value)) return false;
     if (!headerAllowed(name)) continue;
 
-    if (parsed.size() >= kMaxHttpHeaders) return false;
     parsed.emplace_back(name, value);
   }
 

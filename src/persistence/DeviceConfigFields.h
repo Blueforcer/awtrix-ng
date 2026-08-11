@@ -56,8 +56,6 @@
   X(tempDecimals, "tempdec", 0)       \
   X(debugMode, "dbg", 0)              \
   X(scriptingEnabled, "scren", 0)     \
-  X(scriptLimit, "scrlimit", 0)       \
-  X(scriptMaxBytes, "scrmax", 0)      \
   X(pinMatrix, "pmatrix", 0)          \
   X(pinBtnLeft, "pbtnl", 0)           \
   X(pinBtnSelect, "pbtns", 0)         \
@@ -68,4 +66,9 @@
   X(pinI2cSda, "psda", 0)             \
   X(pinI2cScl, "pscl", 0)             \
   X(pinDfRx, "pdfrx", 0)              \
-  X(pinDfTx, "pdftx", 0)                X(pinI2sBclk, "pi2sbck", 0)           X(pinI2sLrclk, "pi2slrc", 0)          X(pinI2sDout, "pi2sdo", 0)
+  X(pinDfTx, "pdftx", 0)              \
+  X(pinI2sBclk, "pi2sbck", 0)         \
+  X(pinI2sLrclk, "pi2slrc", 0)        \
+  X(pinI2sDout, "pi2sdo", 0)          \
+  X(pinI2sMclk, "pi2smck", 0)         \
+  X(pinAmpEnable, "pampen", 0)

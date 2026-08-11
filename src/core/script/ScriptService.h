@@ -7,6 +7,7 @@
 #include "core/Command.h"
 #include "core/Services.h"
 #include "core/script/ScriptConfig.h"
+#include "core/script/ScriptHeap.h"
 #include "core/script/ScriptHost.h"
 
 namespace awtrix::script {
@@ -47,9 +48,9 @@ class ScriptService : public IScriptService {
       detail.message = patch.message;
       return DispatchResult::ValidationError;
     }
-    if (patch.storeJson.size() > kMaxStoreBytes) {
+    if (patch.storeJson.size() > heap::growthBudget()) {
       detail.field = "name";
-      detail.message = "this script has no room left to store the change; shorten a text setting";
+      detail.message = "not enough free memory to store the change; shorten a text setting";
       return DispatchResult::Capacity;
     }
 

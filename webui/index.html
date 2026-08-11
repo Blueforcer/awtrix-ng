@@ -431,9 +431,7 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .edbar .end{margin-left:auto;border-right:none;border-left:1px solid var(--brd2);
   overflow:hidden;text-overflow:ellipsis}
 .edbar .end:empty{display:none}
-.edbar .warn{color:var(--warn)}
 .meta .warn{color:var(--warn);font-weight:400}
-.edbar .over{color:var(--err);font-weight:700}
 .edbar .good{color:var(--ok)}
 .edbar .bad{color:var(--err)}
 .ederr{display:flex;gap:9px;background:var(--badbg);color:var(--badfg);
@@ -811,7 +809,6 @@ const I18N={en:{
   scrpreview:'Show on AWTRIX',scrpreviewed:'Switched the panel to it',
   scrline:'Ln',scrreload:'Reloaded',
   scrinhook:'runtime error in',
-  scrtoobig:'Over what AWTRIX accepts - shorten the script to save it.',
   palhelp:'Colour ramps for effects, text, charts and the progress bar.',
   paledit:'Palette editor',name:'Name',tryit:'Try on AWTRIX',newpal:'New palette',
   palsaved:'Palette saved',palname:'Letters/digits only',
@@ -962,7 +959,6 @@ const I18N={en:{
   scrpreview:'Auf AWTRIX zeigen',scrpreviewed:'Panel darauf umgeschaltet',
   scrline:'Zl',scrreload:'Neu geladen',
   scrinhook:'Laufzeitfehler in',
-  scrtoobig:'Über dem, was AWTRIX annimmt - zum Speichern kürzen.',
   palhelp:'Farbverläufe für Effekte, Text, Diagramme und den Fortschrittsbalken.',
   paledit:'Paletten-Editor',name:'Name',tryit:'Auf AWTRIX testen',newpal:'Neue Palette',
   palsaved:'Palette gespeichert',palname:'Nur Buchstaben/Ziffern',
@@ -1298,6 +1294,8 @@ const SYSF={
  pinI2sBclk:F('gpio','number','I2S BCLK|I2S BCLK','External DAC for internet radio and MP3s.|Externer DAC für Internetradio und MP3s.',{min:-1,max:39}),
  pinI2sLrclk:F('gpio','number','I2S LRCLK|I2S LRCLK','Same DAC, word select.|Selber DAC, Wortauswahl.',{min:-1,max:39}),
  pinI2sDout:F('gpio','number','I2S DOUT|I2S DOUT','Same DAC, data.|Selber DAC, Daten.',{min:-1,max:39}),
+ pinI2sMclk:F('gpio','number','I2S MCLK|I2S MCLK','Only some DACs need it.|Brauchen nur manche DACs.',{min:-1,max:39}),
+ pinAmpEnable:F('gpio','number','Amplifier enable|Verstärker-Enable','Switches the amplifier on.|Schaltet den Verstärker ein.',{min:-1,max:39}),
  soundEnabled:F('sndhw','toggle','Sound|Ton','Master switch for one-shot sounds. Radio keeps playing.|Hauptschalter für Einzelklänge. Radio läuft weiter.',{api:'settings'}),
  buzzerVolume:F('sndhw','slider','Buzzer volume|Buzzer-Lautstärke','RTTTL melodies.|RTTTL-Melodien.',{min:0,max:100,api:'settings'}),
  dfplayerVolume:F('sndhw','slider','DFPlayer volume|DFPlayer-Lautstärke','Tracks.|Titel.',{min:0,max:100,api:'settings'}),
@@ -1309,8 +1307,6 @@ const SYSF={
  artnet:F('misc','toggle','Art-Net|Art-Net','Receive Art-Net DMX on UDP 6454.|Art-Net DMX auf UDP 6454 empfangen.'),
  debugMode:F('misc','toggle','Debug mode|Debug-Modus','Verbose serial logging.|Ausführliches serielles Logging.'),
  scriptingEnabled:F('script','toggle','Run scripts|Skripte ausführen','Off frees about 40 KB of RAM and stops every script. Installed scripts are kept. Applies after a reboot.|Aus spart ca. 40 KB RAM und stoppt alle Skripte. Installierte Skripte bleiben erhalten. Wirkt nach einem Neustart.'),
- scriptLimit:F('script','number','Script limit|Skript-Limit','How many scripts may run at the same time.|Wie viele Skripte gleichzeitig laufen dürfen.',{min:0,max:32}),
- scriptMaxBytes:F('script','number','Max script size|Max. Skriptgröße','Largest script AWTRIX accepts.|Größtes Skript, das AWTRIX annimmt.',{min:1024,max:32768,unit:'B'}),
 };
 const SYS_GROUPS=[['wifi','grpWifi','grpWifiH'],['web','grpWeb','grpWebH'],['mqtt','grpMqtt','grpMqttH'],
  ['time','grpTime','grpTimeH'],['panel','grpPanel','grpPanelH'],['hw','grpHw','grpHwH'],
@@ -1318,7 +1314,7 @@ const SYS_GROUPS=[['wifi','grpWifi','grpWifiH'],['web','grpWeb','grpWebH'],['mqt
  ['sndhw','grpSndHw','grpSndHwH'],['script','grpScript','grpScriptH'],['misc','grpMisc','grpMiscH']];
 const SOUND_KEYS=Object.keys(SYSF).filter(k=>SYSF[k].api==='settings');
 const S={transitions:[],stats:null,ap:false,sysHost:'',sysUid:'',gpio:null,aud:null,
-  scriptMax:0,scriptsOff:null};
+  scriptsOff:null};
 function readAudioCaps(caps){
   const a=caps.audio||{};
   S.aud={buzzer:a.buzzer===true,track:a.track===true,mp3:a.mp3===true,radio:a.radio===true};
@@ -1350,13 +1346,14 @@ function applyGpioCaps(c){
   opts('pinMatrix',c.matrix||[],false);
   ['pinBattery','pinLdr'].forEach(k=>opts(k,adc,true));
   ['pinBtnLeft','pinBtnSelect','pinBtnRight','pinBuzzer','pinI2cSda','pinI2cScl','pinDfTx',
-   'pinI2sBclk','pinI2sLrclk','pinI2sDout'].forEach(k=>opts(k,drive,true));
+   'pinI2sBclk','pinI2sLrclk','pinI2sDout','pinI2sMclk','pinAmpEnable'].forEach(k=>opts(k,drive,true));
   opts('pinDfRx',usable,true);
   const i2s=dflt.pinI2sBclk>=0?'gpio':'hidden';
-  ['pinI2sBclk','pinI2sLrclk','pinI2sDout'].forEach(k=>{SYSF[k].g=i2s;});
+  ['pinI2sBclk','pinI2sLrclk','pinI2sDout','pinI2sMclk','pinAmpEnable'].forEach(k=>{SYSF[k].g=i2s;});
 }
 const PINKEYS=['pinMatrix','pinBtnLeft','pinBtnSelect','pinBtnRight','pinBattery','pinLdr',
-  'pinBuzzer','pinI2cSda','pinI2cScl','pinDfRx','pinDfTx','pinI2sBclk','pinI2sLrclk','pinI2sDout'];
+  'pinBuzzer','pinI2cSda','pinI2cScl','pinDfRx','pinDfTx','pinI2sBclk','pinI2sLrclk','pinI2sDout',
+  'pinI2sMclk','pinAmpEnable'];
 const REBOOT_KEYS=new Set(['wifiSsid','wifiPass','netStatic','ip','gateway','subnet','dns1','dns2',
   'wifiConnectTimeout','hostname','webPort','mqttEnabled','mqttHost','mqttPort','mqttUser',
   'mqttPass','mqttPrefix','statsInterval','dfplayer','scriptingEnabled'].concat(PINKEYS));
@@ -1409,12 +1406,6 @@ function setStats(d){
   S.scriptsOff=d.scriptingRunning===false;
   if(d.hostname)S.sysHost=d.hostname;
   if(d.uid)S.sysUid=d.uid;
-}
-async function loadSystemInfo(){
-  try{
-    const d=(await api('/api/v1/system')).data;
-    if(d.scriptMaxBytes)S.scriptMax=d.scriptMaxBytes;
-  }catch(e){}
 }
 const TABS=[['','dash',viewDash],['apps','appsTab',viewApps],['scripts','scriptsTab',viewScripts],
   ['icons','icons',viewIcons],['editor','editorTab',viewEditor],['audio','audioTab',viewAudio],
@@ -2350,9 +2341,7 @@ window.addEventListener('beforeunload',e=>{if(scrDraft&&scrDraft.dirty)e.prevent
 const BERRY_API=["bar_chart(list, paint?, autoscale?)","circle(cx, cy, r, color)","circle_fill(cx, cy, r, color)","clear(color?)","day()","effect(name, settings?)","epoch_ms()","font(name)","height()","hour()","hsv(h, s, v)","icon(name, x, y)","line(x0, y0, x1, y1, color)","line_chart(list, paint?, autoscale?)","log(value)","minute()","month()","now_ms()","overlay(name, settings?)","pixel(x, y, color)","progress(pct, paint?, bg?)","ramp_text(x, y, str, palette, span?, speed?)","rect(x, y, w, h, color)","rect_fill(x, y, w, h, color)","rgb(r, g, b)","scroll_text(txt, color?, opts?)","second()","text(x, y, txt, color?)","text_ink_width(txt)","text_width(txt)","version()","weekday()","width()","year()","clamp(v, lo, hi)","http.delete(url, cb, opts?)","http.get(url, cb, opts?)","http.patch(url, body, cb, opts?)","http.post(url, body, cb, opts?)","http.put(url, body, cb, opts?)","http.request(method, url, cb, opts?)","max(a, b)","min(a, b)","mqtt.publish(topic, payload)","mqtt.subscribe(topic, cb)","notify(spec)","num(v, dflt?)","re.match(pattern, text)","re.matchall(pattern, text)","re.search(pattern, text)","rotation.next()","rotation.pause()","rotation.previous()","rotation.resume()","rotation.show()","round(v, digits?)","sensor.battery()","sensor.battery_volts()","sensor.humidity()","sensor.light()","sensor.pressure()","sensor.temperature()","settings.apply_case(str)","settings.get(key)","settings.set(key, value)","shared.age(key)","shared.get(key, dflt?)","shared.keys(owner?)","shared.set(key, value)","sound.melody(name)","sound.mp3(name)","sound.play(name)","sound.playing()","sound.rtttl(melody)","sound.sinks()","sound.stop()","sound.track(number)","store.get(k, dflt?)","store.set(k, v)"];
 const BERRY_MODS=["http","mqtt","re","rotation","sensor","settings","shared","sound","store"];
 const BERRY_CORE=["assert","bool","call","classname","classof","compile","format","gc","global","input","int","isinstance","issubclass","json","math","module","number","print","real","size","str","strict","string","super","type"];
-const BERRY_MAXBYTES=8192;
 /* BERRY-API-END */
-S.scriptMax=BERRY_MAXBYTES;
 
 const BERRY_KW=new Set(['if','elif','else','while','for','def','end','class','break',
   'continue','return','true','false','nil','var','do','import','as','try','except',
@@ -2536,9 +2525,9 @@ function viewScripts(view){
   function refresh(){
     const n=enc.encode(ed.value).length;
     showPos();
-    byteOut.replaceChildren(n+' / '+S.scriptMax+' B');
-    byteOut.className=n>S.scriptMax?'over':n>S.scriptMax*0.9?'warn':'';
-    saveBtn.disabled=n>S.scriptMax;
+    // The count is for the author to read; whether a save fits is the device's answer to give.
+    byteOut.replaceChildren(n+' B');
+    saveBtn.disabled=false;
     prevBtn.disabled=!onDevice||ed.value!==onDevice.src||!!onDevice.err;
     const dirty=!onDevice||ed.value!==onDevice.src||nameIn.value!==onDevice.name;
     top.classList.toggle('mod',dirty&&!!ed.value);
@@ -2583,7 +2572,6 @@ function viewScripts(view){
     const name=nameIn.value.trim();
     if(!/^[A-Za-z0-9_-]{1,32}$/.test(name)){toast(t('scrbadname'),false);return false;}
     if(!ed.value.trim()){toast(t('scrempty'),false);return false;}
-    if(enc.encode(ed.value).length>S.scriptMax){toast(t('scrtoobig'),false);return false;}
     const replacing=!!onDevice&&onDevice.name===name;
     const oldName=onDevice&&onDevice.name!==name?onDevice.name:null;
     saveBtn.disabled=true;
@@ -3046,7 +3034,6 @@ function systemSettingsPage(view,data){
     if(w)width=w;
     if('panelWidth'in payload)data.panelWidth=payload.panelWidth;
     if('panels'in payload)data.panels=payload.panels;
-    await loadSystemInfo();
   });
 }
 function provisioningPage(view,data){
@@ -4409,7 +4396,6 @@ new ResizeObserver(setChromeH).observe(topbar);
     readAudioCaps(caps);
     if(!anyAudioCap())nav();
   }catch(e){}
-  await loadSystemInfo();
 })();
 </script>
 </body>

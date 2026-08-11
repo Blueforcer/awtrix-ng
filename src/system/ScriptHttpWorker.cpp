@@ -81,8 +81,7 @@ bool ScriptHttpWorker::request(const script::HttpRequest& req) {
   if (pending_.load(std::memory_order_relaxed) >= kQueueCap) return false;
 
   script::HttpRequest queued = req;
-  if (queued.maxBytes == 0 || queued.maxBytes > script::kMaxHttpBody)
-    queued.maxBytes = script::kMaxHttpBody;
+  if (queued.maxBytes == 0) queued.maxBytes = script::kMaxHttpBody;
 
   pending_.fetch_add(1, std::memory_order_relaxed);
   queue_.push(Queued{std::move(queued)});
@@ -191,11 +190,13 @@ void ScriptHttpWorker::fetch(const script::HttpRequest& req) {
     if (code > 0) {
       res.status = code;
       script::HttpBodyFilter filter;
-      filter.begin(req.find, req.keep, req.maxBytes);
+      filter.begin(req.find, req.keep, script::httpBodyCap(req.maxBytes));
       FilterSink sink(filter);
       http.writeToStream(&sink);
-      res.ok = filter.matched();
+      res.ok = filter.matched() && !filter.outOfRoom();
       if (res.ok) res.body = std::move(filter.body());
+      else if (filter.outOfRoom())
+        logdbg("script http: %s ran out of room for the answer", req.url.c_str());
     } else {
       logdbg("script http: %s %s -> transport error %d", req.method.c_str(), req.url.c_str(),
              code);

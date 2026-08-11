@@ -19,12 +19,6 @@ const char* const kHookNames[ScriptApp::kHookCount] = {
 ScriptApp::ScriptApp(BerryVM& vm, std::string name, const std::string& source,
                      const ScriptMeta& meta, const std::string& storeJson, const RenderCtx* ctx)
     : vm_(vm), name_(std::move(name)) {
-  if (source.size() > maxSourceBytes()) {
-    broken_ = true;
-    error_.message = "source too large (max " + std::to_string(maxSourceBytes()) + " bytes)";
-    return;
-  }
-
   // Before the body runs, so both top-level code and setup() already see restored values.
   if (!storeJson.empty()) {
     BindingScope scope(nullptr, ctx, name_);

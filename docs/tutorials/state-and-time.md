@@ -191,9 +191,8 @@ reboot.
 ```
 
 Anything that survives a JSON round trip works: numbers, strings, booleans, lists and
-maps. The budget is **2 KB serialised per app**, which is plenty for a finished value
-and nowhere near enough for a raw API response. Store what you worked out, never what
-you worked it out from.
+maps. Store what you worked out, never what you worked it out from - a finished value,
+never a raw API response.
 
 The useful detail is the timing. The store is restored *before* `init()` runs, so an app
 can show its last known value the instant the device boots instead of a placeholder:
@@ -354,7 +353,7 @@ correct for a weather app and inconvenient for testing. Set it to 1 while you wo
   it advances evenly when frames do not.
 - Lists that grow need trimming in place, and sixteen values is the number the charts
   and the panel both agree on.
-- `store` survives reboots, holds 2 KB per app, and is restored before `init()` runs.
+- `store` survives reboots, and is restored before `init()` runs.
 - Anything the user might want to change is a `# @config` line read with
   `store.get(key)`, never a constant in the source.
 

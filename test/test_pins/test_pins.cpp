@@ -46,6 +46,28 @@ void test_i2s_defaults_avoid_every_matrix_pin() {
   TEST_ASSERT_FALSE(pins::isMatrixPin(d.i2sDout, s3()));
 }
 
+void test_mclk_and_amp_enable_are_off_by_default_and_share_no_pin() {
+  std::string err;
+  TEST_ASSERT_EQUAL_INT(-1, s3().defaults.i2sMclk);
+  TEST_ASSERT_EQUAL_INT(-1, s3().defaults.ampEnable);
+  TEST_ASSERT_EQUAL_INT(-1, esp32().defaults.i2sMclk);
+  TEST_ASSERT_EQUAL_INT(-1, esp32().defaults.ampEnable);
+
+  pins::PinSet p = s3().defaults;
+  p.i2sMclk = 46;
+  p.ampEnable = 45;
+  TEST_ASSERT_TRUE(pins::validate(p, s3(), err));
+
+  p.ampEnable = p.i2sMclk;
+  TEST_ASSERT_FALSE(pins::validate(p, s3(), err));
+  TEST_ASSERT_TRUE(err.find("duplicate") != std::string::npos);
+
+  p = s3().defaults;
+  p.ampEnable = 19;
+  TEST_ASSERT_FALSE(pins::validate(p, s3(), err));
+  TEST_ASSERT_TRUE(err.find("pinAmpEnable") != std::string::npos);
+}
+
 void test_positional_init_did_not_shift_the_other_pins() {
   TEST_ASSERT_EQUAL_INT(32, esp32().defaults.matrix);
   TEST_ASSERT_EQUAL_INT(15, esp32().defaults.buzzer);
@@ -348,6 +370,7 @@ int main(int, char**) {
   RUN_TEST(test_default_select_button_wakes_on_every_profile);
   RUN_TEST(test_i2s_is_offered_on_the_s3_only);
   RUN_TEST(test_i2s_defaults_avoid_every_matrix_pin);
+  RUN_TEST(test_mclk_and_amp_enable_are_off_by_default_and_share_no_pin);
   RUN_TEST(test_positional_init_did_not_shift_the_other_pins);
   RUN_TEST(test_i2s_pins_are_validated_like_any_other_output);
   RUN_TEST(test_i2s_pins_may_be_disabled_together);

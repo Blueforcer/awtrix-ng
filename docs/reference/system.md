@@ -4,7 +4,7 @@
 Assistant, NTP and timezone, identity, web port and authentication, sensor and battery
 calibration, the auto-brightness range, panel layout, and the complete runtime GPIO map.
 
-It is **67 flat fields**, one JSON object, no nesting. This page documents every one of them.
+It is **69 flat fields**, one JSON object, no nesting. This page documents every one of them.
 
 [Settings](settings.md) is a different resource: it controls how the display *behaves* -
 brightness, apps, transitions - and is written with `PATCH /api/v1/settings`. How your panel is
@@ -429,13 +429,6 @@ The universe and pixel mapping, the five-second hold window and the security imp
 | `tempDecimals` | uint8 | 0–2 | `0` | Number of decimal places the Temperature app shows. Outside 0–2 → `422`. **Applies live.** | no |
 | `debugMode` | bool | - | `false` | Turns on verbose request/command tracing (`logdbg`) to the serial port and the log console. Off keeps the log quiet. **Applies live.** | no |
 | `scriptingEnabled` | bool | - | `true` | Master switch for [Berry scripting](../guides/scripting.md). Off frees the memory the interpreter occupies - watch `freeHeapBytes` in `GET /api/v1/device` to see how much on your board - and no script runs. Stored scripts are not deleted, and they stay **fully editable**: listing, reading, saving and deleting a script all work with this off, so a script that made the device unreachable can be repaired. Only execution stops; saved changes take effect on the next boot once it is switched back on. Holding **left+right** for three seconds while switching the device on sets this to `false` from the panel, for when a script has made it unreachable ([troubleshooting](../troubleshooting/troubleshooting.md#scripts-eat-the-memory-and-awtrix-never-comes-up)). | yes |
-| `scriptLimit` | int | 0–32 | `16` | How many [Berry scripts](../guides/scripting.md) may be resident at once. `0` refuses every install. Installing past it → [`507`](http.md#put-apiv1appsscriptname). Lowering it below the number installed removes nothing - those scripts keep running and stay replaceable, and only a new name is refused. **Applies live**, on the next install. | no |
-| `scriptMaxBytes` | int | 1024–32768 | `16384` | Largest script source AWTRIX accepts, in bytes. Lowering it refuses new installs above the new size. A script already stored that now exceeds the new limit is not deleted - it stays listed, readable and deletable - but it stops running: the app shows `ERR:<name>` on the panel until you raise the limit again or replace the script with shorter source. **Applies live**, and to a stored script the next time it is loaded. | no |
-
-`scriptLimit` is a count, not the on/off switch - that is `scriptingEnabled`. Behind the count
-there is also a memory ceiling, listed in [Limits](limits.md#scripting): once the resident scripts
-reach it a new install is refused, and nothing already running is thrown out. Read `freeHeapBytes`
-and `largestFreeBlockBytes` from `GET /api/v1/device` before raising the limit.
 
 Install, read and remove scripts with [`/api/v1/apps/script/{name}`](http.md#scripts); the language
 itself is in [Scripting](../guides/scripting.md).
@@ -445,9 +438,10 @@ Colour control is not on this route: `colorCorrection` and `colorTint` live on
 
 ## GPIO map
 
-`PUT /api/v1/system` also carries the fourteen `int` GPIO fields (`pinMatrix`, `pinBtnLeft`,
+`PUT /api/v1/system` also carries the sixteen `int` GPIO fields (`pinMatrix`, `pinBtnLeft`,
 `pinBtnSelect`, `pinBtnRight`, `pinBattery`, `pinLdr`, `pinBuzzer`, `pinI2cSda`, `pinI2cScl`,
-`pinDfRx`, `pinDfTx`, `pinI2sBclk`, `pinI2sLrclk`, `pinI2sDout`). `-1` disables a feature (except
+`pinDfRx`, `pinDfTx`, `pinI2sBclk`, `pinI2sLrclk`, `pinI2sDout`, `pinI2sMclk`, `pinAmpEnable`).
+`-1` disables a feature (except
 `pinMatrix`, which cannot be disabled), and **every change requires a reboot**.
 
 The map is validated against the fully merged configuration, so a partial `PUT` is checked against

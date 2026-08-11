@@ -5,7 +5,6 @@
 
 #include "core/api/ApiRouter.h"
 #include "core/api/JsonReader.h"
-#include "core/script/ScriptServices.h"
 #include "core/sound/AudioRouter.h"
 
 using namespace awtrix;
@@ -517,23 +516,6 @@ static void test_http_reserved_app_paths_are_not_names() {
   }
 }
 
-static void test_http_script_oversize_source_rejected() {
-  Command c;
-  api::HttpResult imm;
-  TEST_ASSERT_EQUAL_INT(
-      ro(api::RouteOutcome::Respond),
-      ro(api::routeHttp("PUT", "/api/v1/apps/script/Big",
-                        std::string(script::maxSourceBytes() + 1, 'x'), c, imm)));
-  TEST_ASSERT_EQUAL_INT(413, imm.status);
-  TEST_ASSERT_TRUE(imm.body.find("payloadTooLarge") != std::string::npos);
-
-  TEST_ASSERT_EQUAL_INT(
-      ro(api::RouteOutcome::Routed),
-      ro(api::routeHttp("PUT", "/api/v1/apps/script/Big",
-                        std::string(script::maxSourceBytes(), 'x'), c, imm)));
-  TEST_ASSERT_EQUAL_INT(script::maxSourceBytes(), c.payload.size());
-}
-
 static void test_http_script_empty_source_rejected() {
   Command c;
   api::HttpResult imm;
@@ -923,7 +905,6 @@ int main(int, char**) {
   RUN_TEST(test_http_script_traversal_name_rejected);
   RUN_TEST(test_http_delete_app_is_kind_agnostic);
   RUN_TEST(test_http_reserved_app_paths_are_not_names);
-  RUN_TEST(test_http_script_oversize_source_rejected);
   RUN_TEST(test_http_script_empty_source_rejected);
   RUN_TEST(test_http_script_get_is_read_and_others_405);
   RUN_TEST(test_http_script_config_routes);

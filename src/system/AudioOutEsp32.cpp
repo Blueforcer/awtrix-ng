@@ -2,6 +2,7 @@
 
 #if defined(AWTRIX_SOC_ESP32S3)
 
+#include <Arduino.h>
 #include <LittleFS.h>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
@@ -66,9 +67,21 @@ void* AudioOutEsp32::operator new(std::size_t bytes) {
 
 void AudioOutEsp32::operator delete(void* p) { std::free(p); }
 
-AudioOutEsp32::AudioOutEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int pinDout)
-    : engine_(engine), pinBclk_(pinBclk), pinLrclk_(pinLrclk), pinDout_(pinDout) {
+AudioOutEsp32::AudioOutEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int pinDout,
+                             int pinMclk, int pinAmpEnable)
+    : engine_(engine),
+      pinBclk_(pinBclk),
+      pinLrclk_(pinLrclk),
+      pinDout_(pinDout),
+      pinMclk_(pinMclk),
+      pinAmpEnable_(pinAmpEnable) {
   lock_ = xSemaphoreCreateMutex();
+  // Held high for good: the amplifier's own mute click is worse than its idle noise, and a
+  // notification sound must not wait for it to come up.
+  if (pinAmpEnable_ >= 0) {
+    pinMode(pinAmpEnable_, OUTPUT);
+    digitalWrite(pinAmpEnable_, HIGH);
+  }
 }
 
 AudioOutEsp32::~AudioOutEsp32() {
@@ -244,7 +257,7 @@ bool AudioOutEsp32::writeDecodedFrame(const mp3::DecodeResult& result, int16_t* 
     pins.ws_io_num = pinLrclk_;
     pins.data_out_num = pinDout_;
     pins.data_in_num = I2S_PIN_NO_CHANGE;
-    pins.mck_io_num = I2S_PIN_NO_CHANGE;
+    pins.mck_io_num = pinMclk_ >= 0 ? pinMclk_ : I2S_PIN_NO_CHANGE;
     i2s_set_pin(I2S_NUM_0, &pins);
     sampleRateHz_ = result.sampleRateHz;
     channels_ = result.channels;

@@ -13,7 +13,6 @@ _DEF = re.compile(
 _MODULE = re.compile(r"^\s*([A-Za-z_]\w*)\s*=\s*module\(\s*'([A-Za-z_]\w*)'\s*\)")
 _MEMBER = re.compile(r"^\s*([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*$")
 _CONF_MODULE = re.compile(r"^\s*#define\s+BE_USE_([A-Z0-9_]+)_MODULE\s+(\d+)")
-_MAXBYTES = re.compile(r"kDefaultMaxSourceBytes\s*=\s*([0-9*\s]+?)\s*;")
 
 
 def _read(path):
@@ -110,18 +109,10 @@ def extract(project_dir):
     try:
         bindings = _read(p("src", "core", "script", "ScriptBindings.cpp"))
         prelude = _read(p("src", "core", "script", "Prelude.h"))
-        services = _read(p("src", "core", "script", "ScriptServices.h"))
         baselib = _read(p("lib", "berry", "src", "be_baselib.c"))
         conf = _read(p("lib", "berry", "berry_conf.h"))
     except OSError as e:
         raise SystemExit("berry api: cannot read a source: %s" % e)
-
-    m = _MAXBYTES.search(services)
-    if not m:
-        raise SystemExit("berry api: kDefaultMaxSourceBytes not found in ScriptServices.h")
-    max_bytes = 1
-    for part in m.group(1).split("*"):
-        max_bytes *= int(part.strip())
 
     builtins = _device_builtins(bindings)
     prelude_api, mods = _prelude(prelude)
@@ -129,7 +120,6 @@ def extract(project_dir):
         "api": sorted(builtins) + prelude_api,
         "mods": mods,
         "core": _berry_core(baselib, conf),
-        "max_bytes": max_bytes,
     }
 
 
@@ -155,7 +145,6 @@ def render_js(project_dir):
             "const BERRY_API=%s;" % _js_array(t["api"]),
             "const BERRY_MODS=%s;" % _js_array(t["mods"]),
             "const BERRY_CORE=%s;" % _js_array(t["core"]),
-            "const BERRY_MAXBYTES=%d;" % t["max_bytes"],
         ]
     )
 

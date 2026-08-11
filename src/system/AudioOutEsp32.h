@@ -26,7 +26,9 @@ class AudioOutEsp32 : public sound::IPcmSink {
   static void* operator new(std::size_t bytes);
   static void operator delete(void* p);
 
-  AudioOutEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int pinDout);
+  // pinMclk and pinAmpEnable are -1 on boards that need neither.
+  AudioOutEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int pinDout, int pinMclk,
+                int pinAmpEnable);
   ~AudioOutEsp32() override;
 
   // Two gains, one DAC. A stream turned down for the background must not take the doorbell
@@ -67,6 +69,8 @@ class AudioOutEsp32 : public sound::IPcmSink {
   const int pinBclk_;
   const int pinLrclk_;
   const int pinDout_;
+  const int pinMclk_;
+  const int pinAmpEnable_;
 
   TaskHandle_t task_ = nullptr;
   SemaphoreHandle_t lock_ = nullptr;

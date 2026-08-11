@@ -38,7 +38,7 @@ bool apply(DeviceConfig& cfg, api::JsonReader obj, int& applied, ApplyError& err
       !cfgrules::validateMqttGate(merged.mqttEnabled, merged.mqttHost, cerr) ||
       !cfgrules::validateAuthGate(merged.authEnabled, merged.authUser, merged.authPass, cerr) ||
       !cfgrules::validateAudioPins(merged.pinI2sBclk, merged.pinI2sLrclk, merged.pinI2sDout,
-                                   cerr)) {
+                                   merged.pinI2sMclk, merged.pinAmpEnable, cerr)) {
     err = {422, "validationFailed", cerr.message, cerr.field};
     return false;
   }

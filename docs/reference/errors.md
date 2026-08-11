@@ -68,21 +68,20 @@ counts for.
 | `notFound` | 404 | routing and several handlers | Unknown route, or a named app/sound/file that does not exist. |
 | `methodNotAllowed` | 405 | routing | The path exists but not for this method. `message` always lists the allowed ones. |
 | `unsupportedMediaType` | 415 | `PUT` / `PATCH` with a body, except a script upload; `POST /api/v1/files` | Either the `Content-Type` is not `application/json` (see [Content-Type](#content-type-the-empty-body-trap)), or an uploaded file's leading bytes do not suit the target folder - `/ICONS` takes GIF and JPEG, `/MELODIES` and `/PALETTES` take text. A rejected upload stores nothing. |
-| `payloadTooLarge` | 413 | any route with a body | The body is over the ceiling for that route ([Limits](limits.md#requests)). Nothing was read. A script source upload carries `field: "source"`. |
+| `payloadTooLarge` | 413 | any route with a body | The body is over the ceiling for that route ([Limits](limits.md#requests)). Nothing was read. |
 | `validationFailed` | 422 | write routes | The JSON parsed, but a value is invalid. Usually carries `field`. **Nothing was applied.** |
-| `insufficientStorage` | 507 | pushed apps, notification queue, script store, or a large request body | A store or queue is full ([Limits](limits.md#apps-and-notifications)); the request was rejected instead of silently dropped. Also returned when AWTRIX is too low on memory to act on a large body - a small body (a bare reboot, a short JSON) is never refused this way. Carries `field: "name"` when a script install hit `scriptLimit`, `field: "source"` when there was not enough memory to receive the source at all. |
+| `insufficientStorage` | 507 | pushed apps, notification queue, a script install or its settings, or a large request body | A store or queue is full ([Limits](limits.md#apps-and-notifications)); the request was rejected instead of silently dropped. Also returned when AWTRIX is too low on memory to act on a large body - a small body (a bare reboot, a short JSON) is never refused this way. Carries `field: "name"` on a script install, or when a script's settings do not fit; `field: "source"` when there was not enough memory to receive the source at all. |
 | `internalError` | 500 | dispatch fallback, OTA, uploads | The command reached AWTRIX and failed. A failed firmware flash reads `firmware update failed (bad image or storage full)`. |
 | `unavailable` | 503 | `GET /api/v1/apps/script/{name}`, `GET /api/v1/scripts/shared`, `POST /api/v1/audio/play` | The build has no scripting platform (so there is no source to answer with), or the panel has no output for what was asked. `POST /api/v1/audio/stop` never answers 503. A `PUT` on the script path answers `500 internalError` instead. |
 | `serviceBusy` | 503 | script install, radio play | A transient refusal, distinct from a hard `insufficientStorage` capacity limit; retry shortly. The response carries `Retry-After: 2`. Carries `field: "name"` on a script install and `field: "url"` when a radio stream is refused for lack of memory. |
 
-`field` appears on five codes only, so do not write clients that require it. `invalidName` always
-carries `field: "name"`. `payloadTooLarge` and `insufficientStorage` carry it on the script routes,
-and `serviceBusy` carries `"name"` (script install) or `"url"` (radio play). `validationFailed`
-carries it for every rejected *value*, but not when a route rejects a missing body - there is no
-offending key to name.
+`field` appears on four codes only, so do not write clients that require it. `invalidName` always
+carries `field: "name"`. `insufficientStorage` carries it on the script routes, and `serviceBusy`
+carries `"name"` (script install) or `"url"` (radio play). `validationFailed` carries it for every
+rejected *value*, but not when a route rejects a missing body - there is no offending key to name.
 
 The values behind `payloadTooLarge` and `insufficientStorage` - how large a body may be, how many
-apps, notifications and scripts fit - are collected in [Limits](limits.md).
+apps and notifications fit - are collected in [Limits](limits.md).
 
 ## Status codes
 
@@ -100,8 +99,9 @@ apps, notifications and scripts fit - are collected in [Limits](limits.md).
 | 503 | no | `GET /api/v1/apps/script/{name}` on a build without the scripting platform. |
 | 507 | no | A store or queue was full; the write was rejected and nothing was stored. |
 
-A `507` on a full store or queue reads `storage capacity reached`; a script install past
-`scriptLimit` says `script limit reached (N installed)` and carries `field: "name"` instead.
+A `507` on a full store or queue reads `storage capacity reached`; a script install refused for
+lack of memory carries its own message and `field: "name"` or `field: "source"` instead - see
+[HTTP - `PUT /api/v1/apps/script/{name}`](http.md#put-apiv1appsscriptname).
 
 `device/reboot`, `device/sleep`, `device/factory-reset` and `settings/reset` write their
 `200 {"ok":true}` **before** the restart or deep-sleep is triggered, so the response is delivered
@@ -396,8 +396,6 @@ changes nothing and `field` names the offending key:
 | `ldrFactor` | 0–10 |
 | `ldrGamma` | 0.1–10 |
 | `brightnessSmoothing` | 0–60000 |
-| `scriptLimit` | 0–32 |
-| `scriptMaxBytes` | 1024–32768 |
 | any `pin*` | −1 (disabled), or a GPIO in `0`–`gpioMax` for the running chip; the message is `must be -1 (disabled) or a GPIO in 0..<max>`. The deeper pin rules run separately - see [GPIO validation](#gpio-validation-invalidpinconfig) |
 
 A value of the wrong type answers `must be an integer` (or `must be a number` on the five decimal
@@ -433,6 +431,8 @@ into AP mode. Each answers `422 validationFailed` with the key in `field`:
 | `authEnabled: true` with an empty `authUser`/`authPass` | `authUser` | `set a username and password before requiring login` |
 | `wifiSsid` set to `""` | `wifiSsid` | `an empty string is not a clear; use POST /api/v1/device/factory-reset instead` |
 | only some of `pinI2sBclk` / `pinI2sLrclk` / `pinI2sDout` set | the first unset one | `the I2S pins work as a set: give all three, or -1 for all three` |
+| `pinI2sMclk` set while the three I2S pins are `-1` | `pinI2sMclk` | `set the three I2S pins first, or leave pinI2sMclk at -1` |
+| `pinAmpEnable` set while the three I2S pins are `-1` | `pinAmpEnable` | `set the three I2S pins first, or leave pinAmpEnable at -1` |
 
 Unknown keys are still **ignored** (the route is a partial merge) and every other string is stored
 as sent. The deeper GPIO rules - duplicate pins, input-only pins, the matrix driver whitelist -

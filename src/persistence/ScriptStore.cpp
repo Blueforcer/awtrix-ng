@@ -47,6 +47,14 @@ bool writeFile(const String& path, const std::string& body) {
   return true;
 }
 
+// usedBytes() walks the whole block allocation to add its answer up, so this is the reading
+// FsFreeSpace exists to keep off the hot path.
+std::size_t readFreeBytes() {
+  const std::size_t total = LittleFS.totalBytes();
+  const std::size_t used = LittleFS.usedBytes();
+  return total > used ? total - used : 0;
+}
+
 std::string readFile(const String& path) {
   File f = LittleFS.open(path, "r");
   if (!f) return {};
@@ -63,11 +71,29 @@ std::string readFile(const String& path) {
 
 }
 
+bool ScriptStore::fitsOnDisk(std::size_t bytes) {
+  return fitsWithMargin(free_.bytes(readFreeBytes), bytes);
+}
+
+// What is already queued for the other scripts. Charged alongside the incoming write so a burst
+// between two flushes is weighed as one landing, not as each write having the disk to itself.
+std::size_t ScriptStore::pendingBytesExcept(const std::string& script) const {
+  std::size_t n = 0;
+  for (const auto& kv : dirty_)
+    if (kv.first != script) n += kv.second.size();
+  return n;
+}
+
 void ScriptStore::save(const std::string& name, const std::string& source) {
   if (!nameIsSafe(name)) return;
-  if (source.size() > script::kMaxSourceCeilingBytes) return;
+  if (!fitsOnDisk(source.size() + pendingBytesExcept())) {
+    logf("scripts: %s not saved, no room on flash (%u bytes)", name.c_str(),
+         static_cast<unsigned>(source.size()));
+    return;
+  }
   flush();
   writeFile(sourcePath(name), source);
+  free_.stale();
 }
 
 void ScriptStore::remove(const std::string& name) {
@@ -80,15 +106,31 @@ void ScriptStore::remove(const std::string& name) {
   if (LittleFS.exists(src)) LittleFS.remove(src);
   if (LittleFS.exists(st)) LittleFS.remove(st);
   flush();
+  free_.stale();
 }
 
 void ScriptStore::storeChanged(const std::string& script, const std::string& json) {
   if (!nameIsSafe(script)) return;
-  if (json.size() > script::kMaxStoreBytes) return;
+  if (!fitsOnDisk(json.size() + pendingBytesExcept(script))) {
+    if (!storeRefused_) {
+      storeRefused_ = true;
+      logf("scripts: store not saved for %s, no room on flash (%u bytes)", script.c_str(),
+           static_cast<unsigned>(json.size()));
+    }
+    return;
+  }
+  storeRefused_ = false;
   dirty_[script] = json;
 }
 
 void ScriptStore::tick(int64_t nowMs) {
+  // Everything else on the device writes to the same filesystem, so the remembered free-space
+  // figure is let expire on the flush interval as well. Nothing is read here: the next store
+  // write pays for the reading, and a device where no script writes never pays at all.
+  if (nowMs - lastFreeMs_ >= kFlushIntervalMs || nowMs < lastFreeMs_) {
+    free_.stale();
+    lastFreeMs_ = nowMs;
+  }
   if (dirty_.empty()) {
     lastFlushMs_ = nowMs;
     return;
@@ -103,6 +145,7 @@ void ScriptStore::flush() {
   const std::map<std::string, std::string> pending = std::move(dirty_);
   dirty_.clear();
   for (const auto& kv : pending) writeFile(storePath(kv.first), kv.second);
+  free_.stale();
 }
 
 bool ScriptStore::readSource(const std::string& name, std::string& out) const {

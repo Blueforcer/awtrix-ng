@@ -386,9 +386,6 @@ void setup() {
     if (layout.width() == g_board->matrixWidth()) g_board->setMatrixLayout(layout);
     g_engine->state().runtime().tempDecimals = g_cfg.tempDecimals;
     logbuf::setVerbose(g_cfg.debugMode);
-    if (g_scripts)
-      g_scripts->setLimit(g_cfg.scriptLimit < 0 ? 0 : static_cast<std::size_t>(g_cfg.scriptLimit));
-    script::setMaxSourceBytes(static_cast<std::size_t>(g_cfg.scriptMaxBytes));
     g_mqtt.applyHaConfig(g_cfg);
     applyTimeConfig(g_cfg, false);
     if (g_net.isConnected()) {
@@ -400,7 +397,7 @@ void setup() {
 #if defined(AWTRIX_SOC_ESP32S3)
     if (AudioOutEsp32::usable(g_cfg.pinI2sBclk, g_cfg.pinI2sLrclk, g_cfg.pinI2sDout)) {
       g_radio.reset(new AudioOutEsp32(*g_engine, g_cfg.pinI2sBclk, g_cfg.pinI2sLrclk,
-                                      g_cfg.pinI2sDout));
+                                      g_cfg.pinI2sDout, g_cfg.pinI2sMclk, g_cfg.pinAmpEnable));
       g_engine->setPcmSink(g_radio.get());
       g_audio.setPcm(g_radio.get());
     }
@@ -471,10 +468,10 @@ void setup() {
   g_scriptSvc.log = [](const std::string& s) { logf("%s", s.c_str()); };
   g_scriptIcon.setLog([](const std::string& s) { logf("[icons] %s", s.c_str()); });
   g_scriptSvc.freeHeap = [] {
-    return heap_caps_get_free_size(kGuardHeapCaps);
+    return heap_caps_get_free_size(scriptBufferHeapCaps());
   };
   g_scriptSvc.maxAllocHeap = [] {
-    return heap_caps_get_largest_free_block(kGuardHeapCaps);
+    return heap_caps_get_largest_free_block(scriptBufferHeapCaps());
   };
   g_scriptSvc.logDebug = [](const std::string& s) { logdbg("%s", s.c_str()); };
   g_mqtt.setScriptingRunning(cfg.scriptingEnabled);
@@ -484,8 +481,6 @@ void setup() {
         [](const std::string& id) { g_engine->syncScriptApp(id); },
         [](const std::string& id) { g_engine->removeScriptApp(id); });
     g_scripts = &scripts;
-    scripts.setLimit(cfg.scriptLimit < 0 ? 0 : static_cast<std::size_t>(cfg.scriptLimit));
-    script::setMaxSourceBytes(static_cast<std::size_t>(cfg.scriptMaxBytes));
     g_scriptHttp.begin([](script::HttpResult r) { g_scripts->pushHttpResult(std::move(r)); });
     g_scriptMqtt.begin([](const std::string& t, const std::string& p) { g_mqtt.publishRaw(t, p); },
                        [](const std::string& t) { g_mqtt.subscribeRaw(t); },
@@ -508,7 +503,7 @@ void setup() {
           [modulePass](const std::string& n, const std::string& src, const std::string& st) {
             if (script::parseMeta(src).module != modulePass) return;
             if (!g_scripts->set(n, src, st))
-              logf("scripts: %s not restored (limit %d reached)", n.c_str(), g_cfg.scriptLimit);
+              logf("scripts: %s not restored (%s)", n.c_str(), g_scripts->lastRefusal().c_str());
           });
     }
     if (g_scripts->count()) {

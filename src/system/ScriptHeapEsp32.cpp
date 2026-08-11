@@ -4,6 +4,7 @@
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 
+#include "core/script/ScriptServices.h"
 #include "system/HeapCaps.h"
 
 
@@ -60,6 +61,7 @@ Info info() {
   Info i;
   i.name = d.usePsram ? "psram" : "internal";
   i.budgetBytes = d.budgetBytes;
+  i.psram = d.usePsram;
   return i;
 }
 
@@ -74,6 +76,16 @@ void clearInstallReserve() { g_installReserve = 0; }
 
 std::size_t installLowWater() { return g_installLowWater; }
 
+// The smaller of the two measurements: a buffer needs its bytes in one piece, and the rest of
+// the firmware needs the same margin an install already holds back.
+std::size_t growthBudget() {
+  const uint32_t caps = awtrix::scriptBufferHeapCaps();
+  const std::size_t freeNow = heap_caps_get_free_size(caps);
+  const std::size_t largest = heap_caps_get_largest_free_block(caps);
+  const std::size_t usable = freeNow < largest ? freeNow : largest;
+  return usable > kInstallHeadroomBytes ? usable - kInstallHeadroomBytes : 0;
+}
+
 void noteFree(std::size_t freeNow) {
   if (g_installLowWater == 0 || freeNow < g_installLowWater) g_installLowWater = freeNow;
 }
@@ -84,6 +96,11 @@ bool reserveApplies() { return g_installReserve != 0 && !decision().usePsram; }
 
 }
 }
+
+uint32_t scriptBufferHeapCaps() {
+  return script::heap::info().psram ? (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) : kGuardHeapCaps;
+}
+
 }
 
 extern "C" {

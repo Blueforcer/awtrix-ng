@@ -49,8 +49,6 @@ inline const NumRange* ranges(std::size_t& count) {
       {"ldrFactor", 0, 10, false},
       {"ldrGamma", 0.1, 10, false},
       {"brightnessSmoothing", 0, 60000, true},
-      {"scriptLimit", 0, 32, true},
-      {"scriptMaxBytes", 1024, 32768, true},
   };
   count = sizeof(kRanges) / sizeof(kRanges[0]);
   return kRanges;
@@ -241,12 +239,25 @@ inline bool validateMatrixGeometry(int panelWidth, int panels, ConfigError& err)
   return true;
 }
 
-inline bool validateAudioPins(int bclk, int lrclk, int dout, ConfigError& err) {
+// bclk/lrclk/dout are the bus and go together; mclk and ampEnable are extras some DAC boards
+// need and are only meaningful once the bus itself is wired.
+inline bool validateAudioPins(int bclk, int lrclk, int dout, int mclk, int ampEnable,
+                              ConfigError& err) {
   const int set = (bclk >= 0) + (lrclk >= 0) + (dout >= 0);
-  if (set == 0 || set == 3) return true;
-  const char* missing = bclk < 0 ? "pinI2sBclk" : (lrclk < 0 ? "pinI2sLrclk" : "pinI2sDout");
-  err = {missing, "the I2S pins work as a set: give all three, or -1 for all three"};
-  return false;
+  if (set != 0 && set != 3) {
+    const char* missing = bclk < 0 ? "pinI2sBclk" : (lrclk < 0 ? "pinI2sLrclk" : "pinI2sDout");
+    err = {missing, "the I2S pins work as a set: give all three, or -1 for all three"};
+    return false;
+  }
+  if (set == 0 && mclk >= 0) {
+    err = {"pinI2sMclk", "set the three I2S pins first, or leave pinI2sMclk at -1"};
+    return false;
+  }
+  if (set == 0 && ampEnable >= 0) {
+    err = {"pinAmpEnable", "set the three I2S pins first, or leave pinAmpEnable at -1"};
+    return false;
+  }
+  return true;
 }
 
 // Walks a /api/v1/system body and stops at the first key that breaks a rule. Keys that match none

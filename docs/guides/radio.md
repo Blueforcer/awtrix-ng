@@ -27,6 +27,14 @@ frame - a UDA1334A or a PCM5102A work the same way.
 Plus power and ground. The MAX98357A drives a speaker directly; it needs no
 amplifier of its own.
 
+Some boards have two more inputs. Both settings are off by default and need
+the three pins above:
+
+| Setting | Wire it to |
+|---|---|
+| `pinI2sMclk` | the DAC's **MCLK**, if it has one. |
+| `pinAmpEnable` | the amplifier's enable input - **CTRL** on an NS4168, **SD** on a MAX98357A. AWTRIX pulls it high at startup so the amplifier plays. |
+
 Any free output pin works, but keep clear of GPIO 13–18, 21, 38–42 and 47: the
 matrix panel is wired to one of those. The rest of the
 [GPIO rules](../reference/gpio.md) apply as usual.

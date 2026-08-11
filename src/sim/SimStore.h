@@ -1,9 +1,14 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 namespace awtrix {
 namespace sim {
+
+// The host has no flash partition to report a size for, so everything that answers "how much
+// room is there" measures the data directory against this stand-in for the device's storage area.
+constexpr uint64_t kFsTotalBytes = 8u * 1024u * 1024u;
 
 void setDataDir(const std::string& dir);
 const std::string& dataDir();

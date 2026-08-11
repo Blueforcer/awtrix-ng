@@ -141,7 +141,7 @@ AWTRIX holds at most **50** pushed apps at a time. Updating an app you already p
 against the cap - see [Limits](../reference/limits.md#apps-and-notifications) for exactly what
 happens at the edge.
 
-Scripts are counted separately, against [`scriptLimit`](../reference/system.md#miscellaneous).
+Scripts do not count against it - see [App scripting](scripting.md#limits-and-what-breaks).
 
 ---
 

@@ -77,8 +77,8 @@ Wrapping each app in a class keeps its methods and state to itself, and the `ret
 by completion (**Ctrl-Space**, or just keep typing), so a misspelled `pixel` stays plain
 and is visible before you save, and the list always matches whichever AWTRIX you are
 talking to. **Ctrl-S** saves, **Ctrl-/** toggles comments, **Tab** / **Shift-Tab** indent a
-selection, and the status line counts the bytes you have left of what AWTRIX accepts
-(16 KB by default).
+selection, and the status line shows where the cursor is and how many bytes the script
+has grown to.
 
 If the panel shows **`ERR:`** in red, your script hit an error - a typo, a bad index,
 anything. Nothing is harmed: open the **Scripts** tab and the message is right there
@@ -812,9 +812,9 @@ Values may be integers, reals, strings, booleans, lists and maps - anything that
 
 Reads are cheap. Writes are collected in RAM and reach flash at most once every five seconds - several writes in that window become one - so a `store.set()` per second is fine and will not wear the part out. The trade is that a power cut can cost up to five seconds of writes.
 
-**Everything one app keeps has to fit in 2 KB together.** That is roughly two thousand characters of text, or a few dozen numbers - plenty for what an app needs to remember, and not enough for a whole API response. Store the finished value, never the raw body you got it out of.
+**Store the finished value, never the raw body you got it out of** - a store is for what an app needs to remember, not for a whole API response.
 
-Going over does not raise an error, and that is the part worth knowing: the write is dropped, the app carries on with the value it has in memory, and the panel looks entirely correct **until the next reboot** - when the value comes back as whatever fitted last. The log says `store not saved` with the size it refused, so the Scripts tab console is where this shows up rather than on the panel.
+A write that does not fit does not raise an error, and that is the part worth knowing: it is dropped, the app carries on with the value it has in memory, and the panel looks entirely correct **until the next reboot** - when the value comes back as whatever fitted last. The log says `store not saved` with the size it refused, so the Scripts tab console is where this shows up rather than on the panel.
 
 Editing and re-saving a script keeps its store: the reloaded instance starts with exactly the keys the old one had, so `init()` and `setup()` see them straight away.
 
@@ -860,7 +860,7 @@ required; without a label the key is the label.
 | Type | Shows as | Extras |
 |---|---|---|
 | `bool` | a switch | |
-| `text` | a text box | `maxlen=` (up to 256) |
+| `text` | a text box | `maxlen=` (256 if you leave it out) |
 | `number` | a number box | `min=` `max=` `step=` `unit=` |
 | `slider` | a slider | `min=` `max=` `step=` `unit=` (0–100 if you leave them out) |
 | `select` | a dropdown | `options=a,b,c` - required |
@@ -883,14 +883,13 @@ A few things worth knowing:
 - **A colour is a number**, the same kind `text()` and `pixel()` want. Write the default the way you
   would write it in HTML - `default=#FF8800` - and `store.get("tint")` hands you `0xFF8800` ready to
   draw with.
-- **Twelve settings per script.** Anything past the twelfth is ignored.
 - **A typo does not break the app.** A `@config` line AWTRIX cannot make sense of is skipped, and
   says so at the top of the settings panel - so you find out where to look instead of wondering
   why a field never turned up.
 - **Saving restarts the app**, so `init()` and `setup()` run again with the new values. A running
   animation starts over; everything you stored survives.
 - **Removing a setting removes its value.** Take a `@config` line out and save, and the value goes
-  with it - no invisible leftovers eating the 2 KB every script has for storage. Only settings are
+  with it - no invisible leftovers eating into what a script has stored. Only settings are
   cleaned up this way; anything your code put there with `store.set()` is never touched. The flip
   side: comment a `@config` line out while you are debugging, and whatever the user had chosen is
   gone at the next save.
@@ -944,7 +943,7 @@ for k : shared.keys("weather") # only one app's
 
 A dashboard app can discover its inputs at runtime this way instead of hard-coding names read out of someone else's source.
 
-Each app may publish **8 keys** and **256 bytes** - key names plus string values; numbers cost only their key. Keys are 1–24 characters of `A–Z a–z 0–9 _ -`. `shared.set()` returns `false` when a write is refused - a malformed key, a value that is not a single number/string/bool, or no room left - and a refused write changes nothing, so the previous value survives.
+Keys are 1–24 characters of `A–Z a–z 0–9 _ -`. `shared.set()` returns `false` when a write is refused - a malformed key, a value that is not a single number/string/bool, or too little free memory left to take it - and a refused write changes nothing, so the previous value survives.
 
 ### Sharing code between scripts
 
@@ -1006,7 +1005,7 @@ A module is not an app. It never draws, never takes a turn in the rotation, and 
 `setup()` or `loop()` - the web UI keeps modules in their own **Modules** section on the Scripts tab.
 The Apps tab lists only the modules there is something to do about there: the ones with settings, and
 any that are broken. It does share everything else with the apps: the same file list, the same
-editor, the same memory, and one slot each in the [script limit](#the-caps).
+editor, the same memory.
 
 ### Settings several apps share
 
@@ -1059,8 +1058,8 @@ Two things make this work, and both are worth knowing:
   updates your apps when you edit a module's code.
 
 Everything else is exactly as it is for an app: the same
-[types and attributes](#settings-the-user-can-change), the same twelve settings, the same 2 KB
-store, and deleting the module takes its settings with it.
+[types and attributes](#settings-the-user-can-change) and the same storage, and deleting the
+module takes its settings with it.
 
 ### HTTP
 
@@ -1075,7 +1074,9 @@ end)
 
 `status` is `0` and `body` is `nil` when no response arrived - no Wi-Fi, DNS miss, refused connection, too many requests already in flight, or no answer within 30 seconds. Any real response reaches your callback, **including 4xx and 5xx**: that is where an API explains what it did not like, so `body` carries it.
 
-Only `http://` and `https://` URLs are accepted. Response bodies are kept up to 8 KB.
+Only `http://` and `https://` URLs are accepted. A response is kept up to 8 KB, or up to
+[`cap`](#picking-one-field-out-of-a-big-answer) if the request sets one - and up to whatever
+memory the panel has free when the answer starts arriving, whichever of the three is smallest.
 
 A `GET` follows redirects by itself, so a shortened link or a moved endpoint reaches the right place. A `POST` or `PUT` does not, quite: depending on how the server phrases the redirect, your callback either gets the redirect response itself, or the request arrives at the new address as a `GET` with the body dropped. Neither is what you meant, so **send anything with a body straight to its final URL.**
 
@@ -1108,26 +1109,37 @@ http.post("https://hooks.example.com/panel", json.dump({'state': "up"}),
 
 Four headers are set by AWTRIX itself and are ignored when a script supplies them: `Host`, `Content-Length`, `Transfer-Encoding` and `Connection`. Everything else is yours.
 
-A request that breaks a rule - an unknown method, a body over 2 KB, a malformed or oversized header - never goes out. It fails the same way a network error does, immediately: `cb(nil, 0)`.
+A request that breaks a rule - an unknown method, a malformed header - never goes out. It fails the same way a network error does, immediately: `cb(nil, 0)`.
 
 #### Picking one field out of a big answer
 
-Some APIs answer with far more than the 8 KB AWTRIX keeps - a status
-endpoint that embeds a base64 icon, a document with your one number at byte
-50 000. `find` turns that cap into a search: it scans the
-body as it arrives and keeps a small window starting at the first
-occurrence, instead of blindly keeping the first 8 KB.
+`opts` also carries `cap`, `find` and `keep` - together they decide how much of the response
+reaches your callback. `cap` raises or lowers how much is kept overall; left unset it is 8 KB.
+A large `cap` is what you would like rather than something set aside for you: the panel keeps the
+smaller of your figure and the memory it has free when the answer starts arriving.
+
+That is worth one more sentence, because a big `cap` can fail in a way a small one cannot. If the
+memory runs out **while** the body is still coming in, the response is dropped rather than
+shortened: your callback gets `(nil, status)` with the real status code, the same shape as a
+needle that never matched. So a `cap` you set high enough to matter is a `cap` that can turn a
+perfectly good answer into a miss on a busy panel - which is why `find` below, not a large `cap`,
+is the dependable way to get at one field in a big document.
+
+Some APIs answer with far more than that - a status endpoint that embeds a base64 icon, a
+document with your one number at byte 50 000. `find` turns the cap into a search instead: it
+scans the body as it arrives and keeps a window starting at the first occurrence, instead of
+blindly keeping the response from the start.
 
 ```berry
 http.get(url, / b, st -> self.on_body(b, st),
          {'find': "\"followerCount\":", 'keep': 64})
 ```
 
-`b` is then the `keep` bytes starting **at** the match - the needle included,
-so the usual slice-after-key parsing works on it unchanged. `keep` defaults
-to 256 and is capped at 8 KB; `find` is capped at 64 bytes. Because only the
-window is ever stored, the document's size stops mattering: a field a
-megabyte in works as well as one at the start.
+`b` is then the `keep` bytes starting **at** the match - the needle included, so the usual
+slice-after-key parsing works on it unchanged. `keep` defaults to 256 bytes and bounds the
+window once `find` matches - `cap` can still pull it smaller, never bigger. Because only the
+window is ever stored, the document's size stops mattering: a field a megabyte in works as well
+as one at the start.
 
 If the needle never appears, the callback gets `(nil, status)` with the
 **real** status code - distinguishable from transport failure's `(nil, 0)`:
@@ -1732,18 +1744,13 @@ A script that does not even compile still **installs**. The source is stored, th
 
 ### The caps
 
-Every cap a script runs under - source size, installed count, memory, HTTP, MQTT, store and
-shared state, with what happens when you reach each one - is tabulated under **Scripting** in
-[Limits](../reference/limits.md#scripting). Two of them shape how you write scripts: the
-instruction limit above, and how much memory the scripts on your AWTRIX share.
+Every cap a script runs under - memory, HTTP and MQTT, with what happens when you reach each one -
+is tabulated under **Scripting** in [Limits](../reference/limits.md#scripting). Two of them shape
+how you write scripts: the instruction limit above, and how much memory the scripts on your
+AWTRIX share.
 
-**How many scripts fit.** `scriptLimit` sets the number of installed scripts - [modules](#sharing-code-between-scripts) included, since they take the same memory - 16 out of the box
-and adjustable from 0 to 32 under **System → Advanced** in the web UI (or over the API - see
-[System configuration](../reference/system.md)). It takes effect at once, no reboot. Lowering it
-below the number of scripts you already have **removes nothing**: those keep running and stay
-editable, and only a *new* name is refused until deleting scripts brings the count back under.
-
-**How much memory they share.** On a board without PSRAM - any 4 MB ESP32 - every
+**How many scripts fit** comes down to memory - [modules](#sharing-code-between-scripts)
+included, since they take the same memory. On a board without PSRAM - any 4 MB ESP32 - every
 script shares about 96 KB with the icon decoder, the pushed apps holding their content, and the
 room an HTTPS handshake needs. A handful of scripts is comfortable; a handful of scripts *and* a
 long list of pushed apps is where installs start being refused. An **ESP32-S3 with PSRAM** raises
@@ -1753,8 +1760,7 @@ boot. If you want to push scripting hard, that is the board to be on.
 ### "Not enough free memory to compile"
 
 A `507` with this message means the install was refused because compiling it
-right then would have been unsafe - not that the script is too big and not that
-you are out of slots. Compiling is the expensive moment, not running: an install
+right then would have been unsafe. Compiling is the expensive moment, not running: an install
 briefly needs roughly the source size again in free memory, and AWTRIX still
 has to have enough left afterwards to run what it installed.
 

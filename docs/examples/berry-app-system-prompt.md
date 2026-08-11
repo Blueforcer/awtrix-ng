@@ -390,34 +390,39 @@ The other methods take the same shape, with an optional trailing `opts` map:
              {'headers': {'Authorization': "Bearer " + self.token}})
 ```
 
-`opts` keys are `headers` (a map), `find` and `keep` (below), and `body` - which is how
+`opts` keys are `headers` (a map), `cap`, `find` and `keep` (below), and `body` - which is how
 `http.request()` and `http.delete()` send one, and what `post`/`put`/`patch` fall back to when the
 body argument is `nil`. `Host`, `Content-Length`, `Transfer-Encoding` and `Connection` are set by
-the device and ignored if a script supplies them. A request body is capped at 2 KB, headers at 8
-per request and 256 bytes per line; anything over the line fails immediately with `cb(nil, 0)`.
+the device and ignored if a script supplies them. A malformed header line fails the whole request
+immediately with `cb(nil, 0)`.
 
-Only `http://` and `https://`; redirects followed; response truncated at 8 KB. HTTPS is encrypted
+Only `http://` and `https://`; redirects followed. HTTPS is encrypted
 but the certificate is **not verified**. Script source is served back by
 `GET /api/v1/apps/script/<name>`, behind the device login only if one is configured - the default
 is none. Prefer APIs that need no key; when a key is unavoidable, say in your answer that the panel
 should have a login set and the token should be scoped and revocable.
 
-#### Ask for less: `find` and `keep`
+#### Ask for less: `cap`, `find` and `keep`
 
 **This is the single most important memory decision in a networked app.** By default the callback
-receives up to 8 KB of body as one Berry string on the shared heap. `find` turns that cap into a
-search: the device scans the body as it streams in and keeps only a small window starting at the
-first occurrence of the needle.
+receives up to 8 KB of body as one Berry string on the shared heap; `cap` in `opts` raises or
+lowers that number, and the device collects the smaller of what you asked for and what it has room
+for at the moment the answer starts arriving. A `cap` large enough to matter also brings a failure
+mode a small one does not have: if the memory runs out **while** the body is still coming in, the
+whole response is dropped rather than shortened, and the callback gets `(nil, status)` with the
+real status code. Prefer `find` over a large `cap`. `find` turns the cap into a search instead: the
+device scans the body as it streams in and keeps only a small window starting at the first
+occurrence of the needle.
 
 ```berry
     http.get(url, / b, st -> self.on_body(b, st), {'find': "\"temperature\":", 'keep': 48})
 ```
 
 `b` is then the `keep` bytes starting **at** the match, needle included. `keep` defaults to 256 and
-is capped at 8 KB; `find` is capped at 64 bytes. The size of the document stops mattering - a field
-a megabyte in works as well as one at the start - and the heap receives a string the size of the
-window. If the needle never appears the callback gets `(nil, status)` with the **real** status
-code, distinguishable from a transport failure's `(nil, 0)`. **Use `find` whenever you want one or
+bounds the window once `find` matches - `cap` can still pull it smaller, never bigger. The size of the document
+stops mattering - a field a megabyte in works as well as one at the start - and the heap receives a
+string the size of the window. If the needle never appears the callback gets `(nil, status)` with
+the **real** status code, distinguishable from a transport failure's `(nil, 0)`. **Use `find` whenever you want one or
 two values out of an API answer**, which is most of the time; reach for `json.load()` only when you
 genuinely must walk a structure.
 
@@ -521,9 +526,9 @@ are given.
 Values survive a reboot. Anything that survives a JSON round trip works: integers, reals, strings,
 booleans, lists and maps. Each app gets its own store; apps cannot read each other's - handing a
 value to another app is what `shared` (5.12) is for. Writes are collected in RAM and reach flash at
-most once every five seconds, so a `store.set()` per second is fine. Limit: **2 KB serialised per
-app**, held in RAM as well as flash, so store the finished value and never a raw response - and
-only once the data is known good, so a bad response cannot poison what survives the next reboot.
+most once every five seconds, so a `store.set()` per second is fine. Store the finished value,
+never a raw response - and only once the data is known good, so a bad response cannot poison what
+survives the next reboot.
 
 The store is restored *before* `init()` runs, which lets an app show its last known value the
 instant the device boots instead of `...` until the network comes up: a
@@ -570,11 +575,9 @@ Rules that matter when you write these:
   drawing call.
 - **Saving restarts the app**, so `init()` and `setup()` run again. Build anything derived from a
   setting - a URL, a parsed value - in `init()`.
-- At most **12 settings** per app; further lines are ignored with a warning. Keys are
-  `[A-Za-z_][A-Za-z0-9_]*` up to 24 characters. Labels are cut at 48 characters, `help` at 96,
-  `unit` at 8, a `select` at 12 options of 24 characters, a text value at 256 (or `maxlen`,
-  whichever is smaller). Settings share the app's 2 KB of storage with everything else it keeps, so
-  do not declare a dozen long text fields.
+- Keys are `[A-Za-z_][A-Za-z0-9_]*` up to 24 characters. Labels are cut at 48 characters, `help` at
+  96, `unit` at 8, a `select`'s options at 24 characters each, a text value at 256, or `maxlen` if
+  you set one.
 - **Taking a `@config` line out deletes that value.** Never comment one out to test something - the
   user's choice is gone at the next save.
 - The device fills gaps rather than failing: a `slider` with no `min`/`max` becomes 0–100, a
@@ -627,9 +630,9 @@ Writing takes a **bare** key and files it under your app's install name; reading
 **qualified** `owner.key`. You cannot write into another app's namespace - a dot in a key is an
 invalid key. Key names are 1–24 characters of `A–Z a–z 0–9 _ -`, and passing `nil` as the value
 erases the key. Values are scalars only: integers, reals, booleans, strings. Publish
-`json.dump(...)` if you need structure - sparingly, because it costs bytes against the budget:
-**8 keys and 256 bytes per app** (key names plus string values; numbers cost only their key).
-`shared.set()` returns `false` when a write is refused, and a refused write changes nothing.
+`json.dump(...)` if you need structure - sparingly, since it is stored as one string like
+everything else here. `shared.set()` returns `false` when a write is refused - a malformed key, or
+a value that is not a single number/string/bool - and a refused write changes nothing.
 
 Nothing expires by itself, so a reader that cares about freshness checks `shared.age()` and falls
 back rather than showing an hour-old number:
@@ -857,8 +860,8 @@ collector: fine once a second, wrong forty times a second (section 9).
 `int(v + (v >= 0 ? 0.5 : -0.5))`. `/` on two integers gives an integer, and dividing by zero
 raises, so guard a denominator that comes from data.
 
-**Comments** start with `#`. They cost source bytes against the 16 KB script cap but nothing in
-memory - the compiler drops them. **Unknown global names are resolved at compile time**, so a
+**Comments** start with `#`. They cost source bytes but nothing in memory - the compiler drops
+them. **Unknown global names are resolved at compile time**, so a
 typo'd builtin like `clesr()` is an install-time error rather than a 3 a.m. surprise; methods on
 your own class resolve at call time, so a method may call another defined further down.
 
@@ -891,22 +894,15 @@ anything that waits, waits by returning and being called again.
 | Cap | Value | What happens at the edge |
 |---|---|---|
 | Instructions per call into script code | 200 000 | script stops and stays broken until replaced |
-| Script source | 16 KB by default (`scriptMaxBytes`, 1–32 KB) | upload refused |
-| Scripts installed | 16 by default (`scriptLimit`, 0–32) | upload refused |
 | **Shared Berry heap, all scripts together** | **96 KB** without PSRAM; half the free PSRAM with it | **new installs refused** until something is freed; nothing running is removed |
 | Free memory to install | ~8 KB plus the source (~4 KB plus the source to re-save) | install refused, `507` |
 | Memory in one piece | at least the size of the source | install refused, "heap too fragmented to compile" - a reboot fixes it |
-| HTTP response body | 8 KB, or the `keep` window when `find` is used | truncated |
-| HTTP `find` needle | 64 bytes | request refused, `cb(nil, 0)` |
-| HTTP request body | 2 KB | request refused, `cb(nil, 0)` |
-| HTTP headers | 8 per request, 256 bytes per line | request refused, `cb(nil, 0)` |
+| HTTP response body | 8 KB by default; `cap` raises or lowers it, and `find`+`keep` narrows it to a window (`keep` defaults to 256) | truncated, or filtered |
+| Free memory while the body is collected | brings `cap` down to what is there; running out mid-body drops the response | callback gets `nil` and the real status code |
 | HTTP requests in flight | 8 per app | callback gets `nil` immediately |
 | HTTP timeout | 5 s connect, 5 s read, 30 s total | callback gets `nil` |
 | MQTT subscriptions | 8 per app | further subscribes ignored |
 | MQTT messages waiting | 32, shared by every script | the oldest is dropped |
-| Store | 2 KB serialised per app | write dropped |
-| `@config` settings | 12 per app | further lines ignored with a warning |
-| Shared state | 8 keys and 256 bytes per app | `shared.set()` returns `false` |
 | Chart values | 16 | extras dropped |
 | Regex | 256-byte pattern, 7 capturing groups | the call answers `nil` |
 | Frame budget | 25 ms | nothing is dropped; the whole panel's frame rate falls |
@@ -968,8 +964,8 @@ memory and cannot fail; an icon needs a decode buffer a busy heap may refuse.
 through `shared` (5.12) are cheaper and clearer than one that does everything - and the panel has
 room to say one thing at a time anyway.
 
-**10. Keep the source short.** The 16 KB cap is not the binding constraint; the compile is.
-Comments are free at runtime, so keep the ones that explain a choice and do not pad.
+**10. Keep the source short.** What the source costs to compile is the binding constraint, not its
+length on disk. Comments are free at runtime, so keep the ones that explain a choice and do not pad.
 
 The device logs the cost on every install - `vm heap +6210 bytes (shared 46812)` - and `import gc`
 then `gc.allocated()` reports the live total from inside a script. Do not call `gc.collect()` in

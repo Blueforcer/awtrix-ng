@@ -37,7 +37,6 @@ bool isReservedModule(const std::string& s) {
 std::vector<std::string> collectImports(const std::string& source) {
   static const char kKeyword[] = "import";
   constexpr std::size_t kKeywordLen = sizeof(kKeyword) - 1;
-  constexpr std::size_t kMaxImports = 8;
   auto boundary = [](char c) {
     const unsigned char u = static_cast<unsigned char>(c);
     return !std::isalnum(u) && u != '_';
@@ -46,7 +45,6 @@ std::vector<std::string> collectImports(const std::string& source) {
   std::vector<std::string> out;
   for (std::size_t at = source.find(kKeyword); at != std::string::npos;
        at = source.find(kKeyword, at + kKeywordLen)) {
-    if (out.size() >= kMaxImports) break;
     if (at > 0 && !boundary(source[at - 1])) continue;
     std::size_t p = at + kKeywordLen;
     if (p >= source.size() || !boundary(source[p])) continue;
@@ -174,10 +172,6 @@ bool ScriptHost::set(const std::string& name, const std::string& source,
   if (meta.module && refuseModule(name, meta)) return false;
 
   const bool isNew = !has(name);
-  if (isNew && count() >= limit_) {
-    lastRefusal_ = "script limit reached (" + std::to_string(count()) + " installed)";
-    return false;
-  }
 
   if (svc_.freeHeap) {
     const std::size_t need = installNeedsBytes(source.size(), !isNew);

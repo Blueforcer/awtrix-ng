@@ -286,9 +286,9 @@ publishes, the others read:
     var t = shared.get("Weather.temp", 0)       # in every other app
 ```
 
-One HTTP buffer, one TLS handshake, one parse. `shared` holds scalars only, up to eight
-keys and 256 bytes per app, which is plenty for finished values and deliberately not
-enough for raw data. Use `shared.age()` to check how old a value is before trusting it.
+One HTTP buffer, one TLS handshake, one parse. `shared` holds scalars only - store the
+finished value there, never the raw body you got it out of. Use `shared.age()` to check
+how old a value is before trusting it.
 
 A [headless app](recipe-doorbell.md) that does nothing but fetch and publish is a good
 shape for this. It never takes a turn on the panel and every drawing app gets its

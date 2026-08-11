@@ -26,10 +26,10 @@
 #include "core/render/TextEncoding.h"
 #include "core/render/TextRenderer.h"
 #include "core/script/BerryVM.h"
-#include "core/script/HttpBodyFilter.h"
 #include "core/script/HttpHeaders.h"
 #include "core/script/Prelude.h"
 #include "core/script/Regex.h"
+#include "core/script/ScriptHeap.h"
 #include "core/script/ScriptServices.h"
 #include "core/script/ScrollBank.h"
 #include "core/script/SharedState.h"
@@ -726,22 +726,25 @@ int b_version(bvm* vm) {
 
 int b_http_request(bvm* vm) {
   bool ok = false;
-  if (g_svc && g_svc->http && be_top(vm) >= 7 && be_isstring(vm, 2) && be_isstring(vm, 3) &&
+  if (g_svc && g_svc->http && be_top(vm) >= 8 && be_isstring(vm, 2) && be_isstring(vm, 3) &&
       be_isstring(vm, 4) && be_isstring(vm, 5) && be_isstring(vm, 6)) {
     HttpRequest req;
     req.id = static_cast<uint32_t>(argInt(vm, 1));
     req.url = be_tostring(vm, 3);
     req.body = be_tostring(vm, 4);
-    req.maxBytes = kMaxHttpBody;
     const std::string headerBlock = be_tostring(vm, 5);
 
     req.find = be_tostring(vm, 6);
     const int keep = argInt(vm, 7);
     req.keep = keep > 0 ? static_cast<std::size_t>(keep) : 0;
 
-    if (normalizeMethod(be_tostring(vm, 2), req.method) &&
-        req.body.size() <= kMaxHttpRequestBody && req.find.size() <= kMaxHttpFind &&
-        keep >= 0 && parseHeaderBlock(headerBlock, req.headers))
+    // A script that asks for more than the default gets it; one that asks for nothing, or
+    // for a non-positive amount, still gets the default.
+    const int cap = argInt(vm, 8);
+    req.maxBytes = cap > 0 ? static_cast<std::size_t>(cap) : kMaxHttpBody;
+
+    if (normalizeMethod(be_tostring(vm, 2), req.method) && keep >= 0 &&
+        parseHeaderBlock(headerBlock, req.headers))
       ok = g_svc->http->request(req);
     else if (g_svc->logDebug)
       g_svc->logDebug("script http: request rejected for " + req.url);
@@ -768,10 +771,11 @@ int b_store_flush(bvm* vm) {
   if (be_top(vm) < 1 || !be_isstring(vm, 1)) be_return_nil(vm);
 
   const std::size_t len = static_cast<std::size_t>(be_strlen(vm, 1));
-  if (len > kMaxStoreBytes) {
+  const std::size_t budget = heap::growthBudget();
+  if (len > budget) {
     if (g_svc && g_svc->log)
       g_svc->log("[script:" + g_ctx.name + "] store not saved: " + std::to_string(len) +
-                 " bytes exceeds the " + std::to_string(kMaxStoreBytes) + " byte limit");
+                 " bytes, only " + std::to_string(budget) + " free");
     be_return_nil(vm);
   }
 

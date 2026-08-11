@@ -106,6 +106,9 @@ class HttpApiServer {
   File uploadFile_;
   BodyArena bodyArena_;
   BodyArena sourceArena_;
+  // Growth ceiling for sourceArena_, measured once at RAW_START; takeBody() reports this rather
+  // than re-measuring a heap the upload has already spent.
+  std::size_t sourceCeiling_ = 0;
   bool restoreAuthed_ = false;
   bool restoreStarted_ = false;
   std::unique_ptr<backup::RestoreSink> restoreSink_;

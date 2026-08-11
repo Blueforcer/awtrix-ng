@@ -7,6 +7,7 @@
 
 #include "core/render/Font.h"
 #include "core/script/HttpHeaders.h"
+#include "core/script/ScriptHeap.h"
 
 namespace awtrix {
 class Canvas;
@@ -19,18 +20,18 @@ namespace awtrix::script {
 
 class SharedState;
 
-constexpr std::size_t kMaxSourceCeilingBytes = 32 * 1024;
-constexpr std::size_t kDefaultMaxSourceBytes = 8 * 1024;
-constexpr std::size_t kMinMaxSourceBytes = 1024;
-
-std::size_t maxSourceBytes();
-void setMaxSourceBytes(std::size_t bytes);
+// How much of a response is kept when a script does not ask for a specific maxBytes itself.
 constexpr std::size_t kMaxHttpBody = 8 * 1024;
-constexpr std::size_t kMaxHttpRequestBody = 2 * 1024;
-constexpr std::size_t kMaxHttpHeaders = 8;
-constexpr std::size_t kMaxHttpHeaderBytes = 256;
-constexpr std::size_t kMaxStoreBytes = 2 * 1024;
 constexpr std::size_t kMaxPendingHttp = 8;
+
+// How much of a response may actually be collected. A script names the figure it wants, but the
+// bytes land chunk by chunk on the fetching task's heap, and an append that cannot allocate takes
+// the firmware down with it. Measured when the filter is armed, so a script that asks for little
+// pays for little and nothing is set aside in advance.
+inline std::size_t httpBodyCap(std::size_t wanted) {
+  const std::size_t room = heap::growthBudget();
+  return wanted < room ? wanted : room;
+}
 
 
 // Free heap an install needs beyond the source itself. Replacing costs less because the old

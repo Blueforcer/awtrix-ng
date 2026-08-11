@@ -86,7 +86,6 @@ static void test_set_replace_remove_registry_and_hooks() {
   script::ScriptHost host(
       reg, g_svc, [&](const std::string& id) { installed.push_back(id); },
       [&](const std::string& id) { removed.push_back(id); });
-  host.setLimit(6);
 
   TEST_ASSERT_TRUE(host.set("Clock", app("def draw() end")));
   TEST_ASSERT_NOT_NULL(reg.find("Clock"));
@@ -108,7 +107,6 @@ static void test_set_replace_remove_registry_and_hooks() {
 static void test_replace_points_registry_at_the_new_app() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("A", app("def draw() pixel(0, 0, 0x11) end"));
   host.set("A", app("def draw() pixel(0, 0, 0x22) end"));
   Canvas c(32, 8);
@@ -117,23 +115,18 @@ static void test_replace_points_registry_at_the_new_app() {
   TEST_ASSERT_EQUAL_HEX32(0x22u, c.getPixel(0, 0));
 }
 
-static void test_limit_enforced() {
+// A script is refused only by the heap and fragmentation guards exercised below.
+static void test_installing_many_scripts_succeeds() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(2);
-  TEST_ASSERT_TRUE(host.set("A", app("def draw() end")));
-  TEST_ASSERT_TRUE(host.set("B", app("def draw() end")));
-  TEST_ASSERT_FALSE(host.set("C", app("def draw() end")));
-  TEST_ASSERT_NULL(reg.find("C"));
-  TEST_ASSERT_TRUE(host.set("A", app("def draw() end")));
-  host.remove("B");
-  TEST_ASSERT_TRUE(host.set("C", app("def draw() end")));
+  for (int i = 0; i < 24; ++i)
+    TEST_ASSERT_TRUE(host.set("s" + std::to_string(i), app("def draw() end")));
+  TEST_ASSERT_EQUAL_UINT(24u, (unsigned)host.count());
 }
 
 static void test_install_refused_over_the_script_heap_budget() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(32);
 
   script::heap::testing::setBudgetBytes(0);
   TEST_ASSERT_FALSE(host.set("A", app("def draw() end")));
@@ -153,13 +146,12 @@ static std::string fatApp() {
   return app(body);
 }
 
-static int installUntilRefused(std::size_t budget, int limit, const std::string& src) {
+static int installUntilRefused(std::size_t budget, int attempts, const std::string& src) {
   script::heap::testing::setBudgetBytes(budget);
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(limit);
   int installed = 0;
-  for (int i = 0; i < limit; ++i) {
+  for (int i = 0; i < attempts; ++i) {
     if (!host.set("s" + std::to_string(i), src)) break;
     ++installed;
   }
@@ -167,16 +159,16 @@ static int installUntilRefused(std::size_t budget, int limit, const std::string&
 }
 
 static void test_a_larger_budget_admits_more_scripts() {
-  const int kLimit = 40;
+  const int kAttempts = 40;
   const std::string src = fatApp();
 
-  const int tight = installUntilRefused(script::heap::testing::defaultBudgetBytes(), kLimit, src);
+  const int tight = installUntilRefused(script::heap::testing::defaultBudgetBytes(), kAttempts, src);
   TEST_ASSERT_TRUE_MESSAGE(tight > 0, "the default budget must admit at least one script");
-  TEST_ASSERT_TRUE_MESSAGE(tight < kLimit, "the default budget must refuse before the app limit");
+  TEST_ASSERT_TRUE_MESSAGE(tight < kAttempts, "the default budget must refuse before every attempt");
 
-  const int roomy = installUntilRefused(64u * 1024 * 1024, kLimit, src);
+  const int roomy = installUntilRefused(64u * 1024 * 1024, kAttempts, src);
   TEST_ASSERT_TRUE_MESSAGE(roomy > tight, "a larger budget must admit strictly more scripts");
-  TEST_ASSERT_EQUAL_INT_MESSAGE(kLimit, roomy, "with a large budget the app limit is the wall");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(kAttempts, roomy, "with a large budget every attempt succeeds");
 }
 
 static void test_budget_does_not_relax_the_compile_guards() {
@@ -185,7 +177,6 @@ static void test_budget_does_not_relax_the_compile_guards() {
   g_svc.freeHeap = [&freeHeap] { return freeHeap; };
   script::heap::testing::setBudgetBytes(64u * 1024 * 1024);
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
 
   const std::string src = app("def draw() end");
   freeHeap = script::installNeedsBytes(src.size()) - 1;
@@ -201,7 +192,6 @@ static void test_install_refused_when_system_heap_is_low() {
   std::size_t freeHeap = 0;
   g_svc.freeHeap = [&freeHeap] { return freeHeap; };
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
 
   const std::string src = app("def draw() end");
   const std::size_t need = script::installNeedsBytes(src.size());
@@ -232,7 +222,6 @@ static void test_install_refused_when_the_heap_is_too_fragmented() {
   g_svc.freeHeap = [] { return static_cast<std::size_t>(1024 * 1024); };
   g_svc.maxAllocHeap = [&largest] { return largest; };
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
 
   const std::string src = app("def draw() end");
 
@@ -253,7 +242,6 @@ static void test_low_heap_refusal_is_transient_while_a_fetch_is_in_flight() {
   std::size_t freeHeap = 1024 * 1024;
   g_svc.freeHeap = [&freeHeap] { return freeHeap; };
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
 
   const std::string src = app("def draw() end");
   const std::size_t tooLittle = script::installNeedsBytes(src.size()) - 1;
@@ -289,7 +277,6 @@ static void test_install_not_blocked_without_a_heap_reading() {
   AppRegistry reg;
   g_svc.freeHeap = nullptr;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   TEST_ASSERT_TRUE(host.set("A", app("def draw() end")));
   TEST_ASSERT_NOT_NULL(reg.find("A"));
 }
@@ -297,7 +284,6 @@ static void test_install_not_blocked_without_a_heap_reading() {
 static void test_broken_script_still_installs() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   TEST_ASSERT_TRUE(host.set("Bad", app("def draw( end")));
   TEST_ASSERT_NOT_NULL(reg.find("Bad"));
   TEST_ASSERT_TRUE(host.errorOf("Bad").message.find("syntax_error") != std::string::npos);
@@ -308,7 +294,6 @@ static void test_broken_script_still_installs() {
 static void test_tick_runs_loop_at_1hz_and_visibility() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("L", app("var n, vis\n"
                     "def init() self.n = 0 self.vis = '' end\n"
                     "def loop() self.n += 1 end\n"
@@ -344,7 +329,6 @@ static const char* kCounter =
 static void test_loop_runs_for_offscreen_scripts() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("A", app(kCounter));
   host.set("B", app(kCounter));
   RenderCtx ctx;
@@ -357,7 +341,6 @@ static void test_loop_runs_for_offscreen_scripts() {
 static void test_stagger_spreads_first_loops_across_seconds() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("A", app(kCounter));
   host.set("B", app(kCounter));
   host.set("C", app(kCounter));
@@ -386,7 +369,6 @@ static void test_stagger_spreads_first_loops_across_seconds() {
 static void test_reinstall_clears_the_stagger_hold() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("A", app(kCounter));
   host.set("B", app(kCounter));
   host.staggerFirstLoops(60000);
@@ -413,7 +395,6 @@ static void test_tight_fetch_retries_are_bounded() {
 static void test_every_script_is_active_before_a_running_list_arrives() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("A", app(kCounter));
   TEST_ASSERT_TRUE(host.active("A"));
 }
@@ -421,7 +402,6 @@ static void test_every_script_is_active_before_a_running_list_arrives() {
 static void test_a_script_left_out_of_the_running_list_stops() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("A", app(kCounter));
   host.set("B", app(kCounter));
   host.setRunningScripts({"Time", "A"});
@@ -438,7 +418,6 @@ static void test_a_script_left_out_of_the_running_list_stops() {
 static void test_the_headless_flag_does_not_keep_a_script_running() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("A", app(kCounter));
   host.set("B", "# @headless true\n" + app(kCounter));
 
@@ -463,7 +442,6 @@ static void test_the_headless_flag_does_not_keep_a_script_running() {
 static void test_a_headless_script_needs_no_draw_method() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
 
   TEST_ASSERT_TRUE(host.set("Listener", "# @headless true\ndef setup() end\nclass L\n"
                                         "  def setup() end\nend\nreturn L()"));
@@ -476,7 +454,6 @@ static void test_a_headless_script_needs_no_draw_method() {
 static void test_the_headless_flag_follows_a_re_saved_header() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("A", app(kCounter));
   TEST_ASSERT_FALSE(host.isHeadless("A"));
 
@@ -490,7 +467,6 @@ static void test_the_headless_flag_follows_a_re_saved_header() {
 static void test_rejoining_the_running_list_starts_a_script_again() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("A", app(kCounter));
   host.setRunningScripts({"Time"});
   RenderCtx ctx;
@@ -509,7 +485,6 @@ static void test_http_answers_do_not_reach_an_inactive_script() {
   g_svc.http = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var t\ndef init() self.t = -1 end\n"
                     "def setup() http.get('http://x/', def(b) self.t = int(b) end) end\n"
                     "def draw() end\ndef check() return str(self.t) end"));
@@ -526,7 +501,6 @@ static void test_mqtt_messages_do_not_reach_an_inactive_script() {
   g_svc.mqtt = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("M", app("var t\ndef init() self.t = '' end\n"
                     "def setup() mqtt.subscribe('a/b', def(t, p) self.t = p end) end\n"
                     "def draw() end\ndef check() return self.t end"));
@@ -541,7 +515,6 @@ static void test_mqtt_messages_do_not_reach_an_inactive_script() {
 static void test_button_goes_only_to_the_visible_script() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   const std::string src = app("var t\ndef init() self.t = '' end\ndef draw() end\n"
                               "def on_button(b) self.t += b end\ndef check() return self.t end");
   host.set("A", src);
@@ -561,7 +534,6 @@ static void test_http_result_routed_to_owning_script() {
   g_svc.http = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var t\ndef init() self.t = -1 end\n"
                     "def setup() http.get('http://x/', def(b) self.t = int(b) end) end\n"
                     "def draw() pixel(0, 0, self.t) end"));
@@ -580,7 +552,6 @@ static void test_http_ids_are_unique_across_scripts() {
   g_svc.http = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   const std::string src = app("var t\ndef init() self.t = -1 end\n"
                               "def setup() http.get('http://x/', def(b) self.t = int(b) end) end\n"
                               "def draw() pixel(0, 0, self.t) end");
@@ -605,7 +576,6 @@ static void test_http_failure_and_unknown_id() {
   g_svc.http = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var t\ndef init() self.t = -1 end\n"
                     "def setup() http.get('http://x/', def(b) self.t = b == nil ? 7 : 1 end) end\n"
                     "def draw() pixel(0, 0, self.t) end"));
@@ -624,7 +594,6 @@ static void test_http_result_for_replaced_script_is_dropped() {
   g_svc.http = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var t\ndef init() self.t = -1 end\n"
                     "def setup() http.get('http://x/', def(b) self.t = 1 end) end\n"
                     "def draw() end"));
@@ -644,7 +613,6 @@ static void test_http_pending_cap_per_script() {
   g_svc.http = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var fails\ndef init() self.fails = 0 end\n"
                     "def setup()\n"
                     "  for i : 0 .. 11\n"
@@ -661,7 +629,6 @@ static void test_http_pending_cap_per_script() {
 static void test_http_without_transport_soft_fails() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var t\ndef init() self.t = -1 end\n"
                     "def setup() http.get('http://x/', def(b) self.t = b == nil ? 5 : 1 end) end\n"
                     "def draw() pixel(0, 0, self.t) end"));
@@ -677,7 +644,6 @@ static void test_unanswered_http_requests_free_their_slots() {
   g_svc.http = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var fails\ndef init() self.fails = 0 end\n"
                     "def fire()\n"
                     "  for i : 0 .. 7 http.get('http://x/', "
@@ -711,7 +677,6 @@ static void test_answered_http_request_is_not_swept() {
   g_svc.http = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var t\ndef init() self.t = -1 end\n"
                     "def setup() http.get('http://x/', def(b) self.t = b == nil ? 99 : int(b) end) end\n"
                     "def draw() end\n"
@@ -733,7 +698,6 @@ static void test_mqtt_fans_out_to_every_subscriber() {
   g_svc.mqtt = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   const std::string src = app("var t\ndef init() self.t = '' end\n"
                               "def setup() mqtt.subscribe('a/b', "
                               "def(topic, payload) self.t += payload end) end\n"
@@ -756,7 +720,6 @@ static void test_mqtt_publish_reaches_transport() {
   g_svc.mqtt = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("P", app("def setup() mqtt.publish('a/b', 'v') end\ndef draw() end"));
   TEST_ASSERT_EQUAL_UINT(1u, (unsigned)fake.published.size());
   TEST_ASSERT_EQUAL_STRING("a/b=v", fake.published[0].c_str());
@@ -767,7 +730,6 @@ static void test_remove_drops_subscriptions() {
   g_svc.mqtt = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   const std::string src = app("def setup() mqtt.subscribe('a/b', def(t, p) end) end\ndef draw() end");
   host.set("A", src);
   host.set("B", src);
@@ -789,7 +751,6 @@ static void test_replace_releases_slots_and_broker_subscriptions() {
   g_svc.mqtt = &fmqtt;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   const std::string src = app("def setup()\n"
                               "  mqtt.subscribe('a/b', def(t, p) end)\n"
                               "  for i : 0 .. 7 http.get('http://x/', def(b) end) end\n"
@@ -814,7 +775,6 @@ static void test_mqtt_wildcard_delivers_the_concrete_topic() {
   g_svc.mqtt = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var seen\ndef init() self.seen = '' end\n"
                     "def setup() mqtt.subscribe('sensor/#', "
                     "def(topic, payload) self.seen = topic end) end\n"
@@ -837,7 +797,6 @@ static void test_mqtt_empty_filter_routes_by_topic() {
   g_svc.mqtt = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var seen\ndef init() self.seen = '' end\n"
                     "def setup() mqtt.subscribe('a/b', def(topic, payload) self.seen = topic end) end\n"
                     "def draw() end\n"
@@ -854,7 +813,6 @@ static void test_broken_script_does_not_receive_http_results() {
   g_svc.http = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var got, nil_fn\ndef init() self.got = 0 self.nil_fn = nil end\n"
                     "def setup() http.get('http://x/', def(b) self.got += 1 end) end\n"
                     "def draw() self.nil_fn() end\n"
@@ -876,7 +834,6 @@ static void test_broken_script_does_not_receive_mqtt_messages() {
   g_svc.mqtt = &fake;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var got, nil_fn\ndef init() self.got = 0 self.nil_fn = nil end\n"
                     "def setup() mqtt.subscribe('a/b', def(t, p) self.got += 1 end) end\n"
                     "def draw() self.nil_fn() end\n"
@@ -896,7 +853,6 @@ static void test_broken_script_does_not_receive_mqtt_messages() {
 static void test_wants_show_asks_the_named_app() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("Yes", app("def draw() end\ndef should_show() return true end"));
   host.set("No", app("def draw() end\ndef should_show() return false end"));
 
@@ -910,7 +866,6 @@ static void test_wants_show_asks_the_named_app() {
 static void test_wants_show_is_reported_in_the_listing() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("Q", app("var on\ndef init() self.on = false end\n"
                     "def draw() end\n"
                     "def should_show() return self.on end\n"
@@ -930,7 +885,6 @@ static void test_wants_show_is_reported_in_the_listing() {
 static void test_duration_is_resolved_when_the_app_is_shown() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("D", app("def draw() end\ndef duration() return 3000 end"));
 
   RenderCtx ctx;
@@ -946,7 +900,6 @@ static void test_duration_is_resolved_when_the_app_is_shown() {
 static void test_duration_reevaluates_on_each_show() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("D", app("def draw() end\ndef duration() return hour() * 1000 end"));
 
   RenderCtx ctx;
@@ -966,7 +919,6 @@ static void test_duration_reevaluates_on_each_show() {
 static void test_duration_without_the_hook_or_non_positive_is_global() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("None", app("def draw() end"));
   host.set("Zero", app("def draw() end\ndef duration() return 0 end"));
   host.set("Neg", app("def draw() end\ndef duration() return -5 end"));
@@ -989,7 +941,6 @@ static void test_store_write_from_should_show_reaches_the_sink() {
   g_svc.storeSink = &sink;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("def draw() end\ndef should_show() store.set('asked', 1) return false end"));
   TEST_ASSERT_EQUAL_UINT(0u, (unsigned)sink.writes.size());
   TEST_ASSERT_FALSE(host.wantsShow("W"));
@@ -1004,7 +955,6 @@ static void test_both_sides_of_a_switch_reach_the_sink() {
   g_svc.storeSink = &sink;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("A", app("def draw() end\ndef on_hide() store.set('gone', 1) end"));
   host.set("B", app("def draw() end\ndef on_show() store.set('here', 1) end"));
 
@@ -1027,7 +977,6 @@ static void test_store_writes_routed_to_sink() {
   g_svc.storeSink = &sink;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("S", app("var n\ndef init() self.n = 0 end\n"
                     "def setup() store.set('a', 1) end\n"
                     "def loop() self.n += 1 store.set('n', self.n) end\n"
@@ -1047,7 +996,6 @@ static void test_store_write_from_draw_is_routed_on_next_tick() {
   g_svc.storeSink = &sink;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("D", app("def draw() store.set('d', 1) end"));
   TEST_ASSERT_EQUAL_UINT(0u, (unsigned)sink.writes.size());
   Canvas c(32, 8);
@@ -1063,7 +1011,6 @@ static void test_store_write_is_attributed_to_the_writing_script() {
   g_svc.storeSink = &sink;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
 
   host.set("A", app("def draw() store.set('k', 'A_SECRET') end"));
   Canvas c(32, 8);
@@ -1084,7 +1031,6 @@ static void test_store_is_isolated_per_app() {
   g_svc.storeSink = &sink;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("A", app("def setup() store.set('x', 1) end\ndef draw() end\n"
                     "def check() return str(store.get('x', -1)) end"));
   host.set("B", app("def setup() store.set('x', 2) end\ndef draw() end\n"
@@ -1097,7 +1043,6 @@ static void test_store_is_isolated_per_app() {
 static void test_declared_defaults_reach_the_store() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W",
            "# @config city text default=\"Berlin\"\n"
            "# @config every number default=15\n"
@@ -1111,7 +1056,6 @@ static void test_declared_defaults_reach_the_store() {
 static void test_a_stored_value_wins_over_the_declared_default() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W",
            "# @config city text default=\"Berlin\"\n"
            "# @config every number default=15\n" +
@@ -1124,7 +1068,6 @@ static void test_a_stored_value_wins_over_the_declared_default() {
 static void test_a_script_without_config_keeps_its_store_untouched() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("P", app("def draw() end\ndef check() return str(store.get('x', -1)) end"),
            "{\"x\":5}");
   TEST_ASSERT_EQUAL_STRING("5", check(reg, "P").c_str());
@@ -1133,7 +1076,6 @@ static void test_a_script_without_config_keeps_its_store_untouched() {
 static void test_saving_settings_restarts_the_script_with_the_new_values() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   const std::string src =
       "# @config city text default=\"Berlin\"\n" +
       app("def draw() end\ndef check() return store.get('city') end");
@@ -1150,7 +1092,6 @@ static void test_saving_settings_restarts_the_script_with_the_new_values() {
 static void test_the_apps_list_reports_whether_a_script_has_settings() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", "# @config city text\n" + app("def draw() end"));
   host.set("P", app("def draw() end"));
   const auto list = host.list();
@@ -1163,7 +1104,6 @@ static void test_wall_clock_reaches_every_callback() {
   g_svc.http = &http;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("W", app("var v_show, v_hide, v_btn, v_http, v_mqtt, v_loop\n"
                     "def init()\n"
                     "  self.v_show = -9 self.v_hide = -9 self.v_btn = -9\n"
@@ -1203,7 +1143,6 @@ static void test_wall_clock_reaches_every_callback() {
 static void test_setup_sees_the_last_known_clock() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   const std::string src = app("var v\ndef init() self.v = -9 end\n"
                               "def setup() self.v = hour() end\ndef draw() end\n"
                               "def check() return str(self.v) end");
@@ -1218,27 +1157,6 @@ static void test_setup_sees_the_last_known_clock() {
   TEST_ASSERT_EQUAL_STRING("21", check(reg, "S").c_str());
 }
 
-
-static void test_lowering_the_limit_keeps_installed_scripts() {
-  AppRegistry reg;
-  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(3);
-  TEST_ASSERT_TRUE(host.set("A", app("def draw() end")));
-  TEST_ASSERT_TRUE(host.set("B", app("def draw() end")));
-  TEST_ASSERT_TRUE(host.set("C", app("def draw() end")));
-
-  host.setLimit(1);
-  TEST_ASSERT_EQUAL_UINT(3u, (unsigned)host.count());
-  TEST_ASSERT_NOT_NULL(reg.find("A"));
-  TEST_ASSERT_NOT_NULL(reg.find("C"));
-  TEST_ASSERT_TRUE(host.set("B", app("def draw() pixel(0, 0, 1) end")));
-  TEST_ASSERT_FALSE(host.set("D", app("def draw() end")));
-  host.remove("A");
-  host.remove("B");
-  TEST_ASSERT_FALSE(host.set("D", app("def draw() end")));
-  host.remove("C");
-  TEST_ASSERT_TRUE(host.set("D", app("def draw() end")));
-}
 
 namespace {
 
@@ -1263,7 +1181,6 @@ void assertSpun(script::ScriptHost& host, const char* name) {
 static void test_runaway_draw_latches_and_spares_the_rest() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("Spin", app("def draw() while true end end"));
   host.set("OK", bystander());
 
@@ -1282,7 +1199,6 @@ static void test_runaway_draw_latches_and_spares_the_rest() {
 static void test_runaway_loop_latches_and_spares_the_rest() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("Spin", app("def draw() end\ndef loop() while true end end"));
   host.set("OK", bystander());
 
@@ -1301,7 +1217,6 @@ static void test_runaway_loop_latches_and_spares_the_rest() {
 static void test_runaway_setup_latches_at_install() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("OK", bystander());
   TEST_ASSERT_TRUE(host.set("Spin", app("def setup() while true end end\ndef draw() end")));
   assertSpun(host, "Spin");
@@ -1317,7 +1232,6 @@ static void test_runaway_setup_latches_at_install() {
 static void test_runaway_on_button_latches_and_spares_the_rest() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("Spin", app("def draw() end\ndef on_button(b) while true end end"));
   host.set("OK", bystander());
 
@@ -1339,7 +1253,6 @@ static void test_runaway_http_callback_latches_and_spares_the_rest() {
   g_svc.http = &http;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("Spin", app("def draw() end\n"
                        "def setup() http.get('http://x', def(b) while true end end) end"));
   host.set("OK", bystander());
@@ -1358,7 +1271,6 @@ static void test_runaway_http_callback_latches_and_spares_the_rest() {
 static void test_list_reports_meta_and_errors() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("ok",
            "# @name Nice Clock\n# @desc Shows time\n# @author me\n# @version 1.2\n" +
                app("def draw() end"));
@@ -1377,7 +1289,6 @@ static void test_destructor_unregisters_apps() {
   AppRegistry reg;
   {
     script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-    host.setLimit(6);
     host.set("A", app("def draw() end"));
     TEST_ASSERT_NOT_NULL(reg.find("A"));
   }
@@ -1388,7 +1299,6 @@ static void test_destructor_unregisters_apps() {
 static void test_service_installs_and_persists() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(2);
   std::vector<std::string> saved, removed;
   script::ScriptService svc(
       host, [&](const std::string& n, const std::string& s) { saved.push_back(n + "=" + s); },
@@ -1410,7 +1320,6 @@ static void test_service_installs_and_persists() {
 static void test_service_stores_a_script_that_does_not_compile() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(2);
   std::vector<std::string> saved;
   script::ScriptService svc(
       host, [&](const std::string& n, const std::string&) { saved.push_back(n); }, nullptr);
@@ -1421,10 +1330,11 @@ static void test_service_stores_a_script_that_does_not_compile() {
   TEST_ASSERT_EQUAL_UINT(1u, (unsigned)saved.size());
 }
 
-static void test_service_over_limit_is_capacity_and_stores_nothing() {
+static void test_service_refused_for_low_memory_is_capacity_and_stores_nothing() {
   AppRegistry reg;
+  std::size_t freeHeap = 1024 * 1024;
+  g_svc.freeHeap = [&freeHeap] { return freeHeap; };
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(1);
   std::vector<std::string> saved;
   script::ScriptService svc(
       host, [&](const std::string& n, const std::string&) { saved.push_back(n); }, nullptr);
@@ -1432,11 +1342,15 @@ static void test_service_over_limit_is_capacity_and_stores_nothing() {
   DispatchDetail d;
   TEST_ASSERT_EQUAL(DispatchResult::Ok, svc.setScript("A", app("def draw() end"), d));
   d.clear();
-  TEST_ASSERT_EQUAL(DispatchResult::Capacity, svc.setScript("B", app("def draw() end"), d));
+
+  const std::string src = app("def draw() end");
+  freeHeap = script::installNeedsBytes(src.size()) - 1;
+  TEST_ASSERT_EQUAL(DispatchResult::Capacity, svc.setScript("B", src, d));
   TEST_ASSERT_EQUAL_STRING("name", d.field.c_str());
   TEST_ASSERT_EQUAL_UINT(1u, (unsigned)saved.size());
   TEST_ASSERT_NULL(reg.find("B"));
 
+  freeHeap = 1024 * 1024;
   d.clear();
   TEST_ASSERT_EQUAL(DispatchResult::Ok, svc.setScript("A", app("def draw() end"), d));
   TEST_ASSERT_EQUAL_UINT(2u, (unsigned)saved.size());
@@ -1445,7 +1359,6 @@ static void test_service_over_limit_is_capacity_and_stores_nothing() {
 static void test_service_resave_preserves_the_store() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   std::map<std::string, std::string> persisted{{"S", "{\"n\":7}"}};
   g_svc.readStore = [&](const std::string& n, std::string& out) {
     auto it = persisted.find(n);
@@ -1468,7 +1381,6 @@ static void test_service_resave_preserves_the_store() {
 static void test_service_remove_then_install_starts_empty() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   std::map<std::string, std::string> persisted{{"S", "{\"n\":7}"}};
   g_svc.readStore = [&](const std::string& n, std::string& out) {
     auto it = persisted.find(n);
@@ -1495,7 +1407,6 @@ static void test_service_drops_a_setting_the_new_source_no_longer_declares() {
   g_svc.storeSink = &sink;
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
 
   const std::string body =
       app("def draw() end\n"
@@ -1533,7 +1444,6 @@ static void test_service_drops_a_setting_the_new_source_no_longer_declares() {
 static void test_shared_value_crosses_apps() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("weather", app("def draw() end\ndef setup() shared.set('temp', 12) end"));
   host.set("clock", app("def draw() end\ndef check() return str(shared.get('weather.temp')) end"));
   TEST_ASSERT_EQUAL_STRING("12", check(reg, "clock").c_str());
@@ -1613,15 +1523,6 @@ static void test_shared_rejects_non_scalar_values() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
   host.set("a", app("def draw() end\ndef check() return str(shared.set('k', [1, 2])) end"));
-  TEST_ASSERT_EQUAL_STRING("false", check(reg, "a").c_str());
-}
-
-static void test_shared_key_cap_is_enforced_from_script() {
-  AppRegistry reg;
-  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.set("a", app("def draw() end\ndef setup()\n"
-                    "  for i : 0..7 shared.set('k' + str(i), i) end\nend\n"
-                    "def check() return str(shared.set('over', 1)) end"));
   TEST_ASSERT_EQUAL_STRING("false", check(reg, "a").c_str());
 }
 
@@ -1721,7 +1622,6 @@ struct FakeSources {
 static void test_module_is_importable_from_an_app() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   TEST_ASSERT_TRUE(host.set("fmt", "# @module\nvar m = module('fmt')\nm.tag = 'ok'\nreturn m"));
   host.set("clock", "import fmt\n" + app("def draw() end\ndef check() return fmt.tag end"));
   TEST_ASSERT_EQUAL_STRING("ok", check(reg, "clock").c_str());
@@ -1740,7 +1640,6 @@ static void test_module_is_not_an_app() {
 static void test_module_import_name_can_be_overridden() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   TEST_ASSERT_TRUE(
       host.set("weather-lib", "# @module weather\nvar m = module('weather')\nm.tag = 'w'\nreturn m"));
   host.set("clock",
@@ -1766,7 +1665,6 @@ static void test_module_cannot_shadow_a_builtin() {
 static void test_two_modules_cannot_claim_the_same_import_name() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   TEST_ASSERT_TRUE(host.set("a", "# @module fmt\nreturn module('fmt')"));
   TEST_ASSERT_FALSE(host.set("b", "# @module fmt\nreturn module('fmt')"));
   TEST_ASSERT_TRUE(host.lastRefusal().find("already used by a") != std::string::npos);
@@ -1785,7 +1683,6 @@ static void test_changing_a_module_reloads_its_dependents() {
   FakeSources files;
   files.wire(g_svc);
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   files.set(host, "fmt", "# @module\nvar m = module('fmt')\nm.tag = 'one'\nreturn m");
   files.set(host, "clock", "import fmt\n" + app("def draw() end\ndef check() return fmt.tag end"));
   TEST_ASSERT_EQUAL_STRING("one", check(reg, "clock").c_str());
@@ -1800,7 +1697,6 @@ static const GfxFont kMeasureFont = {kMeasureBitmap, kMeasureGlyphs, 'A', 'A', 8
 
 static std::string measuredByModule(script::ScriptServices& svc, AppRegistry& reg) {
   script::ScriptHost host(reg, svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("fmt", "# @module\nvar m = module('fmt')\nm.w = text_width('AAAA')\nreturn m");
   host.set("clock", "import fmt\n" + app("def draw() end\ndef check() return str(fmt.w) end"));
   return check(reg, "clock");
@@ -1809,7 +1705,6 @@ static std::string measuredByModule(script::ScriptServices& svc, AppRegistry& re
 static void test_a_script_can_read_the_firmware_version() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("V", app("def draw() end\ndef check() return version() end"));
   const std::string v = check(reg, "V");
   TEST_ASSERT_FALSE(v.empty());
@@ -1834,7 +1729,6 @@ static void test_the_panel_size_is_readable_outside_a_frame() {
 
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("fmt", "# @module\nvar m = module('fmt')\nm.w = width()\nm.h = height()\nreturn m");
   host.set("clock",
            "import fmt\n" + app("def draw() end\ndef check() return str(fmt.w) + 'x' + str(fmt.h) end"));
@@ -1849,7 +1743,6 @@ static void test_sensors_are_readable_while_a_module_loads() {
 
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("fmt", "# @module\nvar m = module('fmt')\nm.t = sensor.temperature()\nreturn m");
   host.set("clock",
            "import fmt\n" + app("def draw() end\ndef check() return str(int(fmt.t)) end"));
@@ -1861,7 +1754,6 @@ static void test_removing_a_module_breaks_its_dependents() {
   FakeSources files;
   files.wire(g_svc);
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   files.set(host, "fmt", "# @module\nvar m = module('fmt')\nm.tag = 'one'\nreturn m");
   files.set(host, "clock", "import fmt\n" + app("def draw() end\ndef check() return fmt.tag end"));
   TEST_ASSERT_TRUE(host.errorOf("clock").empty());
@@ -1876,7 +1768,6 @@ static void test_a_module_can_import_another_module_installed_later() {
   FakeSources files;
   files.wire(g_svc);
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   files.set(host, "wrap",
             "# @module\nimport fmt\nvar m = module('wrap')\nm.tag = fmt.tag\nreturn m");
   TEST_ASSERT_FALSE(host.errorOf("wrap").empty());
@@ -1892,7 +1783,6 @@ static void test_a_module_can_import_another_module_installed_later() {
 static void test_turning_an_app_into_a_module_takes_it_out_of_the_registry() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("fmt", app("def draw() end"));
   TEST_ASSERT_NOT_NULL(reg.find("fmt"));
 
@@ -1905,7 +1795,6 @@ static void test_turning_an_app_into_a_module_takes_it_out_of_the_registry() {
 static void test_turning_a_module_into_an_app_puts_it_in_the_registry() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(6);
   host.set("fmt", "# @module\nreturn module('fmt')");
   host.set("fmt", app("def draw() end"));
   TEST_ASSERT_NOT_NULL(reg.find("fmt"));
@@ -1916,7 +1805,6 @@ static void test_turning_a_module_into_an_app_puts_it_in_the_registry() {
 static void test_service_rejects_an_unusable_module_name_as_invalid() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(4);
   std::vector<std::string> saved;
   script::ScriptService svc(
       host, [&](const std::string& n, const std::string&) { saved.push_back(n); }, nullptr);
@@ -1931,16 +1819,6 @@ static void test_service_rejects_an_unusable_module_name_as_invalid() {
   TEST_ASSERT_EQUAL(DispatchResult::Ok,
                     svc.setScript("weather-lib", "# @module weather\nreturn module('weather')", d));
   TEST_ASSERT_EQUAL_UINT(1u, (unsigned)saved.size());
-}
-
-static void test_modules_count_against_the_script_limit() {
-  AppRegistry reg;
-  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
-  host.setLimit(2);
-  TEST_ASSERT_TRUE(host.set("fmt", "# @module\nreturn module('fmt')"));
-  TEST_ASSERT_TRUE(host.set("clock", app("def draw() end")));
-  TEST_ASSERT_FALSE(host.set("extra", app("def draw() end")));
-  TEST_ASSERT_TRUE(host.lastRefusal().find("script limit reached") != std::string::npos);
 }
 
 // ---- settings a module owns -------------------------------------------------
@@ -2113,7 +1991,7 @@ int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_set_replace_remove_registry_and_hooks);
   RUN_TEST(test_replace_points_registry_at_the_new_app);
-  RUN_TEST(test_limit_enforced);
+  RUN_TEST(test_installing_many_scripts_succeeds);
   RUN_TEST(test_install_refused_over_the_script_heap_budget);
   RUN_TEST(test_a_larger_budget_admits_more_scripts);
   RUN_TEST(test_budget_does_not_relax_the_compile_guards);
@@ -2172,7 +2050,6 @@ int main(int, char**) {
   RUN_TEST(test_the_apps_list_reports_whether_a_script_has_settings);
   RUN_TEST(test_wall_clock_reaches_every_callback);
   RUN_TEST(test_setup_sees_the_last_known_clock);
-  RUN_TEST(test_lowering_the_limit_keeps_installed_scripts);
   RUN_TEST(test_runaway_draw_latches_and_spares_the_rest);
   RUN_TEST(test_runaway_loop_latches_and_spares_the_rest);
   RUN_TEST(test_runaway_setup_latches_at_install);
@@ -2182,7 +2059,7 @@ int main(int, char**) {
   RUN_TEST(test_destructor_unregisters_apps);
   RUN_TEST(test_service_installs_and_persists);
   RUN_TEST(test_service_stores_a_script_that_does_not_compile);
-  RUN_TEST(test_service_over_limit_is_capacity_and_stores_nothing);
+  RUN_TEST(test_service_refused_for_low_memory_is_capacity_and_stores_nothing);
   RUN_TEST(test_service_resave_preserves_the_store);
   RUN_TEST(test_service_remove_then_install_starts_empty);
   RUN_TEST(test_service_drops_a_setting_the_new_source_no_longer_declares);
@@ -2196,7 +2073,6 @@ int main(int, char**) {
   RUN_TEST(test_shared_set_cannot_reach_another_namespace);
   RUN_TEST(test_shared_set_to_nil_erases_the_key);
   RUN_TEST(test_shared_rejects_non_scalar_values);
-  RUN_TEST(test_shared_key_cap_is_enforced_from_script);
   RUN_TEST(test_shared_keys_enumerates_every_provider);
   RUN_TEST(test_shared_keys_can_be_filtered_by_provider);
   RUN_TEST(test_removing_a_script_purges_its_shared_keys);
@@ -2223,7 +2099,6 @@ int main(int, char**) {
   RUN_TEST(test_turning_an_app_into_a_module_takes_it_out_of_the_registry);
   RUN_TEST(test_turning_a_module_into_an_app_puts_it_in_the_registry);
   RUN_TEST(test_service_rejects_an_unusable_module_name_as_invalid);
-  RUN_TEST(test_modules_count_against_the_script_limit);
   RUN_TEST(test_a_module_reads_its_own_declared_defaults);
   RUN_TEST(test_a_module_reads_its_stored_value_over_the_default);
   RUN_TEST(test_every_app_importing_a_module_sees_one_value);
