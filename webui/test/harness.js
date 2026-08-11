@@ -68,6 +68,13 @@ function makeStore() {
              radio: { playing: false, station: '', title: '', error: '' }, stations: [] },
     radioPlay: null,   // last POST /api/v1/audio/play carrying a station or a url
     stationsPut: null, // last PUT /api/v1/audio/stations body
+    // The icon database lives outside the device: the browser talks to it
+    // directly, so it is mocked by absolute URL rather than by path.
+    iconDb: { v: 1, icons: [] }, // what index.json answers
+    iconBytes: {},               // slug -> bytes served from icons/<slug>.gif
+    submitted: [],               // FormData bodies POSTed to the submit service
+    submitReply: null,           // override what the submit service answers
+    submitCode: 0,               // HTTP status for a rejected submission (default 409)
     list() {
       if (this.apps) return this.apps;
       return [...scripts.keys()].map(name => ({ name, origin: 'script', error: null }));
@@ -75,14 +82,53 @@ function makeStore() {
   };
 }
 
-function mockFetch(store, netlog) {
+// Must track ICONDB_URL_DEFAULT in index.html: the gallery builds absolute URLs
+// against it, so a stale prefix here mocks nothing and every icon 404s.
+const ICON_DB = 'https://flows.blueforcer.de/icons/';
+
+function mockFetch(store, netlog, win) {
   const resp = (body, ok = true, status = 200) => ({
     ok, status,
     text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
   });
+  // The gallery reads .json() and .blob(), which the device mock never needs.
+  // The blob has to be the page's own Blob, or FormData.append refuses it.
+  const ext = (body, ok = true, status = 200) => ({
+    ok, status,
+    json: async () => body,
+    blob: async () => new win.Blob([String(body == null ? '' : body)], { type: 'image/gif' }),
+    text: async () => JSON.stringify(body),
+  });
   return async function fetch(input, opts = {}) {
     const url = typeof input === 'string' ? input : input.url;
     const method = (opts.method || 'GET').toUpperCase();
+
+    if (/^https?:\/\//.test(url) && !url.startsWith('http://localhost')) {
+      netlog.push(method + ' ' + url);
+      if (url.endsWith('/submit') && method === 'POST') {
+        store.submitted.push(opts.body);
+        const reply = store.submitReply
+          || { ok: true, status: 'published', slug: 'demo', pr: 'https://example.invalid/icons/demo' };
+        // submitCode carries the HTTP status; the body's own `status` field is
+        // the Hub's word for the icon ("published"), not a code.
+        const code = reply.ok === false ? (store.submitCode || 409) : 200;
+        return ext(reply, reply.ok !== false, code);
+      }
+      if (url.startsWith(ICON_DB)) {
+        const rest = url.slice(ICON_DB.length);
+        if (rest === 'index.json') return ext(store.iconDb);
+        // The Hub serves the bytes directly under the catalogue prefix - no
+        // second 'icons/' segment. This pattern is what pins that.
+        const icon = rest.match(/^([^/]+)\.gif$/);
+        if (icon) {
+          const slug = decodeURIComponent(icon[1]);
+          if (!(slug in store.iconBytes)) return ext({ error: 'notFound' }, false, 404);
+          return ext(store.iconBytes[slug]);
+        }
+      }
+      return ext({ error: 'notFound' }, false, 404);
+    }
+
     const u = new URL(url, 'http://localhost');
     const p = u.pathname;
     const q = u.searchParams;
@@ -114,6 +160,13 @@ function mockFetch(store, netlog) {
           return resp({ error: { code: 'notFound', message: full } }, false, 404);
         return resp({ ok: true });
       }
+    }
+
+    // Static asset served off the device, read back when an icon is submitted.
+    if (p.startsWith('/ICONS/')) {
+      const name = decodeURIComponent(p.slice(7));
+      if (!store.files['/ICONS'].has(name)) return ext({ error: 'notFound' }, false, 404);
+      return ext('GIF89a-' + name);
     }
 
     if (p === '/api/v1/audio/melodies' && method === 'GET') return resp({ melodies: store.melodies });
@@ -213,7 +266,7 @@ async function boot(opts) {
     pretendToBeVisual: true,
     url: 'http://localhost/',
     virtualConsole: makeVirtualConsole(),
-    beforeParse: installGlobals(() => mockFetch(store, netlog)),
+    beforeParse: installGlobals(window => mockFetch(store, netlog, window)),
   });
   await flush(60); // boot render() + device/capabilities/system fetches
   return { dom, window: dom.window, store, netlog };
@@ -249,8 +302,9 @@ async function goto(window, hash) {
 }
 
 // uploadFile() goes through XMLHttpRequest, which mockFetch never sees. This swaps in a fake
-// that records {method, url, files:[{field,name}]} into log and answers 200.
-function stubXhr(window, log) {
+// that records {method, url, files:[{field,name}]} into log and answers 200. Pass the store
+// to have the upload land in its file view too, the way the device would store it.
+function stubXhr(window, log, store) {
   window.XMLHttpRequest = class {
     constructor() { this.upload = {}; this.status = 200; this.responseText = '{"ok":true}'; }
     open(method, url) { this.method = method; this.url = url; }
@@ -259,6 +313,11 @@ function stubXhr(window, log) {
       if (body && typeof body.entries === 'function')
         for (const [field, v] of body.entries()) entry.files.push({ field, name: v && v.name });
       log.push(entry);
+      if (store) {
+        const dir = new URL(this.url, 'http://localhost').searchParams.get('dir');
+        if (dir && store.files[dir])
+          for (const f of entry.files) if (f.name) store.files[dir].set(f.name, 1);
+      }
       setTimeout(() => this.onload && this.onload(), 0);
     }
   };

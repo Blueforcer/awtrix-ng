@@ -1,13 +1,15 @@
 # AWTRIX NG - Piskel icon editor
 
 The **Icon Editor** tab of the AWTRIX NG web UI embeds a Piskel fork in an
-`<iframe>`. The fork lives in its own repository and is deployed via GitHub
-Pages:
+`<iframe>`. The fork lives in its own repository and is hosted by the AWTRIX
+Hub:
 
 - Fork: **https://github.com/Blueforcer/awtrix-piskel** (Apache-2.0; the fork's
   README lists every modification relative to upstream Piskel)
-- Deployment: **https://blueforcer.github.io/awtrix-piskel/** - the firmware
-  default (`PISKEL_URL_DEFAULT` in `webui/index.html`)
+- Deployment: **https://flows.blueforcer.de/piskel/index.html** - the firmware
+  default (`PISKEL_URL_DEFAULT` in `webui/index.html`). The file name is spelled
+  out because nothing guarantees that a bare `/piskel/` resolves to the
+  directory index, and a miss would frame a 404 instead of the editor.
 
 Piskel is **not** bundled into the firmware. The AWTRIX page - same-origin
 with the clock - brokers every save/load over the clock's `/api/v1/files` API;

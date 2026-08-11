@@ -3,6 +3,33 @@
 AWTRIX ships with an empty `/ICONS` directory. This page is about filling it: getting an
 8×8 image in there, giving it a name, and putting that name in a payload.
 
+## Install from the icon database
+
+The quickest way to fill `/ICONS` is the **Icons** tab of the built-in web UI. Its **Icon database**
+tab searches a shared community collection of a few thousand icons; one click on a result downloads
+it and installs it under its own name.
+
+The search runs in your browser, not on AWTRIX. The catalogue is fetched once per visit and
+filtered locally, so typing is instant. The clock never contacts the internet for this - your
+browser does, then uploads the bytes to AWTRIX over the local network. In provisioning AP mode,
+where the browser has no internet access, the tab says so and stays disabled.
+
+Filter by size (8×8 or 32×8) and by whether an icon is animated. Icons already on the clock are
+marked and cannot be installed twice.
+
+### Contribute an icon back
+
+Every icon on the clock offers **To database** in its tile menu, and the
+[Icon editor](icon-editor.md) has a **Save to Cloud** button next to Save to AWTRIX. Both send
+the icon to the shared collection with a display name you choose.
+
+Publishing needs an **AWTRIX Hub** account, and the sign-in lives on the Hub rather than on your
+clock - so from the web UI the answer is a link that takes you there to finish. The upload is
+checked first - it has to be a GIF no larger than 32×8 and under 64 KB - and refused right away if
+the exact same image is already in the collection, naming the icon that holds it. What passes is
+published immediately; there is no review queue, and anything that should not be there is taken
+down afterwards.
+
 ## Upload an icon
 
 Two commands: upload the file, then use it.

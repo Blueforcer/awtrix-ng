@@ -203,8 +203,27 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .orsep{display:flex;align-items:center;gap:10px;color:var(--dim);font-size:11px;
   text-transform:uppercase;letter-spacing:.07em}
 .orsep::before,.orsep::after{content:"";flex:1;height:1px;background:var(--border)}
-.lam{display:grid;gap:10px}
+.ihdr{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ihdr .st{flex:1;min-width:140px;display:flex;align-items:center;justify-content:flex-end;gap:8px;
+  color:var(--dim);font-size:11.5px;font-variant-numeric:tabular-nums}
+.ihdr .st .bar{flex:0 1 104px;height:6px}
+.segbar{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+.segbar button{padding:8px 13px;background:none;border:0;border-bottom:2px solid transparent;border-radius:0;
+  color:var(--dim);font-size:13px}
+.segbar button:hover{color:var(--fg)}
+.segbar button.on{color:var(--fg);border-bottom-color:var(--acc)}
+.tmenu{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;justify-content:center;gap:2px;
+  padding:6px;background:#0d1117f2}
+.tmenu button{width:100%;padding:5px 8px;border:0;border-radius:6px;background:none;color:#e6edf3;
+  font-size:11.5px;text-align:left}
+.tmenu button:hover{background:#ffffff1a}
+.tmenu button.danger{color:#f85149}
+.lam,.idb{display:grid;gap:10px}
 .lam .prev{width:52px;height:52px;flex:none;image-rendering:pixelated;background:#000;border-radius:6px}
+.idb .row>input[type=text]{flex:1 1 140px;width:auto}
+.idb .row>select{flex:0 0 auto;width:auto}
+.tile .ft input{flex:1;min-width:0;padding:2px 5px;font-size:11.5px}
+.tile .ft button{flex:none;padding:2px 7px;font-size:11px}
 .empty{grid-column:1/-1;padding:24px 12px;text-align:center;color:var(--dim);font-size:13px;
   border:1px dashed var(--border);border-radius:10px}
 .drop{border:2px dashed var(--border);border-radius:var(--r);padding:22px;text-align:center;color:var(--dim);
@@ -212,7 +231,7 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .drop:hover{border-color:var(--acc);color:var(--fg)}
 .drop.over{border-color:var(--acc);color:var(--acc);background:#58a6ff11}
 .bar{height:8px;background:var(--border);border-radius:4px;overflow:hidden}
-.bar>i{display:block;height:100%;background:var(--acc);border-radius:4px;transition:width .2s}
+.bar>i{display:block;height:100%;min-width:3px;background:var(--acc);border-radius:4px;transition:width .2s}
 .bar>i.hot{background:var(--err)}
 .storage .lbl{display:flex;justify-content:space-between;color:var(--dim);font-size:12px}
 .console{background:var(--con);border:1px solid var(--border);border-radius:8px;padding:10px;height:60vh;overflow:auto;
@@ -772,7 +791,6 @@ const I18N={en:{
   bkCaptiveHint:'The Wi‑Fi sign‑in popup can’t upload files. To restore, open this page in a browser:',
   bkRestored:'Backup restored',bkWarnings:'warning(s)',bkRebootQ:'Restore applied. Reboot now to use it?',
   storage:'Storage',of:'of',free:'free',
-  iconshelp:'8×8 to 32×8 PNG, JPG or animated GIF. Drag & drop files here or click to choose.',
   editorTab:'Icon Editor',
   edLoading:'Loading the editor…',
   edUnreachable:'The editor did not load.',
@@ -788,6 +806,26 @@ const I18N={en:{
   lametric:'LaMetric icon download',lamhelp:'Fetches an icon from the LaMetric gallery.',
   lamid:'Icon ID, e.g. 2867',fetch:'Fetch',lamneed:'Your browser needs internet access for this - unavailable in provisioning mode.',
   lamsave:'Save to AWTRIX',
+  idb:'Icon database',idbhelp:'Search the community collection and install an icon with one click.',
+  idbsearch:'Search icons',idbany:'Any size',idbanim:'Animated only',idbnone:'Nothing matches',
+  idbmore:'Show more',idbinst:'Install',idbon:'Already on AWTRIX',idbfail:'Icon database unreachable',
+  idbshare:'Submit to the icon database',idbsend:'Submit',
+  icown:'On AWTRIX',icadd:'Add',icnone:'No icons on AWTRIX yet',icsend:'To database',icshow:'Show',
+  idbdone:'Published to the icon database',idbopen:'Open the icon',
+  idbdup:'Already in the database as',
+  idbauth:'Publishing needs an AWTRIX Hub account. Open the Hub editor and publish your drawing there.',
+  idbsignin:'Open the Hub',
+  // One entry per error code the submit endpoint can answer with. tooManyFrames
+  // is never sent - frames are not a limit - but a client that cannot name the
+  // code would print it raw, so the vocabulary is kept whole.
+  idbe_badFormat:'Not an image the database accepts',
+  idbe_tooLarge:'The file is too large',
+  idbe_badName:'That name cannot be used',
+  idbe_tooBig:'Bigger than 32x8 pixels',
+  idbe_tooManyFrames:'Too many frames',
+  idbe_rateLimited:'Too many submissions - try again later',
+  idbe_duplicate:'Already in the database',
+  idbe_notLoggedIn:'Sign in on the AWTRIX Hub to publish',
   scriptsTab:'Scripts',
   scrnone:'Nothing open',
   scrkeys:'Ctrl-. API · Ctrl-S save · Ctrl-/ comment',
@@ -922,7 +960,6 @@ const I18N={en:{
   bkCaptiveHint:'Der WLAN-Anmelde-Dialog kann keine Dateien hochladen. Zum Wiederherstellen diese Seite im Browser öffnen:',
   bkRestored:'Sicherung wiederhergestellt',bkWarnings:'Warnung(en)',bkRebootQ:'Wiederhergestellt. Jetzt neu starten?',
   storage:'Speicher',of:'von',free:'frei',
-  iconshelp:'8×8 bis 32×8 PNG, JPG oder animiertes GIF. Dateien hierher ziehen oder klicken zum Auswählen.',
   editorTab:'Icon-Editor',
   edLoading:'Editor wird geladen…',
   edUnreachable:'Der Editor wurde nicht geladen.',
@@ -938,6 +975,23 @@ const I18N={en:{
   lametric:'LaMetric-Icon laden',lamhelp:'Holt ein Icon aus der LaMetric-Galerie.',
   lamid:'Icon-ID, z. B. 2867',fetch:'Laden',lamneed:'Dafür braucht der Browser Internetzugang - im Einrichtungsmodus nicht verfügbar.',
   lamsave:'Auf AWTRIX speichern',
+  idb:'Icon-Datenbank',idbhelp:'Durchsuche die Community-Sammlung und installiere ein Icon mit einem Klick.',
+  idbsearch:'Icons suchen',idbany:'Alle Größen',idbanim:'Nur animierte',idbnone:'Nichts gefunden',
+  idbmore:'Mehr anzeigen',idbinst:'Installieren',idbon:'Schon auf AWTRIX',idbfail:'Icon-Datenbank nicht erreichbar',
+  idbshare:'An die Icon-Datenbank senden',idbsend:'Senden',
+  icown:'Auf AWTRIX',icadd:'Hinzufügen',icnone:'Noch keine Icons auf AWTRIX',icsend:'An Datenbank',icshow:'Zeigen',
+  idbdone:'In der Icon-Datenbank veröffentlicht',idbopen:'Icon öffnen',
+  idbdup:'Schon in der Datenbank als',
+  idbauth:'Zum Veröffentlichen braucht es ein AWTRIX-Hub-Konto. Öffne den Hub-Editor und veröffentliche die Zeichnung dort.',
+  idbsignin:'Hub öffnen',
+  idbe_badFormat:'Kein Bild, das die Datenbank annimmt',
+  idbe_tooLarge:'Die Datei ist zu groß',
+  idbe_badName:'Dieser Name geht nicht',
+  idbe_tooBig:'Größer als 32x8 Pixel',
+  idbe_tooManyFrames:'Zu viele Frames',
+  idbe_rateLimited:'Zu viele Einsendungen - später noch einmal',
+  idbe_duplicate:'Schon in der Datenbank',
+  idbe_notLoggedIn:'Zum Veröffentlichen im AWTRIX Hub anmelden',
   scriptsTab:'Skripte',
   scrnone:'Nichts geöffnet',
   scrkeys:'Strg-. API · Strg-S speichern · Strg-# kommentieren',
@@ -1404,7 +1458,7 @@ function poller(fn,ms){
 function setStats(d){
   S.stats=d;
   S.scriptsOff=d.scriptingRunning===false;
-  if(d.hostname)S.sysHost=d.hostname;
+  if(d.hostname){S.sysHost=d.hostname;document.title=d.hostname+' – AWTRIX NG';}
   if(d.uid)S.sysUid=d.uid;
 }
 const TABS=[['','dash',viewDash],['apps','appsTab',viewApps],['scripts','scriptsTab',viewScripts],
@@ -2338,7 +2392,7 @@ window.addEventListener('beforeunload',e=>{if(scrDraft&&scrDraft.dirty)e.prevent
    Device API from ScriptBindings.cpp + Prelude.h; language builtins from
    Berry's be_baselib.c and the modules berry_conf.h enables. Regenerated on
    every build, so adding a binding is all it takes to teach the editor. */
-const BERRY_API=["bar_chart(list, paint?, autoscale?)","circle(cx, cy, r, color)","circle_fill(cx, cy, r, color)","clear(color?)","day()","effect(name, settings?)","epoch_ms()","font(name)","height()","hour()","hsv(h, s, v)","icon(name, x, y)","line(x0, y0, x1, y1, color)","line_chart(list, paint?, autoscale?)","log(value)","minute()","month()","now_ms()","overlay(name, settings?)","pixel(x, y, color)","progress(pct, paint?, bg?)","ramp_text(x, y, str, palette, span?, speed?)","rect(x, y, w, h, color)","rect_fill(x, y, w, h, color)","rgb(r, g, b)","scroll_text(txt, color?, opts?)","second()","text(x, y, txt, color?)","text_ink_width(txt)","text_width(txt)","version()","weekday()","width()","year()","clamp(v, lo, hi)","http.delete(url, cb, opts?)","http.get(url, cb, opts?)","http.patch(url, body, cb, opts?)","http.post(url, body, cb, opts?)","http.put(url, body, cb, opts?)","http.request(method, url, cb, opts?)","max(a, b)","min(a, b)","mqtt.publish(topic, payload)","mqtt.subscribe(topic, cb)","notify(spec)","num(v, dflt?)","re.match(pattern, text)","re.matchall(pattern, text)","re.search(pattern, text)","rotation.next()","rotation.pause()","rotation.previous()","rotation.resume()","rotation.show()","round(v, digits?)","sensor.battery()","sensor.battery_volts()","sensor.humidity()","sensor.light()","sensor.pressure()","sensor.temperature()","settings.apply_case(str)","settings.get(key)","settings.set(key, value)","shared.age(key)","shared.get(key, dflt?)","shared.keys(owner?)","shared.set(key, value)","sound.melody(name)","sound.mp3(name)","sound.play(name)","sound.playing()","sound.rtttl(melody)","sound.sinks()","sound.stop()","sound.track(number)","store.get(k, dflt?)","store.set(k, v)"];
+const BERRY_API=["bar_chart(list, paint?, autoscale?, x0?)","circle(cx, cy, r, color)","circle_fill(cx, cy, r, color)","clear(color?)","day()","effect(name, settings?)","epoch_ms()","font(name)","height()","hour()","hsv(h, s, v)","icon(name, x, y)","line(x0, y0, x1, y1, color)","line_chart(list, paint?, autoscale?, x0?)","log(value)","minute()","month()","now_ms()","overlay(name, settings?)","pixel(x, y, color)","progress(pct, paint?, bg?, x0?)","ramp_text(x, y, str, palette, span?, speed?)","rect(x, y, w, h, color)","rect_fill(x, y, w, h, color)","rgb(r, g, b)","scroll_text(txt, color?, opts?)","second()","text(x, y, txt, color?)","text_ink_width(txt)","text_width(txt)","version()","weekday()","width()","year()","clamp(v, lo, hi)","http.delete(url, cb, opts?)","http.get(url, cb, opts?)","http.patch(url, body, cb, opts?)","http.post(url, body, cb, opts?)","http.put(url, body, cb, opts?)","http.request(method, url, cb, opts?)","max(a, b)","min(a, b)","mqtt.publish(topic, payload)","mqtt.subscribe(topic, cb)","notify(spec)","num(v, dflt?)","re.match(pattern, text)","re.matchall(pattern, text)","re.search(pattern, text)","rotation.next()","rotation.pause()","rotation.previous()","rotation.resume()","rotation.show()","round(v, digits?)","sensor.battery()","sensor.battery_volts()","sensor.humidity()","sensor.light()","sensor.pressure()","sensor.temperature()","settings.apply_case(str)","settings.get(key)","settings.set(key, value)","shared.age(key)","shared.get(key, dflt?)","shared.keys(owner?)","shared.set(key, value)","sound.melody(name)","sound.mp3(name)","sound.play(name)","sound.playing()","sound.rtttl(melody)","sound.sinks()","sound.stop()","sound.track(number)","store.get(k, dflt?)","store.set(k, v)"];
 const BERRY_MODS=["http","mqtt","re","rotation","sensor","settings","shared","sound","store"];
 const BERRY_CORE=["assert","bool","call","classname","classof","compile","format","gc","global","input","int","isinstance","issubclass","json","math","module","number","print","real","size","str","strict","string","super","type"];
 /* BERRY-API-END */
@@ -3275,41 +3329,230 @@ async function delFile(path){
 }
 function viewIcons(view){
   const iconsGrid=el('div',{class:'grid-icons'});
-  const storSlot=el('div',{class:'wide'});
+  const db=iconDbCard(()=>reload());
+  const meter=el('div',{class:'st'});
+  const ownTab=el('button',null,t('icown'));
+  // Three ways to get an icon are alternatives, not steps, so only one is on
+  // screen at a time - and the icons already on the clock come first, because
+  // that is what the page is about.
+  const panes=[[ownTab,el('div',null,iconsGrid)],
+    [el('button',null,t('idb')),el('div',{hidden:'hidden'},db.node)],
+    [el('button',null,t('icadd')),el('div',{hidden:'hidden'},
+      uploadZone('/ICONS','.png,.jpg,.jpeg,.gif','⬆ '+t('upload')+' (.png / .jpg / .gif, 8×8)',reload,true),
+      lametricCard(reload))]];
+  panes.forEach(([tab,pane],i)=>{
+    if(!i)tab.classList.add('on');
+    tab.addEventListener('click',()=>panes.forEach(([b,p],j)=>{
+      b.classList.toggle('on',i===j);p.hidden=i!==j;
+    }));
+  });
   async function reload(){
     try{
       const{data}=await api('/api/v1/files?dir='+encodeURIComponent('/ICONS'),{cache:'no-store'});
       const files=(data.files||[]).sort((a,b)=>a.name.localeCompare(b.name));
-      storSlot.replaceChildren(storageCard(data));
-      iconsGrid.replaceChildren(...files.map(f=>iconTile(f)));
-      if(!files.length)iconsGrid.replaceChildren(el('div',{class:'empty'},t('nofiles')));
+      const used=data.usedBytes||0,total=data.totalBytes||1;
+      meter.replaceChildren(el('div',{class:'bar'},el('i',{class:used/total>0.9?'hot':'',
+        style:'width:'+(used/total*100).toFixed(1)+'%'})),
+        el('span',null,fmtBytes(used)+' '+t('of')+' '+fmtBytes(total)));
+      ownTab.replaceChildren(t('icown')+' ('+files.length+')');
+      iconsGrid.replaceChildren(...(files.length?files.map(f=>iconTile(f))
+        :[el('div',{class:'empty'},t('icnone'))]));
+      db.setInstalled(new Set(files.map(f=>f.name.replace(/\.[^.]+$/,''))));
     }catch(e){toast(e.message,false);}
   }
   function iconTile(f){
     const base=f.name.replace(/\.[^.]+$/,'');
-    const img=el('img',{src:'/ICONS/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev,alt:f.name,loading:'lazy'});
-    const pv=el('button',{title:t('preview'),'aria-label':t('preview')},icon('eye'));
-    pv.addEventListener('click',async()=>{
-      try{await post('/api/v1/notifications',{icon:base,text:' '+base,durationMs:3000});toast(t('shown'));}
-      catch(e){toast(e.message,false);}
+    const ft=el('div',{class:'ft'},el('span',{class:'nm',title:f.name},base),
+      el('span',{class:'sz'},fmtBytes(f.size)));
+    const pw=el('div',{class:'pw'},
+      el('img',{src:'/ICONS/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev,alt:f.name,loading:'lazy'}));
+    const open=el('button',{title:t('more'),'aria-label':t('more')},'⋯');
+    const shut=()=>{const m=pw.querySelector('.tmenu');if(m)m.remove();};
+    // A floating menu cannot leave a tile - .tile clips its overflow - so the
+    // actions cover the artwork instead. Four icon buttons never fit the
+    // narrowest column anyway, and words beat glyphs at this size.
+    open.addEventListener('click',()=>{
+      if(pw.querySelector('.tmenu'))return shut();
+      document.querySelectorAll('.tmenu').forEach(m=>m.remove());
+      const item=(label,fn,danger)=>{
+        const b=el('button',danger?{class:'danger'}:null,label);
+        if(danger)armable(b,()=>{shut();fn();});
+        else b.addEventListener('click',()=>{shut();fn();});
+        return b;
+      };
+      pw.append(el('div',{class:'tmenu'},
+        item(t('icshow'),async()=>{
+          try{await post('/api/v1/notifications',{icon:base,text:' '+base,durationMs:3000});toast(t('shown'));}
+          catch(e){toast(e.message,false);}
+        }),
+        item(t('edit'),()=>{pendingEditIcon=f.name;location.hash='#/editor';}),
+        item(t('icsend'),()=>shareRow(f,base,ft)),
+        item(t('del'),async()=>{
+          try{await delFile('/ICONS/'+f.name);toast(t('deleted'));reload();}catch(e){toast(e.message,false);}
+        },true)));
     });
-    const ed=el('button',{title:t('edit'),'aria-label':t('edit')},icon('pen'));
-    ed.addEventListener('click',()=>{pendingEditIcon=f.name;location.hash='#/editor';});
-    const del=armable(el('button',{class:'danger',title:t('del'),'aria-label':t('del')},icon('trash')),async()=>{
-      try{await delFile('/ICONS/'+f.name);toast(t('deleted'));reload();}catch(e){toast(e.message,false);}
+    pw.append(el('div',{class:'acts'},open));
+    return el('div',{class:'tile'},pw,ft);
+  }
+  view.append(el('div',{class:'card wide'},
+    el('div',{class:'ihdr'},el('h2',null,t('icons')),meter),
+    el('div',{class:'segbar'},...panes.map(p=>p[0])),
+    ...panes.map(p=>p[1])));
+  reload();
+}
+// Swaps a tile's footer into a name field, so submitting needs no dialog.
+function shareRow(f,base,ft){
+  const saved=[...ft.childNodes];
+  const nameIn=el('input',{type:'text',value:base,'aria-label':t('name')});
+  const send=el('button',{class:'pri'},t('idbsend'));
+  const back=el('button',{title:t('cancel'),'aria-label':t('cancel')},'✕');
+  const restore=()=>ft.replaceChildren(...saved);
+  back.addEventListener('click',restore);
+  nameIn.addEventListener('keydown',e=>{if(e.key==='Enter')send.click();else if(e.key==='Escape')restore();});
+  send.addEventListener('click',async()=>{
+    send.disabled=true;
+    try{
+      const d=await idbSubmit(await iconAsSubmission(f.name),nameIn.value.trim()||base);
+      restore();
+      toast(t('idbdone'),true,[{label:t('idbopen'),pri:true,fn:()=>window.open(d.pr,'_blank','noopener')},
+        {label:t('cancel'),fn:()=>{}}]);
+    }catch(e){
+      send.disabled=false;
+      // This branch is the normal outcome here, not an edge case: the page is
+      // served from the clock, so the Hub session cookie is cross-site and never
+      // travels with the POST. Publishing happens in the Hub editor, and saying
+      // only 'error' would send people looking for a fault that is not there.
+      if(e.code==='notLoggedIn'&&e.pr){
+        toast(t('idbauth'),false,[{label:t('idbsignin'),pri:true,fn:()=>window.open(e.pr,'_blank','noopener')},
+          {label:t('cancel'),fn:()=>{}}]);
+      }else toast(e.slug?t('idbdup')+' '+e.slug:e.message,false);
+    }
+  });
+  ft.replaceChildren(nameIn,send,back);
+  nameIn.focus();nameIn.select();
+}
+async function iconAsSubmission(name){
+  const r=await fetch('/ICONS/'+encodeURIComponent(name));
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const blob=await r.blob();
+  return /\.gif$/i.test(name)?blob:imgToGif(blob);
+}
+// Catalogue and submission live under one prefix on the AWTRIX Hub; the two
+// constants stay separate so a test hub can take submissions while the icons
+// still come from production. The localStorage keys below override both and are
+// the only lever if the Hub ever moves hostname.
+const ICONDB_URL_DEFAULT='https://flows.blueforcer.de/icons/';
+const ICONAPI_URL_DEFAULT='https://flows.blueforcer.de/icons/';
+function cfgUrl(key,def){
+  let u=def;
+  try{u=localStorage[key]||def;}catch(e){}
+  return u.endsWith('/')?u:u+'/';
+}
+const iconDbUrl=()=>cfgUrl('awtrixIconDbUrl',ICONDB_URL_DEFAULT);
+const iconApiUrl=()=>cfgUrl('awtrixIconApiUrl',ICONAPI_URL_DEFAULT);
+let idbCache=null;
+async function idbLoad(){
+  if(!idbCache){
+    const r=await fetch(iconDbUrl()+'index.json');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    idbCache=(d.icons||[]).map(row=>({slug:row[0],name:row[1]||row[0],w:row[2],h:row[3],
+      frames:row[4],bytes:row[5],key:(row[0]+' '+(row[1]||'')).toLowerCase()}));
+  }
+  return idbCache;
+}
+async function idbInstall(slug){
+  // No 'icons/' segment: that came from the GitHub Pages directory layout and
+  // would ask the Hub for /icons/icons/<slug>.gif, which is a 404 - the Hub
+  // serves the bytes straight under the catalogue prefix.
+  const r=await fetch(iconDbUrl()+encodeURIComponent(slug)+'.gif');
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  await uploadFile(await r.blob(),'/ICONS',slug+'.gif',null);
+  await dropStale('/ICONS',slug+'.jpg',slug+'.gif');
+}
+async function idbSubmit(blob,name){
+  const fd=new FormData();
+  fd.append('file',blob,'icon.gif');
+  fd.append('name',name);
+  fd.append('source','webui');
+  let r;
+  try{r=await fetch(iconApiUrl()+'submit',{method:'POST',body:fd});}
+  catch(e){throw new Error(t('idbfail'));}
+  let d={};
+  try{d=await r.json();}catch(e){}
+  if(r.ok&&d.ok)return d;
+  // 'message' is the Hub's human sentence and wins when it is there; the code
+  // is only a fallback, and t() would echo an unknown code back as its own key,
+  // so anything outside the vocabulary is shown raw instead.
+  const known=I18N.en['idbe_'+d.error];
+  const err=new Error(d.message||(known?t('idbe_'+d.error):d.error)||'HTTP '+r.status);
+  err.code=d.error||'';
+  err.slug=d.slug&&d.error==='duplicate'?d.slug:null;
+  err.pr=d.pr||'';
+  throw err;
+}
+const IDB_PAGE=60;
+function iconDbCard(onInstalled){
+  const q=el('input',{type:'text',placeholder:t('idbsearch'),class:'grow'});
+  const size=el('select',null,el('option',{value:''},t('idbany')),
+    el('option',{value:'8x8'},'8×8'),el('option',{value:'32x8'},'32×8'));
+  const anim=el('input',{type:'checkbox'});
+  const info=el('div',{class:'help'});
+  const grid=el('div',{class:'grid-icons'});
+  const more=el('button',null,t('idbmore'));
+  const moreRow=el('div',{style:'text-align:center',hidden:'hidden'},more);
+  let rows=[],shown=IDB_PAGE,installed=new Set();
+  function tile(r){
+    const on=installed.has(r.slug);
+    const btn=el('button',{title:on?t('idbon'):t('idbinst'),'aria-label':on?t('idbon'):t('idbinst'),
+      disabled:on},on?'✓':icon('import'));
+    btn.addEventListener('click',async()=>{
+      btn.disabled=true;
+      try{
+        await idbInstall(r.slug);
+        installed.add(r.slug);btn.replaceChildren('✓');btn.title=t('idbon');
+        toast(r.slug+'.gif '+t('uploaded'));
+        onInstalled&&onInstalled();
+      }catch(e){btn.disabled=false;toast(e.message,false);}
     });
     return el('div',{class:'tile'},
-      el('div',{class:'pw'},img,el('div',{class:'acts'},pv,ed,del)),
-      el('div',{class:'ft'},el('span',{class:'nm',title:f.name},base),
-        el('span',{class:'sz'},fmtBytes(f.size))));
+      el('div',{class:'pw'},
+        el('img',{src:iconDbUrl()+encodeURIComponent(r.slug)+'.gif',alt:r.slug,loading:'lazy'}),
+        el('div',{class:'acts'},btn)),
+      el('div',{class:'ft'},el('span',{class:'nm',title:r.name},r.name),
+        el('span',{class:'sz'},r.w+'×'+r.h)));
   }
-  view.append(storSlot);
-  view.append(el('div',{class:'card wide'},
-    el('h2',null,t('icons')),el('div',{class:'ghelp'},t('iconshelp')),
-    uploadZone('/ICONS','.png,.jpg,.jpeg,.gif','⬆ '+t('upload')+' (.png / .jpg / .gif, 8×8)',reload,true),
-    lametricCard(reload),
-    iconsGrid));
-  reload();
+  function paint(reset){
+    if(!rows.length)return;
+    if(reset)shown=IDB_PAGE;
+    const needle=q.value.trim().toLowerCase(),sz=size.value,onlyAnim=anim.checked;
+    const hits=rows.filter(r=>(!needle||r.key.indexOf(needle)>=0)&&
+      (!sz||r.w+'x'+r.h===sz)&&(!onlyAnim||r.frames>1));
+    grid.replaceChildren(...(hits.length?hits.slice(0,shown).map(tile):[el('div',{class:'empty'},t('idbnone'))]));
+    info.replaceChildren(hits.length===rows.length?rows.length+' '+t('icons')
+      :hits.length+' '+t('of')+' '+rows.length);
+    moreRow.hidden=hits.length<=shown;
+  }
+  q.addEventListener('input',debounce(()=>paint(true),200));
+  size.addEventListener('change',()=>paint(true));
+  anim.addEventListener('change',()=>paint(true));
+  more.addEventListener('click',()=>{shown+=IDB_PAGE;paint(false);});
+  (async()=>{
+    if(navigator.onLine===false){
+      info.replaceChildren(t('lamneed'));
+      q.disabled=size.disabled=anim.disabled=true;
+      return;
+    }
+    try{rows=await idbLoad();paint(true);}
+    catch(e){info.replaceChildren(t('idbfail'));}
+  })();
+  return{
+    node:el('div',{class:'idb'},
+      el('div',{class:'ghelp'},t('idbhelp')),
+      el('div',{class:'row'},q,size,el('label',{class:'row',style:'gap:6px'},anim,t('idbanim'))),
+      info,grid,moreRow),
+    setInstalled(ids){installed=ids;paint(false);}
+  };
 }
 function lametricCard(onDone){
   const idIn=el('input',{type:'text',placeholder:t('lamid'),inputmode:'numeric'});
@@ -3354,7 +3597,10 @@ function lametricCard(onDone){
     el('div',{class:'ghelp'},t('lamhelp')),
     el('div',{class:'row'},idIn,getBtn,prev,saveBtn),note);
 }
-const PISKEL_URL_DEFAULT='https://blueforcer.github.io/awtrix-piskel/';
+// index.html is spelled out on purpose: whether the Hub's web server resolves a
+// bare /piskel/ to the directory index is not something this repo can promise,
+// and a miss would frame a 404 instead of the editor.
+const PISKEL_URL_DEFAULT='https://flows.blueforcer.de/piskel/index.html';
 function getPiskelUrl(){try{return localStorage.awtrixPiskelUrl||PISKEL_URL_DEFAULT;}catch(e){return PISKEL_URL_DEFAULT;}}
 function piskelOrigin(){try{return new URL(getPiskelUrl()).origin;}catch(e){return'';}}
 function postToPiskel(msg){

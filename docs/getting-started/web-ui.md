@@ -356,16 +356,24 @@ plain form. Keep it where you would keep the passwords themselves.
 
 ## Icons
 
-A storage bar (used / total / free, turning red past 90 % full), a drag-and-drop upload zone, and a
-grid of every icon on AWTRIX.
+Three tabs, and a storage bar in the header (used / total, turning red past 90 % full):
 
-Icons are `.png`, `.jpg`, `.jpeg` or `.gif`, 8×8 for a static icon. PNG and JPG are turned into a
-GIF as they upload - sharper on the panel and smaller on AWTRIX - so `smiley.png` becomes
+| Tab | What it holds |
+|---|---|
+| **On AWTRIX** | every icon on the clock, with the count in the tab label |
+| **Icon database** | the shared community collection |
+| **Add** | the upload zone, and the LaMetric field |
+
+**On AWTRIX** opens first. Each tile carries one **⋯** button; it covers the icon with the four
+things you can do with it: **Show** puts it on the panel for three seconds, **Edit** opens it in the
+[Icon Editor](#icon-editor), **To database** submits it to the shared collection, and **Delete**
+removes it after a second click to confirm.
+
+**Add** takes `.png`, `.jpg`, `.jpeg` and `.gif`, 8×8 for a static icon. PNG and JPG are turned into
+a GIF as they upload - sharper on the panel and smaller on AWTRIX - so `smiley.png` becomes
 `smiley.gif`, replacing an older `smiley.jpg` if you had one. Animated GIFs stay animated, and a
 full-width (32×8) animated GIF is also accepted - it renders as a background across the whole panel
-rather than a single icon tile; see [Payload → Icon](../reference/payload.md#icon). Each tile has
-three buttons: an **eye** shows the icon on the panel for three seconds, a **pencil** opens it in
-the [Icon Editor](#icon-editor), and a **bin** deletes it (two-step confirm).
+rather than a single icon tile; see [Payload → Icon](../reference/payload.md#icon).
 
 Files upload one at a time, each with its own progress line.
 
@@ -376,10 +384,23 @@ curl -X POST 'http://<awtrix-ip>/api/v1/files?dir=/ICONS' \
   -F 'file=@smiley.jpg'
 ```
 
+The **Icon database** tab searches the shared community collection. The catalogue is fetched once
+*in your browser* - AWTRIX never talks to the internet for this - and filtered locally, so search is
+instant. Narrow it by size (8×8 or 32×8) or to animated icons only; icons already on AWTRIX are
+marked and their install button is locked. One click downloads an icon and uploads it under its own
+name.
+
+**To database** in a tile's menu sends that icon the other way, into the collection. Give
+it a display name and submit; it is checked immediately and then waits for review before it shows
+up for anyone else. An icon whose bytes are already in the collection is refused on the spot,
+naming the entry that holds it.
+
 **LaMetric icon download** fetches an icon from the LaMetric gallery *in your browser* - AWTRIX
-never talks to the internet for this - converts it to GIF, then uploads it. Paste a numeric icon
-ID, hit **Fetch**, preview it, then **Save to AWTRIX**. It is disabled when your browser is offline, so it is unavailable
-in provisioning mode.
+never talks to the internet for this either - converts it to GIF, then uploads it. Paste a numeric
+icon ID, hit **Fetch**, preview it, then **Save to AWTRIX**.
+
+Both sections are disabled when your browser is offline, so they are unavailable in provisioning
+mode.
 
 More: [HTTP API → Files](../reference/http.md#files) · [Payload → Icon](../reference/payload.md#icon).
 

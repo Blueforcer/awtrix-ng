@@ -13,6 +13,23 @@ uploading a finished `.gif` or `.jpg` (see [Icons & assets](icons.md)).
 The icon is stored on AWTRIX and appears in the [Icons](../getting-started/web-ui.md#icons) tab
 straight away, ready to use in any app or notification as `"icon":"<name>"`.
 
+## Share an icon with everyone
+
+**Save to Cloud**, next to Save to AWTRIX, submits the drawing to the shared icon database instead
+of storing it on your clock. Type the name you want it listed under and press it.
+
+Publishing needs an **AWTRIX Hub** account. The editor you see here is framed by a page served from
+your clock, and a Hub sign-in cannot travel that far - so from this tab the status line says so and
+offers a link to the Hub's own editor, where the same drawing publishes under your account. There it
+appears in the collection immediately; there is no review queue, and the status line links straight
+to the published icon.
+
+The other answer you may see is a refusal - most often because the identical image is already in the
+collection, in which case it names the entry that holds it.
+
+Saving to the cloud does **not** put the icon on your clock; use Save to AWTRIX for that, and do
+both if you want it in each place.
+
 ## Edit an icon you already have
 
 Press the **pencil** button on any tile in the [Icons](../getting-started/web-ui.md#icons) tab. It
