@@ -68,28 +68,28 @@ void PeripheryService::tick(int64_t nowMs) {
   // Rotating the panel puts the buttons on the other side, so it flips left and right the same way
   // the explicit swap setting does; setting both cancels out.
   const bool swapped = cfg_->rotate != cfg_->swapButtons;
-  // Scripts get first refusal on every press; only what they do not take reaches the built-in
-  // navigation.
-  bool consumed = false;
+  // Scripts get first refusal on every press, button by button; only what they do not take
+  // reaches the built-in navigation.
+  bool tookLeft = false, tookSelect = false, tookRight = false;
   if (buttonHook_) {
-    if (lEdge) consumed |= buttonHook_(swapped ? 2 : 0);
-    if (sEdge) consumed |= buttonHook_(1);
-    if (rEdge) consumed |= buttonHook_(swapped ? 0 : 2);
+    if (lEdge) tookLeft = buttonHook_(swapped ? 2 : 0);
+    if (sEdge) tookSelect = buttonHook_(1);
+    if (rEdge) tookRight = buttonHook_(swapped ? 0 : 2);
   }
-  if (!consumed) {
-    if (lEdge && !blocked)
-      engine_->submit(Command(swapped ? CommandType::NextApp : CommandType::PreviousApp));
-    if (rEdge && !blocked)
-      engine_->submit(Command(swapped ? CommandType::PreviousApp : CommandType::NextApp));
-    if (sEdge) {
-      engine_->submit(Command(CommandType::DismissNotify));
-      if (!blocked && nowMs - lastSelectEdgeMs_ <= kDoublePressMs) {
-        Command c(CommandType::SetDisplay);
-        c.payload = engine_->state().runtime().matrixOff ? "{\"power\":true}" : "{\"power\":false}";
-        engine_->submit(c);
-      }
-      lastSelectEdgeMs_ = nowMs;
+  if (lEdge && !tookLeft && !blocked)
+    engine_->submit(Command(swapped ? CommandType::NextApp : CommandType::PreviousApp));
+  if (rEdge && !tookRight && !blocked)
+    engine_->submit(Command(swapped ? CommandType::PreviousApp : CommandType::NextApp));
+  // A consumed press is not remembered, so it can never pair up with the next one into a
+  // double press.
+  if (sEdge && !tookSelect) {
+    engine_->submit(Command(CommandType::DismissNotify));
+    if (!blocked && nowMs - lastSelectEdgeMs_ <= kDoublePressMs) {
+      Command c(CommandType::SetDisplay);
+      c.payload = engine_->state().runtime().matrixOff ? "{\"power\":true}" : "{\"power\":false}";
+      engine_->submit(c);
     }
+    lastSelectEdgeMs_ = nowMs;
   }
   if (cur.left != prev_.left || cur.select != prev_.select || cur.right != prev_.right) {
     engine_->state().runtime().buttons = {cur.left, cur.select, cur.right};

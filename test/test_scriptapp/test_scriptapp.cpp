@@ -1069,6 +1069,51 @@ static void test_button_ignored_while_hidden() {
   TEST_ASSERT_EQUAL_STRING("left", trace(app).c_str());
 }
 
+static void test_button_return_true_consumes_the_press() {
+  Engine e;
+  script::ScriptApp app(e.vm, "C",
+                        "class C\n"
+                        "  def draw() end\n"
+                        "  def on_button(b) return b == 'left' end\n"
+                        "end\n"
+                        "return C()",
+                        script::ScriptMeta{}, "", nullptr);
+  RenderCtx ctx;
+  TEST_ASSERT_FALSE(app.handleButton("left", &ctx));
+  app.notifyVisible(true, &ctx);
+  TEST_ASSERT_TRUE(app.handleButton("left", &ctx));
+  TEST_ASSERT_FALSE(app.handleButton("right", &ctx));
+}
+
+static void test_button_without_a_return_passes_the_press_on() {
+  Engine e;
+  script::ScriptApp app(e.vm, "P",
+                        "class P\n"
+                        "  def draw() end\n"
+                        "  def on_button(b) end\n"
+                        "end\n"
+                        "return P()",
+                        script::ScriptMeta{}, "", nullptr);
+  RenderCtx ctx;
+  app.notifyVisible(true, &ctx);
+  TEST_ASSERT_FALSE(app.handleButton("select", &ctx));
+}
+
+static void test_button_that_throws_passes_the_press_on() {
+  Engine e;
+  script::ScriptApp app(e.vm, "T",
+                        "class T\n"
+                        "  def draw() end\n"
+                        "  def on_button(b) return nil.x end\n"
+                        "end\n"
+                        "return T()",
+                        script::ScriptMeta{}, "", nullptr);
+  RenderCtx ctx;
+  app.notifyVisible(true, &ctx);
+  TEST_ASSERT_FALSE(app.handleButton("select", &ctx));
+  TEST_ASSERT_FALSE(app.ok());
+}
+
 static void test_should_show_false_declines_the_turn() {
   Engine e;
   script::ScriptApp app(e.vm, "S",
@@ -1442,6 +1487,9 @@ int main(int, char**) {
   RUN_TEST(test_lifecycle_sequence);
   RUN_TEST(test_visibility_hooks_are_edge_triggered);
   RUN_TEST(test_button_ignored_while_hidden);
+  RUN_TEST(test_button_return_true_consumes_the_press);
+  RUN_TEST(test_button_without_a_return_passes_the_press_on);
+  RUN_TEST(test_button_that_throws_passes_the_press_on);
   RUN_TEST(test_should_show_false_declines_the_turn);
   RUN_TEST(test_should_show_without_a_return_still_shows);
   RUN_TEST(test_missing_should_show_shows);

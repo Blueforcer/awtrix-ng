@@ -24,7 +24,7 @@ calls at different moments, and knowing which is which is most of the craft.
 | `draw()` | every frame, roughly 40 times a second, while on screen | **yes** |
 | `on_show()` | the app has just been rotated in | no |
 | `on_hide()` | the app has just been rotated out | no |
-| `on_button(btn)` | a button was pressed while the app is on screen | no |
+| `on_button(btn)` | a button was pressed while the app is on screen; `true` consumes it | no |
 | `should_show()` | the rotation arrived; `false` skips the app this turn | no |
 | `duration()` | the rotation arrived; return milliseconds to override the dwell time | no |
 

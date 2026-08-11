@@ -41,7 +41,7 @@ class ScriptApp : public IApp {
   bool lastWantedShow() const { return lastWantShow_; }
   long dwellMs() const { return dwellMs_; }
   void notifyVisible(bool visible, const RenderCtx* ctx);
-  void handleButton(const std::string& btn, const RenderCtx* ctx);
+  bool handleButton(const std::string& btn, const RenderCtx* ctx);
   void dispatchHttp(uint32_t id, int status, const std::string& body, bool ok,
                     const RenderCtx* ctx);
   void dispatchMqtt(const std::string& filter, const std::string& topic,

@@ -234,7 +234,7 @@ The hooks are **methods on your class**. Only `draw()` is required; define the o
 | `draw()` | every frame (~40/s) while your app is on screen | **yes** |
 | `on_show()` | your app has just been rotated in | no |
 | `on_hide()` | your app has just been rotated out | no |
-| `on_button(btn)` | a button was pressed while your app is on screen; `btn` is `"left"`, `"select"` or `"right"` | no |
+| `on_button(btn)` | a button was pressed while your app is on screen; `btn` is `"left"`, `"select"` or `"right"`, and `true` consumes the press | no |
 | `should_show()` | the rotation has reached you - return `false` to let it pass you by | no |
 | `duration()` | the rotation has reached you - return ms to override how long you stay | no |
 
@@ -272,9 +272,27 @@ A typo in a builtin (`clesr()`) fails at install time with a `syntax_error`, rat
 than when that line finally runs. Methods on your own class are looked up when they are
 called, so `self.helper()` may refer to a method defined further down the class.
 
-`on_button` is a notification, not a capture: your hook fires, and then left/right still
-rotate to the next app as usual. `select` has no other job in the rotation, so it is the
-one to use for an action.
+`on_button` decides what happens next. Return `true` and the press stops with you: left
+and right no longer rotate to the neighbouring app, and select no longer dismisses a
+notification or toggles the matrix on a double press. Return nothing, `false` or `nil` and
+the press carries on to the built-in navigation as usual, which is what you want unless
+your app really owns that button.
+
+```berry
+  def on_button(btn)
+    if btn == "left"
+      self.page -= 1
+      return true                     # the panel stays on this app
+    elif btn == "right"
+      self.page += 1
+      return true
+    end
+  end
+```
+
+Only the app that is on screen is asked, and only while it is drawing, so the rest of the
+rotation is unaffected. A hook that raises lets the press through: a broken app cannot lock
+the buttons.
 
 ### Sitting a round out
 

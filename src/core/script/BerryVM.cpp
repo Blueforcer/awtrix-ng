@@ -309,6 +309,11 @@ bool BerryVM::method1(const std::string& appKey, const char* name,
   return doMethod(appKey, name, 1, &a);
 }
 
+bool BerryVM::method1Bool(const std::string& appKey, const char* name,
+                          const std::string& a, bool& out) {
+  return doMethod(appKey, name, 1, &a, nullptr, &out);
+}
+
 bool BerryVM::methodString(const std::string& appKey, const char* name,
                            std::string& out) {
   return doMethod(appKey, name, 0, nullptr, &out);

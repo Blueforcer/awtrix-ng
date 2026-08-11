@@ -552,12 +552,13 @@ bool ScriptHost::scrollHolds(const std::string& name) const {
   return it != apps_.end() && it->second->scrollHolds();
 }
 
-void ScriptHost::handleButton(const std::string& currentAppId, const std::string& btn) {
+bool ScriptHost::handleButton(const std::string& currentAppId, const std::string& btn) {
   auto it = apps_.find(currentAppId);
-  if (it == apps_.end()) return;
+  if (it == apps_.end()) return false;
   activate();
-  it->second->handleButton(btn, lastCtx());
+  const bool consumed = it->second->handleButton(btn, lastCtx());
   drainStoreFlush();
+  return consumed;
 }
 
 

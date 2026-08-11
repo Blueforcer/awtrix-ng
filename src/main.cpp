@@ -544,7 +544,7 @@ void setup() {
   g_periphery.setButtonHook([](int btn) {
     static const char* kBtnNames[3] = {"left", "select", "right"};
     if (g_scripts && btn >= 0 && btn < 3)
-      g_scripts->handleButton(g_engine->currentAppId(), kBtnNames[btn]);
+      return g_scripts->handleButton(g_engine->currentAppId(), kBtnNames[btn]);
     return false;
   });
   g_display->setPublisher(publisher);

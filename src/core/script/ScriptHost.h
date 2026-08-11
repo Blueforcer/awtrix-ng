@@ -49,7 +49,7 @@ class ScriptHost {
   void tick(const RenderCtx& ctx, const std::string& currentAppId,
             const std::string& incomingAppId = std::string());
   void staggerFirstLoops(int64_t stepMs);
-  void handleButton(const std::string& currentAppId, const std::string& btn);
+  bool handleButton(const std::string& currentAppId, const std::string& btn);
   bool wantsShow(const std::string& name);
   long durationMs(const std::string& name) const;
   bool scrollHolds(const std::string& name) const;

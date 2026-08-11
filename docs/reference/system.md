@@ -384,7 +384,8 @@ What to expect from it:
 * **One press is two calls** - `state=1` when the button goes down, `state=0` when it is released.
   Act on `state=1` and ignore the other, or measure the gap to detect a hold.
 * **The buttons keep their normal job.** The webhook runs alongside app switching; use
-  [`blockNavigation`](settings.md#buttons) if left/right should only drive your automation.
+  [`blockNavigation`](settings.md#buttons) if left/right should only drive your automation, or a
+  script that returns `true` from `on_button()` to take single presses on its own screen.
 * **`middle`, not `select`** - MQTT and scripts use `select` for the same button. The names follow
   the wiring: `swapButtons` and `rotate` do not rename them.
 * **Plain `http://` only**, no TLS and no auth header, so keep the listener on your own network. An

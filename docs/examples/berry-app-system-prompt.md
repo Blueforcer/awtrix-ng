@@ -118,7 +118,7 @@ Define only the methods you need. **Every method costs memory for as long as the
 | `draw()` | **every frame (~40×/second)** while the app is on screen | **yes** |
 | `on_show()` | the app has just been rotated in | no |
 | `on_hide()` | the app has just been rotated out | no |
-| `on_button(btn)` | a button was pressed while the app is on screen | no |
+| `on_button(btn)` | a button was pressed while the app is on screen; `true` consumes it | no |
 | `should_show()` | the rotation has reached the app; `false` makes it skip past | no |
 | `duration()` | the rotation has reached the app; return ms to override the dwell | no |
 
@@ -131,9 +131,20 @@ poll, count down and refresh there, so the data is waiting when the rotation com
 already restored when it runs. `setup()` runs just after, once the app is wired in; put the first
 fetch and any logging there.
 
-`on_button(btn)` receives exactly one of `"left"`, `"select"`, `"right"`. Left and right still
-rotate to the neighbouring app afterwards - a script cannot hold the user on itself - so
-**`"select"` is the one to use for an action**.
+`on_button(btn)` receives exactly one of `"left"`, `"select"`, `"right"`. **Return `true` to
+consume the press**: left and right then no longer rotate to the neighbouring app, and select no
+longer dismisses a notification or toggles the matrix on a double press. Anything else - no
+`return`, `false`, `nil` - passes the press on to the built-in navigation, and so does a hook that
+raises. Take only the buttons your app really owns; `"select"` is the usual one for an action.
+
+```berry
+  def on_button(btn)
+    if btn == "left"
+      self.page -= 1
+      return true
+    end
+  end
+```
 
 `should_show()` is for an app that only sometimes has something to say: a reminder due today, a
 value gone stale, a fetch that has not landed. Return `false` and the rotation skips to the next
