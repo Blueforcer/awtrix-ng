@@ -114,6 +114,21 @@ async function testAlreadyInstalled() {
   assert(button.disabled === true, 'an icon already on the clock is marked as installed');
 }
 
+/* The Hub launches with nothing in it, so "loaded and empty" is a normal state
+   and has to read differently from "still loading" and from "no search hits". */
+async function testEmptyCatalogue() {
+  const ctx = await boot();
+  ctx.store.iconDb = { v: 1, icons: [] };
+  await goto(ctx.window, '#/icons');
+  await flush(80);
+  const note = card(ctx.window).querySelector('.empty');
+  assert(!!note, 'an empty catalogue says so instead of showing a blank pane');
+  assert(!/matches|gefunden/i.test(note ? note.textContent : ''),
+    'and does not blame the search, which was never run');
+  assert(card(ctx.window).querySelector('.help').textContent === '',
+    'no count is offered when there is nothing to count');
+}
+
 async function testUnreachableCatalogue() {
   const ctx = await boot();
   ctx.store.iconDb = null; // json() answers null, so the rows never materialise
@@ -258,6 +273,7 @@ async function main() {
   await testBrowse();
   await testInstall();
   await testAlreadyInstalled();
+  await testEmptyCatalogue();
   await testUnreachableCatalogue();
   await testSubmit();
   await testDuplicate();

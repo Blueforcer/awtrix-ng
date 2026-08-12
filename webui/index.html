@@ -808,7 +808,7 @@ const I18N={en:{
   lamsave:'Save to AWTRIX',
   idb:'Icon database',idbhelp:'Search the community collection and install an icon with one click.',
   idbsearch:'Search icons',idbany:'Any size',idbanim:'Animated only',idbnone:'Nothing matches',
-  idbmore:'Show more',idbinst:'Install',idbon:'Already on AWTRIX',idbfail:'Icon database unreachable',
+  idbmore:'Show more',idbempty:'The collection is still empty',idbinst:'Install',idbon:'Already on AWTRIX',idbfail:'Icon database unreachable',
   idbshare:'Submit to the icon database',idbsend:'Submit',
   icown:'On AWTRIX',icadd:'Add',icnone:'No icons on AWTRIX yet',icsend:'To database',icshow:'Show',
   idbdone:'Published to the icon database',idbopen:'Open the icon',
@@ -977,7 +977,7 @@ const I18N={en:{
   lamsave:'Auf AWTRIX speichern',
   idb:'Icon-Datenbank',idbhelp:'Durchsuche die Community-Sammlung und installiere ein Icon mit einem Klick.',
   idbsearch:'Icons suchen',idbany:'Alle Größen',idbanim:'Nur animierte',idbnone:'Nichts gefunden',
-  idbmore:'Mehr anzeigen',idbinst:'Installieren',idbon:'Schon auf AWTRIX',idbfail:'Icon-Datenbank nicht erreichbar',
+  idbmore:'Mehr anzeigen',idbempty:'Die Sammlung ist noch leer',idbinst:'Installieren',idbon:'Schon auf AWTRIX',idbfail:'Icon-Datenbank nicht erreichbar',
   idbshare:'An die Icon-Datenbank senden',idbsend:'Senden',
   icown:'Auf AWTRIX',icadd:'Hinzufügen',icnone:'Noch keine Icons auf AWTRIX',icsend:'An Datenbank',icshow:'Zeigen',
   idbdone:'In der Icon-Datenbank veröffentlicht',idbopen:'Icon öffnen',
@@ -3501,7 +3501,9 @@ function iconDbCard(onInstalled){
   const grid=el('div',{class:'grid-icons'});
   const more=el('button',null,t('idbmore'));
   const moreRow=el('div',{style:'text-align:center',hidden:'hidden'},more);
-  let rows=[],shown=IDB_PAGE,installed=new Set();
+  // 'loaded' is not the same question as 'rows.length': a catalogue that is
+  // simply still empty has to say so, not sit there blank.
+  let rows=[],loaded=false,shown=IDB_PAGE,installed=new Set();
   function tile(r){
     const on=installed.has(r.slug);
     const btn=el('button',{title:on?t('idbon'):t('idbinst'),'aria-label':on?t('idbon'):t('idbinst'),
@@ -3523,13 +3525,14 @@ function iconDbCard(onInstalled){
         el('span',{class:'sz'},r.w+'×'+r.h)));
   }
   function paint(reset){
-    if(!rows.length)return;
+    if(!loaded)return;
     if(reset)shown=IDB_PAGE;
     const needle=q.value.trim().toLowerCase(),sz=size.value,onlyAnim=anim.checked;
     const hits=rows.filter(r=>(!needle||r.key.indexOf(needle)>=0)&&
       (!sz||r.w+'x'+r.h===sz)&&(!onlyAnim||r.frames>1));
-    grid.replaceChildren(...(hits.length?hits.slice(0,shown).map(tile):[el('div',{class:'empty'},t('idbnone'))]));
-    info.replaceChildren(hits.length===rows.length?rows.length+' '+t('icons')
+    grid.replaceChildren(...(hits.length?hits.slice(0,shown).map(tile)
+      :[el('div',{class:'empty'},rows.length?t('idbnone'):t('idbempty'))]));
+    info.replaceChildren(!rows.length?'':hits.length===rows.length?rows.length+' '+t('icons')
       :hits.length+' '+t('of')+' '+rows.length);
     moreRow.hidden=hits.length<=shown;
   }
@@ -3543,7 +3546,7 @@ function iconDbCard(onInstalled){
       q.disabled=size.disabled=anim.disabled=true;
       return;
     }
-    try{rows=await idbLoad();paint(true);}
+    try{rows=await idbLoad();loaded=true;paint(true);}
     catch(e){info.replaceChildren(t('idbfail'));}
   })();
   return{
@@ -3682,7 +3685,11 @@ function viewEditor(view){
   piskelReady=false;
   const url=getPiskelUrl();
   const theme=document.documentElement.dataset.theme==='light'?'light':'dark';
-  const src=url+(url.includes('?')?'&':'?')+'theme='+encodeURIComponent(theme)+'&sizes=8x8,32x8&host=awtrix';
+  // The editor is handed the same Hub the gallery uses. Without it a framed
+  // editor falls back to whatever host it was built against, and an override in
+  // localStorage would reach the gallery but not the editor inside it.
+  const src=url+(url.includes('?')?'&':'?')+'theme='+encodeURIComponent(theme)+
+    '&sizes=8x8,32x8&host=awtrix&iconapi='+encodeURIComponent(iconApiUrl());
   const loading=el('div',{class:'piskelload'},el('span',{class:'spin'}),el('span',null,t('edLoading')));
   const frame=el('iframe',{id:'piskelFrame',src,title:t('editorTab'),allow:'clipboard-read; clipboard-write'});
   view.append(el('div',{class:'piskelwrap wide'},loading,frame));
