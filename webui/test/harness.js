@@ -60,6 +60,7 @@ function makeStore() {
             audio: { buzzer: true, track: false, mp3: true, radio: true } },
     settings: { soundEnabled: true, buzzerVolume: 80, dfplayerVolume: 80, mp3Volume: 70,
                 radioVolume: 60, radioMeta: true },
+    system: { hostname: 'awtrix-ng' },
     // dir -> Map(name -> size), the file API's flash view.
     files: { '/ICONS': new Map(), '/MP3': new Map() },
     melodies: [], // [{name, rtttl, valid, notes, durationMs, bytes}]
@@ -91,7 +92,7 @@ function mockFetch(store, netlog) {
     if (p === '/api/v1/device') return resp({ ipAddress: '192.168.1.5', firmware: 'test' });
     if (p === '/api/v1/capabilities')
       return store.caps ? resp(store.caps) : resp({ error: { message: 'offline' } }, false, 503);
-    if (p === '/api/v1/system') return resp({ hostname: 'awtrix-ng' });
+    if (p === '/api/v1/system') return resp(store.system);
     if (p === '/api/v1/settings' && method === 'GET') return resp(store.settings);
     if (p === '/api/v1/settings' && method === 'PATCH') {
       store.settingsPatch = JSON.parse(opts.body || '{}');

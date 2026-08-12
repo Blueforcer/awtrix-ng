@@ -1207,7 +1207,11 @@ const TZNAMES=[...TZRULE.keys()].sort();
 const TZFMT=new Map();
 function tzOffset(zone,at){
   let f=TZFMT.get(zone);
-  if(!f)TZFMT.set(zone,f=new Intl.DateTimeFormat('en',{timeZone:zone,timeZoneName:'longOffset'}));
+  if(!f){
+    try{f=new Intl.DateTimeFormat('en',{timeZone:zone,timeZoneName:'longOffset'});}
+    catch(e){return null;}
+    TZFMT.set(zone,f);
+  }
   const s=f.formatToParts(at).find(p=>p.type==='timeZoneName').value;
   const m=/GMT([+-])(\d+)(?::(\d+))?/.exec(s);
   return m?(m[1]==='-'?-1:1)*(Number(m[2])*60+Number(m[3]||0)):0;
@@ -1215,6 +1219,7 @@ function tzOffset(zone,at){
 const tzOffsetStr=o=>'UTC'+(o<0?'-':'+')+Math.floor(Math.abs(o)/60)+(Math.abs(o)%60?':'+String(Math.abs(o)%60).padStart(2,'0'):'');
 function tzState(zone){
   const now=new Date(),cur=tzOffset(zone,now);
+  if(cur===null)return{off:0,dst:false,changes:false,next:null};
   const DAY=864e5;
   let win=cur,sum=cur,next=null;
   for(let i=1;i<=366;i++){
@@ -1570,17 +1575,20 @@ const WIDGETS={
     const detect=el('button',{type:'button',title:t('tzDetectH')},t('tzDetect'));
     let cur=TZRULE.has(value)?value:'UTC';
     const now=new Date();
+    const ok=TZNAMES.filter(n=>tzOffset(n,now)!==null);
     const label=n=>(n.includes('/')?n.split('/').slice(1).join('/'):n).replace(/_/g,' ')
       +' · '+tzOffsetStr(tzOffset(n,now));
     const areas=new Map();
-    TZNAMES.forEach(n=>{const a=n.includes('/')?n.split('/')[0]:'-';
+    ok.forEach(n=>{const a=n.includes('/')?n.split('/')[0]:'-';
       if(!areas.has(a))areas.set(a,[]);areas.get(a).push(n);});
     sel.replaceChildren(...[...areas].map(([a,ns])=>
       el('optgroup',{label:a},ns.map(n=>el('option',{value:n},label(n))))));
     sel.value=cur;
     function preview(){
       const s=tzState(cur),loc=LANG==='de'?'de-DE':'en-GB';
-      const at=new Intl.DateTimeFormat(loc,{timeZone:cur,dateStyle:'medium',timeStyle:'short'}).format(new Date());
+      let at;
+      try{at=new Intl.DateTimeFormat(loc,{timeZone:cur,dateStyle:'medium',timeStyle:'short'}).format(new Date());}
+      catch(e){at='?';}
       const dst=!s.changes?t('tzNoDst'):s.dst?t('tzDstOn'):t('tzDstOff');
       const nxt=s.changes&&s.next?' · '+t('tzNext')+' '+new Intl.DateTimeFormat(loc,{dateStyle:'medium'}).format(s.next):'';
       prev.replaceChildren(at+' · '+tzOffsetStr(s.off)+' · '+dst+nxt);
