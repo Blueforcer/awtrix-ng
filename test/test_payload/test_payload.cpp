@@ -330,6 +330,18 @@ static void test_an_unparsable_sound_rtttl_is_rejected() {
   TEST_ASSERT_FALSE(err.message.empty());
 }
 
+// Clients that serialise their whole schema send every field they know about, empty ones
+// included; an empty melody is the absence of one, not a malformed one.
+static void test_an_empty_sound_rtttl_is_accepted() {
+  AppSpec s;
+  DispatchDetail err;
+  TEST_ASSERT_TRUE(payload::parse("{\"text\":\"A\",\"soundRtttl\":\"\",\"sound\":\"\"}", true, s,
+                                  nullptr, nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("A", s.text.c_str());
+  TEST_ASSERT_TRUE(s.extras().rtttl.empty());
+  TEST_ASSERT_TRUE(s.sound.empty());
+}
+
 static void test_effect_overlay_names() {
   AppSpec s = parseApp("{\"effect\":\"Matrix\",\"overlay\":\"snow\"}");
   TEST_ASSERT_EQUAL_STRING("Matrix", s.effect.c_str());
@@ -644,6 +656,7 @@ int main(int, char**) {
   RUN_TEST(test_notification_key_on_an_app_is_rejected);
   RUN_TEST(test_notification_keys_pass_on_a_notification);
   RUN_TEST(test_an_unparsable_sound_rtttl_is_rejected);
+  RUN_TEST(test_an_empty_sound_rtttl_is_accepted);
   RUN_TEST(test_effect_overlay_names);
   RUN_TEST(test_bad_json_returns_false);
   RUN_TEST(test_array_payload_parses_first);
