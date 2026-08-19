@@ -28,6 +28,7 @@ bool jpgOutput(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
 
 bool draw(Canvas& canvas, const std::string& iconId, int x, int y) {
   media::PodBuffer<uint8_t> buf;
+  std::string path;
   // Same convention as GifPlayer: anything longer than a plausible filename is inline base64.
   if (iconId.size() > 64) {
     const auto* in = reinterpret_cast<const unsigned char*>(iconId.c_str());
@@ -43,18 +44,28 @@ bool draw(Canvas& canvas, const std::string& iconId, int x, int y) {
     }
     buf.resize(n);
   } else {
-    const std::string path = "/ICONS/" + iconId + ".jpg";
+    path = "/ICONS/" + iconId + ".jpg";
     if (!media::readAsset(path, buf)) {
       logf("icon: %s missing or empty", path.c_str());
       return false;
     }
   }
 
+  const char* label = path.empty() ? "inline icon" : path.c_str();
+  if (isPng(buf.data(), buf.size())) {
+    logf("icon: %s is a PNG, only GIF and JPEG are supported", label);
+    return false;
+  }
+
   s_canvas = &canvas;
   TJpgDec.setJpgScale(1);
   TJpgDec.setCallback(jpgOutput);
-  TJpgDec.drawJpg(x, y, buf.data(), static_cast<uint32_t>(buf.size()));
+  const JRESULT res = TJpgDec.drawJpg(x, y, buf.data(), static_cast<uint32_t>(buf.size()));
   s_canvas = nullptr;
+  if (res != JDR_OK) {
+    logf("icon: %s is not a JPEG the decoder can read (%d)", label, static_cast<int>(res));
+    return false;
+  }
   return true;
 }
 
