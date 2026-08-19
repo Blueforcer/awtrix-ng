@@ -166,6 +166,9 @@ main>.wide{grid-column:1/-1}
 canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelated;background:#000}
 .hctl{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--border);flex-wrap:wrap}
 .hctl .lab{font-size:var(--f1);color:var(--dim)}
+html.fs,html.fs body{margin:0;height:100%;background:#000;overflow:hidden}
+html.fs body{display:flex;align-items:center;justify-content:center}
+html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-ratio:auto}
 .hctl input[type=range]{flex:1;min-width:110px;width:auto}
 .hctl .val{font:var(--f1)/1 var(--mono);color:var(--dim);min-width:26px;text-align:right}
 .vitals{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
@@ -4636,6 +4639,29 @@ function viewLog(view){
     }
   },1000);
 }
+function viewFullscreen(){
+  document.documentElement.classList.add('fs');
+  const cv=el('canvas',{id:'screen',width:320,height:80,role:'img','aria-label':t('livepre')});
+  document.body.replaceChildren(cv);
+  const ctx=cv.getContext('2d');
+  let pw=32,ph=8;
+  const fit=()=>{
+    const sc=Math.max(1,Math.floor(Math.min(innerWidth/pw,innerHeight/ph)));
+    if(cv.width!==pw*sc||cv.height!==ph*sc){cv.width=pw*sc;cv.height=ph*sc;}
+    return sc;
+  };
+  addEventListener('resize',()=>fit());
+  poller(async()=>{
+    const{data}=await api('/api/v1/display/screen',{timeout:4000});
+    const px=data&&data.pixels;
+    if(!Array.isArray(px))return;
+    pw=data.width||32;ph=data.height||8;
+    paint(ctx,px,pw,ph,fit());
+  },250);
+}
+if(/\/fullscreen\/?$/.test(location.pathname)){
+  viewFullscreen();
+}else{
 $('#langbtn').replaceChildren(LANG.toUpperCase());
 paintTheme();
 render();
@@ -4657,6 +4683,7 @@ new ResizeObserver(setChromeH).observe(topbar);
     if(!anyAudioCap())nav();
   }catch(e){}
 })();
+}
 </script>
 </body>
 </html>

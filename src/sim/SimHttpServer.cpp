@@ -505,7 +505,7 @@ void SimHttpServer::Impl::route(const httplib::Request& req, httplib::Response& 
     }
   }
 
-  if (path == "/" || path == "/index.html") {
+  if (path == "/" || path == "/index.html" || path == "/fullscreen") {
     std::string html;
     if (!sim::readFile(webuiFile, html)) {
       res.status = 500;

@@ -1908,7 +1908,11 @@ curl -X POST http://<awtrix-ip>/api/v1/restore -F "file=@backup.zip"
 
 ### GET /
 
-The gzipped web UI, embedded in the firmware. Served for `/` and `/index.html`.
+The gzipped web UI, embedded in the firmware. Served for `/`, `/index.html` and
+`/fullscreen`.
+
+At `/fullscreen` the page drops its chrome and shows only the live matrix, scaled to fill the
+window at a whole-pixel factor - made for an iframe on a dashboard.
 
 | Status | Condition |
 |---|---|
@@ -1998,5 +2002,5 @@ Anything not matched above answers **404** `notFound` with message `unknown rout
 | DELETE | `/api/v1/files` | [by `?path=`, allowlisted](#delete-apiv1files) |
 | POST | `/update` | [firmware image](#post-update) |
 | POST | `/api/v1/restore` | [backup ZIP; available in AP mode](#post-apiv1restore) |
-| GET | `/`, `/index.html` | [web UI](#get) |
+| GET | `/`, `/index.html`, `/fullscreen` | [web UI](#get) |
 | GET | `/ICONS/*`, `/MELODIES/*`, `/PALETTES/*`, `/MP3/*`, `/SCRIPTS/*`, `/apploop.json` | [static assets](#web-ui-and-static-assets) |

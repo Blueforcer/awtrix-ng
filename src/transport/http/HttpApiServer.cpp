@@ -764,7 +764,7 @@ bool HttpApiServer::rejectedByPolicy(const Request& req) {
 // The web UI is a gzip blob in flash, sent verbatim without decompressing. The ETag never changes
 // within a build, so a repeat visit costs a 304 instead of the whole transfer.
 bool HttpApiServer::serveWebUi(const Request& req) {
-  if (req.path != "/" && req.path != "/index.html") return false;
+  if (req.path != "/" && req.path != "/index.html" && req.path != "/fullscreen") return false;
   if (server_->header("If-None-Match") == WEBUI_ETAG) {
     server_->send(304, "text/plain", "");
     return true;

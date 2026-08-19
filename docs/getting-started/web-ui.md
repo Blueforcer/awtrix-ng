@@ -53,6 +53,9 @@ curl http://<awtrix-ip>/api/v1/display/screen
 
 See [HTTP API → Display](../reference/http.md#display) for the response shape.
 
+`http://<awtrix-ip>/fullscreen` serves the same preview on its own, without the rest of the page -
+embed it in a Home Assistant dashboard or any other iframe.
+
 ### Screenshot and GIF
 
 The two buttons on the right of the docked controls export what the preview shows. **↓** saves the
