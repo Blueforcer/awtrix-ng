@@ -30,6 +30,7 @@ RenderPipeline::RenderPipeline(int width, int height, const RenderPipelineDeps& 
 
 const AppSpec* RenderPipeline::pageSpec(const std::string& id, bool isNotif) const {
   if (isNotif) return &d_.engine->notifications().current();
+  if (d_.engine->isScriptApp(id)) return nullptr;
   return d_.engine->pushedApp(id);
 }
 
@@ -103,7 +104,9 @@ void RenderPipeline::renderPage(Canvas& dst, const std::string& id, int64_t nowM
     drawSpec(d_.engine->notifications().current());
     return;
   }
-  if (IApp* app = d_.apps->find(id)) {
+  const AppSpec* pushed = pageSpec(id, false);
+  IApp* app = pushed ? nullptr : d_.apps->find(id);
+  if (app) {
     dst.clear(0x000000u);
     RenderCtx ctx;
     ctx.settings = &s;
@@ -114,8 +117,8 @@ void RenderPipeline::renderPage(Canvas& dst, const std::string& id, int64_t nowM
     d_.clock->fill(ctx, nowMs);
     app->render(dst, ctx);
     drawOverlay("", EffectSettings{});
-  } else if (const AppSpec* cs = d_.engine->pushedApp(id)) {
-    drawSpec(*cs);
+  } else if (pushed) {
+    drawSpec(*pushed);
   } else {
     dst.clear(0x000000u);
   }
@@ -244,7 +247,7 @@ void RenderPipeline::renderFrame(Canvas& out, int64_t nowMs) {
       !isNotif && ah.inTransition() && ah.transitionTarget() >= 0 && ah.count() > 1;
   if (inTransition) {
     const std::string& toId = ah.idAt(ah.transitionTarget());
-    const AppSpec* toSpec = d_.engine->pushedApp(toId);
+    const AppSpec* toSpec = pageSpec(toId, false);
     const bool entered = slotB_.pageId != toId;
     loadIcon(slotB_, toId, toSpec, nowMs);
     slotB_.pageId = toId;

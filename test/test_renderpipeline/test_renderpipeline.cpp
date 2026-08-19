@@ -689,6 +689,20 @@ static void test_builtin_app_renders_via_clock() {
   TEST_ASSERT_EQUAL_HEX32(0xFF0000u, r.canvas.getPixel(6, 6));
 }
 
+static void test_a_pushed_app_shadows_the_builtin_of_the_same_name() {
+  Rig r;
+  TimeApp timeApp;
+  r.apps.add(&timeApp);
+  CaptureEffect fx;
+  r.effects.add(&fx);
+  r.engine.execute(cmd(CommandType::SetPushedApp, "Time",
+                       "{\"text\":\"x\",\"effect\":\"capture\",\"effectSpeed\":3}"));
+  r.engine.execute(switchFast("Time"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+  TEST_ASSERT_TRUE(fx.lastSettings.hasSpeed);
+}
+
 static void test_effect_settings_reset_between_apps() {
   Rig r;
   CaptureEffect fx;
@@ -856,6 +870,7 @@ int main(int, char**) {
   RUN_TEST(test_incoming_scroll_survives_the_page_change);
   RUN_TEST(test_incoming_icon_keeps_its_place_during_a_transition);
   RUN_TEST(test_builtin_app_renders_via_clock);
+  RUN_TEST(test_a_pushed_app_shadows_the_builtin_of_the_same_name);
   RUN_TEST(test_effect_settings_reset_between_apps);
   RUN_TEST(test_indicators_render_and_blink);
   RUN_TEST(test_indicators_have_the_upstream_corner_shapes);
