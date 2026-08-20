@@ -130,8 +130,15 @@ inline ScriptMeta parseMeta(const std::string& source) {
       const std::string v = detail::lower(value);
       meta.headless = v == "true" || v == "1" || v == "yes";
     } else if (key == "icons") {
-      if (!meta.icons.empty()) meta.icons += ' ';
-      meta.icons += value;
+      // Gekappt beim Anhaengen, nicht erst beim Auswerten: der rohe Text wird je
+      // Skript gehalten und bei jedem /api/v1/apps kopiert. Was ueber das
+      // Fassungsvermoegen der Liste hinausgeht, kann splitIcons ohnehin nicht
+      // mehr ausgeben - es wuerde nur Heap belegen.
+      const std::size_t room = kIconsMax * (kIconIdMax + 1);
+      if (meta.icons.size() < room) {
+        if (!meta.icons.empty()) meta.icons += ' ';
+        meta.icons.append(value, 0, room - meta.icons.size());
+      }
     }
   });
 

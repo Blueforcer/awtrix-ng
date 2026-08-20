@@ -232,6 +232,8 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .tile .ft.share{flex-wrap:wrap}
 .tile .ft.share input{flex:1 1 100%}
 .tile .ft.share button.pri{flex:1}
+.tile .ft.share .hint{flex:1 1 100%;font-size:10px;line-height:1.3;color:var(--dim);text-decoration:underline}
+.tile .ft.share .hint:hover{color:var(--acc)}
 .empty{grid-column:1/-1;padding:24px 12px;text-align:center;color:var(--dim);font-size:13px;
   border:1px dashed var(--border);border-radius:10px}
 .drop{border:2px dashed var(--border);border-radius:var(--r);padding:22px;text-align:center;color:var(--dim);
@@ -822,6 +824,7 @@ const I18N={en:{
   idbsearch:'Search icons',idbany:'Any size',idbanim:'Animated only',idbnone:'Nothing matches',
   idbmore:'Show more',idbempty:'The collection is still empty',idbinst:'Install',idbon:'Already on AWTRIX',idbfail:'Icon database unreachable',
   idbcopy:'Copy the name for a script',
+  idbterms:'Publishing means you accept the terms of service.',
   hubSection:'AWTRIX Hub',hubSectionH:'Needed to publish your icons to the shared collection.',
   hubTokenLbl:'Device token',hubTokenH:'Stored in this browser only, not on AWTRIX.',
   hubOn:'Saved',hubOff:'Not set',hubClear:'Remove',hubCleared:'Token removed',hubStored:'Token saved in this browser',
@@ -998,6 +1001,7 @@ const I18N={en:{
   idbsearch:'Icons suchen',idbany:'Alle Größen',idbanim:'Nur animierte',idbnone:'Nichts gefunden',
   idbmore:'Mehr anzeigen',idbempty:'Die Sammlung ist noch leer',idbinst:'Installieren',idbon:'Schon auf AWTRIX',idbfail:'Icon-Datenbank nicht erreichbar',
   idbcopy:'Namen für ein Skript kopieren',
+  idbterms:'Mit dem Veröffentlichen akzeptierst du die Nutzungsbedingungen.',
   hubSection:'AWTRIX Hub',hubSectionH:'Nötig, um eigene Icons zu veröffentlichen.',
   hubTokenLbl:'Geräte-Token',hubTokenH:'Nur in diesem Browser gespeichert, nicht auf AWTRIX.',
   hubOn:'Gespeichert',hubOff:'Nicht gesetzt',hubClear:'Entfernen',hubCleared:'Token entfernt',hubStored:'Token in diesem Browser gespeichert',
@@ -3550,8 +3554,12 @@ function shareRow(f,base,ft){
       }else toast(e.slug?t('idbdup')+' '+e.slug:e.message,false);
     }
   });
+  // Der Hub schreibt zu jedem Beitrag terms_version und terms_accepted_at mit.
+  // Ohne diese Zeile behauptete die Zeile in der Datenbank eine Zustimmung, die
+  // dem Menschen davor nie gezeigt wurde.
+  const terms=el('a',{class:'hint',href:hubTermsUrl(),target:'_blank',rel:'noopener'},t('idbterms'));
   ft.classList.add('share');
-  ft.replaceChildren(nameIn,send,back);
+  ft.replaceChildren(nameIn,send,back,terms);
   nameIn.focus();nameIn.select();
 }
 async function iconAsSubmission(name){
@@ -3638,6 +3646,10 @@ async function idbSubmit(blob,name){
   fd.append('file',blob,'icon.gif');
   fd.append('name',name);
   fd.append('source','webui');
+  // Ausdrücklich mitgeschickt, weil shareRow den Zustimmungssatz zeigt. Der Hub
+  // verlangt das Feld nicht, honoriert es aber - und nur so entspricht der
+  // Stempel in der Datenbank etwas, das wirklich stattgefunden hat.
+  fd.append('agree','1');
   const tok=hubToken();
   let r;
   try{r=await fetch(iconApiUrl()+'submit',
@@ -3776,6 +3788,7 @@ function lametricCard(onDone){
 const PISKEL_URL_DEFAULT='https://hub.flows.blueforcer.de/piskel/index.html';
 function hubToken(){try{return localStorage.awtrixHubToken||'';}catch(e){return'';}}
 function hubAccountUrl(){try{return new URL('/account/settings',iconApiUrl()).href;}catch(e){return iconApiUrl();}}
+function hubTermsUrl(){try{return new URL('/terms-of-service',iconApiUrl()).href;}catch(e){return iconApiUrl();}}
 function getPiskelUrl(){try{return localStorage.awtrixPiskelUrl||PISKEL_URL_DEFAULT;}catch(e){return PISKEL_URL_DEFAULT;}}
 function piskelOrigin(){try{return new URL(getPiskelUrl()).origin;}catch(e){return'';}}
 function postToPiskel(msg){

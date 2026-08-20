@@ -171,6 +171,7 @@ async function testSubmit() {
   const footer = tile.querySelector('.ft');
   assert(footer.querySelector('input') && footer.querySelector('input').value === 'own',
     'the submit row is prefilled with the icon name');
+  assert(!!footer.querySelector('a.hint'), 'and it links the terms it is about to accept');
 
   footer.querySelector('input').value = 'My Own Icon';
   footer.querySelector('button').click();
@@ -181,6 +182,9 @@ async function testSubmit() {
   assert(sent && typeof sent.get === 'function' && sent.get('name') === 'My Own Icon',
     'the display name is sent as typed');
   assert(sent && sent.get('source') === 'webui', 'the source identifies the web UI');
+  // The Hub stamps terms_version/terms_accepted_at on every submission. The row
+  // shows the sentence, so the consent it records has to have been given.
+  assert(sent && sent.get('agree') === '1', 'the consent shown in the row is sent along');
   assert(!!tile.querySelector('.ft .nm'), 'the footer goes back to normal after a submission');
 
   const toast = [...window.document.querySelectorAll('.toast')].map(t => t.textContent).join(' ');

@@ -168,6 +168,15 @@ static void test_an_overlong_id_is_dropped() {
   TEST_ASSERT_EQUAL_STRING(just.c_str(), ids[0].c_str());
 }
 
+// Der rohe Text wird je Skript gehalten und bei jedem /api/v1/apps kopiert -
+// er darf nicht mitwachsen, nur weil jemand eine lange Zeile schreibt.
+static void test_the_stored_text_is_bounded() {
+  std::string header;
+  for (int i = 0; i < 500; ++i) header += "# @icons " + std::string(script::kIconIdMax, 'a') + "\n";
+  auto m = script::parseMeta(header + "def draw() end\n");
+  TEST_ASSERT_TRUE(m.icons.size() <= script::kIconsMax * (script::kIconIdMax + 1));
+}
+
 static void test_the_list_is_capped() {
   std::string raw;
   for (std::size_t i = 0; i < script::kIconsMax + 10; ++i) raw += std::to_string(i) + " ";
@@ -199,5 +208,6 @@ int main(int, char**) {
   RUN_TEST(test_unusable_entries_are_dropped);
   RUN_TEST(test_an_overlong_id_is_dropped);
   RUN_TEST(test_the_list_is_capped);
+  RUN_TEST(test_the_stored_text_is_bounded);
   return UNITY_END();
 }
