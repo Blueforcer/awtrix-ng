@@ -6,7 +6,7 @@ Hub:
 
 - Fork: **https://github.com/Blueforcer/awtrix-piskel** (Apache-2.0; the fork's
   README lists every modification relative to upstream Piskel)
-- Deployment: **https://flows.blueforcer.de/piskel/index.html** - the firmware
+- Deployment: **https://hub.flows.blueforcer.de/piskel/index.html** - the firmware
   default (`PISKEL_URL_DEFAULT` in `webui/index.html`). The file name is spelled
   out because nothing guarantees that a bare `/piskel/` resolves to the
   directory index, and a miss would frame a 404 instead of the editor.

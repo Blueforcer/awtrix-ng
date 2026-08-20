@@ -85,7 +85,7 @@ function makeStore() {
 
 // Must track ICONDB_URL_DEFAULT in index.html: the gallery builds absolute URLs
 // against it, so a stale prefix here mocks nothing and every icon 404s.
-const ICON_DB = 'https://flows.blueforcer.de/icons/';
+const ICON_DB = 'https://hub.flows.blueforcer.de/icons/';
 
 function mockFetch(store, netlog, win) {
   const resp = (body, ok = true, status = 200) => ({
