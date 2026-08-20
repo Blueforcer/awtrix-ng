@@ -477,6 +477,7 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .ac div .g{color:var(--dim)}
 .ac div.on .g{color:#fffc}
 .badge{border-radius:6px;padding:4px 9px;font:11.5px/1.4 var(--mono);word-break:break-word}
+#sec-hub .badge{flex:none;white-space:nowrap;word-break:normal}
 .badge.bad{color:var(--badfg);background:var(--badbg);border:1px solid var(--err);flex-basis:100%}
 .badge.good{color:var(--ok);border:1px solid #2ea04355}
 @media(min-width:721px){
@@ -821,12 +822,16 @@ const I18N={en:{
   idbsearch:'Search icons',idbany:'Any size',idbanim:'Animated only',idbnone:'Nothing matches',
   idbmore:'Show more',idbempty:'The collection is still empty',idbinst:'Install',idbon:'Already on AWTRIX',idbfail:'Icon database unreachable',
   idbcopy:'Copy ID',
+  hubSection:'AWTRIX Hub',hubSectionH:'Needed to publish icons to the shared collection.',
+  hubTokenLbl:'Device token',hubTokenH:'Stored in this browser only, not on AWTRIX.',
+  hubOn:'Set',hubOff:'Not set',hubClear:'Remove',hubCleared:'Token removed',hubStored:'Token saved in this browser',
+  hubGetLbl:'Where to get one',hubGetH:'Create it on the Hub under Account.',hubGet:'Open the Hub',
   scricons:'Install icons',scriconsok:'All icons here',scriconsfail:'Not found:',
   idbshare:'Submit to the icon database',idbsend:'Submit',
   icown:'On AWTRIX',icadd:'Add',icnone:'No icons on AWTRIX yet',icsend:'To database',icshow:'Show',
   idbdone:'Published to the icon database',idbopen:'Open the icon',
   idbdup:'Already in the database as',
-  idbauth:'Publishing needs an AWTRIX Hub account. Open the Hub editor and publish your drawing there.',
+  idbauth:'Publishing needs a Hub token. Create one on the Hub, then paste it under System.',
   idbsignin:'Open the Hub',
   // One entry per error code the submit endpoint can answer with. tooManyFrames
   // is never sent - frames are not a limit - but a client that cannot name the
@@ -992,12 +997,16 @@ const I18N={en:{
   idbsearch:'Icons suchen',idbany:'Alle Größen',idbanim:'Nur animierte',idbnone:'Nichts gefunden',
   idbmore:'Mehr anzeigen',idbempty:'Die Sammlung ist noch leer',idbinst:'Installieren',idbon:'Schon auf AWTRIX',idbfail:'Icon-Datenbank nicht erreichbar',
   idbcopy:'ID kopieren',
+  hubSection:'AWTRIX Hub',hubSectionH:'Nötig, um Icons in die Sammlung einzureichen.',
+  hubTokenLbl:'Geräte-Token',hubTokenH:'Nur in diesem Browser gespeichert, nicht auf AWTRIX.',
+  hubOn:'Gesetzt',hubOff:'Nicht gesetzt',hubClear:'Entfernen',hubCleared:'Token entfernt',hubStored:'Token in diesem Browser gespeichert',
+  hubGetLbl:'Woher',hubGetH:'Im Hub unter Konto erzeugen.',hubGet:'Hub öffnen',
   scricons:'Icons installieren',scriconsok:'Alle Icons da',scriconsfail:'Nicht gefunden:',
   idbshare:'An die Icon-Datenbank senden',idbsend:'Senden',
   icown:'Auf AWTRIX',icadd:'Hinzufügen',icnone:'Noch keine Icons auf AWTRIX',icsend:'An Datenbank',icshow:'Zeigen',
   idbdone:'In der Icon-Datenbank veröffentlicht',idbopen:'Icon öffnen',
   idbdup:'Schon in der Datenbank als',
-  idbauth:'Zum Veröffentlichen braucht es ein AWTRIX-Hub-Konto. Öffne den Hub-Editor und veröffentliche die Zeichnung dort.',
+  idbauth:'Zum Veröffentlichen braucht es ein Hub-Token. Im Hub erzeugen, dann unter System eintragen.',
   idbsignin:'Hub öffnen',
   idbe_badFormat:'Kein Bild, das die Datenbank annimmt',
   idbe_tooLarge:'Die Datei ist zu groß',
@@ -3184,6 +3193,7 @@ function systemPage(view,data){
     page.onUpdate.push(()=>paintPanelSize(sysFields,size));
     page.update();
   }
+  hubTokenSection(page);
   const mqSec=page.panel.querySelector('#sec-mqtt');
   if(mqSec){
     const mq=el('div',{class:'badge'});
@@ -3243,6 +3253,37 @@ function paintMqtt(node,m){
   if(m.retryInMs>0)parts.push(t('mqRetry')+' '+Math.ceil(m.retryInMs/1000)+' s');
   node.className='badge'+(m.state==='connected'?' good':m.state==='offline'?' bad':'');
   node.replaceChildren(parts.join(' · '));
+}
+// No Save button here on purpose: the settings bar below saves to the device,
+// this one is browser-local and takes effect at once. Two buttons reading "Save"
+// on one page is the confusion, not the convenience.
+function hubTokenSection(page){
+  const inp=el('input',{type:'password',autocomplete:'off',spellcheck:'false',value:hubToken()});
+  const clear=el('button',null,t('hubClear'));
+  const open=el('button',null,t('hubGet'));
+  const state=el('div',{class:'badge'});
+  function paint(){
+    const has=!!hubToken();
+    state.className='badge'+(has?' good':'');
+    state.replaceChildren(has?t('hubOn'):t('hubOff'));
+    clear.disabled=!has;
+  }
+  function store(v){
+    try{if(v)localStorage.awtrixHubToken=v;else delete localStorage.awtrixHubToken;}catch(e){}
+    paint();
+  }
+  inp.addEventListener('change',()=>{
+    const v=inp.value.trim();
+    inp.value=v;store(v);toast(v?t('hubStored'):t('hubCleared'));
+  });
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();});
+  clear.addEventListener('click',()=>{inp.value='';store('');toast(t('hubCleared'));});
+  open.addEventListener('click',()=>window.open(hubAccountUrl(),'_blank','noopener'));
+  paint();
+  page.section('hub',t('hubSection'),t('hubSectionH'),[
+    actionRow(t('hubTokenLbl'),t('hubTokenH'),[state,inp,clear]),
+    actionRow(t('hubGetLbl'),t('hubGetH'),[open]),
+  ]);
 }
 function actionRow(label,help,ctls,key){
   return el('div',{class:'frow'},
@@ -3574,8 +3615,10 @@ async function idbSubmit(blob,name){
   fd.append('file',blob,'icon.gif');
   fd.append('name',name);
   fd.append('source','webui');
+  const tok=hubToken();
   let r;
-  try{r=await fetch(iconApiUrl()+'submit',{method:'POST',body:fd});}
+  try{r=await fetch(iconApiUrl()+'submit',
+    tok?{method:'POST',body:fd,headers:{Authorization:'Bearer '+tok}}:{method:'POST',body:fd});}
   catch(e){throw new Error(t('idbfail'));}
   let d={};
   try{d=await r.json();}catch(e){}
@@ -3704,6 +3747,8 @@ function lametricCard(onDone){
 // bare /piskel/ to the directory index is not something this repo can promise,
 // and a miss would frame a 404 instead of the editor.
 const PISKEL_URL_DEFAULT='https://hub.flows.blueforcer.de/piskel/index.html';
+function hubToken(){try{return localStorage.awtrixHubToken||'';}catch(e){return'';}}
+function hubAccountUrl(){try{return new URL('/account/settings',iconApiUrl()).href;}catch(e){return iconApiUrl();}}
 function getPiskelUrl(){try{return localStorage.awtrixPiskelUrl||PISKEL_URL_DEFAULT;}catch(e){return PISKEL_URL_DEFAULT;}}
 function piskelOrigin(){try{return new URL(getPiskelUrl()).origin;}catch(e){return'';}}
 function postToPiskel(msg){

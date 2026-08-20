@@ -192,6 +192,47 @@ async function testSubmit() {
 /* Publishing from the clock's own page always lands here: the page is served
    from http://<device-ip>, so the Hub session cookie is cross-site and never
    reaches the POST. The answer has to point at the Hub, not read as a fault. */
+// The clock cannot send the Hub session cookie, so a device token is what gets
+// a submission authenticated. It must travel only when one is actually set.
+async function testDeviceToken() {
+  const { window, store } = await withGallery(ctx => {
+    ctx.store.files['/ICONS'].set('own.gif', 240);
+  });
+
+  const submit = () => {
+    const tile = ownGrid(window).querySelector('.tile');
+    openMenu(tile)[2].click();
+    tile.querySelector('.ft button').click();
+  };
+
+  submit();
+  await flush(80);
+  assert(store.submittedHeaders.length === 1, 'the submission went out');
+  assert(!store.submittedHeaders[0].Authorization,
+    'without a token nothing is sent as authorization');
+
+  // Entered the way a person does it: the field on the System tab.
+  await goto(window, '#/system');
+  await flush(80);
+  const field = window.document.querySelector('#sec-hub input[type=password]');
+  assert(!!field, 'the System tab carries the token field');
+  field.value = '  tok_abc123  ';
+  field.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await flush(40);
+  assert(window.localStorage.awtrixHubToken === 'tok_abc123',
+    'the field stores the token, trimmed');
+
+  await goto(window, '#/icons');
+  await flush(80);
+  submit();
+  await flush(80);
+  assert(store.submittedHeaders.length === 2, 'the second submission went out');
+  assert(store.submittedHeaders[1].Authorization === 'Bearer tok_abc123',
+    'a stored token travels as a bearer header');
+
+  delete window.localStorage.awtrixHubToken;
+}
+
 async function testNotLoggedIn() {
   const { window } = await withGallery(ctx => {
     ctx.store.files['/ICONS'].set('own.gif', 240);
@@ -294,6 +335,7 @@ async function main() {
   await testEmptyCatalogue();
   await testUnreachableCatalogue();
   await testSubmit();
+  await testDeviceToken();
   await testDuplicate();
   await testNotLoggedIn();
   await testUnknownError();

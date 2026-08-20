@@ -74,6 +74,7 @@ function makeStore() {
     iconBytes: {},               // slug -> bytes served from icons/<slug>.<ext>
     iconExt: {},                 // slug -> 'gif' (default) or 'jpg'; the Hub serves only that one
     submitted: [],               // FormData bodies POSTed to the submit service
+    submittedHeaders: [],        // the headers each of those carried
     submitReply: null,           // override what the submit service answers
     submitCode: 0,               // HTTP status for a rejected submission (default 409)
     list() {
@@ -108,6 +109,7 @@ function mockFetch(store, netlog, win) {
       netlog.push(method + ' ' + url);
       if (url.endsWith('/submit') && method === 'POST') {
         store.submitted.push(opts.body);
+        store.submittedHeaders.push(opts.headers || {});
         const reply = store.submitReply
           || { ok: true, status: 'published', slug: 'demo', pr: 'https://example.invalid/icons/demo' };
         // submitCode carries the HTTP status; the body's own `status` field is
