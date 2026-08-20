@@ -229,6 +229,9 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .idb .row>select{flex:0 0 auto;width:auto}
 .tile .ft input{flex:1;min-width:0;padding:2px 5px;font-size:11.5px}
 .tile .ft button{flex:none;padding:2px 7px;font-size:11px}
+.tile .ft.share{flex-wrap:wrap}
+.tile .ft.share input{flex:1 1 100%}
+.tile .ft.share button.pri{flex:1}
 .empty{grid-column:1/-1;padding:24px 12px;text-align:center;color:var(--dim);font-size:13px;
   border:1px dashed var(--border);border-radius:10px}
 .drop{border:2px dashed var(--border);border-radius:var(--r);padding:22px;text-align:center;color:var(--dim);
@@ -3472,7 +3475,7 @@ function shareRow(f,base,ft){
   const nameIn=el('input',{type:'text',value:base,'aria-label':t('name')});
   const send=el('button',{class:'pri'},t('idbsend'));
   const back=el('button',{title:t('cancel'),'aria-label':t('cancel')},'✕');
-  const restore=()=>ft.replaceChildren(...saved);
+  const restore=()=>{ft.classList.remove('share');ft.replaceChildren(...saved);};
   back.addEventListener('click',restore);
   nameIn.addEventListener('keydown',e=>{if(e.key==='Enter')send.click();else if(e.key==='Escape')restore();});
   send.addEventListener('click',async()=>{
@@ -3494,6 +3497,7 @@ function shareRow(f,base,ft){
       }else toast(e.slug?t('idbdup')+' '+e.slug:e.message,false);
     }
   });
+  ft.classList.add('share');
   ft.replaceChildren(nameIn,send,back);
   nameIn.focus();nameIn.select();
 }
