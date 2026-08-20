@@ -49,7 +49,7 @@ const char* const kLegacyMatrixKeys[] = {"mwidth", "matlay", "mtilew", "morient"
 // firmware simply leaves the newer fields at their compiled-in defaults.
 void DeviceConfig::load() {
   Preferences p;
-  p.begin(kNs, true);
+  if (!p.begin(kNs, true)) return;
 #define X(member, key, secret) cfgGet(p, key, member);
   AWTRIX_CFG_FIELDS(X)
 #undef X
@@ -58,7 +58,7 @@ void DeviceConfig::load() {
 
 void DeviceConfig::save() const {
   Preferences p;
-  p.begin(kNs, false);
+  if (!p.begin(kNs, false)) return;
 #define X(member, key, secret) cfgPut(p, key, member);
   AWTRIX_CFG_FIELDS(X)
 #undef X

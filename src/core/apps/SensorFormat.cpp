@@ -7,7 +7,7 @@ namespace awtrix {
 
 namespace {
 std::string roundToString(float v, int decimals) {
-  char buf[16];
+  char buf[32];  // room for any 64-bit %ld or high-precision %f, not just sensor ranges
   if (decimals <= 0) {
     snprintf(buf, sizeof(buf), "%ld", std::lround(v));
   } else {

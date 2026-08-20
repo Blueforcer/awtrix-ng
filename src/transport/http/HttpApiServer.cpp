@@ -1134,6 +1134,15 @@ bool HttpApiServer::serveFiles(const Request& req) {
 
   if (req.get) {
     const String dir = server_->hasArg("dir") ? server_->arg("dir") : String("/ICONS");
+    // Same rule as DELETE below: without it ?dir= could enumerate any directory on the flash.
+    // The bare root names carry no trailing slash, so append one for the prefix check.
+    std::string probe(dir.c_str());
+    if (probe.empty() || probe.back() != '/') probe += '/';
+    if (!assets::isServable(probe)) {
+      sendError(400, "invalidPath",
+                "dir must be /ICONS, /MELODIES, /PALETTES or /MP3 and contain no '..'");
+      return true;
+    }
     listDir(dir.c_str());
     return true;
   }

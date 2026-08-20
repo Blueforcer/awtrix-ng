@@ -1,5 +1,6 @@
 #include "media/GifPlayer.h"
 
+#include <algorithm>
 #include <cstring>
 
 #include "media/AssetFile.h"
@@ -79,7 +80,9 @@ GifPlayer::PreDecode GifPlayer::preDecode(bool firstFrameOnly, int maxResidentFr
   const int frameBytes = w_ * h_;
   const int budgetFrames =
       kPreDecodeBudgetBytes / (frameBytes * static_cast<int>(sizeof(uint32_t)));
-  const int maxFrames = maxResidentFrames > 0 ? maxResidentFrames : budgetFrames;
+  // Clamp caller-supplied caps so frameCount * frameBytes can never overflow a 32-bit size_t.
+  const int maxFrames =
+      maxResidentFrames > 0 ? std::min(maxResidentFrames, 4096) : budgetFrames;
   Canvas scratch(w_, h_);
   scratch.clear(0x000000u);
   for (;;) {
