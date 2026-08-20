@@ -585,6 +585,7 @@ std::map<std::string, ScriptHost::Info> ScriptHost::list() const {
     info.desc = m->second.desc;
     info.author = m->second.author;
     info.version = m->second.version;
+    info.icons = m->second.icons;
   };
   for (const auto& kv : apps_) {
     Info info;

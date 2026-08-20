@@ -572,7 +572,7 @@ switched on and keeps its place with nothing to draw.
 | `headless` | boolean | **script only** - the script carries `@headless true` and so never draws |
 | `config` | boolean | **scripts and modules** - it declares [settings](../guides/scripting.md#settings-the-user-can-change), so [`/config`](#get-apiv1appsnameconfig) has something to show. On a [module](../guides/scripting.md#settings-several-apps-share) these are the settings every app importing it shares |
 | `error` | object \| null | **script only** - `null` while healthy, otherwise the error the script is stuck on (see [below](#the-error-object)) |
-| `meta` | object | **script only** - `{name, desc, author, version}` from the `@` headers; each entry `""` when the header is absent |
+| `meta` | object | **script only** - `{name, desc, author, version, icons}` from the `@` headers; each string entry `""` when the header is absent. `icons` is the list of icon IDs from [`@icons`](../guides/scripting.md#the-icons-your-script-needs), `[]` when the header is absent |
 
 `icon`, `import`, `skipped`, `config`, `error` and `meta` are **omitted**, not emitted empty, where
 they do not apply. `skipped`, `config`, `error` and `meta` are also absent on a build with no
@@ -595,11 +595,11 @@ moment. It reports the last answer the app gave, not one taken for this request.
   {"name":"weather","enabled":true,"inLoop":true,"slot":1,"present":true,"origin":"pushed","icon":"1"},
   {"name":"doorbell","enabled":true,"inLoop":false,"slot":2,"present":true,"origin":"script",
    "skipped":false,"headless":true,"config":false,"error":null,
-   "meta":{"name":"Doorbell","desc":"","author":"me","version":"1.0"}},
+   "meta":{"name":"Doorbell","desc":"","author":"me","version":"1.0","icons":[]}},
   {"name":"co2","enabled":true,"inLoop":false,"slot":3,"present":false,"origin":null},
   {"name":"clock","enabled":false,"inLoop":false,"slot":null,"present":true,"origin":"script",
    "skipped":false,"headless":false,"config":true,"error":null,
-   "meta":{"name":"Wall Clock","desc":"","author":"me","version":"1.2"}}
+   "meta":{"name":"Wall Clock","desc":"","author":"me","version":"1.2","icons":["2105","2106"]}}
 ]
 ```
 

@@ -390,13 +390,13 @@ curl -X POST 'http://<awtrix-ip>/api/v1/files?dir=/ICONS' \
 The **Icon database** tab searches the shared community collection. The catalogue is fetched once
 *in your browser* - AWTRIX never talks to the internet for this - and filtered locally, so search is
 instant. Narrow it by size (8×8 or 32×8) or to animated icons only; icons already on AWTRIX are
-marked and their install button is locked. One click downloads an icon and uploads it under its own
-name.
+marked and their install button is locked. One click downloads an icon and uploads it under its ID,
+which is shown under every picture and copies on click.
 
-**To database** in a tile's menu sends that icon the other way, into the collection. Give
-it a display name and submit; it is checked immediately and then waits for review before it shows
-up for anyone else. An icon whose bytes are already in the collection is refused on the spot,
-naming the entry that holds it.
+**To database** in a tile's menu sends that icon the other way, into the collection. Give it a
+display name and submit; publishing needs an AWTRIX Hub account, and the web UI hands you a link to
+sign in there. What passes the check is published straight away. An icon whose bytes are already in
+the collection is refused on the spot, naming the ID that holds it.
 
 **LaMetric icon download** fetches an icon from the LaMetric gallery *in your browser* - AWTRIX
 never talks to the internet for this either - converts it to GIF, then uploads it. Paste a numeric

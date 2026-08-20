@@ -968,7 +968,7 @@ paths:
 
         There is no separate script inventory: `GET /api/v1/apps` lists every
         app with an `origin`, and a script entry carries its `error` state and
-        its `@name`/`@desc`/`@author`/`@version` header in `meta`. `error` is
+        its `@name`/`@desc`/`@author`/`@version`/`@icons` header in `meta`. `error` is
         `""` while the script is healthy; anything else is the message the
         matrix is showing as `ERR:<name>`, and it STICKS - a script that
         raised once stays broken until it is replaced. The source is
@@ -1614,9 +1614,9 @@ components:
       type: object
       description: >
         Script apps only, in `GET /api/v1/apps`. The
-        `@name`/`@desc`/`@author`/`@version` header comments the source
-        declared; each is `""` when absent. Omitted for other origins and on a
-        build with no scripting platform.
+        `@name`/`@desc`/`@author`/`@version`/`@icons` header comments the source
+        declared; each string is `""` when absent. Omitted for other origins and
+        on a build with no scripting platform.
       properties:
         name:
           type: string
@@ -1624,6 +1624,14 @@ components:
         desc: { type: string }
         author: { type: string }
         version: { type: string }
+        icons:
+          type: array
+          items: { type: string, pattern: "^[A-Za-z0-9_-]{1,32}$" }
+          maxItems: 32
+          description: >
+            The icon database IDs from the `@icons` header lines - what the
+            script draws with `icon()` and what a client offers to install
+            into `/ICONS`. `[]` when the header is absent.
     ScriptConfig:
       type: object
       description: >

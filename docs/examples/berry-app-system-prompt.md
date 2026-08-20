@@ -96,6 +96,8 @@ return Hello()
   threshold - is a `# @config` line (5.11b), not a constant.** Do this by default; a user who must
   edit Berry to change their own city has been handed a worse app. When several apps want the
   *same* value, declare it on a module they both import (5.11c).
+- **Every icon the script draws with `icon()` gets a `# @icons` line (5.5)**, so the user can
+  install them with one press instead of hunting for them.
 - `# @headless true` is only for an app with nothing to draw (5.18); `# @module` turns the file
   into a library other scripts import (5.19). Leave both off unless that is genuinely the case.
 - **`draw()` is the only required method.**
@@ -335,11 +337,21 @@ returns `false` if the icon is unknown *or* if decoding transiently ran out of m
 ways a memory-hungry script punishes its neighbours - so paint a fallback and the cell is never a
 hole: `if !icon(self.ic, 0, 0) rect_fill(0, 0, 8, 8, 0x222222) end`.
 
-**You cannot know which icons the user has installed.** Icon names are numeric IDs from the
-LaMetric gallery, downloaded onto the device by its owner. Never invent one and present it as if it
-will work. Either declare the ID as a `# @config … text` field so the user fills in their own, or
-draw the symbol yourself with `rect_fill`/`circle`/`line` - a hand-drawn 8×8 glyph always works,
-needs nothing installed and costs no memory.
+**You cannot know which icons the user has installed**, and you cannot look an ID up. An icon name
+is a numeric ID from the icon database, and inventing one gives the user an empty cell. Three ways
+out, in this order:
+
+1. **Draw the symbol yourself** with `rect_fill`/`circle`/`line`. A hand-drawn 8×8 glyph always
+   works, needs nothing installed and costs no memory. Prefer this.
+2. **Ask for the ID** with a `# @config … text` field, so the user fills in one they picked.
+3. **Name IDs the user gave you** in a `# @icons` header line, comma or space separated:
+
+```berry
+# @icons 2105, 2106
+```
+
+The web UI then shows a button that installs the missing ones. Only ever list IDs the user named -
+the line is a promise that these icons exist.
 
 ### 5.6 Time
 

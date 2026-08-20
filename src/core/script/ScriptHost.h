@@ -74,6 +74,7 @@ class ScriptHost {
     std::string desc;
     std::string author;
     std::string version;
+    std::string icons;
   };
   std::map<std::string, Info> list() const;
 

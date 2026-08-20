@@ -71,7 +71,8 @@ function makeStore() {
     // The icon database lives outside the device: the browser talks to it
     // directly, so it is mocked by absolute URL rather than by path.
     iconDb: { v: 1, icons: [] }, // what index.json answers
-    iconBytes: {},               // slug -> bytes served from icons/<slug>.gif
+    iconBytes: {},               // slug -> bytes served from icons/<slug>.<ext>
+    iconExt: {},                 // slug -> 'gif' (default) or 'jpg'; the Hub serves only that one
     submitted: [],               // FormData bodies POSTed to the submit service
     submitReply: null,           // override what the submit service answers
     submitCode: 0,               // HTTP status for a rejected submission (default 409)
@@ -119,10 +120,12 @@ function mockFetch(store, netlog, win) {
         if (rest === 'index.json') return ext(store.iconDb);
         // The Hub serves the bytes directly under the catalogue prefix - no
         // second 'icons/' segment. This pattern is what pins that.
-        const icon = rest.match(/^([^/]+)\.gif$/);
+        const icon = rest.match(/^([^/]+)\.(gif|jpg)$/);
         if (icon) {
           const slug = decodeURIComponent(icon[1]);
           if (!(slug in store.iconBytes)) return ext({ error: 'notFound' }, false, 404);
+          if ((store.iconExt[slug] || 'gif') !== icon[2])
+            return ext({ error: 'notFound' }, false, 404);
           return ext(store.iconBytes[slug]);
         }
       }

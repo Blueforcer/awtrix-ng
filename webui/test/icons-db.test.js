@@ -105,6 +105,23 @@ async function testInstall() {
     'the button locks once the icon is on the clock');
 }
 
+// The catalogue carries no format, so a JPEG entry is only found by asking for
+// .gif, getting a 404 and trying .jpg.
+async function testJpegEntry() {
+  const { window, store } = await withGallery(ctx => { ctx.store.iconExt.firepit = 'jpg'; });
+  const uploads = [];
+  stubXhr(window, uploads, store);
+
+  await search(window, 'firepit');
+  card(window).querySelector('.tile .acts button').click();
+  await flush(120);
+
+  assert(uploads.length === 1, 'a JPEG entry installs (got ' + uploads.length + ' uploads)');
+  assert(uploads[0] && uploads[0].files.some(f => f.name === 'firepit.jpg'),
+    'and lands under .jpg, not .gif');
+  assert(store.files['/ICONS'].has('firepit.jpg'), 'the clock holds the JPEG');
+}
+
 async function testAlreadyInstalled() {
   const { window } = await withGallery(ctx => {
     ctx.store.files['/ICONS'].set('mail.gif', 100);
@@ -272,6 +289,7 @@ async function main() {
   await testSegments();
   await testBrowse();
   await testInstall();
+  await testJpegEntry();
   await testAlreadyInstalled();
   await testEmptyCatalogue();
   await testUnreachableCatalogue();

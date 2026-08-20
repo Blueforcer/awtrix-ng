@@ -111,6 +111,7 @@ row that sounds like the app you have in mind, and follow it.
 | [Working with numbers](#numbers) | `num()` `round()` `clamp()` `min()` `max()` |
 | [Remembering across a reboot](#storage) | `store.get()` `store.set()` |
 | [Letting the user change something](#settings-the-user-can-change) | a `# @config` line, then `store.get()` |
+| [Shipping the icons you draw](#the-icons-your-script-needs) | a `# @icons` line, then `icon()` |
 | [Fetching from the internet](#http) | `http.get()` `http.post()` `http.put()` `http.patch()` `http.delete()` |
 | [Picking a value out of a reply](#regular-expressions) | `re.search()` `re.match()` `re.matchall()`, or `json.load()` |
 | [Home automation](#mqtt) | `mqtt.publish()` `mqtt.subscribe()` |
@@ -527,6 +528,25 @@ end
 the frame, so centring and fitting stay correct across a switch. The choice resets every frame, so
 set it in `draw()` rather than once in `setup()`. `large` is seven rows tall and reaches the
 top row - see [Text & colors](text.md#the-fonts).
+
+#### The icons your script needs
+
+`icon()` only draws what is already on the clock, so a script you pass on arrives without its
+pictures. Name them in the header instead:
+
+```berry
+# @name  Weather
+# @icons 2105, 2106, 2107
+```
+
+Each value is an icon ID from the [icon database](icons.md#install-from-the-icon-database) - the
+number under the picture in the **Icon database** tab, which you can click to copy. Separate them
+with commas or spaces, and use as many `# @icons` lines as you like. Up to 32 icons.
+
+Then one press gets them. In the script editor a button appears in the toolbar showing how many
+are still missing; in the **Apps** tab the row menu offers **Install icons**. Icons already on the
+clock are left as they are, and an ID the database does not have is named in a message while the
+rest still arrive.
 
 ### Styled and scrolling text
 
@@ -1645,7 +1665,7 @@ Four habits worth copying. **One `nil` check covers every failure** - offline, r
   end
 ```
 
-The symbol is drawn rather than loaded, in the leftmost eight columns. That is deliberate: [`icon()`](#panel-and-drawing) can only draw what its owner has installed, so a shared script that names an icon arrives broken on most devices. Rectangles and circles always work, cost no memory, and the cloud is reused by three of the five states with a couple of pixels changed underneath it.
+The symbol is drawn rather than loaded, in the leftmost eight columns. That is deliberate: rectangles and circles always work, cost no memory, and need nothing installed - where an icon would have to be fetched first, even with an [`# @icons`](#the-icons-your-script-needs) line to fetch it by. The cloud is reused by three of the five states with a couple of pixels changed underneath it.
 
 ```berry
   def draw()

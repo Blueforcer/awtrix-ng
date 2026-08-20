@@ -10,7 +10,7 @@
    loaded.
 
    Run:  node apps-tab.test.js */
-const { boot, goto, flush } = require('./harness');
+const { boot, goto, flush, stubXhr } = require('./harness');
 
 let failures = 0;
 function assert(cond, msg) {
@@ -22,7 +22,8 @@ const INVENTORY = [
   { name: 'Time', enabled: true, inLoop: true, slot: 0, present: true, origin: 'builtin' },
   { name: 'co2', enabled: true, inLoop: false, slot: 1, present: false, origin: null },
   { name: 'Weather', enabled: true, inLoop: true, slot: 2, present: true, origin: 'script',
-    headless: false, skipped: false, config: true, error: null, meta: {} },
+    headless: false, skipped: false, config: true, error: null,
+    meta: { icons: ['2105', '2106'] } },
   { name: 'Doorbell', enabled: true, inLoop: false, slot: 3, present: true, origin: 'script',
     headless: true, skipped: false, error: null, meta: {} },
   { name: 'Bridge', enabled: false, inLoop: false, slot: null, present: true, origin: 'script',
@@ -183,6 +184,18 @@ async function run() {
   assert(!!gearOf(rowFor('Weather')), 'a script with settings offers Settings');
   assert(!gearOf(rowFor('Doorbell')), 'a script without settings does not');
   assert(!gearOf(rowFor('Time')), 'a built-in never does');
+
+  assert(!!btn(rowFor('Weather'), 'Install icons'), 'a script that names icons offers to fetch them');
+  assert(!btn(rowFor('Doorbell'), 'Install icons'), 'a script that names none does not');
+
+  store.iconBytes = { '2105': 'GIF89a-2105', '2106': 'GIF89a-2106' };
+  store.files['/ICONS'].set('2105.gif', 1);
+  const uploads = [];
+  stubXhr(window, uploads, store);
+  btn(rowFor('Weather'), 'Install icons').click();
+  await flush(200);
+  assert(uploads.map(u => u.files.map(f => f.name).join('')).join(',') === '2106.gif',
+    'and fetches only what the clock is missing');
 
   const panel = rowFor('Weather').querySelector('.appcfg');
   assert(!!panel && panel.hidden, 'the panel starts closed and unfetched');

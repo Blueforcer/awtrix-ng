@@ -193,6 +193,8 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .tile .ft{display:flex;align-items:baseline;gap:6px;padding:7px 9px;min-width:0}
 .tile .ft .nm{flex:1;min-width:0;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile .ft .sz{flex:none;font-size:10.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+.tile .ft .id{flex:none;font:10.5px var(--mono);color:var(--dim);cursor:pointer}
+.tile .ft .id:hover{color:var(--acc)}
 .tile .acts{position:absolute;inset:0 0 auto 0;display:flex;justify-content:flex-end;gap:5px;padding:6px;
   background:linear-gradient(#000b,#0000);opacity:0;pointer-events:none;transition:opacity .15s}
 .tile:hover .acts,.tile:focus-within .acts{opacity:1;pointer-events:auto}
@@ -419,7 +421,9 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .edtop .sec button{background:transparent;border-color:transparent;color:var(--dim);
   padding:5px 9px;font-size:12.5px}
 .edtop .sec button:hover{color:var(--fg);border-color:var(--border)}
-.edtop button.ico{display:inline-flex;align-items:center;justify-content:center;padding:6px;width:34px;height:34px;flex:none}
+.edtop button.ico{position:relative;display:inline-flex;align-items:center;justify-content:center;padding:6px;width:34px;height:34px;flex:none}
+.edtop button.ico .cnt{position:absolute;top:0;right:0;min-width:14px;height:14px;padding:0 3px;
+  border-radius:7px;background:var(--acc);color:var(--bg);font:600 9px/14px var(--mono);text-align:center}
 .edtop button.ico .ic{width:18px;height:18px}
 .ed{display:flex;background:var(--bg);height:calc(100vh - 250px);min-height:240px}
 .ed .gut,.ed .hl,.ed .ta{font:12.5px/1.5 var(--mono);tab-size:2;padding:8px 10px}
@@ -589,6 +593,7 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
 <symbol id="i-save" viewBox="0 0 24 24"><path d="M6 4h10l4 4v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M8 4v4h6"/><path d="M8 20v-6h8v6"/></symbol>
 <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><path d="M5 17v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.4"/><path d="M20 16l-4.5-4.5L9 18"/></symbol>
 <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V5"/><path d="M8 9l4-4 4 4"/><path d="M5 17v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2"/></symbol>
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
 <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4H5.5A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></symbol>
@@ -812,6 +817,8 @@ const I18N={en:{
   idb:'Icon database',idbhelp:'Search the community collection and install an icon with one click.',
   idbsearch:'Search icons',idbany:'Any size',idbanim:'Animated only',idbnone:'Nothing matches',
   idbmore:'Show more',idbempty:'The collection is still empty',idbinst:'Install',idbon:'Already on AWTRIX',idbfail:'Icon database unreachable',
+  idbcopy:'Copy ID',
+  scricons:'Install icons',scriconsok:'All icons here',scriconsfail:'Not found:',
   idbshare:'Submit to the icon database',idbsend:'Submit',
   icown:'On AWTRIX',icadd:'Add',icnone:'No icons on AWTRIX yet',icsend:'To database',icshow:'Show',
   idbdone:'Published to the icon database',idbopen:'Open the icon',
@@ -981,6 +988,8 @@ const I18N={en:{
   idb:'Icon-Datenbank',idbhelp:'Durchsuche die Community-Sammlung und installiere ein Icon mit einem Klick.',
   idbsearch:'Icons suchen',idbany:'Alle Größen',idbanim:'Nur animierte',idbnone:'Nichts gefunden',
   idbmore:'Mehr anzeigen',idbempty:'Die Sammlung ist noch leer',idbinst:'Installieren',idbon:'Schon auf AWTRIX',idbfail:'Icon-Datenbank nicht erreichbar',
+  idbcopy:'ID kopieren',
+  scricons:'Icons installieren',scriconsok:'Alle Icons da',scriconsfail:'Nicht gefunden:',
   idbshare:'An die Icon-Datenbank senden',idbsend:'Senden',
   icown:'Auf AWTRIX',icadd:'Hinzufügen',icnone:'Noch keine Icons auf AWTRIX',icsend:'An Datenbank',icshow:'Zeigen',
   idbdone:'In der Icon-Datenbank veröffentlicht',idbopen:'Icon öffnen',
@@ -2193,6 +2202,7 @@ async function viewApps(view){
         inLoop?[t('dupapp'),duplicate]:null,
         toggleCfg?[t('cfgTitle'),toggleCfg]:null,
         scr?[t('edit'),()=>{scrPending={name:a.name,error:a.error||null};location.hash='#/scripts';}]:null,
+        (a.meta&&(a.meta.icons||[]).length)?[t('scricons'),()=>grabIcons(a)]:null,
         mode==='off'?[t('activate'),activate]:[t('deactivate'),deactivate],
         (pushed||a.present===false)?[t('del'),remove,true]:null,
       ]);
@@ -2213,6 +2223,13 @@ async function viewApps(view){
     return row;
   }
 
+  async function grabIcons(a){
+    const ids=(a.meta&&a.meta.icons)||[];
+    if(!ids.length)return;
+    try{await installScriptIcons(ids,await installedIconIds());}
+    catch(e){toast(e.message,false);}
+  }
+
   function modRow(a){
     const row=el('div',{class:'approw'});
     const m=a.meta||{};
@@ -2224,6 +2241,7 @@ async function viewApps(view){
        a.error?errBadge(a.name,a.error):null),
      rowMenu([
        toggleCfg?[t('cfgTitle'),toggleCfg]:null,
+       (a.meta&&(a.meta.icons||[]).length)?[t('scricons'),()=>grabIcons(a)]:null,
        [t('edit'),()=>{scrPending={name:a.name,error:a.error||null};location.hash='#/scripts';}],
      ]),
      cfgBox,
@@ -2316,6 +2334,22 @@ return m
 function scriptMeta(src,key){
   const m=new RegExp('^#[ \\t]*@'+key+'[ \\t]+(.+)$','m').exec(src);
   return m?m[1].trim():'';
+}
+const ICONS_MAX=32;
+function scriptIcons(src){
+  const out=[];
+  for(const raw of String(src||'').split(/\r?\n/)){
+    const line=raw.trim();
+    if(!line)continue;
+    if(line[0]!=='#')break;
+    const m=/^#[ \t]*@icons\b[ \t]*(.*)$/i.exec(line);
+    if(!m)continue;
+    for(const id of m[1].split(/[,\s]+/)){
+      if(!/^[A-Za-z0-9_-]{1,32}$/.test(id))continue;
+      if(out.indexOf(id)<0&&out.length<ICONS_MAX)out.push(id);
+    }
+  }
+  return out;
 }
 const scriptName=s=>s.replace(/[^A-Za-z0-9_-]/g,'').slice(0,32);
 function download(filename,data,type){
@@ -2563,6 +2597,7 @@ function viewScripts(view){
   const top=el('div',{class:'edtop'});
   const enc=new TextEncoder();
   let onDevice=null;
+  let iconsHave=new Set();
 
   function setStatus(err,name){
     ed.markError(err&&err.line?err.line:0);
@@ -2586,6 +2621,17 @@ function viewScripts(view){
     const c=ed.caret();
     posOut.replaceChildren(t('scrline')+' '+c.line+':'+c.col);
   }
+  function paintIcons(){
+    const want=scriptIcons(ed.value);
+    icoBtn.style.display=want.length?'':'none';
+    if(!want.length)return;
+    const miss=want.filter(id=>!iconsHave.has(id));
+    icoBtn.disabled=!miss.length;
+    const label=miss.length?t('scricons')+' ('+miss.length+')':t('scriconsok');
+    icoBtn.title=label;icoBtn.setAttribute('aria-label',label);
+    icoBtn.replaceChildren(...[icon('image'),
+      miss.length?el('span',{class:'cnt'},String(miss.length)):null].filter(Boolean));
+  }
   function refresh(){
     const n=enc.encode(ed.value).length;
     showPos();
@@ -2595,6 +2641,7 @@ function viewScripts(view){
     prevBtn.disabled=!onDevice||ed.value!==onDevice.src||!!onDevice.err;
     const dirty=!onDevice||ed.value!==onDevice.src||nameIn.value!==onDevice.name;
     top.classList.toggle('mod',dirty&&!!ed.value);
+    paintIcons();
     empty.style.display=ed.value?'none':'';
     scrDraft={name:nameIn.value,src:ed.value,dirty,onDevice};
   }
@@ -2674,6 +2721,14 @@ function viewScripts(view){
       await req('PUT','/api/v1/apps/active',{name:onDevice.name});
       toast(t('scrpreviewed'));
     }catch(e){toast(e.message,false);}
+  });
+  const icoBtn=el('button',{class:'ico',style:'display:none'},icon('image'));
+  icoBtn.addEventListener('click',async()=>{
+    icoBtn.disabled=true;
+    try{await installScriptIcons(scriptIcons(ed.value),iconsHave);}
+    catch(e){toast(e.message,false);}
+    try{iconsHave=await installedIconIds();}catch(e){}
+    paintIcons();
   });
   const expBtn=el('button',{class:'ico',title:t('export'),'aria-label':t('export')},icon('export'));
   expBtn.addEventListener('click',()=>{
@@ -2975,7 +3030,7 @@ function viewScripts(view){
     if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleTree();}});
 
   top.append(nameIn,dirtyDot,el('span',{class:'grow'}),
-    el('div',{class:'sec'},impBtn,expBtn,prevBtn),saveBtn);
+    el('div',{class:'sec'},impBtn,expBtn,icoBtn,prevBtn),saveBtn);
   const edwrap=el('div',{class:'edwrap'},top,ed.node,
     el('div',{class:'edbar'},posOut,byteOut,el('span',{class:'keys'},t('scrkeys')),stateOut),
     errBox);
@@ -2993,6 +3048,7 @@ function viewScripts(view){
   ed.repaint();
   const draft=scrDraft;
   refresh();
+  installedIconIds().then(have=>{iconsHave=have;paintIcons();}).catch(()=>{});
 
   if(scrPending){
     const p=scrPending;scrPending=null;
@@ -3471,14 +3527,43 @@ async function idbLoad(){
   }
   return idbCache;
 }
+// No 'icons/' segment: that came from the GitHub Pages directory layout and
+// would ask the Hub for /icons/icons/<slug>.gif, which is a 404 - the Hub
+// serves the bytes straight under the catalogue prefix. The extension is part
+// of the address there and the catalogue does not carry it, so a GIF is tried
+// first and a JPEG only when that comes back missing.
+const idbBytesUrl=(slug,ext)=>iconDbUrl()+encodeURIComponent(slug)+'.'+ext;
+async function idbFetch(slug){
+  let last=404;
+  for(const ext of ['gif','jpg']){
+    const r=await fetch(idbBytesUrl(slug,ext));
+    if(r.ok)return{blob:await r.blob(),ext};
+    last=r.status;
+    if(r.status!==404)break;
+  }
+  throw new Error('HTTP '+last);
+}
 async function idbInstall(slug){
-  // No 'icons/' segment: that came from the GitHub Pages directory layout and
-  // would ask the Hub for /icons/icons/<slug>.gif, which is a 404 - the Hub
-  // serves the bytes straight under the catalogue prefix.
-  const r=await fetch(iconDbUrl()+encodeURIComponent(slug)+'.gif');
-  if(!r.ok)throw new Error('HTTP '+r.status);
-  await uploadFile(await r.blob(),'/ICONS',slug+'.gif',null);
-  await dropStale('/ICONS',slug+'.jpg',slug+'.gif');
+  const{blob,ext}=await idbFetch(slug);
+  await uploadFile(blob,'/ICONS',slug+'.'+ext,null);
+  await dropStale('/ICONS',slug+'.'+(ext==='gif'?'jpg':'gif'),slug+'.'+ext);
+  return ext;
+}
+async function installedIconIds(){
+  const{data}=await api('/api/v1/files?dir='+encodeURIComponent('/ICONS'),{cache:'no-store'});
+  return new Set(((data&&data.files)||[]).map(f=>f.name.replace(/\.[^.]+$/,'')));
+}
+async function installScriptIcons(ids,have){
+  const missing=ids.filter(id=>!have.has(id));
+  if(!missing.length){toast(t('scriconsok'));return 0;}
+  const done=[],failed=[];
+  for(const id of missing){
+    try{await idbInstall(id);done.push(id);}
+    catch(e){failed.push(id);}
+  }
+  if(done.length)toast(done.join(', ')+' '+t('uploaded'));
+  if(failed.length)toast(t('scriconsfail')+' '+failed.join(', '),false);
+  return done.length;
 }
 async function idbSubmit(blob,name){
   const fd=new FormData();
@@ -3521,18 +3606,19 @@ function iconDbCard(onInstalled){
     btn.addEventListener('click',async()=>{
       btn.disabled=true;
       try{
-        await idbInstall(r.slug);
+        const ext=await idbInstall(r.slug);
         installed.add(r.slug);btn.replaceChildren('✓');btn.title=t('idbon');
-        toast(r.slug+'.gif '+t('uploaded'));
+        toast(r.slug+'.'+ext+' '+t('uploaded'));
         onInstalled&&onInstalled();
       }catch(e){btn.disabled=false;toast(e.message,false);}
     });
+    const img=el('img',{src:idbBytesUrl(r.slug,'gif'),alt:r.slug,loading:'lazy',
+      onerror:()=>{if(/\.gif$/.test(img.src))img.src=idbBytesUrl(r.slug,'jpg');}});
     return el('div',{class:'tile'},
-      el('div',{class:'pw'},
-        el('img',{src:iconDbUrl()+encodeURIComponent(r.slug)+'.gif',alt:r.slug,loading:'lazy'}),
-        el('div',{class:'acts'},btn)),
-      el('div',{class:'ft'},el('span',{class:'nm',title:r.name},r.name),
-        el('span',{class:'sz'},r.w+'×'+r.h)));
+      el('div',{class:'pw'},img,el('div',{class:'acts'},btn)),
+      el('div',{class:'ft'},el('span',{class:'nm',title:r.name+' · '+r.w+'×'+r.h},r.name),
+        el('span',{class:'id',title:t('idbcopy'),
+          onclick:()=>copyText(r.slug).then(()=>toast(r.slug+' '+t('copied')))},'#'+r.slug)));
   }
   function paint(reset){
     if(!loaded)return;

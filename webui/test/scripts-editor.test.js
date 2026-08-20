@@ -8,7 +8,7 @@
 
    Run:  node scripts-editor.test.js         (in-memory mock, offline)
          node scripts-editor.test.js --sim   (against a sim on :8080) */
-const { boot, bootSim, goto, flush } = require('./harness');
+const { boot, bootSim, goto, flush, stubXhr } = require('./harness');
 const USE_SIM = !!process.env.SIM || process.argv.includes('--sim');
 
 let failures = 0;
@@ -79,10 +79,45 @@ async function scenarioDirtySurvives() {
   assert(isDirty(window), 'restored unsaved edit still reads as dirty');
 }
 
+// The @icons header line and the toolbar button that installs what is missing.
+async function scenarioIconButton() {
+  console.log('\nScenario C: the @icons button installs what the clock is missing');
+  if (USE_SIM) { console.log('  SKIP: needs the mocked icon database'); return; }
+  const { window, store } = await boot();
+  const $ = q(window);
+  store.iconBytes = { '2105': 'GIF89a-2105', '2106': 'GIF89a-2106' };
+  store.files['/ICONS'].set('2105.gif', 1);
+  const uploads = [];
+  stubXhr(window, uploads, store);
+
+  await goto(window, '#/scripts');
+  const btn = () => [...$('.edtop .sec').querySelectorAll('button')]
+    .find(b => b.querySelector('use') && b.querySelector('use').getAttribute('href') === '#i-image');
+
+  assert(btn().style.display === 'none', 'no @icons line, no button');
+
+  const ta = $('.edwrap textarea');
+  await typeInto(window, ta, '# @icons 2105, 2106 4242\ndef draw() end\n');
+  await flush(60);
+
+  assert(btn().style.display !== 'none', 'an @icons line shows the button');
+  assert(btn().querySelector('.cnt').textContent === '2', 'the badge counts only the missing ones');
+
+  btn().click();
+  await flush(200);
+
+  const names = uploads.map(u => u.files.map(f => f.name).join('')).sort();
+  assert(names.join(',') === '2106.gif', 'only the missing id was fetched and uploaded');
+  assert(store.files['/ICONS'].has('2106.gif'), 'the icon landed on the clock');
+  assert(btn().querySelector('.cnt').textContent === '1', 'an id the database does not have stays missing');
+  assert(!btn().disabled, 'and the button stays pressable for another try');
+}
+
 async function main() {
   console.log('Backend: ' + (USE_SIM ? 'SIMULATOR (http://localhost:8080)' : 'in-memory mock'));
   await scenarioStaysClean();
   await scenarioDirtySurvives();
+  await scenarioIconButton();
   console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);
 }

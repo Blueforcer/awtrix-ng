@@ -638,6 +638,22 @@ static void test_apps_json_lists_stored_scripts_without_an_interpreter() {
   TEST_ASSERT_TRUE(out.find("\"inLoop\":false") != std::string::npos);
   TEST_ASSERT_TRUE(out.find("\"headless\":true") != std::string::npos);
   TEST_ASSERT_TRUE(out.find("\"desc\":\"eats the heap\"") != std::string::npos);
+  TEST_ASSERT_TRUE(out.find("\"icons\":[]") != std::string::npos);
+}
+
+static void test_apps_json_carries_the_icons_a_script_names() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  std::vector<script::StoredScript> stored;
+  script::StoredScript s;
+  s.name = "Weather";
+  s.meta.name = "Weather";
+  s.meta.icons = "2105, 2106 2105";
+  stored.push_back(s);
+
+  std::string out;
+  appendAppsJson(out, e, nullptr, &stored);
+  TEST_ASSERT_TRUE(out.find("\"icons\":[\"2105\",\"2106\"]") != std::string::npos);
 }
 
 namespace {
@@ -972,6 +988,7 @@ int main(int, char**) {
   RUN_TEST(test_settings_parse_error);
   RUN_TEST(test_script_sources_stay_writable_without_an_interpreter);
   RUN_TEST(test_apps_json_lists_stored_scripts_without_an_interpreter);
+  RUN_TEST(test_apps_json_carries_the_icons_a_script_names);
   RUN_TEST(test_a_headless_script_runs_without_being_drawn);
   RUN_TEST(test_the_app_order_switches_a_headless_script_on_and_off);
   RUN_TEST(test_clearing_the_headless_flag_puts_the_script_on_the_panel);

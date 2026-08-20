@@ -1,8 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <cctype>
 #include <cstddef>
 #include <string>
+#include <vector>
 
 namespace awtrix::script {
 
@@ -15,6 +17,7 @@ struct ScriptMeta {
   bool module = false;
   bool hasConfig = false;
   std::string moduleName;
+  std::string icons;
 };
 
 struct StoredScript {
@@ -74,6 +77,35 @@ inline void forEachHeaderTag(const std::string& source, Fn fn) {
   }
 }
 
+constexpr std::size_t kIconsMax = 32;
+constexpr std::size_t kIconIdMax = 32;
+
+inline std::vector<std::string> splitIcons(const std::string& raw) {
+  std::vector<std::string> out;
+  const char* sep = " \t,";
+  std::size_t pos = 0;
+
+  while (out.size() < kIconsMax) {
+    const std::size_t b = raw.find_first_not_of(sep, pos);
+    if (b == std::string::npos) break;
+    std::size_t e = raw.find_first_of(sep, b);
+    if (e == std::string::npos) e = raw.size();
+    const std::string id = raw.substr(b, e - b);
+    pos = e;
+
+    if (id.size() > kIconIdMax) continue;
+    const bool ok = std::all_of(id.begin(), id.end(), [](char c) {
+      return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_' || c == '-';
+    });
+    if (!ok) continue;
+    if (std::find(out.begin(), out.end(), id) != out.end()) continue;
+
+    out.push_back(id);
+  }
+
+  return out;
+}
+
 inline ScriptMeta parseMeta(const std::string& source) {
   ScriptMeta meta;
 
@@ -97,6 +129,9 @@ inline ScriptMeta parseMeta(const std::string& source) {
     } else if (key == "headless") {
       const std::string v = detail::lower(value);
       meta.headless = v == "true" || v == "1" || v == "yes";
+    } else if (key == "icons") {
+      if (!meta.icons.empty()) meta.icons += ' ';
+      meta.icons += value;
     }
   });
 
