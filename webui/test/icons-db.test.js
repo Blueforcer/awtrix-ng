@@ -189,9 +189,6 @@ async function testSubmit() {
   assert(/published/i.test(toast), 'a successful submission says the icon is published');
 }
 
-/* Publishing from the clock's own page always lands here: the page is served
-   from http://<device-ip>, so the Hub session cookie is cross-site and never
-   reaches the POST. The answer has to point at the Hub, not read as a fault. */
 // The clock cannot send the Hub session cookie, so a device token is what gets
 // a submission authenticated. It must travel only when one is actually set.
 async function testDeviceToken() {
@@ -233,6 +230,9 @@ async function testDeviceToken() {
   delete window.localStorage.awtrixHubToken;
 }
 
+/* Publishing from the clock's own page always lands here: the page is served
+   from http://<device-ip>, so the Hub session cookie is cross-site and never
+   reaches the POST. The answer has to point at the Hub, not read as a fault. */
 async function testNotLoggedIn() {
   const { window } = await withGallery(ctx => {
     ctx.store.files['/ICONS'].set('own.gif', 240);

@@ -7,7 +7,7 @@ AWTRIX ships with an empty `/ICONS` directory. This page is about filling it: ge
 
 The quickest way to fill `/ICONS` is the **Icons** tab of the built-in web UI. Its **Icon database**
 tab searches a shared community collection; one click on a result downloads it and installs it
-under its ID - the number you then write in a payload or in a script.
+under its name - the name you then write in a payload or in a script.
 
 The search runs in your browser, not on AWTRIX. The catalogue is fetched once per visit and
 filtered locally, so typing is instant. The clock never contacts the internet for this - your
@@ -15,8 +15,8 @@ browser does, then uploads the bytes to AWTRIX over the local network. In provis
 where the browser has no internet access, the tab says so and stays disabled.
 
 Filter by size (8×8 or 32×8) and by whether an icon is animated. Icons already on the clock are
-marked and cannot be installed twice. Under every picture is its ID; click it to copy, then use it
-in a payload or in a script's [`# @icons`](scripting.md#the-icons-your-script-needs) line.
+marked and cannot be installed twice. Click an icon's name to copy it, then use it in a payload or
+in a script's [`# @icons`](scripting.md#the-icons-your-script-needs) line.
 
 ### Contribute an icon back
 
@@ -27,7 +27,7 @@ the icon to the shared collection with a display name you choose.
 Publishing needs an **AWTRIX Hub** account, and the sign-in lives on the Hub rather than on your
 clock - so from the web UI the answer is a link that takes you there to finish. The upload is
 checked first - it has to be a GIF no larger than 32×8 and under 64 KB - and refused right away if
-the exact same image is already in the collection, naming the ID that holds it. What passes is
+the exact same image is already in the collection, naming the icon that holds it. What passes is
 published immediately; there is no review queue, and anything that should not be there is taken
 down afterwards.
 

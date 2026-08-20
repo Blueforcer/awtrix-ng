@@ -539,9 +539,9 @@ pictures. Name them in the header instead:
 # @icons 2105, 2106, 2107
 ```
 
-Each value is an icon ID from the [icon database](icons.md#install-from-the-icon-database) - the
-number under the picture in the **Icon database** tab, which you can click to copy. Separate them
-with commas or spaces, and use as many `# @icons` lines as you like. Up to 32 icons.
+Each value is an icon name from the [icon database](icons.md#install-from-the-icon-database) - the
+name under the picture in the **Icon database** tab, which you can click to copy. Separate them with
+commas or spaces, and use as many `# @icons` lines as you like. Up to 32 icons.
 
 Then one press gets them. In the script editor a button appears in the toolbar showing how many
 are still missing; in the **Apps** tab the row menu offers **Install icons**. Icons already on the

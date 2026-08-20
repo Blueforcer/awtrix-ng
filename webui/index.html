@@ -193,8 +193,8 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .tile .ft{display:flex;align-items:baseline;gap:6px;padding:7px 9px;min-width:0}
 .tile .ft .nm{flex:1;min-width:0;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile .ft .sz{flex:none;font-size:10.5px;color:var(--dim);font-variant-numeric:tabular-nums}
-.tile .ft .id{flex:none;font:10.5px var(--mono);color:var(--dim);cursor:pointer}
-.tile .ft .id:hover{color:var(--acc)}
+.tile .ft .nm.cp{cursor:pointer}
+.tile .ft .nm.cp:hover{color:var(--acc)}
 .tile .acts{position:absolute;inset:0 0 auto 0;display:flex;justify-content:flex-end;gap:5px;padding:6px;
   background:linear-gradient(#000b,#0000);opacity:0;pointer-events:none;transition:opacity .15s}
 .tile:hover .acts,.tile:focus-within .acts{opacity:1;pointer-events:auto}
@@ -821,17 +821,19 @@ const I18N={en:{
   idb:'Icon database',idbhelp:'Search the community collection and install an icon with one click.',
   idbsearch:'Search icons',idbany:'Any size',idbanim:'Animated only',idbnone:'Nothing matches',
   idbmore:'Show more',idbempty:'The collection is still empty',idbinst:'Install',idbon:'Already on AWTRIX',idbfail:'Icon database unreachable',
-  idbcopy:'Copy ID',
-  hubSection:'AWTRIX Hub',hubSectionH:'Needed to publish icons to the shared collection.',
+  idbcopy:'Copy the name for a script',
+  hubSection:'AWTRIX Hub',hubSectionH:'Needed to publish your icons to the shared collection.',
   hubTokenLbl:'Device token',hubTokenH:'Stored in this browser only, not on AWTRIX.',
-  hubOn:'Set',hubOff:'Not set',hubClear:'Remove',hubCleared:'Token removed',hubStored:'Token saved in this browser',
-  hubGetLbl:'Where to get one',hubGetH:'Create it on the Hub under Account.',hubGet:'Open the Hub',
-  scricons:'Install icons',scriconsok:'All icons here',scriconsfail:'Not found:',
-  idbshare:'Submit to the icon database',idbsend:'Submit',
+  hubOn:'Saved',hubOff:'Not set',hubClear:'Remove',hubCleared:'Token removed',hubStored:'Token saved in this browser',
+  hubGetLbl:'Where to get one',hubGetH:'Opens your account page on the Hub.',hubGet:'Open the Hub',
+  scricons:'Install icons',scriconsok:'All icons here',
+  scriconsfail:'Not in the icon database:',scriconserr:'Could not be saved:',idbsend:'Submit',
   icown:'On AWTRIX',icadd:'Add',icnone:'No icons on AWTRIX yet',icsend:'To database',icshow:'Show',
   idbdone:'Published to the icon database',idbopen:'Open the icon',
   idbdup:'Already in the database as',
-  idbauth:'Publishing needs a Hub token. Create one on the Hub, then paste it under System.',
+  idbauth:'Publishing needs a device token. Get one on the Hub, then paste it under System.',
+  idbauthbad:'The Hub did not accept your device token. Get a new one and replace it under System.',
+  idbtosys:'Go to System',close:'Close',
   idbsignin:'Open the Hub',
   // One entry per error code the submit endpoint can answer with. tooManyFrames
   // is never sent - frames are not a limit - but a client that cannot name the
@@ -840,7 +842,6 @@ const I18N={en:{
   idbe_tooLarge:'The file is too large',
   idbe_badName:'That name cannot be used',
   idbe_tooBig:'Bigger than 32x8 pixels',
-  idbe_tooManyFrames:'Too many frames',
   idbe_rateLimited:'Too many submissions - try again later',
   idbe_duplicate:'Already in the database',
   idbe_notLoggedIn:'Sign in on the AWTRIX Hub to publish',
@@ -996,23 +997,24 @@ const I18N={en:{
   idb:'Icon-Datenbank',idbhelp:'Durchsuche die Community-Sammlung und installiere ein Icon mit einem Klick.',
   idbsearch:'Icons suchen',idbany:'Alle Größen',idbanim:'Nur animierte',idbnone:'Nichts gefunden',
   idbmore:'Mehr anzeigen',idbempty:'Die Sammlung ist noch leer',idbinst:'Installieren',idbon:'Schon auf AWTRIX',idbfail:'Icon-Datenbank nicht erreichbar',
-  idbcopy:'ID kopieren',
-  hubSection:'AWTRIX Hub',hubSectionH:'Nötig, um Icons in die Sammlung einzureichen.',
+  idbcopy:'Namen für ein Skript kopieren',
+  hubSection:'AWTRIX Hub',hubSectionH:'Nötig, um eigene Icons zu veröffentlichen.',
   hubTokenLbl:'Geräte-Token',hubTokenH:'Nur in diesem Browser gespeichert, nicht auf AWTRIX.',
-  hubOn:'Gesetzt',hubOff:'Nicht gesetzt',hubClear:'Entfernen',hubCleared:'Token entfernt',hubStored:'Token in diesem Browser gespeichert',
-  hubGetLbl:'Woher',hubGetH:'Im Hub unter Konto erzeugen.',hubGet:'Hub öffnen',
-  scricons:'Icons installieren',scriconsok:'Alle Icons da',scriconsfail:'Nicht gefunden:',
-  idbshare:'An die Icon-Datenbank senden',idbsend:'Senden',
+  hubOn:'Gespeichert',hubOff:'Nicht gesetzt',hubClear:'Entfernen',hubCleared:'Token entfernt',hubStored:'Token in diesem Browser gespeichert',
+  hubGetLbl:'Token holen',hubGetH:'Öffnet deine Kontoseite im Hub.',hubGet:'Hub öffnen',
+  scricons:'Icons installieren',scriconsok:'Alle Icons da',
+  scriconsfail:'Nicht in der Icon-Datenbank:',scriconserr:'Konnte nicht gespeichert werden:',idbsend:'Senden',
   icown:'Auf AWTRIX',icadd:'Hinzufügen',icnone:'Noch keine Icons auf AWTRIX',icsend:'An Datenbank',icshow:'Zeigen',
   idbdone:'In der Icon-Datenbank veröffentlicht',idbopen:'Icon öffnen',
   idbdup:'Schon in der Datenbank als',
-  idbauth:'Zum Veröffentlichen braucht es ein Hub-Token. Im Hub erzeugen, dann unter System eintragen.',
+  idbauth:'Zum Veröffentlichen braucht es ein Geräte-Token. Im Hub holen, dann unter System eintragen.',
+  idbauthbad:'Der Hub hat dein Geräte-Token abgelehnt. Neues holen und unter System ersetzen.',
+  idbtosys:'Zu System',close:'Schließen',
   idbsignin:'Hub öffnen',
   idbe_badFormat:'Kein Bild, das die Datenbank annimmt',
   idbe_tooLarge:'Die Datei ist zu groß',
   idbe_badName:'Dieser Name geht nicht',
   idbe_tooBig:'Größer als 32x8 Pixel',
-  idbe_tooManyFrames:'Zu viele Frames',
   idbe_rateLimited:'Zu viele Einsendungen - später noch einmal',
   idbe_duplicate:'Schon in der Datenbank',
   idbe_notLoggedIn:'Zum Veröffentlichen im AWTRIX Hub anmelden',
@@ -2347,6 +2349,9 @@ function scriptMeta(src,key){
   const m=new RegExp('^#[ \\t]*@'+key+'[ \\t]+(.+)$','m').exec(src);
   return m?m[1].trim():'';
 }
+// Mirrors splitIcons() in src/core/script/ScriptMeta.h - the editor badges icons
+// from source the device has never parsed, so it cannot ask /api/v1/apps. Both
+// caps are 32 and the charset matches IconSlug::isValid; keep all three in step.
 const ICONS_MAX=32;
 function scriptIcons(src){
   const out=[];
@@ -3525,16 +3530,23 @@ function shareRow(f,base,ft){
       const d=await idbSubmit(await iconAsSubmission(f.name),nameIn.value.trim()||base);
       restore();
       toast(t('idbdone'),true,[{label:t('idbopen'),pri:true,fn:()=>window.open(d.pr,'_blank','noopener')},
-        {label:t('cancel'),fn:()=>{}}]);
+        {label:t('close'),fn:()=>{}}]);
     }catch(e){
       send.disabled=false;
       // This branch is the normal outcome here, not an edge case: the page is
       // served from the clock, so the Hub session cookie is cross-site and never
       // travels with the POST. Publishing happens in the Hub editor, and saying
       // only 'error' would send people looking for a fault that is not there.
-      if(e.code==='notLoggedIn'&&e.pr){
-        toast(t('idbauth'),false,[{label:t('idbsignin'),pri:true,fn:()=>window.open(e.pr,'_blank','noopener')},
-          {label:t('cancel'),fn:()=>{}}]);
+      if(e.code==='notLoggedIn'){
+        // Der Hub antwortet auf "kein Token", "falsches Token", "widerrufen" und
+        // "gesperrt" absichtlich gleich. Wer schon eins hinterlegt hat, darf
+        // trotzdem nicht denselben Satz lesen wie jemand, der noch keins hat.
+        const has=!!hubToken();
+        toast(t(has?'idbauthbad':'idbauth'),false,[
+          e.pr?{label:t('idbsignin'),pri:!has,fn:()=>window.open(e.pr,'_blank','noopener')}:null,
+          {label:t('idbtosys'),pri:has,fn:()=>{location.hash='#/system';}},
+          {label:t('close'),fn:()=>{}},
+        ].filter(Boolean));
       }else toast(e.slug?t('idbdup')+' '+e.slug:e.message,false);
     }
   });
@@ -3601,13 +3613,24 @@ async function installedIconIds(){
 async function installScriptIcons(ids,have){
   const missing=ids.filter(id=>!have.has(id));
   if(!missing.length){toast(t('scriconsok'));return 0;}
-  const done=[],failed=[];
+  const done=[],missingAtHub=[],broke=[];
   for(const id of missing){
-    try{await idbInstall(id);done.push(id);}
-    catch(e){failed.push(id);}
+    // Zwei Fehlerursachen, zwei Meldungen: der Hub kennt das Icon nicht, oder
+    // das Hochladen auf die Uhr ging schief (volles Flash, Netz weg). Beides in
+    // einen Topf zu werfen hiess, jemandem mit vollem Speicher zu sagen, sein
+    // Icon-Name sei falsch.
+    let blob,ext;
+    try{({blob,ext}=await idbFetch(id));}
+    catch(e){missingAtHub.push(id);continue;}
+    try{
+      await uploadFile(blob,'/ICONS',id+'.'+ext,null);
+      await dropStale('/ICONS',id+'.'+(ext==='gif'?'jpg':'gif'),id+'.'+ext);
+      done.push(id);
+    }catch(e){broke.push(id+': '+e.message);}
   }
   if(done.length)toast(done.join(', ')+' '+t('uploaded'));
-  if(failed.length)toast(t('scriconsfail')+' '+failed.join(', '),false);
+  if(missingAtHub.length)toast(t('scriconsfail')+' '+missingAtHub.join(', '),false);
+  if(broke.length)toast(t('scriconserr')+' '+broke.join(', '),false);
   return done.length;
 }
 async function idbSubmit(blob,name){
@@ -3626,8 +3649,11 @@ async function idbSubmit(blob,name){
   // 'message' is the Hub's human sentence and wins when it is there; the code
   // is only a fallback, and t() would echo an unknown code back as its own key,
   // so anything outside the vocabulary is shown raw instead.
+  // Die eigene Uebersetzung zuerst: der Hub haengt an fast jeden Fehler einen
+  // englischen Satz, und der gewann bisher - in einer deutschen Oberflaeche.
+  // d.message bleibt der Rueckfall fuer Codes, die dieses Vokabular nicht kennt.
   const known=I18N.en['idbe_'+d.error];
-  const err=new Error(d.message||(known?t('idbe_'+d.error):d.error)||'HTTP '+r.status);
+  const err=new Error((known?t('idbe_'+d.error):'')||d.message||d.error||'HTTP '+r.status);
   err.code=d.error||'';
   err.slug=d.slug&&d.error==='duplicate'?d.slug:null;
   err.pr=d.pr||'';
@@ -3663,9 +3689,10 @@ function iconDbCard(onInstalled){
       onerror:()=>{if(/\.gif$/.test(img.src))img.src=idbBytesUrl(r.slug,'jpg');}});
     return el('div',{class:'tile'},
       el('div',{class:'pw'},img,el('div',{class:'acts'},btn)),
-      el('div',{class:'ft'},el('span',{class:'nm',title:r.name+' · '+r.w+'×'+r.h},r.name),
-        el('span',{class:'id',title:t('idbcopy'),
-          onclick:()=>copyText(r.slug).then(()=>toast(r.slug+' '+t('copied')))},'#'+r.slug)));
+      el('div',{class:'ft'},
+        el('span',{class:'nm cp',title:r.slug===r.name?t('idbcopy'):r.slug+' — '+t('idbcopy'),
+          onclick:()=>copyText(r.slug).then(()=>toast(r.slug+' '+t('copied')))},r.name),
+        el('span',{class:'sz'},r.w+'×'+r.h)));
   }
   function paint(reset){
     if(!loaded)return;
