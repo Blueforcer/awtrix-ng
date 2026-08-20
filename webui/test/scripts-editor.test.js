@@ -79,7 +79,6 @@ async function scenarioDirtySurvives() {
   assert(isDirty(window), 'restored unsaved edit still reads as dirty');
 }
 
-// The @icons header line and the toolbar button that installs what is missing.
 async function scenarioIconButton() {
   console.log('\nScenario C: the @icons button installs what the clock is missing');
   if (USE_SIM) { console.log('  SKIP: needs the mocked icon database'); return; }

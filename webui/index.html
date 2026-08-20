@@ -2353,9 +2353,6 @@ function scriptMeta(src,key){
   const m=new RegExp('^#[ \\t]*@'+key+'[ \\t]+(.+)$','m').exec(src);
   return m?m[1].trim():'';
 }
-// Mirrors splitIcons() in src/core/script/ScriptMeta.h - the editor badges icons
-// from source the device has never parsed, so it cannot ask /api/v1/apps. Both
-// caps are 32 and the charset matches IconSlug::isValid; keep all three in step.
 const ICONS_MAX=32;
 function scriptIcons(src){
   const out=[];
@@ -3263,9 +3260,6 @@ function paintMqtt(node,m){
   node.className='badge'+(m.state==='connected'?' good':m.state==='offline'?' bad':'');
   node.replaceChildren(parts.join(' · '));
 }
-// No Save button here on purpose: the settings bar below saves to the device,
-// this one is browser-local and takes effect at once. Two buttons reading "Save"
-// on one page is the confusion, not the convenience.
 function hubTokenSection(page){
   const inp=el('input',{type:'password',autocomplete:'off',spellcheck:'false',value:hubToken()});
   const clear=el('button',null,t('hubClear'));
@@ -3542,9 +3536,6 @@ function shareRow(f,base,ft){
       // travels with the POST. Publishing happens in the Hub editor, and saying
       // only 'error' would send people looking for a fault that is not there.
       if(e.code==='notLoggedIn'){
-        // Der Hub antwortet auf "kein Token", "falsches Token", "widerrufen" und
-        // "gesperrt" absichtlich gleich. Wer schon eins hinterlegt hat, darf
-        // trotzdem nicht denselben Satz lesen wie jemand, der noch keins hat.
         const has=!!hubToken();
         toast(t(has?'idbauthbad':'idbauth'),false,[
           e.pr?{label:t('idbsignin'),pri:!has,fn:()=>window.open(e.pr,'_blank','noopener')}:null,
@@ -3554,9 +3545,6 @@ function shareRow(f,base,ft){
       }else toast(e.slug?t('idbdup')+' '+e.slug:e.message,false);
     }
   });
-  // Der Hub schreibt zu jedem Beitrag terms_version und terms_accepted_at mit.
-  // Ohne diese Zeile behauptete die Zeile in der Datenbank eine Zustimmung, die
-  // dem Menschen davor nie gezeigt wurde.
   const terms=el('a',{class:'hint',href:hubTermsUrl(),target:'_blank',rel:'noopener'},t('idbterms'));
   ft.classList.add('share');
   ft.replaceChildren(nameIn,send,back,terms);
@@ -3594,9 +3582,7 @@ async function idbLoad(){
 }
 // No 'icons/' segment: that came from the GitHub Pages directory layout and
 // would ask the Hub for /icons/icons/<slug>.gif, which is a 404 - the Hub
-// serves the bytes straight under the catalogue prefix. The extension is part
-// of the address there and the catalogue does not carry it, so a GIF is tried
-// first and a JPEG only when that comes back missing.
+// serves the bytes straight under the catalogue prefix.
 const idbBytesUrl=(slug,ext)=>iconDbUrl()+encodeURIComponent(slug)+'.'+ext;
 async function idbFetch(slug){
   let last=404;
@@ -3623,10 +3609,6 @@ async function installScriptIcons(ids,have){
   if(!missing.length){toast(t('scriconsok'));return 0;}
   const done=[],missingAtHub=[],broke=[];
   for(const id of missing){
-    // Zwei Fehlerursachen, zwei Meldungen: der Hub kennt das Icon nicht, oder
-    // das Hochladen auf die Uhr ging schief (volles Flash, Netz weg). Beides in
-    // einen Topf zu werfen hiess, jemandem mit vollem Speicher zu sagen, sein
-    // Icon-Name sei falsch.
     let blob,ext;
     try{({blob,ext}=await idbFetch(id));}
     catch(e){missingAtHub.push(id);continue;}
@@ -3646,9 +3628,6 @@ async function idbSubmit(blob,name){
   fd.append('file',blob,'icon.gif');
   fd.append('name',name);
   fd.append('source','webui');
-  // Ausdrücklich mitgeschickt, weil shareRow den Zustimmungssatz zeigt. Der Hub
-  // verlangt das Feld nicht, honoriert es aber - und nur so entspricht der
-  // Stempel in der Datenbank etwas, das wirklich stattgefunden hat.
   fd.append('agree','1');
   const tok=hubToken();
   let r;
@@ -3661,9 +3640,6 @@ async function idbSubmit(blob,name){
   // 'message' is the Hub's human sentence and wins when it is there; the code
   // is only a fallback, and t() would echo an unknown code back as its own key,
   // so anything outside the vocabulary is shown raw instead.
-  // Die eigene Uebersetzung zuerst: der Hub haengt an fast jeden Fehler einen
-  // englischen Satz, und der gewann bisher - in einer deutschen Oberflaeche.
-  // d.message bleibt der Rueckfall fuer Codes, die dieses Vokabular nicht kennt.
   const known=I18N.en['idbe_'+d.error];
   const err=new Error((known?t('idbe_'+d.error):'')||d.message||d.error||'HTTP '+r.status);
   err.code=d.error||'';

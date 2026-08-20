@@ -168,8 +168,6 @@ static void test_an_overlong_id_is_dropped() {
   TEST_ASSERT_EQUAL_STRING(just.c_str(), ids[0].c_str());
 }
 
-// Der rohe Text wird je Skript gehalten und bei jedem /api/v1/apps kopiert -
-// er darf nicht mitwachsen, nur weil jemand eine lange Zeile schreibt.
 static void test_the_stored_text_is_bounded() {
   std::string header;
   for (int i = 0; i < 500; ++i) header += "# @icons " + std::string(script::kIconIdMax, 'a') + "\n";

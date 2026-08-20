@@ -105,8 +105,6 @@ async function testInstall() {
     'the button locks once the icon is on the clock');
 }
 
-// The catalogue carries no format, so a JPEG entry is only found by asking for
-// .gif, getting a 404 and trying .jpg.
 async function testJpegEntry() {
   const { window, store } = await withGallery(ctx => { ctx.store.iconExt.firepit = 'jpg'; });
   const uploads = [];
@@ -182,8 +180,6 @@ async function testSubmit() {
   assert(sent && typeof sent.get === 'function' && sent.get('name') === 'My Own Icon',
     'the display name is sent as typed');
   assert(sent && sent.get('source') === 'webui', 'the source identifies the web UI');
-  // The Hub stamps terms_version/terms_accepted_at on every submission. The row
-  // shows the sentence, so the consent it records has to have been given.
   assert(sent && sent.get('agree') === '1', 'the consent shown in the row is sent along');
   assert(!!tile.querySelector('.ft .nm'), 'the footer goes back to normal after a submission');
 
@@ -193,8 +189,6 @@ async function testSubmit() {
   assert(/published/i.test(toast), 'a successful submission says the icon is published');
 }
 
-// The clock cannot send the Hub session cookie, so a device token is what gets
-// a submission authenticated. It must travel only when one is actually set.
 async function testDeviceToken() {
   const { window, store } = await withGallery(ctx => {
     ctx.store.files['/ICONS'].set('own.gif', 240);
@@ -212,7 +206,6 @@ async function testDeviceToken() {
   assert(!store.submittedHeaders[0].Authorization,
     'without a token nothing is sent as authorization');
 
-  // Entered the way a person does it: the field on the System tab.
   await goto(window, '#/system');
   await flush(80);
   const field = window.document.querySelector('#sec-hub input[type=password]');
