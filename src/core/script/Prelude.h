@@ -347,6 +347,21 @@ sensor.light = _sensor_light
 sensor.battery = _sensor_battery
 sensor.battery_volts = _sensor_battery_volts
 
+# ---- heart rate ------------------------------------------------------------
+# The read-only state of the Bluetooth Heart Rate Profile client. connected()
+# is true only while measurement notifications are subscribed. bpm() is the
+# most recent valid measurement, or nil until the first valid measurement has
+# arrived; the last valid value remains available across a disconnect.
+heartrate = module('heartrate')
+def _heartrate_connected() # heartrate.connected()
+  return _native_heartrate_connected()
+end
+def _heartrate_bpm() # heartrate.bpm()
+  return _native_heartrate_bpm()
+end
+heartrate.connected = _heartrate_connected
+heartrate.bpm = _heartrate_bpm
+
 # ---- rotation --------------------------------------------------------------
 # Drive the app rotation the script lives in. rotation.next()/previous() advance
 # now and keep any pause you set (so a paused app can step itself), while

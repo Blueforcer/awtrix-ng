@@ -164,7 +164,7 @@ out for the device's global app time (7000 ms out of the box). It changes only *
 ## 5. The API
 
 Every function below is a plain global, callable from any method with no import. The modules
-`http`, `mqtt`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
+`heartrate`, `http`, `mqtt`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
 there too. Only `json`, `string`, `math` and `gc` need an `import` line at the top of the file.
 
 ### 5.1 Panel and drawing
@@ -664,6 +664,16 @@ buffer and one parse on the device instead of three.
 **Each returns `nil` when the board has no such sensor** - check before drawing, or you print a `0`
 that reads like a real measurement. Temperature is always Celsius; convert yourself if
 `settings.get("useCelsius")` is false. Readings refresh on the device's own schedule, not per frame.
+
+### 5.12c Bluetooth heart rate
+
+| Call | Answer |
+|---|---|
+| `heartrate.connected()` | `true` while heart-rate notifications are subscribed; otherwise `false` |
+| `heartrate.bpm()` | latest valid BPM as an integer, or `nil` before the first valid reading |
+
+The last valid BPM remains available after disconnect. Check `connected()` when the app requires a
+currently active monitor. Both calls are read-only and do not initiate BLE work.
 
 ### 5.13 The rotation
 

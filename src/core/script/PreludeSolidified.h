@@ -17,7 +17,7 @@
 
 #include "be_constobj.h"
 
-// input-sha256: 3879389d08996c15d3daed64f0c1916dcb77ced5f19ba38bfc4175181a95d9a9
+// input-sha256: fec5335e534c58d436d92b4b30a2fe12f6b471de267c5ebcd6d27f4b32012125
 
 
 /********************************************************************
@@ -31,7 +31,7 @@ be_local_closure(awtrix_prelude,   /* name */
     0,                          /* has upvals */
     NULL,                       /* no upvals */
     1,                          /* has sup protos */
-    ( &(const struct bproto*[59]) {
+    ( &(const struct bproto*[61]) {
       be_nested_proto(
         8,                          /* nstack */
         1,                          /* argc */
@@ -1236,6 +1236,46 @@ be_local_closure(awtrix_prelude,   /* name */
         NULL,                       /* no sub protos */
         1,                          /* has constants */
         ( &(const bvalue[ 1]) {     /* constants */
+        /* K0   */  be_nested_str(_native_heartrate_connected),
+        }),
+        &be_const_str__heartrate_connected,
+        &be_const_str_solidified,
+        ( &(const binstruction[ 3]) {  /* code */
+          0xB8020000,  //  0000  GETNGBL	R0	K0
+          0x7C000000,  //  0001  CALL	R0	0
+          0x80040000,  //  0002  RET	1	R0
+        })
+      ),
+      be_nested_proto(
+        1,                          /* nstack */
+        0,                          /* argc */
+        0,                          /* varg */
+        0,                          /* has upvals */
+        NULL,                       /* no upvals */
+        0,                          /* has sup protos */
+        NULL,                       /* no sub protos */
+        1,                          /* has constants */
+        ( &(const bvalue[ 1]) {     /* constants */
+        /* K0   */  be_nested_str(_native_heartrate_bpm),
+        }),
+        &be_const_str__heartrate_bpm,
+        &be_const_str_solidified,
+        ( &(const binstruction[ 3]) {  /* code */
+          0xB8020000,  //  0000  GETNGBL	R0	K0
+          0x7C000000,  //  0001  CALL	R0	0
+          0x80040000,  //  0002  RET	1	R0
+        })
+      ),
+      be_nested_proto(
+        1,                          /* nstack */
+        0,                          /* argc */
+        0,                          /* varg */
+        0,                          /* has upvals */
+        NULL,                       /* no upvals */
+        0,                          /* has sup protos */
+        NULL,                       /* no sub protos */
+        1,                          /* has constants */
+        ( &(const bvalue[ 1]) {     /* constants */
         /* K0   */  be_nested_str(_native_rotation_next),
         }),
         &be_const_str__rotation_next,
@@ -1820,7 +1860,7 @@ be_local_closure(awtrix_prelude,   /* name */
       ),
     }),
     1,                          /* has constants */
-    ( &(const bvalue[156]) {     /* constants */
+    ( &(const bvalue[166]) {     /* constants */
     /* K0   */  be_nested_str(json),
     /* K1   */  be_nested_str(http),
     /* K2   */  be_nested_str(_http_cbs),
@@ -1909,78 +1949,88 @@ be_local_closure(awtrix_prelude,   /* name */
     /* K85  */  be_nested_str(sensor),
     /* K86  */  be_nested_str(battery_volts),
     /* K87  */  be_nested_str(_sensor_battery_volts),
-    /* K88  */  be_nested_str(rotation),
-    /* K89  */  be_nested_str(rotation),
-    /* K90  */  be_nested_str(_rotation_next),
-    /* K91  */  be_nested_str(_rotation_previous),
-    /* K92  */  be_nested_str(_rotation_pause),
-    /* K93  */  be_nested_str(_rotation_resume),
-    /* K94  */  be_nested_str(_rotation_show),
-    /* K95  */  be_nested_str(rotation),
-    /* K96  */  be_nested_str(next),
-    /* K97  */  be_nested_str(_rotation_next),
+    /* K88  */  be_nested_str(heartrate),
+    /* K89  */  be_nested_str(heartrate),
+    /* K90  */  be_nested_str(_heartrate_connected),
+    /* K91  */  be_nested_str(_heartrate_bpm),
+    /* K92  */  be_nested_str(heartrate),
+    /* K93  */  be_nested_str(connected),
+    /* K94  */  be_nested_str(_heartrate_connected),
+    /* K95  */  be_nested_str(heartrate),
+    /* K96  */  be_nested_str(bpm),
+    /* K97  */  be_nested_str(_heartrate_bpm),
     /* K98  */  be_nested_str(rotation),
-    /* K99  */  be_nested_str(previous),
-    /* K100 */  be_nested_str(_rotation_previous),
-    /* K101 */  be_nested_str(rotation),
-    /* K102 */  be_nested_str(pause),
-    /* K103 */  be_nested_str(_rotation_pause),
-    /* K104 */  be_nested_str(rotation),
-    /* K105 */  be_nested_str(resume),
-    /* K106 */  be_nested_str(_rotation_resume),
-    /* K107 */  be_nested_str(rotation),
-    /* K108 */  be_nested_str(show),
-    /* K109 */  be_nested_str(_rotation_show),
-    /* K110 */  be_nested_str(store),
-    /* K111 */  be_nested_str(store),
-    /* K112 */  be_nested_str(_stores),
-    /* K113 */  be_nested_str(_store_map),
-    /* K114 */  be_nested_str(_store_set),
-    /* K115 */  be_nested_str(_store_get),
-    /* K116 */  be_nested_str(store),
-    /* K117 */  be_nested_str(_store_set),
-    /* K118 */  be_nested_str(store),
-    /* K119 */  be_nested_str(_store_get),
-    /* K120 */  be_nested_str(_store_load),
-    /* K121 */  be_nested_str(shared),
-    /* K122 */  be_nested_str(shared),
-    /* K123 */  be_nested_str(_shared_set),
-    /* K124 */  be_nested_str(_shared_get),
-    /* K125 */  be_nested_str(_shared_age),
-    /* K126 */  be_nested_str(_shared_keys),
-    /* K127 */  be_nested_str(shared),
-    /* K128 */  be_nested_str(_shared_set),
-    /* K129 */  be_nested_str(shared),
-    /* K130 */  be_nested_str(_shared_get),
+    /* K99  */  be_nested_str(rotation),
+    /* K100 */  be_nested_str(_rotation_next),
+    /* K101 */  be_nested_str(_rotation_previous),
+    /* K102 */  be_nested_str(_rotation_pause),
+    /* K103 */  be_nested_str(_rotation_resume),
+    /* K104 */  be_nested_str(_rotation_show),
+    /* K105 */  be_nested_str(rotation),
+    /* K106 */  be_nested_str(next),
+    /* K107 */  be_nested_str(_rotation_next),
+    /* K108 */  be_nested_str(rotation),
+    /* K109 */  be_nested_str(previous),
+    /* K110 */  be_nested_str(_rotation_previous),
+    /* K111 */  be_nested_str(rotation),
+    /* K112 */  be_nested_str(pause),
+    /* K113 */  be_nested_str(_rotation_pause),
+    /* K114 */  be_nested_str(rotation),
+    /* K115 */  be_nested_str(resume),
+    /* K116 */  be_nested_str(_rotation_resume),
+    /* K117 */  be_nested_str(rotation),
+    /* K118 */  be_nested_str(show),
+    /* K119 */  be_nested_str(_rotation_show),
+    /* K120 */  be_nested_str(store),
+    /* K121 */  be_nested_str(store),
+    /* K122 */  be_nested_str(_stores),
+    /* K123 */  be_nested_str(_store_map),
+    /* K124 */  be_nested_str(_store_set),
+    /* K125 */  be_nested_str(_store_get),
+    /* K126 */  be_nested_str(store),
+    /* K127 */  be_nested_str(_store_set),
+    /* K128 */  be_nested_str(store),
+    /* K129 */  be_nested_str(_store_get),
+    /* K130 */  be_nested_str(_store_load),
     /* K131 */  be_nested_str(shared),
-    /* K132 */  be_nested_str(age),
-    /* K133 */  be_nested_str(_shared_age),
-    /* K134 */  be_nested_str(shared),
-    /* K135 */  be_nested_str(keys),
+    /* K132 */  be_nested_str(shared),
+    /* K133 */  be_nested_str(_shared_set),
+    /* K134 */  be_nested_str(_shared_get),
+    /* K135 */  be_nested_str(_shared_age),
     /* K136 */  be_nested_str(_shared_keys),
-    /* K137 */  be_nested_str(re),
-    /* K138 */  be_nested_str(re),
-    /* K139 */  be_nested_str(_re_search),
-    /* K140 */  be_nested_str(_re_match),
-    /* K141 */  be_nested_str(_re_matchall),
-    /* K142 */  be_nested_str(re),
-    /* K143 */  be_nested_str(search),
-    /* K144 */  be_nested_str(_re_search),
-    /* K145 */  be_nested_str(re),
-    /* K146 */  be_nested_str(match),
-    /* K147 */  be_nested_str(_re_match),
+    /* K137 */  be_nested_str(shared),
+    /* K138 */  be_nested_str(_shared_set),
+    /* K139 */  be_nested_str(shared),
+    /* K140 */  be_nested_str(_shared_get),
+    /* K141 */  be_nested_str(shared),
+    /* K142 */  be_nested_str(age),
+    /* K143 */  be_nested_str(_shared_age),
+    /* K144 */  be_nested_str(shared),
+    /* K145 */  be_nested_str(keys),
+    /* K146 */  be_nested_str(_shared_keys),
+    /* K147 */  be_nested_str(re),
     /* K148 */  be_nested_str(re),
-    /* K149 */  be_nested_str(matchall),
-    /* K150 */  be_nested_str(_re_matchall),
-    /* K151 */  be_nested_str(_apps),
-    /* K152 */  be_nested_str(_app_anchor),
-    /* K153 */  be_nested_str(_app_instance),
-    /* K154 */  be_nested_str(_app_drop),
-    /* K155 */  be_nested_str(_app_forget),
+    /* K149 */  be_nested_str(_re_search),
+    /* K150 */  be_nested_str(_re_match),
+    /* K151 */  be_nested_str(_re_matchall),
+    /* K152 */  be_nested_str(re),
+    /* K153 */  be_nested_str(search),
+    /* K154 */  be_nested_str(_re_search),
+    /* K155 */  be_nested_str(re),
+    /* K156 */  be_nested_str(match),
+    /* K157 */  be_nested_str(_re_match),
+    /* K158 */  be_nested_str(re),
+    /* K159 */  be_nested_str(matchall),
+    /* K160 */  be_nested_str(_re_matchall),
+    /* K161 */  be_nested_str(_apps),
+    /* K162 */  be_nested_str(_app_anchor),
+    /* K163 */  be_nested_str(_app_instance),
+    /* K164 */  be_nested_str(_app_drop),
+    /* K165 */  be_nested_str(_app_forget),
     }),
     &be_const_str_main,
     &be_const_str_solidified,
-    ( &(const binstruction[288]) {  /* code */
+    ( &(const binstruction[302]) {  /* code */
       0xA4020000,  //  0000  IMPORT	R0	K0
       0xBC020000,  //  0001  SETNGBL	R0	K0
       0x6000000B,  //  0002  GETGBL	R0	G11
@@ -2172,103 +2222,117 @@ be_local_closure(awtrix_prelude,   /* name */
       0xBC02B400,  //  00BC  SETNGBL	R0	K90
       0x84000028,  //  00BD  CLOSURE	R0	P40
       0xBC02B600,  //  00BE  SETNGBL	R0	K91
-      0x84000029,  //  00BF  CLOSURE	R0	P41
-      0xBC02B800,  //  00C0  SETNGBL	R0	K92
-      0x8400002A,  //  00C1  CLOSURE	R0	P42
-      0xBC02BA00,  //  00C2  SETNGBL	R0	K93
-      0x8400002B,  //  00C3  CLOSURE	R0	P43
-      0xBC02BC00,  //  00C4  SETNGBL	R0	K94
-      0xB802BE00,  //  00C5  GETNGBL	R0	K95
-      0xB806C200,  //  00C6  GETNGBL	R1	K97
-      0x9002C001,  //  00C7  SETMBR	R0	K96	R1
-      0xB802C400,  //  00C8  GETNGBL	R0	K98
-      0xB806C800,  //  00C9  GETNGBL	R1	K100
-      0x9002C601,  //  00CA  SETMBR	R0	K99	R1
-      0xB802CA00,  //  00CB  GETNGBL	R0	K101
-      0xB806CE00,  //  00CC  GETNGBL	R1	K103
-      0x9002CC01,  //  00CD  SETMBR	R0	K102	R1
-      0xB802D000,  //  00CE  GETNGBL	R0	K104
-      0xB806D400,  //  00CF  GETNGBL	R1	K106
-      0x9002D201,  //  00D0  SETMBR	R0	K105	R1
-      0xB802D600,  //  00D1  GETNGBL	R0	K107
-      0xB806DA00,  //  00D2  GETNGBL	R1	K109
-      0x9002D801,  //  00D3  SETMBR	R0	K108	R1
-      0x6000000B,  //  00D4  GETGBL	R0	G11
-      0x5804006E,  //  00D5  LDCONST	R1	K110
-      0x7C000200,  //  00D6  CALL	R0	1
-      0xBC02DE00,  //  00D7  SETNGBL	R0	K111
-      0x60000013,  //  00D8  GETGBL	R0	G19
-      0x7C000000,  //  00D9  CALL	R0	0
-      0xBC02E000,  //  00DA  SETNGBL	R0	K112
-      0x8400002C,  //  00DB  CLOSURE	R0	P44
-      0xBC02E200,  //  00DC  SETNGBL	R0	K113
-      0x8400002D,  //  00DD  CLOSURE	R0	P45
-      0xBC02E400,  //  00DE  SETNGBL	R0	K114
-      0x8400002E,  //  00DF  CLOSURE	R0	P46
-      0xBC02E600,  //  00E0  SETNGBL	R0	K115
-      0xB802E800,  //  00E1  GETNGBL	R0	K116
-      0xB806EA00,  //  00E2  GETNGBL	R1	K117
-      0x90025201,  //  00E3  SETMBR	R0	K41	R1
-      0xB802EC00,  //  00E4  GETNGBL	R0	K118
-      0xB806EE00,  //  00E5  GETNGBL	R1	K119
-      0x90021E01,  //  00E6  SETMBR	R0	K15	R1
-      0x8400002F,  //  00E7  CLOSURE	R0	P47
-      0xBC02F000,  //  00E8  SETNGBL	R0	K120
-      0x6000000B,  //  00E9  GETGBL	R0	G11
-      0x58040079,  //  00EA  LDCONST	R1	K121
-      0x7C000200,  //  00EB  CALL	R0	1
-      0xBC02F400,  //  00EC  SETNGBL	R0	K122
+      0xB802B800,  //  00BF  GETNGBL	R0	K92
+      0xB806BC00,  //  00C0  GETNGBL	R1	K94
+      0x9002BA01,  //  00C1  SETMBR	R0	K93	R1
+      0xB802BE00,  //  00C2  GETNGBL	R0	K95
+      0xB806C200,  //  00C3  GETNGBL	R1	K97
+      0x9002C001,  //  00C4  SETMBR	R0	K96	R1
+      0x6000000B,  //  00C5  GETGBL	R0	G11
+      0x58040062,  //  00C6  LDCONST	R1	K98
+      0x7C000200,  //  00C7  CALL	R0	1
+      0xBC02C600,  //  00C8  SETNGBL	R0	K99
+      0x84000029,  //  00C9  CLOSURE	R0	P41
+      0xBC02C800,  //  00CA  SETNGBL	R0	K100
+      0x8400002A,  //  00CB  CLOSURE	R0	P42
+      0xBC02CA00,  //  00CC  SETNGBL	R0	K101
+      0x8400002B,  //  00CD  CLOSURE	R0	P43
+      0xBC02CC00,  //  00CE  SETNGBL	R0	K102
+      0x8400002C,  //  00CF  CLOSURE	R0	P44
+      0xBC02CE00,  //  00D0  SETNGBL	R0	K103
+      0x8400002D,  //  00D1  CLOSURE	R0	P45
+      0xBC02D000,  //  00D2  SETNGBL	R0	K104
+      0xB802D200,  //  00D3  GETNGBL	R0	K105
+      0xB806D600,  //  00D4  GETNGBL	R1	K107
+      0x9002D401,  //  00D5  SETMBR	R0	K106	R1
+      0xB802D800,  //  00D6  GETNGBL	R0	K108
+      0xB806DC00,  //  00D7  GETNGBL	R1	K110
+      0x9002DA01,  //  00D8  SETMBR	R0	K109	R1
+      0xB802DE00,  //  00D9  GETNGBL	R0	K111
+      0xB806E200,  //  00DA  GETNGBL	R1	K113
+      0x9002E001,  //  00DB  SETMBR	R0	K112	R1
+      0xB802E400,  //  00DC  GETNGBL	R0	K114
+      0xB806E800,  //  00DD  GETNGBL	R1	K116
+      0x9002E601,  //  00DE  SETMBR	R0	K115	R1
+      0xB802EA00,  //  00DF  GETNGBL	R0	K117
+      0xB806EE00,  //  00E0  GETNGBL	R1	K119
+      0x9002EC01,  //  00E1  SETMBR	R0	K118	R1
+      0x6000000B,  //  00E2  GETGBL	R0	G11
+      0x58040078,  //  00E3  LDCONST	R1	K120
+      0x7C000200,  //  00E4  CALL	R0	1
+      0xBC02F200,  //  00E5  SETNGBL	R0	K121
+      0x60000013,  //  00E6  GETGBL	R0	G19
+      0x7C000000,  //  00E7  CALL	R0	0
+      0xBC02F400,  //  00E8  SETNGBL	R0	K122
+      0x8400002E,  //  00E9  CLOSURE	R0	P46
+      0xBC02F600,  //  00EA  SETNGBL	R0	K123
+      0x8400002F,  //  00EB  CLOSURE	R0	P47
+      0xBC02F800,  //  00EC  SETNGBL	R0	K124
       0x84000030,  //  00ED  CLOSURE	R0	P48
-      0xBC02F600,  //  00EE  SETNGBL	R0	K123
-      0x84000031,  //  00EF  CLOSURE	R0	P49
-      0xBC02F800,  //  00F0  SETNGBL	R0	K124
-      0x84000032,  //  00F1  CLOSURE	R0	P50
-      0xBC02FA00,  //  00F2  SETNGBL	R0	K125
-      0x84000033,  //  00F3  CLOSURE	R0	P51
-      0xBC02FC00,  //  00F4  SETNGBL	R0	K126
-      0xB802FE00,  //  00F5  GETNGBL	R0	K127
-      0xB8070000,  //  00F6  GETNGBL	R1	K128
-      0x90025201,  //  00F7  SETMBR	R0	K41	R1
-      0xB8030200,  //  00F8  GETNGBL	R0	K129
-      0xB8070400,  //  00F9  GETNGBL	R1	K130
-      0x90021E01,  //  00FA  SETMBR	R0	K15	R1
-      0xB8030600,  //  00FB  GETNGBL	R0	K131
-      0xB8070A00,  //  00FC  GETNGBL	R1	K133
-      0x90030801,  //  00FD  SETMBR	R0	K132	R1
-      0xB8030C00,  //  00FE  GETNGBL	R0	K134
-      0xB8071000,  //  00FF  GETNGBL	R1	K136
-      0x90030E01,  //  0100  SETMBR	R0	K135	R1
-      0x6000000B,  //  0101  GETGBL	R0	G11
-      0x58040089,  //  0102  LDCONST	R1	K137
-      0x7C000200,  //  0103  CALL	R0	1
-      0xBC031400,  //  0104  SETNGBL	R0	K138
-      0x84000034,  //  0105  CLOSURE	R0	P52
-      0xBC031600,  //  0106  SETNGBL	R0	K139
-      0x84000035,  //  0107  CLOSURE	R0	P53
-      0xBC031800,  //  0108  SETNGBL	R0	K140
-      0x84000036,  //  0109  CLOSURE	R0	P54
-      0xBC031A00,  //  010A  SETNGBL	R0	K141
-      0xB8031C00,  //  010B  GETNGBL	R0	K142
-      0xB8072000,  //  010C  GETNGBL	R1	K144
-      0x90031E01,  //  010D  SETMBR	R0	K143	R1
-      0xB8032200,  //  010E  GETNGBL	R0	K145
-      0xB8072600,  //  010F  GETNGBL	R1	K147
-      0x90032401,  //  0110  SETMBR	R0	K146	R1
-      0xB8032800,  //  0111  GETNGBL	R0	K148
-      0xB8072C00,  //  0112  GETNGBL	R1	K150
-      0x90032A01,  //  0113  SETMBR	R0	K149	R1
-      0x60000013,  //  0114  GETGBL	R0	G19
-      0x7C000000,  //  0115  CALL	R0	0
-      0xBC032E00,  //  0116  SETNGBL	R0	K151
-      0x84000037,  //  0117  CLOSURE	R0	P55
-      0xBC033000,  //  0118  SETNGBL	R0	K152
-      0x84000038,  //  0119  CLOSURE	R0	P56
-      0xBC033200,  //  011A  SETNGBL	R0	K153
-      0x84000039,  //  011B  CLOSURE	R0	P57
-      0xBC033400,  //  011C  SETNGBL	R0	K154
-      0x8400003A,  //  011D  CLOSURE	R0	P58
-      0xBC033600,  //  011E  SETNGBL	R0	K155
-      0x80000000,  //  011F  RET	0
+      0xBC02FA00,  //  00EE  SETNGBL	R0	K125
+      0xB802FC00,  //  00EF  GETNGBL	R0	K126
+      0xB806FE00,  //  00F0  GETNGBL	R1	K127
+      0x90025201,  //  00F1  SETMBR	R0	K41	R1
+      0xB8030000,  //  00F2  GETNGBL	R0	K128
+      0xB8070200,  //  00F3  GETNGBL	R1	K129
+      0x90021E01,  //  00F4  SETMBR	R0	K15	R1
+      0x84000031,  //  00F5  CLOSURE	R0	P49
+      0xBC030400,  //  00F6  SETNGBL	R0	K130
+      0x6000000B,  //  00F7  GETGBL	R0	G11
+      0x58040083,  //  00F8  LDCONST	R1	K131
+      0x7C000200,  //  00F9  CALL	R0	1
+      0xBC030800,  //  00FA  SETNGBL	R0	K132
+      0x84000032,  //  00FB  CLOSURE	R0	P50
+      0xBC030A00,  //  00FC  SETNGBL	R0	K133
+      0x84000033,  //  00FD  CLOSURE	R0	P51
+      0xBC030C00,  //  00FE  SETNGBL	R0	K134
+      0x84000034,  //  00FF  CLOSURE	R0	P52
+      0xBC030E00,  //  0100  SETNGBL	R0	K135
+      0x84000035,  //  0101  CLOSURE	R0	P53
+      0xBC031000,  //  0102  SETNGBL	R0	K136
+      0xB8031200,  //  0103  GETNGBL	R0	K137
+      0xB8071400,  //  0104  GETNGBL	R1	K138
+      0x90025201,  //  0105  SETMBR	R0	K41	R1
+      0xB8031600,  //  0106  GETNGBL	R0	K139
+      0xB8071800,  //  0107  GETNGBL	R1	K140
+      0x90021E01,  //  0108  SETMBR	R0	K15	R1
+      0xB8031A00,  //  0109  GETNGBL	R0	K141
+      0xB8071E00,  //  010A  GETNGBL	R1	K143
+      0x90031C01,  //  010B  SETMBR	R0	K142	R1
+      0xB8032000,  //  010C  GETNGBL	R0	K144
+      0xB8072400,  //  010D  GETNGBL	R1	K146
+      0x90032201,  //  010E  SETMBR	R0	K145	R1
+      0x6000000B,  //  010F  GETGBL	R0	G11
+      0x58040093,  //  0110  LDCONST	R1	K147
+      0x7C000200,  //  0111  CALL	R0	1
+      0xBC032800,  //  0112  SETNGBL	R0	K148
+      0x84000036,  //  0113  CLOSURE	R0	P54
+      0xBC032A00,  //  0114  SETNGBL	R0	K149
+      0x84000037,  //  0115  CLOSURE	R0	P55
+      0xBC032C00,  //  0116  SETNGBL	R0	K150
+      0x84000038,  //  0117  CLOSURE	R0	P56
+      0xBC032E00,  //  0118  SETNGBL	R0	K151
+      0xB8033000,  //  0119  GETNGBL	R0	K152
+      0xB8073400,  //  011A  GETNGBL	R1	K154
+      0x90033201,  //  011B  SETMBR	R0	K153	R1
+      0xB8033600,  //  011C  GETNGBL	R0	K155
+      0xB8073A00,  //  011D  GETNGBL	R1	K157
+      0x90033801,  //  011E  SETMBR	R0	K156	R1
+      0xB8033C00,  //  011F  GETNGBL	R0	K158
+      0xB8074000,  //  0120  GETNGBL	R1	K160
+      0x90033E01,  //  0121  SETMBR	R0	K159	R1
+      0x60000013,  //  0122  GETGBL	R0	G19
+      0x7C000000,  //  0123  CALL	R0	0
+      0xBC034200,  //  0124  SETNGBL	R0	K161
+      0x84000039,  //  0125  CLOSURE	R0	P57
+      0xBC034400,  //  0126  SETNGBL	R0	K162
+      0x8400003A,  //  0127  CLOSURE	R0	P58
+      0xBC034600,  //  0128  SETNGBL	R0	K163
+      0x8400003B,  //  0129  CLOSURE	R0	P59
+      0xBC034800,  //  012A  SETNGBL	R0	K164
+      0x8400003C,  //  012B  CLOSURE	R0	P60
+      0xBC034A00,  //  012C  SETNGBL	R0	K165
+      0x80000000,  //  012D  RET	0
     })
   )
 );
@@ -2284,6 +2348,8 @@ static const bvalue awtrix_binding_name_anchor[]
   be_nested_str(_native_apply_case),
   be_nested_str(_native_battery),
   be_nested_str(_native_battery_volts),
+  be_nested_str(_native_heartrate_bpm),
+  be_nested_str(_native_heartrate_connected),
   be_nested_str(_native_http_request),
   be_nested_str(_native_humidity),
   be_nested_str(_native_light),

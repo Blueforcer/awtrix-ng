@@ -45,7 +45,7 @@ def main():
     check(core, "no Berry language builtins extracted from be_baselib.c/berry_conf.h")
 
     for want in ("pixel", "text", "log", "http.get", "mqtt.subscribe", "store.get", "notify",
-                 "scroll_text"):
+                 "scroll_text", "heartrate.connected", "heartrate.bpm"):
         check(want in names, "expected %r in the device API, got %d entries" % (want, len(api)))
 
     check("pixel(x, y, color)" in api, "pixel lost its signature comment")

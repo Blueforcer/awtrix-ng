@@ -60,9 +60,8 @@ void NetworkService::begin(const DeviceConfig& cfg, bool forceAp,
   country.nchan = 13;
   country.policy = WIFI_COUNTRY_POLICY_AUTO;
   esp_wifi_set_country(&country);
-  // Modem sleep adds a hundred milliseconds of latency to every packet, which shows up as stuttery
-  // Art-Net and laggy API calls. The device is mains-powered, so trade the power for latency.
-  esp_wifi_set_ps(WIFI_PS_NONE);
+  // Classic ESP32 WiFi/Bluetooth coexistence requires modem sleep to remain enabled.
+  esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
   WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
   WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
 

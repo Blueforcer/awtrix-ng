@@ -7,6 +7,7 @@
 #include <ctime>
 
 #include "AppConfig.h"
+#include "bluetooth/BleHeartRateService.h"
 #include "core/CoreEngine.h"
 #include "core/FrameClock.h"
 #include "core/StrCase.h"
@@ -125,6 +126,7 @@ PeripheryService g_periphery;
 BootAnimator g_bootAnim;
 DiscoveryService g_disco;
 ArtnetService g_artnet;
+bluetooth::BleHeartRateService g_bleHeartRate;
 #if defined(AWTRIX_SOC_ESP32S3)
 std::unique_ptr<AudioOutEsp32> g_radio;
 #endif
@@ -429,6 +431,7 @@ void setup() {
   g_scriptSvc.storeSink = &g_scriptStore;
   g_scriptSvc.effects = &g_effects;
   g_scriptSvc.overlays = &g_overlays;
+  g_scriptSvc.heartRate = &g_bleHeartRate;
   g_scriptSvc.notify = [](const std::string& json) {
     DispatchDetail detail;
     return g_engine->notify(json, static_cast<uint8_t>(Source::Internal), detail) ==
@@ -555,6 +558,10 @@ void setup() {
   g_display->setPublisher(publisher);
   g_display->setScreen(g_canvas);
 
+  // Phase-one BLE HR is autonomous and intentionally starts after the normal device services, so
+  // BLE initialization and scanning never hold up networking, HTTP, MQTT or the display boot.
+  g_bleHeartRate.begin();
+
   // Everything is up; hold the intro on screen for its full length even when setup got there
   // early, then show the address long enough to be read before the first app appears.
   g_bootAnim.stop();
@@ -613,6 +620,7 @@ void loop() {
     g_lastSettingsSaveMs = now;
   }
   g_net.tick();
+  g_bleHeartRate.tick(static_cast<uint32_t>(now));
   const bool netConnected = g_net.isConnected();
   if (netConnected && !g_netWasConnected) applyTimeConfig(g_cfg, true);
   g_netWasConnected = netConnected;

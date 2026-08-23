@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "bluetooth/HeartRateState.h"
 #include "core/apps/IApp.h"
 #include "core/render/Canvas.h"
 #include "core/render/TextRenderer.h"
@@ -20,12 +21,65 @@ static const GfxFont kFont = {kBitmap, kGlyphs, 'A', 'Z', 8};
 
 static script::ScriptServices g_svc;
 
+class FakeHeartRateState : public bluetooth::IHeartRateState {
+ public:
+  bool connected() const override { return connected_; }
+  bool hasValidBpm() const override { return valid_; }
+  uint16_t bpm() const override { return bpm_; }
+
+  bool connected_ = false;
+  bool valid_ = false;
+  uint16_t bpm_ = 0;
+};
+
+static bool loadWithPrelude(script::BerryVM& vm, const char* user);
+
 void setUp() {
   g_svc.http = nullptr;
   g_svc.mqtt = nullptr;
   g_svc.icon = nullptr;
   g_svc.storeSink = nullptr;
+  g_svc.heartRate = nullptr;
   script::setServices(&g_svc);
+}
+
+static void test_heartrate_module_reads_live_service_state() {
+  FakeHeartRateState heartRate;
+  g_svc.heartRate = &heartRate;
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(loadWithPrelude(
+      vm,
+      "def draw()\n"
+      "  clear()\n"
+      "  pixel(0, 0, heartrate.connected() ? 1 : 0)\n"
+      "  var v = heartrate.bpm()\n"
+      "  pixel(1, 0, v == nil ? 255 : v)\n"
+      "  pixel(2, 0, type(heartrate.connected()) == 'bool' ? 1 : 0)\n"
+      "end"));
+  Canvas c(32, 8);
+  RenderCtx ctx;
+  script::BindingScope scope(&c, &ctx, "T");
+
+  TEST_ASSERT_TRUE(vm.call("draw"));
+  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(255u, c.getPixel(1, 0));
+  TEST_ASSERT_EQUAL_HEX32(1u, c.getPixel(2, 0));
+
+  heartRate.connected_ = true;
+  heartRate.valid_ = true;
+  heartRate.bpm_ = 72;
+  TEST_ASSERT_TRUE(vm.call("draw"));
+  TEST_ASSERT_EQUAL_HEX32(1u, c.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(72u, c.getPixel(1, 0));
+
+  heartRate.bpm_ = 88;
+  TEST_ASSERT_TRUE(vm.call("draw"));
+  TEST_ASSERT_EQUAL_HEX32(88u, c.getPixel(1, 0));
+
+  heartRate.connected_ = false;
+  TEST_ASSERT_TRUE(vm.call("draw"));
+  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(88u, c.getPixel(1, 0));
 }
 
 void tearDown() { script::setServices(nullptr); }
@@ -1348,6 +1402,7 @@ int main(int, char**) {
   g_svc.monotonicMs = []() { return t += 10; };
 
   UNITY_BEGIN();
+  RUN_TEST(test_heartrate_module_reads_live_service_state);
   RUN_TEST(test_draw_primitives);
   RUN_TEST(test_shape_primitives);
   RUN_TEST(test_draw_noop_without_canvas);

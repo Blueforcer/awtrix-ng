@@ -11,6 +11,7 @@
 
 #include "AppConfig.h"
 #include "berry.h"
+#include "bluetooth/HeartRateState.h"
 #include "core/Settings.h"
 #include "core/StrCase.h"
 #include "core/api/JsonReader.h"
@@ -672,6 +673,20 @@ int b_battery_volts(bvm* vm) {
   be_return(vm);
 }
 
+int b_heartrate_connected(bvm* vm) {
+  be_pushbool(vm, g_svc && g_svc->heartRate && g_svc->heartRate->connected());
+  be_return(vm);
+}
+
+int b_heartrate_bpm(bvm* vm) {
+  const bluetooth::IHeartRateState* heartRate = g_svc ? g_svc->heartRate : nullptr;
+  if (heartRate && heartRate->hasValidBpm())
+    be_pushint(vm, static_cast<bint>(heartRate->bpm()));
+  else
+    be_pushnil(vm);
+  be_return(vm);
+}
+
 int b_hour(bvm* vm) {
   be_pushint(vm, g_ctx.rctx ? g_ctx.rctx->hour : kNoClock);
   be_return(vm);
@@ -1148,6 +1163,8 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "_native_light", b_light);
   be_regfunc(b, "_native_battery", b_battery);
   be_regfunc(b, "_native_battery_volts", b_battery_volts);
+  be_regfunc(b, "_native_heartrate_connected", b_heartrate_connected);
+  be_regfunc(b, "_native_heartrate_bpm", b_heartrate_bpm);
   be_regfunc(b, "_native_rotation_hold", b_rotation_hold);
   be_regfunc(b, "_native_shared_set", b_shared_set);
   be_regfunc(b, "_native_shared_get", b_shared_get);

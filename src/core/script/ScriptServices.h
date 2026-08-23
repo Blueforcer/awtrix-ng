@@ -13,6 +13,9 @@ class Canvas;
 class EffectRegistry;
 struct RuntimeState;
 struct Settings;
+namespace bluetooth {
+class IHeartRateState;
+}
 }
 
 namespace awtrix::script {
@@ -139,6 +142,7 @@ struct ScriptServices {
   SharedState* shared = nullptr;
   const EffectRegistry* effects = nullptr;
   const EffectRegistry* overlays = nullptr;
+  const bluetooth::IHeartRateState* heartRate = nullptr;
   const GfxFont* fonts[kFontCount] = {nullptr, nullptr};
   const Canvas* panel = nullptr;
   std::function<int64_t()> monotonicMs;

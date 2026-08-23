@@ -119,6 +119,7 @@ row that sounds like the app you have in mind, and follow it.
 | [Interrupting with an alert](#notifications) | `notify()` |
 | [Making a noise](#sound) | `sound.play()` `sound.mp3()` `sound.melody()` `sound.track()` `sound.rtttl()` `sound.stop()` `sound.playing()` `sound.sinks()` |
 | [What the device measures](#reading-the-sensors) | `sensor.temperature()` `sensor.humidity()` `sensor.pressure()` `sensor.light()` `sensor.battery()` |
+| [Bluetooth heart rate](#reading-bluetooth-heart-rate) | `heartrate.connected()` `heartrate.bpm()` |
 | [What the owner configured](#device-settings) | `settings.get()` `settings.set()` `settings.apply_case()` |
 | [Moving the rotation along](#driving-the-rotation) | `rotation.show()` `rotation.next()` `rotation.previous()` `rotation.pause()` `rotation.resume()` |
 | [Working out what went wrong](#logging) | `log()` |
@@ -393,6 +394,19 @@ Temperature is always Celsius and humidity always a percentage. The raw value st
 
 The readings refresh on the device's own schedule, not once per frame - reading them in `draw()` is
 cheap, but nothing changes between two frames.
+
+### Reading Bluetooth heart rate
+
+The `heartrate` module exposes the read-only state of the device's Bluetooth Heart Rate Profile
+client:
+
+| Call | Answer |
+|---|---|
+| `heartrate.connected()` | `true` while heart-rate measurement notifications are subscribed; otherwise `false` |
+| `heartrate.bpm()` | the most recent valid BPM as an integer, or `nil` before the first valid reading |
+
+The last valid BPM remains available after a disconnect, so use `connected()` when freshness
+matters. These calls only read the BLE service's current state; they do not scan, connect, or poll.
 
 ### Driving the rotation
 
