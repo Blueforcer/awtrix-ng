@@ -1,0 +1,87 @@
+# @name    Heart Rate
+# @desc    Live Bluetooth heart rate with a BPM-timed pulse
+# @author  AWTRIX NG
+# @version 1.0
+
+class HeartRate
+  var beat_at, next_beat, interval
+
+  def init()
+    self.beat_at = -10000
+    self.next_beat = -1
+    self.interval = 1000
+  end
+
+  def on_show()
+    # Begin a visible beat when this app enters the normal rotation.
+    self.next_beat = -1
+  end
+
+  def small_heart(x, color)
+    pixel(x + 2, 2, color)
+    pixel(x + 4, 2, color)
+    rect_fill(x + 1, 3, 5, 1, color)
+    rect_fill(x + 2, 4, 3, 1, color)
+    pixel(x + 3, 5, color)
+  end
+
+  def large_heart(x, color)
+    rect_fill(x + 1, 1, 2, 1, color)
+    rect_fill(x + 4, 1, 2, 1, color)
+    rect_fill(x, 2, 7, 2, color)
+    rect_fill(x + 1, 4, 5, 1, color)
+    rect_fill(x + 2, 5, 3, 1, color)
+    pixel(x + 3, 6, color)
+  end
+
+  def draw()
+    clear()
+    var connected = heartrate.connected()
+    var bpm = heartrate.bpm()
+    var live = connected && bpm != nil && bpm > 0
+    var label = live ? str(int(bpm)) : "--"
+    var text_w = text_ink_width(label)
+    var left = int((width() - (7 + 2 + text_w)) / 2)
+
+    if live
+      # Clamp animation only; the actual BPM above is always displayed unchanged.
+      var animated_bpm = bpm
+      if animated_bpm < 30 animated_bpm = 30 end
+      if animated_bpm > 220 animated_bpm = 220 end
+      var new_interval = int(60000 / animated_bpm)
+      var now = now_ms()
+
+      if self.next_beat < 0
+        self.beat_at = now
+        self.next_beat = now + new_interval
+      elif new_interval != self.interval
+        # Apply a changed BPM to the next beat without restarting the current pulse.
+        self.next_beat = self.beat_at + new_interval
+      end
+      self.interval = new_interval
+
+      if now >= self.next_beat
+        self.beat_at = now
+        self.next_beat = now + self.interval
+      end
+
+      var age = now - self.beat_at
+      if age < 100
+        self.large_heart(left, 0xFF2020)
+      elif age < 180
+        self.large_heart(left, 0xB00000)
+      else
+        self.small_heart(left, 0x700000)
+      end
+      text(left + 9, 6, label, 0xFFFFFF)
+    else
+      # Phase 2 retains the last BPM after disconnect, so never use it here.
+      self.next_beat = -1
+      self.beat_at = -10000
+      self.small_heart(left, 0x280000)
+      text(left + 9, 6, label, 0x707070)
+    end
+  end
+end
+
+return HeartRate()

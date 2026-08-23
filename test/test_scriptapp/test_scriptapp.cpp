@@ -1,5 +1,6 @@
 ﻿#include <unity.h>
 
+#include <fstream>
 #include <string>
 
 #include "bluetooth/HeartRateState.h"
@@ -10,6 +11,7 @@
 #include "core/script/ScriptApp.h"
 #include "core/script/ScriptBindings.h"
 #include "core/script/ScriptServices.h"
+#include "media/AwtrixFontAdapter.h"
 
 using namespace awtrix;
 
@@ -970,6 +972,141 @@ struct Engine {
   }
 };
 
+static std::string heartRateAppSource() {
+  const char* paths[] = {
+      "docs/examples/heart-rate.ax",
+      "../../docs/examples/heart-rate.ax",
+      "../../../docs/examples/heart-rate.ax",
+  };
+  for (const char* path : paths) {
+    std::ifstream input(path, std::ios::binary);
+    if (input) return std::string(std::istreambuf_iterator<char>(input), {});
+  }
+  return {};
+}
+
+static int countColor(const Canvas& canvas, uint32_t color) {
+  int count = 0;
+  for (int y = 0; y < canvas.height(); ++y)
+    for (int x = 0; x < canvas.width(); ++x)
+      if (canvas.getPixel(x, y) == color) ++count;
+  return count;
+}
+
+static int minColorX(const Canvas& canvas, uint32_t color) {
+  for (int x = 0; x < canvas.width(); ++x)
+    for (int y = 0; y < canvas.height(); ++y)
+      if (canvas.getPixel(x, y) == color) return x;
+  return -1;
+}
+
+static int maxColorX(const Canvas& canvas, uint32_t color) {
+  for (int x = canvas.width() - 1; x >= 0; --x)
+    for (int y = 0; y < canvas.height(); ++y)
+      if (canvas.getPixel(x, y) == color) return x;
+  return -1;
+}
+
+static void test_heart_rate_app_states_layout_and_beat_timing() {
+  const std::string source = heartRateAppSource();
+  TEST_ASSERT_FALSE_MESSAGE(source.empty(), "docs/examples/heart-rate.ax not found");
+
+  FakeHeartRateState heartRate;
+  g_svc.heartRate = &heartRate;
+  int64_t nowMs = 0;
+  const auto previousClock = g_svc.monotonicMs;
+  g_svc.monotonicMs = [&nowMs]() { return nowMs; };
+
+  Engine e;
+  script::ScriptApp app(e.vm, "HeartRate", source, script::ScriptMeta{}, "", nullptr);
+  TEST_ASSERT_TRUE_MESSAGE(app.ok(), app.error().message.c_str());
+  Canvas canvas(32, 8);
+  RenderCtx ctx;
+  ctx.font = &awtrixFont(FontId::Small);
+  ctx.fonts[0] = &awtrixFont(FontId::Small);
+  ctx.fonts[1] = &awtrixFont(FontId::Large);
+
+  // Disconnected with no reading: a dim resting heart and "--", never a stale white BPM.
+  nowMs = 500;
+  app.render(canvas, ctx);
+  TEST_ASSERT_TRUE(app.ok());
+  TEST_ASSERT_TRUE(countColor(canvas, 0x280000u) > 0);
+  TEST_ASSERT_TRUE(countColor(canvas, 0x707070u) > 0);
+  TEST_ASSERT_EQUAL_INT(0, countColor(canvas, 0xFFFFFFu));
+
+  // A subscribed connection still waits safely when no valid measurement has arrived.
+  heartRate.connected_ = true;
+  canvas.clear();
+  app.render(canvas, ctx);
+  TEST_ASSERT_TRUE(app.ok());
+  TEST_ASSERT_TRUE(countColor(canvas, 0x280000u) > 0);
+  TEST_ASSERT_TRUE(countColor(canvas, 0x707070u) > 0);
+
+  // 60 BPM: pulse immediately, rest after 180 ms, then pulse again at 1000 ms.
+  heartRate.valid_ = true;
+  heartRate.bpm_ = 60;
+  nowMs = 1000;
+  canvas.clear();
+  app.render(canvas, ctx);
+  TEST_ASSERT_TRUE(app.ok());
+  TEST_ASSERT_TRUE(countColor(canvas, 0xFF2020u) > 0);
+  TEST_ASSERT_TRUE(countColor(canvas, 0xFFFFFFu) > 0);
+  const int twoDigitHeartX = minColorX(canvas, 0xFF2020u);
+  const int twoDigitTextRight = maxColorX(canvas, 0xFFFFFFu);
+  TEST_ASSERT_TRUE(twoDigitHeartX >= 0);
+  TEST_ASSERT_TRUE(twoDigitTextRight < 32);
+
+  nowMs = 1200;
+  canvas.clear();
+  app.render(canvas, ctx);
+  TEST_ASSERT_EQUAL_INT(0, countColor(canvas, 0xFF2020u));
+  TEST_ASSERT_TRUE(countColor(canvas, 0x700000u) > 0);
+
+  nowMs = 2000;
+  canvas.clear();
+  app.render(canvas, ctx);
+  TEST_ASSERT_TRUE(countColor(canvas, 0xFF2020u) > 0);
+
+  // Changing to 120 BPM shortens the following interval to 500 ms without restarting now.
+  heartRate.bpm_ = 120;
+  nowMs = 2200;
+  canvas.clear();
+  app.render(canvas, ctx);
+  TEST_ASSERT_EQUAL_INT(0, countColor(canvas, 0xFF2020u));
+  const int threeDigitHeartX = minColorX(canvas, 0x700000u);
+  const int threeDigitTextRight = maxColorX(canvas, 0xFFFFFFu);
+  TEST_ASSERT_TRUE(threeDigitHeartX >= 0);
+  TEST_ASSERT_TRUE(threeDigitHeartX < twoDigitHeartX);
+  TEST_ASSERT_TRUE(threeDigitTextRight <= twoDigitTextRight + 2);
+  TEST_ASSERT_TRUE(threeDigitTextRight < 32);
+
+  nowMs = 2500;
+  canvas.clear();
+  app.render(canvas, ctx);
+  TEST_ASSERT_TRUE(countColor(canvas, 0xFF2020u) > 0);
+
+  // Retained Phase 2 BPM must disappear immediately after disconnect.
+  heartRate.connected_ = false;
+  nowMs = 2600;
+  canvas.clear();
+  app.render(canvas, ctx);
+  TEST_ASSERT_TRUE(app.ok());
+  TEST_ASSERT_EQUAL_INT(0, countColor(canvas, 0xFFFFFFu));
+  TEST_ASSERT_TRUE(countColor(canvas, 0x707070u) > 0);
+
+  // Connected zero is unavailable, exercising the divide-by-zero guard.
+  heartRate.connected_ = true;
+  heartRate.bpm_ = 0;
+  nowMs = 2700;
+  canvas.clear();
+  app.render(canvas, ctx);
+  TEST_ASSERT_TRUE(app.ok());
+  TEST_ASSERT_EQUAL_INT(0, countColor(canvas, 0xFFFFFFu));
+  TEST_ASSERT_TRUE(countColor(canvas, 0x707070u) > 0);
+
+  g_svc.monotonicMs = previousClock;
+}
+
 static std::string trace(script::ScriptApp& app) {
   std::string out;
   TEST_ASSERT_TRUE(app.callCheckForTest(out));
@@ -1403,6 +1540,7 @@ int main(int, char**) {
 
   UNITY_BEGIN();
   RUN_TEST(test_heartrate_module_reads_live_service_state);
+  RUN_TEST(test_heart_rate_app_states_layout_and_beat_timing);
   RUN_TEST(test_draw_primitives);
   RUN_TEST(test_shape_primitives);
   RUN_TEST(test_draw_noop_without_canvas);
