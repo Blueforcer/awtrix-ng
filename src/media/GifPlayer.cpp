@@ -20,15 +20,27 @@ constexpr int kPreDecodeBudgetBytes = 16 * 1024;
 
 GifPlayer::~GifPlayer() { close(); }
 
+namespace {
+bool hasBase64Prefix(const std::string& s) { return s.rfind("base64:", 0) == 0; }
+}
+
 GifPlayer::OpenResult GifPlayer::open(const std::string& iconId, bool firstFrameOnly,
                                       int maxResidentFrames) {
   close();
-  // No id that long can be a filename, so treat it as an inline base64 GIF from the API.
-  if (iconId.size() > 64) {
-    const auto* in = reinterpret_cast<const unsigned char*>(iconId.c_str());
-    const unsigned int maxLen = decode_base64_length(in, iconId.size());
+  const std::string* b64 = nullptr;
+  if (hasBase64Prefix(iconId)) {
+    b64 = &iconId;
+  } else if (iconId.size() > 64) {
+    // Legacy heuristic: no id that long can be a filename.
+    b64 = &iconId;
+  }
+  if (b64) {
+    const auto* in = reinterpret_cast<const unsigned char*>(b64->c_str());
+    const unsigned int len = b64->size();
+    const unsigned int prefixLen = hasBase64Prefix(*b64) ? 7 : 0;
+    const unsigned int maxLen = decode_base64_length(in + prefixLen, len - prefixLen);
     if (!data_.resize(maxLen)) return OpenResult::kOom;
-    const unsigned int n = decode_base64(in, iconId.size(), data_.data());
+    const unsigned int n = decode_base64(in + prefixLen, len - prefixLen, data_.data());
     if (n < 6) {
       data_.clear();
       return OpenResult::kMissing;

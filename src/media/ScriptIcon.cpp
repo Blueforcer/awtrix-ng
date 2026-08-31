@@ -102,7 +102,9 @@ ScriptIcon::Entry* ScriptIcon::acquire(const std::string& name, int64_t nowMs) {
 }
 
 bool ScriptIcon::draw(Canvas& canvas, const std::string& name, int x, int y, int64_t nowMs) {
-  if (!nameIsSafe(name) || name.size() > kMaxNameLen) return false;
+  const bool isB64 = name.rfind("base64:", 0) == 0;
+  if (!nameIsSafe(name)) return false;
+  if (!isB64 && name.size() > kMaxNameLen) return false;
 
   Entry* e = acquire(name, nowMs);
   if (e->state == State::kOom && nowMs >= e->nextRetryMs) load(*e, nowMs);
