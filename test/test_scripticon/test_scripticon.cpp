@@ -139,11 +139,24 @@ void test_unsafe_names_rejected() {
   TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
 }
 
+void test_base64_prefix_draws_short_icon() {
+  std::string b64(encode_base64_length(kGif8x8TwoFrames_len), '\0');
+  encode_base64(kGif8x8TwoFrames, kGif8x8TwoFrames_len,
+                reinterpret_cast<unsigned char*>(&b64[0]));
+  useAsset(nullptr, 0);
+  ScriptIcon si;
+  Canvas c(32, 8);
+  TEST_ASSERT_TRUE(si.draw(c, "base64:" + b64, 0, 0, 0));
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+  assertColorNear(0xFF0000u, c.getPixel(0, 0));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_good_icon_draws_and_caches);
   RUN_TEST(test_missing_icon_cached_without_retry);
   RUN_TEST(test_streaming_icon_renders_under_alloc_pressure);
   RUN_TEST(test_unsafe_names_rejected);
+  RUN_TEST(test_base64_prefix_draws_short_icon);
   return UNITY_END();
 }

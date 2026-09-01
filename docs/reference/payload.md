@@ -241,14 +241,15 @@ With `direction: left`, an `inline` text rests at the start of that area, while 
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `icon` | string | - | `""` | Icon ID, or inline base64 when longer than 64 chars |
+| `icon` | string | - | `""` | Icon ID, or `base64:` + inline data |
 | `iconMode` | string | `fixed` · `pushOnce` · `push` | `fixed` | Whether approaching text shoves the icon aside |
 | `iconOffsetX` | int | px | `0` | X shift of the icon |
 
-The mode is chosen purely by **length**:
+The mode is chosen by **prefix**, with a length-based fallback:
 
-- **64 characters or fewer** - an icon ID resolved against the filesystem. Animated `/ICONS/<id>.gif` is tried **first**, then static `/ICONS/<id>.jpg`.
-- **More than 64 characters** - inline base64 data, decoded and sniffed: a `GIF8` magic makes it an animated GIF, otherwise it is decoded as JPEG.
+- **`base64:` prefix** - the rest of the string is decoded as base64 image data, then sniffed: a `GIF8` magic makes it an animated GIF, otherwise it is decoded as JPEG.
+- **No prefix, 64 characters or fewer** - an icon ID resolved against the filesystem. Animated `/ICONS/<id>.gif` is tried **first**, then static `/ICONS/<id>.jpg`.
+- **No prefix, more than 64 characters** - treated as inline base64 (same as the prefixed form). Prefer the explicit `base64:` prefix.
 
 Only JPEG and GIF are supported - no PNG, no BMP. Icons are drawn at rows 0–7.
 

@@ -94,24 +94,23 @@ missing or fails to decode - is covered in the
 
 ## Inline base64 icons
 
-You do not have to upload a file at all. The mode is chosen **purely by the length of the
-`icon` string**:
+You do not have to upload a file at all. The mode is chosen by **prefix**:
 
-* **64 characters or fewer** → a file ID, resolved as above.
-* **more than 64 characters** → the string is decoded as base64 image data, then played as an
+* **`base64:` prefix** → the rest of the string is decoded as base64 image data, then played as an
   animated GIF or decoded as a JPEG depending on what the bytes turn out to be.
+* **64 characters or fewer, no prefix** → a file ID, resolved as above.
+* **More than 64 characters, no prefix** → treated as inline base64 via the legacy length
+  heuristic. It can misclassify a long icon id, and a short base64 without the prefix is taken
+  as a file ID — prefer the explicit `base64:` prefix.
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H "Content-Type: application/json" \
-  -d "{\"text\":\"Inline\",\"icon\":\"$(base64 -w0 1234.jpg)\"}"
+  -d "{\"text\":\"Inline\",\"icon\":\"base64:$(base64 -w0 1234.jpg)\"}"
 ```
 
 This suits a one-shot notification from a script that has the image to hand and does not want to
 leave a file behind. The trade-off is payload size: the image travels with every request.
-
-The threshold cuts both ways, so keep file names short. An icon ID longer than 64 characters is
-treated as base64 data, fails to decode, and the page renders without an icon.
 
 ## List and delete
 

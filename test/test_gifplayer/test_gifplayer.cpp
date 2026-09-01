@@ -236,6 +236,26 @@ void test_inline_base64_gif() {
   TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(0, 0));
 }
 
+void test_base64_prefix_opens_inline() {
+  std::string b64(encode_base64_length(kGif8x8TwoFrames_len), '\0');
+  encode_base64(kGif8x8TwoFrames, kGif8x8TwoFrames_len,
+                reinterpret_cast<unsigned char*>(&b64[0]));
+  useAsset(nullptr, 0);
+  GifPlayer gif;
+  TEST_ASSERT_TRUE(openOk(gif, "base64:" + b64));
+  Canvas c(8, 8);
+  gif.render(c, 0);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(0, 0));
+}
+
+void test_short_base64_without_prefix_is_a_filename() {
+  const std::string fake = "R0lGODlhAQABAIAAAAAAAAD/AAAAAAAsAAAAAAEAAQAAAgJEAQA7";
+  TEST_ASSERT_TRUE(fake.size() < 64);
+  useAsset(nullptr, 0);
+  GifPlayer gif;
+  TEST_ASSERT_TRUE(gif.open(fake) == OpenResult::kMissing);
+}
+
 void test_transparent_static_renders_black() {
   useAsset(kGifTransparentStatic, kGifTransparentStatic_len);
   GifPlayer gif;
@@ -364,6 +384,8 @@ int main(int, char**) {
   RUN_TEST(test_non_gif_rejected);
   RUN_TEST(test_missing_asset_rejected);
   RUN_TEST(test_inline_base64_gif);
+  RUN_TEST(test_base64_prefix_opens_inline);
+  RUN_TEST(test_short_base64_without_prefix_is_a_filename);
   RUN_TEST(test_transparent_static_renders_black);
   RUN_TEST(test_transparent_animation_keeps_previous_frame);
   RUN_TEST(test_transparent_streaming_first_frame_is_black);

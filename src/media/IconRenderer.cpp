@@ -28,15 +28,16 @@ bool jpgOutput(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
 
 bool draw(Canvas& canvas, const std::string& iconId, int x, int y) {
   media::PodBuffer<uint8_t> buf;
-  // Same convention as GifPlayer: anything longer than a plausible filename is inline base64.
-  if (iconId.size() > 64) {
+  bool isB64 = iconId.rfind("base64:", 0) == 0;
+  if (isB64 || iconId.size() > 64) {
     const auto* in = reinterpret_cast<const unsigned char*>(iconId.c_str());
-    const unsigned int maxLen = decode_base64_length(in, iconId.size());
+    const unsigned int prefixLen = isB64 ? 7 : 0;
+    const unsigned int maxLen = decode_base64_length(in + prefixLen, iconId.size() - prefixLen);
     if (!buf.resize(maxLen)) {
       logf("icon: no memory for inline icon");
       return false;
     }
-    const unsigned int n = decode_base64(in, iconId.size(), buf.data());
+    const unsigned int n = decode_base64(in + prefixLen, iconId.size() - prefixLen, buf.data());
     if (n == 0) {
       logf("icon: inline base64 decode failed");
       return false;

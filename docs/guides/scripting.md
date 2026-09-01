@@ -457,7 +457,7 @@ build the same number from plain channel values.
 | `text_width(str)` | how far the pen moves - use it to chain runs and to space repeats | `var w = text_width("hi")` |
 | `text_ink_width(str)` | how wide the lit pixels are - use it to fit and to centre | `var w = text_ink_width("hi")` |
 | `font(name)` | switch to `"small"` or `"large"` for the rest of the frame | `font("large")` |
-| `icon(name, x, y)` | an 8×8 icon by name; `false` if it could not be drawn | `icon("1234", 0, 0)` |
+| `icon(name, x, y)` | an 8×8 icon by name, or `base64:` + inline data; `false` if it could not be drawn | `icon("1234", 0, 0)` |
 | `rgb(r, g, b)` | pack a colour from channels (0–255) | `pixel(0, 0, rgb(255, 128, 0))` |
 | `hsv(h, s, v)` | pack a colour from hue/sat/val (h 0–360, s/v 0–100) | `hsv(second() * 6, 100, 100)` |
 
@@ -491,7 +491,7 @@ colour of its own, uses the colour of the call, and `font("large")` applies to a
 the same thing a [pushed app](../reference/payload.md#colored-fragments) does when its `text` is
 an array rather than a string.
 
-`icon()` draws from the same `/ICONS` folder the rest of AWTRIX uses - see [Icons & assets](icons.md). Give it the bare name, no path and no extension. **An animated GIF animates** - draw the same icon each frame and it plays, on the same schedule a [pushed app](pushed-apps.md)'s icon uses. A handful of icons stay cached, so cycling through a small set is cheap while fanning out over many costs a read each time.
+`icon()` draws from the same `/ICONS` folder the rest of AWTRIX uses - see [Icons & assets](icons.md). Give it the bare name, no path and no extension. You can also pass a `base64:` prefixed string to draw inline image data without uploading a file. **An animated GIF animates** - draw the same icon each frame and it plays, on the same schedule a [pushed app](pushed-apps.md)'s icon uses. A handful of icons stay cached, so cycling through a small set is cheap while fanning out over many costs a read each time.
 
 `icon()` returns `false` for a name AWTRIX does not have, and briefly also when it is
 short on memory - that second case heals itself within a few seconds, but the icon draws

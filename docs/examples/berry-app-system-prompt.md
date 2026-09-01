@@ -315,10 +315,11 @@ text has to stay readable on top.
 ### 5.5 Icons
 
 `icon(name, x, y)` draws an **8×8 icon by name** from the device's icon folder. Give the bare name -
-no path, no extension. Animated GIFs animate on their own if you draw the same icon every frame. It
-returns `false` if the icon is unknown *or* if decoding transiently ran out of memory - one of the
-ways a memory-hungry script punishes its neighbours - so paint a fallback and the cell is never a
-hole: `if !icon(self.ic, 0, 0) rect_fill(0, 0, 8, 8, 0x222222) end`.
+no path, no extension. You can also pass a `base64:` prefixed string for inline image data. Animated
+GIFs animate on their own if you draw the same icon every frame. It returns `false` if the icon is
+unknown *or* if decoding transiently ran out of memory - one of the ways a memory-hungry script
+punishes its neighbours - so paint a fallback and the cell is never a hole:
+`if !icon(self.ic, 0, 0) rect_fill(0, 0, 8, 8, 0x222222) end`.
 
 **You cannot know which icons the user has installed.** Icon names are numeric IDs from the
 LaMetric gallery, downloaded onto the device by its owner. Never invent one and present it as if it
