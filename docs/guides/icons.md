@@ -127,8 +127,9 @@ You do not have to upload a file at all. The mode is chosen by **prefix**:
 * **`base64:` prefix** → the rest of the string is decoded as base64 image data, then played as an
   animated GIF or decoded as a JPEG depending on what the bytes turn out to be.
 * **64 characters or fewer, no prefix** → a file ID, resolved as above.
-* **More than 64 characters, no prefix** → also treated as inline base64. Unreliable for short
-  icons — prefer the explicit prefix.
+* **More than 64 characters, no prefix** → treated as inline base64 via the legacy length
+  heuristic. It can misclassify a long icon id, and a short base64 without the prefix is taken
+  as a file ID — prefer the explicit `base64:` prefix.
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \

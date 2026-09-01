@@ -103,7 +103,11 @@ ScriptIcon::Entry* ScriptIcon::acquire(const std::string& name, int64_t nowMs) {
 
 bool ScriptIcon::draw(Canvas& canvas, const std::string& name, int x, int y, int64_t nowMs) {
   const bool isB64 = name.rfind("base64:", 0) == 0;
-  if (!isB64) {
+  if (isB64) {
+    constexpr std::size_t kPrefixLen = sizeof("base64:") - 1;
+    constexpr std::size_t kMaxInlineBase64 = 16 * 1024;
+    if (name.size() > kPrefixLen + kMaxInlineBase64) return false;
+  } else {
     if (!nameIsSafe(name) || name.size() > kMaxNameLen) return false;
   }
 
