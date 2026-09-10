@@ -1904,6 +1904,57 @@ curl -X POST http://<awtrix-ip>/api/v1/restore -F "file=@backup.zip"
 
 ---
 
+## Icon origins
+
+### GET /api/v1/icons/origins
+
+Lists durable links between installed icons and their published Hub originals:
+
+```json
+{"icons":[{"name":"mail.gif","hub":"https://hub.flows.blueforcer.de/icons/","slug":"mail","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}
+```
+
+This local metadata is available offline and across reboots. `sha256` is the lowercase
+SHA256 of the **local file bytes at linkage time**, supplied by the caller. It is not a
+signature, authorship claim, or permission to publish. Compare it with the current file
+before describing that file as an unchanged Hub copy. Ordinary file replacement preserves
+the link; deleting the icon through the files API removes it. Missing files are omitted.
+
+The collection is bounded to 64 records and 16 KiB of serialized metadata; no pagination is
+needed within this device storage limit. Responses use `Cache-Control: no-store`.
+
+### PUT /api/v1/icons/origins
+
+Upserts one record with the four fields above. The full filename must match
+`[A-Za-z0-9_-]{1,32}\.(gif|jpg)` and refer to an existing icon. `slug` matches
+`[a-z0-9_-]{1,32}`. `hub` is an HTTPS base ending in `/icons/`, at most 240 characters,
+without credentials, query, fragment, percent escapes or dot-segments. Alternate configured
+DNS/IPv4 hosts, ports and path prefixes are allowed. The body limit is 1024 bytes.
+
+Returns `200 {"ok":true}`. Repeating the same PUT is safe. A changed record for the same
+filename replaces its link. Errors: `400 invalidOrigin`, `404 notFound` for a missing icon,
+`413 payloadTooLarge`, `507 insufficientStorage` at the metadata limit, or
+`500 storageError` if the old store cannot be read or the atomic write fails.
+
+### DELETE /api/v1/icons/origins?name=mail.gif
+
+Removes only the link, leaving the icon bytes intact. Returns `200 {"ok":true}` even when
+already absent; invalid filenames return `400 invalidName`. A storage failure returns
+`500 storageError`. The file-deletion endpoint also removes the corresponding link and
+refuses to delete bytes if that metadata write fails.
+
+All three operations follow device authentication. During provisioning, GET remains available
+under the existing read-only policy; PUT and DELETE return `403 forbidden`.
+Other methods return `405 methodNotAllowed`. Unknown JSON fields are ignored for forward
+compatibility; required fields must occur once and contain strings.
+
+Backups include the GET response as `config/icon-origins.json`. The device stores it at
+`/config/icon-origins.json` using a temporary sibling and atomic replacement. It is not
+exposed as a gallery image or writable via the generic file API. Restore validates this
+optional entry, applies it after icon files, and removes links to absent files. Old backups
+without the entry still restore; retained old links must always be checked against actual
+file bytes. Corrupt metadata is skipped with a restore warning.
+
 ## Web UI and static assets
 
 ### GET /
@@ -2000,6 +2051,7 @@ Anything not matched above answers **404** `notFound` with message `unknown rout
 | GET | `/api/v1/files` | [list](#get-apiv1files) |
 | POST | `/api/v1/files` | [multipart upload](#post-apiv1files) |
 | DELETE | `/api/v1/files` | [by `?path=`, allowlisted](#delete-apiv1files) |
+| GET, PUT, DELETE | `/api/v1/icons/origins` | [local Hub links](#icon-origins) |
 | POST | `/update` | [firmware image](#post-update) |
 | POST | `/api/v1/restore` | [backup ZIP; available in AP mode](#post-apiv1restore) |
 | GET | `/`, `/index.html`, `/fullscreen` | [web UI](#get) |

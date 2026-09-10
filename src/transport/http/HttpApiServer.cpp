@@ -30,6 +30,7 @@
 #include "hal/IBoard.h"
 #include "persistence/DeviceConfig.h"
 #include "persistence/FsRestoreSink.h"
+#include "persistence/IconOriginsStore.h"
 #include "persistence/SystemConfigApply.h"
 #include "system/HeapCaps.h"
 #include "system/HeapProbe.h"
@@ -661,6 +662,7 @@ void HttpApiServer::dispatch() {
   if (serveSystem(req)) return;
   if (serveSounds(req)) return;
   if (serveMp3(req)) return;
+  if (serveIconOrigins(req)) return;
   if (serveFiles(req)) return;
 
   sendError(404, "notFound", "unknown route");
@@ -1138,6 +1140,15 @@ void HttpApiServer::listDir(const char* dir) {
   server_->sendContent("");
 }
 
+bool HttpApiServer::serveIconOrigins(const Request& req) {
+  if (req.path != "/api/v1/icons/origins") return false;
+  const std::string name = server_->hasArg("name") ? server_->arg("name").c_str() : "";
+  const auto result = iconorigins::handle(iconorigins::storage(), req.method, req.body, name);
+  server_->sendHeader("Cache-Control", "no-store");
+  sendJson(result.status, result.body);
+  return true;
+}
+
 bool HttpApiServer::serveFiles(const Request& req) {
   if (req.path != "/api/v1/files") return false;
 
@@ -1153,6 +1164,13 @@ bool HttpApiServer::serveFiles(const Request& req) {
       sendError(400, "invalidPath",
                 "path must be under /ICONS, /MELODIES, /PALETTES or /MP3 and contain no '..'");
       return true;
+    }
+    // Remove provenance before deleting bytes: a failed metadata write must not leave
+    // a link that could later be inherited by an unrelated upload with the same name.
+    const std::string path = fn.c_str();
+    if (path.rfind("/ICONS/", 0) == 0 && iconorigins::validName(path.substr(7))) {
+      const auto result = iconorigins::handle(iconorigins::storage(), "DELETE", {}, path.substr(7));
+      if (result.status != 200) { sendJson(result.status, result.body); return true; }
     }
     if (LittleFS.remove(fn)) {
       if (onAssetsChanged_) onAssetsChanged_();

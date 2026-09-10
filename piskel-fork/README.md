@@ -18,13 +18,15 @@ the editor only draws and exchanges image bytes over `postMessage`.
 ## The postMessage contract
 
 Namespace `awtrix` on every message. The AWTRIX page validates `event.origin`
-against the editor URL; the editor validates `event.source === window.parent`.
+against the editor URL and `event.source === iframe.contentWindow`; the editor
+validates `event.source === window.parent`.
 Full reference: `docs/guides/icon-editor.md` in this repo, and
 `src/js/embed-bridge.js` in the fork.
 
 **Editor → AWTRIX**
 - `{ns:'awtrix', type:'ready'}` - sent once the editor has initialised.
-- `{ns:'awtrix', type:'save', name, mime:'image/gif', dataBase64}` - save the current sprite.
+- `{ns:'awtrix', type:'save', name, mime:'image/gif', dataBase64, origin?}` - save the current sprite locally, without publishing.
+- `{ns:'awtrix', type:'publish', requestId, name, mime:'image/gif', dataBase64, based_on?}` - explicitly publish through the parent when `publishViaParent` is enabled.
 - `{ns:'awtrix', type:'list'}` - ask for the clock's icon list.
 - `{ns:'awtrix', type:'load', name}` - ask for one icon's bytes to edit.
 - `{ns:'awtrix', type:'live', mode:'bitmap', w, h, dataBase64}` - mirror one still frame to the matrix. `dataBase64` is `w × h × 3` raw RGB888 bytes, row-major.
@@ -33,10 +35,24 @@ Full reference: `docs/guides/icon-editor.md` in this repo, and
 
 **AWTRIX → Editor**
 - `{ns:'awtrix', type:'theme', theme:'dark'|'light'}`
-- `{ns:'awtrix', type:'config', sizes:['8x8','32x8']}`
+- `{ns:'awtrix', type:'config', sizes:['8x8','32x8'], publishViaParent:true}`
 - `{ns:'awtrix', type:'list-result', files:[{name,size}], usedBytes, totalBytes}`
-- `{ns:'awtrix', type:'load-result', name, mime, dataBase64}`
+- `{ns:'awtrix', type:'load-result', name, mime, dataBase64, origin?, based_on?}`
 - `{ns:'awtrix', type:'save-result', ok, name, error?}`
+- `{ns:'awtrix', type:'publish-result', requestId, ok, status?, slug?, pr?, origin?, error?, message?}`
+
+The parent keeps the Hub token and sends publication requests with
+`response=resolve`. A successful result is `created` or `existing`; neither a
+local save nor an existing result creates another publication. Publishing
+requires a descriptive name containing a letter. Numeric LaMetric filenames
+remain valid for local saves.
+
+`origin` contains `{hub, slug, sha256}`, with the hash of the local bytes at
+association time. The parent persists it with the local filename through
+`/api/v1/icons/origins`. Later saves retain the reference so the gallery can
+recognize local changes. Creating or importing another drawing clears the
+editor's reference; editing and Undo preserve it. Hub-hosted Piskel publishes
+directly with its same-origin session instead of receiving the device token.
 
 The iframe `src` also carries `?theme=<dark|light>&sizes=8x8,32x8` so the
 editor paints correctly before the first message arrives. The AWTRIX side

@@ -232,8 +232,9 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .tile .ft.share{flex-wrap:wrap}
 .tile .ft.share input{flex:1 1 100%}
 .tile .ft.share button.pri{flex:1}
-.tile .ft.share .hint{flex:1 1 100%;font-size:10px;line-height:1.3;color:var(--dim);text-decoration:underline}
-.tile .ft.share .hint:hover{color:var(--acc)}
+.tile .ft.share .hint{flex:1 1 100%;font-size:10px;line-height:1.3;color:var(--dim)}
+.tile .ft.share a.hint{text-decoration:underline}
+.tile .ft.share a.hint:hover{color:var(--acc)}
 .empty{grid-column:1/-1;padding:24px 12px;text-align:center;color:var(--dim);font-size:13px;
   border:1px dashed var(--border);border-radius:10px}
 .drop{border:2px dashed var(--border);border-radius:var(--r);padding:22px;text-align:center;color:var(--dim);
@@ -575,6 +576,88 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
   .appcfg .frow{grid-template-columns:1fr}
   .appcfg .frow .ctl{justify-content:flex-start}
 }
+
+.hub-connect{border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:12px 14px}
+.hub-connect summary{cursor:pointer;font-size:13px;font-weight:600}
+.hub-connect summary .help{font-weight:400;margin-left:12px}
+.hub-connect-body{display:grid;gap:10px;margin-top:14px}
+.hub-connect-body input{flex:1 1 200px;min-width:0}
+/* Gallery layout uses the same theme colours as the rest of the device. */
+.icons-page.card{padding:24px;gap:22px;background:none;border:0}
+.icons-page [hidden]{display:none!important}
+.icons-page h2{font-size:30px;letter-spacing:-1px;line-height:1.2}
+.icons-page .ghelp{margin-top:5px;line-height:1.6;font-size:13px}
+.icons-page :is(button,a,input,select,summary,[tabindex]):focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+.icons-page .ihdr{align-items:start;justify-content:space-between}
+.icons-page .ihdr .st{flex:0 1 auto;flex-wrap:wrap;margin-top:8px;font-size:11px}
+.icons-page .segbar{gap:10px}
+.icons-page .segbar button{min-height:44px;padding:10px 13px;font-weight:600}
+.icons-toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.icons-toolbar input{flex:1 1 190px;max-width:440px;min-height:42px;background:var(--card)}
+.icons-toolbar .help{margin-right:auto}
+.icons-page .grid-icons{grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:16px}
+.icons-page .tile{background:var(--card);border-radius:12px;min-width:0;display:flex;flex-direction:column}
+.icons-page .tile:hover{border-color:var(--border);box-shadow:0 5px 16px #00000018}
+.icons-page .tile .pw{height:auto;aspect-ratio:1;margin:7px 7px 0;border-radius:6px;box-shadow:none;flex:none}
+.icons-page .tile .pw img{position:absolute;inset:14px;width:calc(100% - 28px);height:calc(100% - 28px);padding:0;object-fit:contain}
+.icons-page .tile .ft{padding:12px 12px 4px;align-items:start;flex-wrap:wrap;gap:4px}
+.icons-page .tile .ft .nm{flex:1 1 100%;font-size:13px;white-space:normal;overflow-wrap:anywhere;line-height:1.45;color:var(--fg)}
+.icons-page .tile .ft .sz{font:10px/1.5 var(--mono);color:var(--dim)}
+.icon-origin{flex:1 1 100%;font-size:11px;line-height:1.5;color:var(--dim)}
+.icon-origin[data-state=hub]{color:var(--acc)}
+.icon-origin[data-state=modified]{color:var(--warn)}
+.icons-page .tile .acts{position:static;opacity:1;pointer-events:auto;background:none;padding:10px 12px;gap:8px;margin-top:auto}
+.icons-page .tile .acts button{background:var(--card2);color:var(--fg);border-color:var(--border);height:auto;min-height:38px;width:100%;font-size:12px}
+.icons-page .tile .acts button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.icons-page .tile .acts button:disabled{opacity:1;background:transparent;border-color:var(--border);color:var(--dim)}
+.icon-tile-actions{display:flex;gap:7px;padding:10px 12px;margin-top:auto}
+.icon-tile-actions>.icon-show{flex:1;min-width:0;padding:7px 5px;min-height:38px;font-size:12px;white-space:normal;line-height:1.3}
+.icons-page .icon-tile-actions .acts{padding:0;flex:0 0 34px;margin:0}
+.icons-page .icon-tile-actions .acts button{font-size:20px;padding:0;line-height:1}
+.icons-page .tmenu{inset:0 0 auto;min-height:100%;max-height:280px;border-radius:6px;overflow:auto;justify-content:start;padding:7px}
+.icons-page .tmenu :is(button,a){display:block;text-align:left;padding:8px;font-size:12px;color:#e6edf3;min-height:34px}
+.icons-page .tmenu button.danger{color:#f85149}
+.icons-page .tmenu a:hover{background:#ffffff1a;border-radius:6px}
+.idb{gap:16px}
+.idb-toolbar{padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--card)}
+.idb-toolbar label{font-size:12px;white-space:nowrap;min-height:32px}
+.idb .tile .ft .nm{border:0;background:none;padding:0;text-align:left;font-weight:600}
+.idb-actions{display:flex;align-items:center;justify-content:space-between;gap:4px;padding:0 12px 12px;font-size:11px}
+.idb-actions button{padding:5px 6px;font-size:10px;background:transparent}
+.idb-actions a{padding:5px 2px}
+.icons-page .hub-connect{background:none;border:0;border-top:1px solid var(--border);border-radius:0;padding:17px 0 0}
+.icons-page .hub-connect summary .help{font-size:11px;color:var(--dim)}
+.icons-page .hub-connect-body{max-width:680px;gap:12px;padding:6px 0 0}
+.icons-add{display:grid;grid-template-columns:1.1fr 1fr;gap:20px;align-items:start}
+.icons-add>section{padding:20px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:grid;gap:15px;min-width:0}
+.icons-add h3{font-size:16px;font-weight:600}
+.icons-add .drop{padding:30px 16px;line-height:1.7;background:var(--bg);border-radius:9px;cursor:pointer;font-size:13px}
+.icons-add .lam .orsep{display:none}
+.icons-add .lam>.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px}
+.icons-add .lam>.row>.pri{grid-column:1/-1}
+.icons-add .lam .prev{width:96px;height:96px}
+.icons-page .empty{grid-column:1/-1;padding:36px 20px;border:1px dashed var(--border);border-radius:12px;text-align:center;color:var(--dim)}
+.icons-page .empty button{display:block;margin:16px auto 0}
+@media(max-width:640px){
+  .icons-page.card{padding:8px 0;gap:20px}
+  .icons-page h2{font-size:26px}
+  .icons-page .ihdr .st{justify-content:start;flex-basis:100%;margin:0}
+  .icons-page .segbar{gap:0;display:grid;grid-template-columns:1fr 1fr 1fr}
+  .icons-page .segbar button{font-size:12px;padding:10px 4px}
+  .icons-page .grid-icons{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .icons-page .tile .pw img{inset:11px;width:calc(100% - 22px);height:calc(100% - 22px)}
+  .icons-page .tile .ft{padding:10px 10px 4px}
+  .icons-page .tile .ft .nm{font-size:12px}
+  .icons-page .tile .acts,.icon-tile-actions{padding:8px 10px}
+  .icons-toolbar{gap:10px}
+  .icons-toolbar input{flex-basis:100%;max-width:none}
+  .icons-add{grid-template-columns:1fr}
+  .icons-add>section{padding:16px}
+  .hub-connect summary .help{display:block;margin:5px 0 0}
+  .idb-actions{padding:0 10px 10px;flex-wrap:wrap}
+  .idb-intro{align-items:start;flex-direction:column;gap:12px}
+}
+
 </style>
 <script>try{document.documentElement.dataset.theme=localStorage.awtrixTheme||
   (matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');}catch(e){}</script>
@@ -820,22 +903,32 @@ const I18N={en:{
   lametric:'LaMetric icon download',lamhelp:'Fetches an icon from the LaMetric gallery.',
   lamid:'Icon ID, e.g. 2867',fetch:'Fetch',lamneed:'Your browser needs internet access for this - unavailable in provisioning mode.',
   lamsave:'Save to AWTRIX',
-  idb:'Icon database',idbhelp:'Search the community collection and install an icon with one click.',
+  idb:'Hub gallery',idbhelp:'Search the community collection and install an icon with one click.',
   idbsearch:'Search icons',idbany:'Any size',idbanim:'Animated only',idbnone:'Nothing matches',
-  idbmore:'Show more',idbempty:'The collection is still empty',idbinst:'Install',idbon:'Already on AWTRIX',idbfail:'Icon database unreachable',
-  idbcopy:'Copy the name for a script',
+  idbmore:'Show more',idbempty:'The collection is still empty',idbinst:'Install',idbon:'Installed',idbfail:'The Hub is unavailable. Check your internet connection and try again.',
+  idbcopy:'Copy icon name',
   idbterms:'Publishing means you accept the terms of service.',
+  hubConnect:'Publish your own icons',hubReady:'Connection key saved',hubIntro:'Installing icons needs no account. To publish your own, create a connection key (token) in your Hub account and paste it here.',hubSave:'Save key',hubStorageFail:'Your browser could not save the token. Allow site storage and try again.',idbrefresh:'Refresh collection',idbloading:'Loading the collection…',idbinstalling:'Installing…',idbdetails:'Details',idbscript:'Copy @icons',
   hubSection:'AWTRIX Hub',hubSectionH:'Needed to publish your icons to the shared collection.',
-  hubTokenLbl:'Device token',hubTokenH:'Stored in this browser only, not on AWTRIX.',
-  hubOn:'Saved',hubOff:'Not set',hubClear:'Remove',hubCleared:'Token removed',hubStored:'Token saved in this browser',
+  hubTokenLbl:'Connection key (token)',hubTokenH:'Stored in this browser only, not on AWTRIX.',
+  hubOn:'Saved',hubOff:'Not set',hubClear:'Remove',hubCleared:'Connection key removed',hubStored:'Connection key saved in this browser',
   hubGetLbl:'Where to get one',hubGetH:'Opens your account page on the Hub.',hubGet:'Open the Hub',
-  scricons:'Install icons',scriconsok:'All icons here',
-  scriconsfail:'Not in the icon database:',scriconserr:'Could not be saved:',idbsend:'Submit',
-  icown:'On AWTRIX',icadd:'Add',icnone:'No icons on AWTRIX yet',icsend:'To database',icshow:'Show',
-  idbdone:'Published to the icon database',idbopen:'Open the icon',
-  idbdup:'Already in the database as',
-  idbauth:'Publishing needs a device token. Get one on the Hub, then paste it under System.',
-  idbauthbad:'The Hub did not accept your device token. Get a new one and replace it under System.',
+  icfromhub:'From the Hub',icmodified:'Locally changed',iclocal:'Only on this device',icchecking:'Checking origin…',icunknown:'Could not check origin',
+  icreload:'Reload from Hub',icreloaded:'Latest Hub version loaded.',edDrafts:'My drafts',edDraftSaved:'Draft saved in this browser',edDraftError:'Draft could not be saved. Download your project before leaving.',edDraftNew:'New draft',edDraftOpen:'Open draft',edDraftDownload:'Download project',edDraftImport:'Open project',edDraftDelete:'Delete draft',edDraftOnly:'Drafts stay private in this browser. Save to AWTRIX updates the device file.',icviewhub:'View on Hub',icvariant:'Publish as a variant',icexists:'This icon is already in the gallery.',
+  icoriginfail:'The icon is saved, but its Hub origin could not be stored. Check the device firmware and free space.',
+  icconflict:'A different local icon uses this name:',icreplace:'Replace with Hub original',ickeep:'Keep local icon',
+  icpublishfirst:'Publish this icon first to get a shared @icons reference.',icreference:'Use this Hub ID in your script:',
+  icpubname:'Name in the Hub',icpubexample:'e.g. Sunny sky',
+  icpubnamehelp:'Give this icon a descriptive name. A LaMetric number is not a name.',
+  scricons:'Install icons',scriconsok:'Hub icons verified',
+  scriconsfail:'Not in the icon database:',scriconserr:'Could not be saved:',idbsend:'Publish',
+  icintro:'Manage your icons, find new favourites and add your own.',icsearch:'Search installed icons',icclear:'Clear search',icstorage:'Device storage',icdownload:'Download file',icanimated:'Animated',
+  icupload:'Upload an image',icuploadhelp:'Add images from your computer. GIF animations keep moving.',icdrop:'Choose files or drop them here · GIF, PNG or JPG',iccreate:'Draw something new',iccreatehelp:'Create an icon or animation in the editor, then save it to your AWTRIX.',
+  icown:'On AWTRIX',icadd:'Add',icnone:'No icons on AWTRIX yet',icsend:'Publish to Hub',icshow:'Show on display',
+  idbdone:'Your icon is published on the Hub',idbopen:'Open the icon',
+  idbdup:'Already on the Hub as',
+  idbauth:'To publish, save a connection key from your Hub account under Publish your own icons.',
+  idbauthbad:'The Hub did not accept this key. Create a new key in your Hub account and replace it under Publish your own icons.',
   idbtosys:'Go to System',close:'Close',
   idbsignin:'Open the Hub',
   // One entry per error code the submit endpoint can answer with. tooManyFrames
@@ -844,6 +937,7 @@ const I18N={en:{
   idbe_badFormat:'Not an image the database accepts',
   idbe_tooLarge:'The file is too large',
   idbe_badName:'That name cannot be used',
+  idbe_descriptiveNameRequired:'Give your icon a descriptive name with letters, for example “Sunny sky”. Number-only names cannot be published.',
   idbe_tooBig:'Bigger than 32x8 pixels',
   idbe_rateLimited:'Too many submissions - try again later',
   idbe_duplicate:'Already in the database',
@@ -997,27 +1091,38 @@ const I18N={en:{
   lametric:'LaMetric-Icon laden',lamhelp:'Holt ein Icon aus der LaMetric-Galerie.',
   lamid:'Icon-ID, z. B. 2867',fetch:'Laden',lamneed:'Dafür braucht der Browser Internetzugang - im Einrichtungsmodus nicht verfügbar.',
   lamsave:'Auf AWTRIX speichern',
-  idb:'Icon-Datenbank',idbhelp:'Durchsuche die Community-Sammlung und installiere ein Icon mit einem Klick.',
+  idb:'Hub-Galerie',idbhelp:'Durchsuche die Community-Sammlung und installiere ein Icon mit einem Klick.',
   idbsearch:'Icons suchen',idbany:'Alle Größen',idbanim:'Nur animierte',idbnone:'Nichts gefunden',
-  idbmore:'Mehr anzeigen',idbempty:'Die Sammlung ist noch leer',idbinst:'Installieren',idbon:'Schon auf AWTRIX',idbfail:'Icon-Datenbank nicht erreichbar',
-  idbcopy:'Namen für ein Skript kopieren',
+  idbmore:'Mehr anzeigen',idbempty:'Die Sammlung ist noch leer',idbinst:'Installieren',idbon:'Installiert',idbfail:'Der Hub ist nicht erreichbar. Prüfe deine Internetverbindung und versuche es erneut.',
+  idbcopy:'Icon-Namen kopieren',
   idbterms:'Mit dem Veröffentlichen akzeptierst du die Nutzungsbedingungen.',
+  hubConnect:'Eigene Icons veröffentlichen',hubReady:'Verbindungsschlüssel gespeichert',hubIntro:'Zum Installieren brauchst du kein Konto. Um eigene Icons zu veröffentlichen, erstelle einen Verbindungsschlüssel (Token) in deinem Hub-Konto und füge ihn hier ein.',hubSave:'Schlüssel speichern',hubStorageFail:'Dein Browser konnte das Token nicht speichern. Erlaube den Website-Speicher und versuche es erneut.',idbrefresh:'Sammlung aktualisieren',idbloading:'Sammlung wird geladen…',idbinstalling:'Wird installiert…',idbdetails:'Details',idbscript:'@icons kopieren',
   hubSection:'AWTRIX Hub',hubSectionH:'Nötig, um eigene Icons zu veröffentlichen.',
-  hubTokenLbl:'Geräte-Token',hubTokenH:'Nur in diesem Browser gespeichert, nicht auf AWTRIX.',
-  hubOn:'Gespeichert',hubOff:'Nicht gesetzt',hubClear:'Entfernen',hubCleared:'Token entfernt',hubStored:'Token in diesem Browser gespeichert',
-  hubGetLbl:'Token holen',hubGetH:'Öffnet deine Kontoseite im Hub.',hubGet:'Hub öffnen',
-  scricons:'Icons installieren',scriconsok:'Alle Icons da',
-  scriconsfail:'Nicht in der Icon-Datenbank:',scriconserr:'Konnte nicht gespeichert werden:',idbsend:'Senden',
-  icown:'Auf AWTRIX',icadd:'Hinzufügen',icnone:'Noch keine Icons auf AWTRIX',icsend:'An Datenbank',icshow:'Zeigen',
-  idbdone:'In der Icon-Datenbank veröffentlicht',idbopen:'Icon öffnen',
-  idbdup:'Schon in der Datenbank als',
-  idbauth:'Zum Veröffentlichen braucht es ein Geräte-Token. Im Hub holen, dann unter System eintragen.',
-  idbauthbad:'Der Hub hat dein Geräte-Token abgelehnt. Neues holen und unter System ersetzen.',
+  hubTokenLbl:'Verbindungsschlüssel (Token)',hubTokenH:'Nur in diesem Browser gespeichert, nicht auf AWTRIX.',
+  hubOn:'Gespeichert',hubOff:'Nicht gesetzt',hubClear:'Entfernen',hubCleared:'Verbindungsschlüssel entfernt',hubStored:'Verbindungsschlüssel in diesem Browser gespeichert',
+  hubGetLbl:'Schlüssel holen',hubGetH:'Öffnet deine Kontoseite im Hub.',hubGet:'Hub öffnen',
+  icfromhub:'Aus dem Hub',icmodified:'Lokal geändert',iclocal:'Nur auf diesem Gerät',icchecking:'Herkunft wird geprüft…',icunknown:'Herkunft nicht geprüft',
+  icreload:'Vom Hub neu laden',icreloaded:'Aktuelle Hub-Version geladen.',edDrafts:'Meine Entwürfe',edDraftSaved:'Entwurf in diesem Browser gespeichert',edDraftError:'Entwurf konnte nicht gespeichert werden. Lade das Projekt vor dem Verlassen herunter.',edDraftNew:'Neuer Entwurf',edDraftOpen:'Entwurf öffnen',edDraftDownload:'Projekt herunterladen',edDraftImport:'Projekt öffnen',edDraftDelete:'Entwurf löschen',edDraftOnly:'Entwürfe bleiben privat in diesem Browser. Auf AWTRIX speichern aktualisiert die Gerätedatei.',icviewhub:'Im Hub ansehen',icvariant:'Als Variante veröffentlichen',icexists:'Dieses Icon gibt es bereits in der Galerie.',
+  icoriginfail:'Das Icon ist gespeichert, seine Hub-Herkunft konnte aber nicht gespeichert werden. Prüfe Firmware und freien Speicher.',
+  icconflict:'Ein anderes lokales Icon verwendet diesen Namen:',icreplace:'Durch Hub-Original ersetzen',ickeep:'Lokales Icon behalten',
+  icpublishfirst:'Veröffentliche dieses Icon zuerst, um einen gemeinsamen @icons-Verweis zu erhalten.',icreference:'Verwende diese Hub-ID in deinem Skript:',
+  icpubname:'Name im Hub',icpubexample:'z. B. Sonnenschein',
+  icpubnamehelp:'Gib dem Icon einen sprechenden Namen. Eine LaMetric-Nummer ist kein Name.',
+  scricons:'Icons installieren',scriconsok:'Hub-Icons geprüft',
+  scriconsfail:'Nicht in der Icon-Datenbank:',scriconserr:'Konnte nicht gespeichert werden:',idbsend:'Veröffentlichen',
+  icintro:'Verwalte deine Icons, entdecke neue Motive und füge eigene hinzu.',icsearch:'Installierte Icons suchen',icclear:'Suche zurücksetzen',icstorage:'Gerätespeicher',icdownload:'Datei herunterladen',icanimated:'Animiert',
+  icupload:'Bild hochladen',icuploadhelp:'Füge Bilder von deinem Computer hinzu. GIF-Animationen bleiben animiert.',icdrop:'Dateien auswählen oder hier ablegen · GIF, PNG oder JPG',iccreate:'Selbst gestalten',iccreatehelp:'Zeichne ein Icon oder eine Animation im Editor und speichere sie auf deinem AWTRIX.',
+  icown:'Auf AWTRIX',icadd:'Hinzufügen',icnone:'Noch keine Icons auf AWTRIX',icsend:'Im Hub veröffentlichen',icshow:'Anzeigen',
+  idbdone:'Dein Icon ist im Hub veröffentlicht',idbopen:'Icon öffnen',
+  idbdup:'Bereits im Hub als',
+  idbauth:'Speichere zum Veröffentlichen einen Verbindungsschlüssel aus deinem Hub-Konto unter Eigene Icons veröffentlichen.',
+  idbauthbad:'Der Hub hat diesen Schlüssel nicht akzeptiert. Erstelle im Hub-Konto einen neuen und ersetze ihn unter Eigene Icons veröffentlichen.',
   idbtosys:'Zu System',close:'Schließen',
   idbsignin:'Hub öffnen',
   idbe_badFormat:'Kein Bild, das die Datenbank annimmt',
   idbe_tooLarge:'Die Datei ist zu groß',
   idbe_badName:'Dieser Name geht nicht',
+  idbe_descriptiveNameRequired:'Gib deinem Icon einen sprechenden Namen mit Buchstaben, zum Beispiel „Sonnenschein“. Reine Zahlen sind zum Veröffentlichen nicht erlaubt.',
   idbe_tooBig:'Größer als 32x8 Pixel',
   idbe_rateLimited:'Zu viele Einsendungen - später noch einmal',
   idbe_duplicate:'Schon in der Datenbank',
@@ -2126,9 +2231,12 @@ async function viewApps(view){
   const offBanner=el('div',{class:'banner',style:'display:none'},'⏸ ',
     el('span',{class:'grow'},t('appsscroff')));
 
-  function closeCfgBtn(box){
-    const b=el('button',{class:'mbtn icon pri',title:t('cfgHide')},'✕');
-    b.addEventListener('click',()=>{box.hidden=true;render();});
+  function cfgBtn(toggle,box){
+    if(!toggle)return null;
+    const label=t(box.hidden?'cfgTitle':'cfgHide');
+    const b=el('button',{class:'mbtn icon cfgbtn'+(box.hidden?'':' pri'),title:label,
+      'aria-label':label,'aria-expanded':String(!box.hidden)},'⚙');
+    b.addEventListener('click',toggle);
     return b;
   }
 
@@ -2213,12 +2321,9 @@ async function viewApps(view){
       }catch(e){toast(e.message,false);}
     };
     const[toggleCfg,cfgBox]=scr?cfgPanel(a):[null,null];
-    const menu=cfgBox&&!cfgBox.hidden
-      ?el('div',{class:'rowmenu'},closeCfgBtn(cfgBox))
-      :rowMenu([
+    const menu=rowMenu([
         inLoop?[t('switchto'),showNow]:null,
         inLoop?[t('dupapp'),duplicate]:null,
-        toggleCfg?[t('cfgTitle'),toggleCfg]:null,
         scr?[t('edit'),()=>{scrPending={name:a.name,error:a.error||null};location.hash='#/scripts';}]:null,
         (a.meta&&(a.meta.icons||[]).length)?[t('scricons'),()=>grabIcons(a)]:null,
         mode==='off'?[t('activate'),activate]:[t('deactivate'),deactivate],
@@ -2235,6 +2340,7 @@ async function viewApps(view){
        inLoop&&a.skipped?el('span',{class:'chip skip',title:t('chipSkipH')},t('chipSkip')):null,
        a.present===false?el('span',{class:'chip skip',title:t('chipGoneH')},t('chipGone')):null,
        a.error?errBadge(a.name,a.error):null),
+     cfgBtn(toggleCfg,cfgBox),
      menu,
      cfgBox,
     ].forEach(n=>{if(n)row.append(n);});
@@ -2257,8 +2363,8 @@ async function viewApps(view){
        el('span',{class:'nm'},m.name||a.name,el('span',{class:'sub'},bits.join(' · '))),
        el('span',{class:'chip s'},t('chipModule')),
        a.error?errBadge(a.name,a.error):null),
+     cfgBtn(toggleCfg,cfgBox),
      rowMenu([
-       toggleCfg?[t('cfgTitle'),toggleCfg]:null,
        (a.meta&&(a.meta.icons||[]).length)?[t('scricons'),()=>grabIcons(a)]:null,
        [t('edit'),()=>{scrPending={name:a.name,error:a.error||null};location.hash='#/scripts';}],
      ]),
@@ -2416,7 +2522,10 @@ async function collectBackup(cats){
     entries.push({name:'config/system.json',data:JSON.stringify(s)});
     entries.push({name:'config/settings.json',data:JSON.stringify((await api('/api/v1/settings')).data)});
     included.push('settings');}
-  if(cats.icons){await grab('/ICONS');included.push('icons');}
+  if(cats.icons){await grab('/ICONS');
+    try{const{data}=await api('/api/v1/icons/origins');if(!Array.isArray(data.icons))throw new Error(t('icoriginfail'));
+      entries.push({name:'config/icon-origins.json',data:JSON.stringify(data)});}catch(e){if(e.status!==404)throw e;}
+    included.push('icons');}
   if(cats.melodies){for(const m of((await api('/api/v1/audio/melodies')).data.melodies||[]))
     entries.push({name:'MELODIES/'+m.name+'.txt',data:m.rtttl});included.push('melodies');}
   if(cats.palettes){await grab('/PALETTES');included.push('palettes');}
@@ -3440,53 +3549,99 @@ async function delFile(path){
   await api('/api/v1/files?path='+encodeURIComponent(path),{method:'DELETE'});
   assetRev++;
 }
+function requestedHubIcon(){
+  const slug=new URL(location.href).searchParams.get('icon')||'';
+  return /^[a-z0-9_-]{1,32}$/.test(slug)?slug:'';
+}
 function viewIcons(view){
   const iconsGrid=el('div',{class:'grid-icons'});
   const db=iconDbCard(()=>reload());
   const meter=el('div',{class:'st'});
   const ownTab=el('button',null,t('icown'));
-  // Three ways to get an icon are alternatives, not steps, so only one is on
-  // screen at a time - and the icons already on the clock come first, because
-  // that is what the page is about.
-  const panes=[[ownTab,el('div',null,iconsGrid)],
+  const ownSearch=el('input',{type:'search',placeholder:t('icsearch'),'aria-label':t('icsearch')});
+  const ownInfo=el('span',{class:'help',role:'status'});
+  let ownFiles=[],reloadVersion=0;
+  const add=el('button',{type:'button',onclick:()=>selectPane(2,true)},t('icadd'));
+  const upload=uploadZone('/ICONS','.png,.jpg,.jpeg,.gif',t('icdrop'),reload,true);
+  const drop=upload.querySelector('.drop');
+  drop.setAttribute('role','button');drop.tabIndex=0;
+  drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();drop.click();}});
+  const panes=[[ownTab,el('div',null,
+    el('div',{class:'icons-toolbar'},ownSearch,ownInfo,add),iconsGrid)],
     [el('button',null,t('idb')),el('div',{hidden:'hidden'},db.node)],
-    [el('button',null,t('icadd')),el('div',{hidden:'hidden'},
-      uploadZone('/ICONS','.png,.jpg,.jpeg,.gif','⬆ '+t('upload')+' (.png / .jpg / .gif, 8×8)',reload,true),
-      lametricCard(reload))]];
+    [el('button',null,t('icadd')),el('div',{hidden:'hidden'},el('div',{class:'icons-add'},
+      el('section',null,el('h3',null,t('icupload')),el('p',{class:'ghelp'},t('icuploadhelp')),upload),
+      el('section',null,el('h3',null,t('lametric')),lametricCard(reload)),
+      el('section',null,el('h3',null,t('iccreate')),el('p',{class:'ghelp'},t('iccreatehelp')),
+        el('a',{href:'#/editor'},t('editorTab')+' →'))))]];
+  function selectPane(index,focus=false){
+    panes.forEach(([tab,pane],i)=>{
+      tab.classList.toggle('on',i===index);tab.setAttribute('aria-selected',String(i===index));
+      tab.tabIndex=i===index?0:-1;pane.hidden=i!==index;
+    });
+    if(focus)panes[index][0].focus();
+  }
   panes.forEach(([tab,pane],i)=>{
-    if(!i)tab.classList.add('on');
-    tab.addEventListener('click',()=>panes.forEach(([b,p],j)=>{
-      b.classList.toggle('on',i===j);p.hidden=i!==j;
-    }));
+    tab.id='icons-tab-'+i;tab.setAttribute('role','tab');tab.setAttribute('aria-controls','icons-pane-'+i);
+    pane.id='icons-pane-'+i;pane.setAttribute('role','tabpanel');pane.setAttribute('aria-labelledby',tab.id);
+    tab.addEventListener('click',()=>selectPane(i));
+    tab.addEventListener('keydown',e=>{
+      const next=e.key==='ArrowRight'?(i+1)%3:e.key==='ArrowLeft'?(i+2)%3:e.key==='Home'?0:e.key==='End'?2:null;
+      if(next!==null){e.preventDefault();selectPane(next,true);}
+    });
   });
+  selectPane(requestedHubIcon()?1:0);
+  function paintOwn(){
+    const needle=ownSearch.value.trim().toLowerCase();
+    const files=ownFiles.filter(f=>f.name.toLowerCase().includes(needle));
+    ownInfo.textContent=needle?files.length+' '+t('of')+' '+ownFiles.length:'';
+    iconsGrid.replaceChildren(...(files.length?files.map(iconTile):[
+      el('div',{class:'empty'},t(ownFiles.length?'idbnone':'icnone'),
+        el('button',{type:'button',onclick:()=>{if(ownFiles.length){ownSearch.value='';paintOwn();ownSearch.focus();}else selectPane(2,true);}},
+          t(ownFiles.length?'icclear':'icadd')))]));
+  }
+  ownSearch.addEventListener('input',()=>paintOwn());
   async function reload(){
+    const version=++reloadVersion;
     try{
       const{data}=await api('/api/v1/files?dir='+encodeURIComponent('/ICONS'),{cache:'no-store'});
       const files=(data.files||[]).sort((a,b)=>a.name.localeCompare(b.name));
+      if(version!==reloadVersion)return;
+      ownFiles=files.map(f=>({...f,state:'checking'}));
       const used=data.usedBytes||0,total=data.totalBytes||1;
       meter.replaceChildren(el('div',{class:'bar'},el('i',{class:used/total>0.9?'hot':'',
         style:'width:'+(used/total*100).toFixed(1)+'%'})),
-        el('span',null,fmtBytes(used)+' '+t('of')+' '+fmtBytes(total)));
+        el('span',null,t('icstorage')+': '+fmtBytes(used)+' '+t('of')+' '+fmtBytes(total)));
       ownTab.replaceChildren(t('icown')+' ('+files.length+')');
-      iconsGrid.replaceChildren(...(files.length?files.map(f=>iconTile(f))
-        :[el('div',{class:'empty'},t('icnone'))]));
-      db.setInstalled(new Set(files.map(f=>f.name.replace(/\.[^.]+$/,''))));
+      paintOwn();
+      const checked=await iconInventory(files);
+      if(version!==reloadVersion)return;
+      ownFiles=checked;paintOwn();
+      db.setInstalled(new Set(checked.filter(f=>f.state==='hub'&&f.origin.hub===iconDbUrl()&&f.origin.slug===f.name.replace(/\.[^.]+$/,'')).map(f=>f.origin.slug)));
     }catch(e){toast(e.message,false);}
   }
   function iconTile(f){
     const base=f.name.replace(/\.[^.]+$/,'');
     const ft=el('div',{class:'ft'},el('span',{class:'nm',title:f.name},base),
-      el('span',{class:'sz'},fmtBytes(f.size)));
+      el('span',{class:'sz'},fmtBytes(f.size)),el('span',{class:'icon-origin','data-state':f.state},
+        t(({hub:'icfromhub',modified:'icmodified',checking:'icchecking',unknown:'icunknown'})[f.state]||'iclocal')));
     const pw=el('div',{class:'pw'},
       el('img',{src:'/ICONS/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev,alt:f.name,loading:'lazy'}));
-    const open=el('button',{title:t('more'),'aria-label':t('more')},'⋯');
-    const shut=()=>{const m=pw.querySelector('.tmenu');if(m)m.remove();};
+    const open=el('button',{title:t('more'),'aria-label':t('more')+': '+base,'aria-expanded':'false'},'⋯');
+    const shut=()=>{const m=pw.querySelector('.tmenu');if(m)m.remove();open.setAttribute('aria-expanded','false');};
+    const show=el('button',{type:'button',class:'icon-show','aria-label':t('icshow')+': '+base},t('icshow'));
+    show.addEventListener('click',async()=>{
+      show.disabled=true;
+      try{await post('/api/v1/notifications',{icon:base,text:' '+base,durationMs:3000});toast(t('shown'));}
+      catch(e){toast(e.message,false);}finally{show.disabled=false;}
+    });
     // A floating menu cannot leave a tile - .tile clips its overflow - so the
     // actions cover the artwork instead. Four icon buttons never fit the
     // narrowest column anyway, and words beat glyphs at this size.
     open.addEventListener('click',()=>{
       if(pw.querySelector('.tmenu'))return shut();
-      document.querySelectorAll('.tmenu').forEach(m=>m.remove());
+      document.querySelectorAll('.icons-page .tmenu').forEach(m=>{const b=m.closest('.tile').querySelector('[aria-expanded]');if(b)b.setAttribute('aria-expanded','false');m.remove();});
+      open.setAttribute('aria-expanded','true');
       const item=(label,fn,danger)=>{
         const b=el('button',danger?{class:'danger'}:null,label);
         if(danger)armable(b,()=>{shut();fn();});
@@ -3494,41 +3649,78 @@ function viewIcons(view){
         return b;
       };
       pw.append(el('div',{class:'tmenu'},
-        item(t('icshow'),async()=>{
-          try{await post('/api/v1/notifications',{icon:base,text:' '+base,durationMs:3000});toast(t('shown'));}
-          catch(e){toast(e.message,false);}
+        item(t('idbscript'),()=>{
+          if(f.state!=='hub')return toast(t('icpublishfirst'),false);
+          copyText('# @icons '+f.origin.slug).then(()=>toast(f.origin.slug===base?t('copied'):t('icreference')+' '+f.origin.slug));
         }),
         item(t('edit'),()=>{pendingEditIcon=f.name;location.hash='#/editor';}),
-        item(t('icsend'),()=>shareRow(f,base,ft)),
+        f.state==='hub'?el('a',{href:f.origin.hub+encodeURIComponent(f.origin.slug),target:'_blank',rel:'noopener'},t('icviewhub')):
+          item(t(f.state==='modified'?'icvariant':'icsend'),()=>shareRow(f,base,ft,reload)),
+        ...(f.origin?[item(t('icreload'),()=>{
+          const run=async(replace=false)=>{try{await reloadHubIcon(f,{replace});toast(t('icreloaded'));reload();}
+            catch(e){toast(e.message,false,e.code==='iconConflict'?[{label:t('ickeep'),fn:()=>{}},{label:t('icreplace'),fn:()=>run(true)}]:undefined);}};
+          run();
+        })]:[]),
+        el('a',{href:'/ICONS/'+encodeURIComponent(f.name),download:f.name},t('icdownload')),
         item(t('del'),async()=>{
           try{await delFile('/ICONS/'+f.name);toast(t('deleted'));reload();}catch(e){toast(e.message,false);}
         },true)));
     });
-    pw.append(el('div',{class:'acts'},open));
-    return el('div',{class:'tile'},pw,ft);
+    const tile=el('div',{class:'tile'},pw,ft,el('div',{class:'icon-tile-actions'},show,el('div',{class:'acts'},open)));
+    tile.addEventListener('keydown',e=>{if(e.key==='Escape'&&pw.querySelector('.tmenu')){shut();open.focus();}});
+    return tile;
   }
-  view.append(el('div',{class:'card wide'},
-    el('div',{class:'ihdr'},el('h2',null,t('icons')),meter),
-    el('div',{class:'segbar'},...panes.map(p=>p[0])),
-    ...panes.map(p=>p[1])));
+  view.append(el('div',{class:'card wide icons-page'},
+    el('div',{class:'ihdr'},el('div',null,el('h2',null,t('icons')),el('p',{class:'ghelp'},t('icintro'))),meter),
+    el('div',{class:'segbar',role:'tablist','aria-label':t('icons')},...panes.map(p=>p[0])),
+    ...panes.map(p=>p[1]),hubConnectionCard()));
   reload();
 }
+// Publishing is configured where people use it; downloading needs no token.
+function hubConnectionCard(){
+  const input=el('input',{type:'password',autocomplete:'off',spellcheck:'false',value:hubToken(),'aria-label':t('hubTokenLbl')});
+  const save=el('button',{type:'button',class:'pri'},t('hubSave'));
+  const remove=el('button',{type:'button'},t('hubClear'));
+  const status=el('span',{class:'help',role:'status'});
+  const summary=el('summary',null,t('hubConnect'),status);
+  const panel=el('details',{class:'hub-connect'},summary,
+    el('div',{class:'hub-connect-body'},el('p',{class:'help'},t('hubIntro')),
+      el('a',{href:hubAccountUrl()+'#device-token',target:'_blank',rel:'noopener'},t('hubGet')),
+      el('div',{class:'row'},input,save,remove),el('p',{class:'help'},t('hubTokenH'))));
+  function paint(){status.textContent=hubToken()?t('hubReady'):t('hubOff');remove.disabled=!hubToken();}
+  function store(value){
+    try{
+      if(value)localStorage.awtrixHubToken=value;else localStorage.removeItem('awtrixHubToken');
+      input.value=value;paint();toast(t(value?'hubStored':'hubCleared'));
+    }catch(e){toast(t('hubStorageFail'),false);}
+  }
+  save.addEventListener('click',()=>store(input.value.trim()));
+  remove.addEventListener('click',()=>store(''));
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save.click();}});
+  paint();return panel;
+}
 // Swaps a tile's footer into a name field, so submitting needs no dialog.
-function shareRow(f,base,ft){
+function descriptiveIconName(name){return /\p{L}/u.test(String(name||'').trim());}
+function shareRow(f,base,ft,onDone){
   const saved=[...ft.childNodes];
-  const nameIn=el('input',{type:'text',value:base,'aria-label':t('name')});
+  const nameIn=el('input',{type:'text',value:descriptiveIconName(base)?base:'',placeholder:t('icpubexample'),'aria-label':t('icpubname'),required:true});
   const send=el('button',{class:'pri'},t('idbsend'));
   const back=el('button',{title:t('cancel'),'aria-label':t('cancel')},'✕');
   const restore=()=>{ft.classList.remove('share');ft.replaceChildren(...saved);};
   back.addEventListener('click',restore);
   nameIn.addEventListener('keydown',e=>{if(e.key==='Enter')send.click();else if(e.key==='Escape')restore();});
   send.addEventListener('click',async()=>{
+    if(!descriptiveIconName(nameIn.value)){nameIn.setAttribute('aria-invalid','true');nameIn.focus();toast(t('idbe_descriptiveNameRequired'),false);return;}
     send.disabled=true;
     try{
-      const d=await idbSubmit(await iconAsSubmission(f.name),nameIn.value.trim()||base);
+      const original=await readIconBlob(f.name);
+      const submission=/\.gif$/i.test(f.name)?original:await imgToGif(original);
+      const d=await idbSubmit(submission,nameIn.value.trim(),f.origin&&f.origin.hub===iconApiUrl()?f.origin.slug:null);
+      try{await saveIconOrigin(f.name,d.slug,await iconBlobHash(original),iconApiUrl());}catch(e){toast(t('icoriginfail'),false);}
       restore();
-      toast(t('idbdone'),true,[{label:t('idbopen'),pri:true,fn:()=>window.open(d.pr,'_blank','noopener')},
+      toast(t(d.status==='existing'?'icexists':'idbdone'),true,[{label:t('idbopen'),pri:true,fn:()=>window.open(d.pr,'_blank','noopener')},
         {label:t('close'),fn:()=>{}}]);
+      onDone&&onDone();
     }catch(e){
       send.disabled=false;
       // This branch is the normal outcome here, not an edge case: the page is
@@ -3539,7 +3731,7 @@ function shareRow(f,base,ft){
         const has=!!hubToken();
         toast(t(has?'idbauthbad':'idbauth'),false,[
           e.pr?{label:t('idbsignin'),pri:!has,fn:()=>window.open(e.pr,'_blank','noopener')}:null,
-          {label:t('idbtosys'),pri:has,fn:()=>{location.hash='#/system';}},
+          {label:t('hubConnect'),pri:has,fn:()=>{const p=document.querySelector('.hub-connect');if(p){p.open=true;p.querySelector('input').focus();}else location.hash='#/system';}},
           {label:t('close'),fn:()=>{}},
         ].filter(Boolean));
       }else toast(e.slug?t('idbdup')+' '+e.slug:e.message,false);
@@ -3547,7 +3739,8 @@ function shareRow(f,base,ft){
   });
   const terms=el('a',{class:'hint',href:hubTermsUrl(),target:'_blank',rel:'noopener'},t('idbterms'));
   ft.classList.add('share');
-  ft.replaceChildren(nameIn,send,back,terms);
+  nameIn.addEventListener('input',()=>nameIn.removeAttribute('aria-invalid'));
+  ft.replaceChildren(nameIn,send,back,el('span',{class:'hint'},t('icpubnamehelp')),terms);
   nameIn.focus();nameIn.select();
 }
 async function iconAsSubmission(name){
@@ -3572,7 +3765,7 @@ const iconApiUrl=()=>cfgUrl('awtrixIconApiUrl',ICONAPI_URL_DEFAULT);
 let idbCache=null;
 async function idbLoad(){
   if(!idbCache){
-    const r=await fetch(iconDbUrl()+'index.json');
+    const r=await fetch(iconDbUrl()+'index.json',{cache:'no-cache',signal:AbortSignal.timeout(10000)});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const d=await r.json();
     idbCache=(d.icons||[]).map(row=>({slug:row[0],name:row[1]||row[0],w:row[2],h:row[3],
@@ -3587,48 +3780,146 @@ const idbBytesUrl=(slug,ext)=>iconDbUrl()+encodeURIComponent(slug)+'.'+ext;
 async function idbFetch(slug){
   let last=404;
   for(const ext of ['gif','jpg']){
-    const r=await fetch(idbBytesUrl(slug,ext));
+    const r=await fetch(idbBytesUrl(slug,ext),{cache:'no-cache',signal:AbortSignal.timeout(15000)});
     if(r.ok)return{blob:await r.blob(),ext};
     last=r.status;
     if(r.status!==404)break;
   }
   throw new Error('HTTP '+last);
 }
-async function idbInstall(slug){
-  const{blob,ext}=await idbFetch(slug);
-  await uploadFile(blob,'/ICONS',slug+'.'+ext,null);
+// WebCrypto is not available on an HTTP device origin. This small SHA-256
+// fallback uses the same bytes on HTTP and HTTPS; it never hashes GIF metadata
+// as a substitute for the Hub's decoded-content fingerprint.
+function iconSha256(bytes){
+  const k=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  const h=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const padded=new Uint8Array(Math.ceil((bytes.length+9)/64)*64);padded.set(bytes);padded[bytes.length]=128;
+  const v=new DataView(padded.buffer);v.setUint32(padded.length-8,Math.floor(bytes.length/0x20000000));v.setUint32(padded.length-4,bytes.length*8);
+  const w=new Uint32Array(64),rr=(x,n)=>(x>>>n)|(x<<(32-n));
+  for(let offset=0;offset<padded.length;offset+=64){
+    for(let i=0;i<16;i++)w[i]=v.getUint32(offset+i*4);
+    for(let i=16;i<64;i++){const x=w[i-15],y=w[i-2];w[i]=w[i-16]+(rr(x,7)^rr(x,18)^(x>>>3))+w[i-7]+(rr(y,17)^rr(y,19)^(y>>>10));}
+    let[a,b,c,d,e,f,g,j]=h;
+    for(let i=0;i<64;i++){const t1=(j+(rr(e,6)^rr(e,11)^rr(e,25))+((e&f)^(~e&g))+k[i]+w[i])>>>0;
+      const t2=((rr(a,2)^rr(a,13)^rr(a,22))+((a&b)^(a&c)^(b&c)))>>>0;
+      j=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}
+    [a,b,c,d,e,f,g,j].forEach((n,i)=>h[i]=(h[i]+n)>>>0);
+  }
+  return h.map(n=>n.toString(16).padStart(8,'0')).join('');
+}
+async function iconBlobHash(blob){
+  const bytes=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(new Uint8Array(r.result));r.onerror=reject;r.readAsArrayBuffer(blob);});
+  return iconSha256(bytes);
+}
+function validIconOrigin(o){
+  if(!o||!/^[-A-Za-z0-9_]{1,32}\.(gif|jpg)$/.test(o.name)||!/^[-a-z0-9_]{1,32}$/.test(o.slug)||!/^[a-f0-9]{64}$/.test(o.sha256))return false;
+  try{const u=new URL(o.hub);return u.protocol==='https:'&&!u.username&&!u.password&&!u.search&&!u.hash&&u.pathname.endsWith('/');}catch(e){return false;}
+}
+async function saveIconOrigin(name,slug,sha256,hub=iconDbUrl()){
+  const origin={name,hub:new URL(hub,location.href).href,slug,sha256};
+  if(!validIconOrigin(origin))throw new Error(t('icoriginfail'));
+  await req('PUT','/api/v1/icons/origins',origin);return origin;
+}
+async function readIconBlob(name){
+  const r=await fetch('/ICONS/'+encodeURIComponent(name),{cache:'no-store'});
+  if(!r.ok)throw new Error('HTTP '+r.status);return r.blob();
+}
+async function hubIconMetadata(slug,hub=iconDbUrl()){
+  const r=await fetch(hub+encodeURIComponent(slug)+'/metadata.json',{cache:'no-cache',signal:AbortSignal.timeout(10000)});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const m=await r.json();if(m.slug!==slug||!/^[a-f0-9]{64}$/.test(m.sha256))throw new Error(t('idbfail'));return m;
+}
+async function iconInventory(files){
+  if(!files){const{data}=await api('/api/v1/files?dir=%2FICONS',{cache:'no-store'});files=data.files||[];}
+  let origins=[],originsReadable=true;
+  try{const{data}=await api('/api/v1/icons/origins',{cache:'no-store'});
+    if(!Array.isArray(data.icons))throw new Error(t('icoriginfail'));origins=data.icons.filter(validIconOrigin);
+  }catch(e){originsReadable=e.status===404;}
+  const records=new Map(origins.map(o=>[o.name,o]));
+  let catalogue=[];
+  if(files.some(f=>!records.has(f.name))&&navigator.onLine!==false)try{catalogue=await idbLoad();}catch(e){}
+  const published=new Set(catalogue.map(r=>r.slug));
+  const out=[];
+  // Sequential reads keep the small device's single HTTP connection responsive.
+  for(const f of files){
+    const item={...f,state:originsReadable?'local':'unknown',origin:records.get(f.name)||null,sha256:null};
+    try{
+      item.sha256=await iconBlobHash(await readIconBlob(f.name));
+      if(item.origin)item.state=item.sha256===item.origin.sha256?'hub':'modified';
+      else{const slug=f.name.replace(/\.[^.]+$/,'');
+        if(published.has(slug))try{
+          const m=await hubIconMetadata(slug);
+          if(m.sha256===item.sha256){item.origin=await saveIconOrigin(f.name,slug,item.sha256);item.state='hub';}
+        }catch(e){}
+      }
+    }catch(e){item.state='unknown';}
+    out.push(item);
+  }
+  return out;
+}
+async function idbInstall(slug,{replace=false}={}){
+  const{blob,ext}=await idbFetch(slug),hash=await iconBlobHash(blob);
+  const{data}=await api('/api/v1/files?dir=%2FICONS',{cache:'no-store'});
+  const existing=(data.files||[]).filter(f=>f.name.replace(/\.[^.]+$/,'')===slug);
+  let same=false;
+  for(const f of existing){const localHash=await iconBlobHash(await readIconBlob(f.name));
+    if(localHash!==hash&&!replace){const e=new Error(t('icconflict')+' '+slug);e.code='iconConflict';throw e;}
+    if(f.name===slug+'.'+ext&&localHash===hash)same=true;
+  }
+  if(!same)await uploadFile(blob,'/ICONS',slug+'.'+ext,null);
   await dropStale('/ICONS',slug+'.'+(ext==='gif'?'jpg':'gif'),slug+'.'+ext);
+  try{await saveIconOrigin(slug+'.'+ext,slug,hash);}catch(e){toast(t('icoriginfail'),false);}
   return ext;
 }
+async function reloadHubIcon(file,{replace=false}={}){
+  const origin=file.origin;
+  if(!validIconOrigin(origin))throw new Error(t('idbfail'));
+  const metadata=await hubIconMetadata(origin.slug,origin.hub);
+  if(!new RegExp('^'+origin.slug+'\\.(gif|jpg)$').test(metadata.filename||''))throw new Error(t('idbfail'));
+  const r=await fetch(origin.hub+encodeURIComponent(metadata.filename),{cache:'no-cache',signal:AbortSignal.timeout(15000)});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const blob=await r.blob(),hash=await iconBlobHash(blob);
+  if(hash!==metadata.sha256)throw new Error(t('idbfail'));
+  // Re-read immediately before replacing: another editor may have changed it.
+  const current=await iconBlobHash(await readIconBlob(file.name));
+  if(current!==origin.sha256&&current!==hash&&!replace){const e=new Error(t('icconflict')+' '+file.name);e.code='iconConflict';throw e;}
+  const ext=metadata.filename.split('.').pop(),name=file.name.replace(/\.[^.]+$/,'')+'.'+ext;
+  if(current!==hash||name!==file.name)await uploadFile(blob,'/ICONS',name,null);
+  await dropStale('/ICONS',name.replace(/\.[^.]+$/,ext==='gif'?'.jpg':'.gif'),name);
+  await saveIconOrigin(name,origin.slug,hash,origin.hub);
+  return name;
+}
 async function installedIconIds(){
-  const{data}=await api('/api/v1/files?dir='+encodeURIComponent('/ICONS'),{cache:'no-store'});
-  return new Set(((data&&data.files)||[]).map(f=>f.name.replace(/\.[^.]+$/,'')));
+  const files=await iconInventory();
+  return new Set(files.filter(f=>f.state==='hub'&&f.origin.hub===iconDbUrl()&&f.origin.slug===f.name.replace(/\.[^.]+$/,'')).map(f=>f.origin.slug));
 }
 async function installScriptIcons(ids,have){
-  const missing=ids.filter(id=>!have.has(id));
-  if(!missing.length){toast(t('scriconsok'));return 0;}
-  const done=[],missingAtHub=[],broke=[];
-  for(const id of missing){
-    let blob,ext;
-    try{({blob,ext}=await idbFetch(id));}
-    catch(e){missingAtHub.push(id);continue;}
-    try{
-      await uploadFile(blob,'/ICONS',id+'.'+ext,null);
-      await dropStale('/ICONS',id+'.'+(ext==='gif'?'jpg':'gif'),id+'.'+ext);
-      done.push(id);
-    }catch(e){broke.push(id+': '+e.message);}
-  }
-  if(done.length)toast(done.join(', ')+' '+t('uploaded'));
-  if(missingAtHub.length)toast(t('scriconsfail')+' '+missingAtHub.join(', '),false);
+  // Always recheck the actual bytes: an editor or another browser may have
+  // changed a same-named file since the script page was opened.
+  const done=[],broke=[];
+  for(const id of ids){try{await idbInstall(id);done.push(id);}catch(e){broke.push(id+': '+e.message);}}
+  if(done.length)toast(done.join(', ')+' '+t('scriconsok'));
   if(broke.length)toast(t('scriconserr')+' '+broke.join(', '),false);
   return done.length;
 }
-async function idbSubmit(blob,name){
+async function idbSubmit(blob,name,basedOn,update=null){
+  name=String(name||'').trim();
+  if(!descriptiveIconName(name)){const err=new Error(t('idbe_descriptiveNameRequired'));err.code='descriptiveNameRequired';throw err;}
   const fd=new FormData();
   fd.append('file',blob,'icon.gif');
   fd.append('name',name);
   fd.append('source','webui');
   fd.append('agree','1');
+  fd.append('response','resolve');
+  if(basedOn)fd.append('based_on',basedOn);
+  if(update){fd.append('update_slug',update.slug);fd.append('expected_sha256',update.sha256);}
   const tok=hubToken();
   let r;
   try{r=await fetch(iconApiUrl()+'submit',
@@ -3636,7 +3927,7 @@ async function idbSubmit(blob,name){
   catch(e){throw new Error(t('idbfail'));}
   let d={};
   try{d=await r.json();}catch(e){}
-  if(r.ok&&d.ok)return d;
+  if(r.ok&&d.ok){idbCache=null;return d;}
   // 'message' is the Hub's human sentence and wins when it is there; the code
   // is only a fallback, and t() would echo an unknown code back as its own key,
   // so anything outside the vocabulary is shown raw instead.
@@ -3649,11 +3940,12 @@ async function idbSubmit(blob,name){
 }
 const IDB_PAGE=60;
 function iconDbCard(onInstalled){
-  const q=el('input',{type:'text',placeholder:t('idbsearch'),class:'grow'});
-  const size=el('select',null,el('option',{value:''},t('idbany')),
+  const q=el('input',{type:'text',placeholder:t('idbsearch'),class:'grow','aria-label':t('idbsearch')});
+  q.value=requestedHubIcon();
+  const size=el('select',{'aria-label':t('idbany')},el('option',{value:''},t('idbany')),
     el('option',{value:'8x8'},'8×8'),el('option',{value:'32x8'},'32×8'));
   const anim=el('input',{type:'checkbox'});
-  const info=el('div',{class:'help'});
+  const info=el('div',{class:'help',role:'status','aria-live':'polite'});
   const grid=el('div',{class:'grid-icons'});
   const more=el('button',null,t('idbmore'));
   const moreRow=el('div',{style:'text-align:center',hidden:'hidden'},more);
@@ -3662,25 +3954,37 @@ function iconDbCard(onInstalled){
   let rows=[],loaded=false,shown=IDB_PAGE,installed=new Set();
   function tile(r){
     const on=installed.has(r.slug);
-    const btn=el('button',{title:on?t('idbon'):t('idbinst'),'aria-label':on?t('idbon'):t('idbinst'),
-      disabled:on},on?'✓':icon('import'));
-    btn.addEventListener('click',async()=>{
-      btn.disabled=true;
+    const btn=el('button',{class:on?'':'pri',title:on?t('idbon'):t('idbinst'),'aria-label':(on?t('idbon'):t('idbinst'))+': '+r.name,
+      disabled:false},on?t('icreload'):t('idbinst'));
+    async function install(replace=false){
+      btn.disabled=true;btn.textContent=t('idbinstalling');
       try{
-        const ext=await idbInstall(r.slug);
-        installed.add(r.slug);btn.replaceChildren('✓');btn.title=t('idbon');
+        let ext;
+        if(installed.has(r.slug)){
+          const files=await iconInventory(),file=files.find(f=>f.origin&&f.origin.hub===iconDbUrl()&&f.origin.slug===r.slug&&f.name.replace(/\.[^.]+$/,'')===r.slug);
+          if(file)ext=(await reloadHubIcon(file,{replace})).split('.').pop();else ext=await idbInstall(r.slug,{replace});
+        }else ext=await idbInstall(r.slug,{replace});
+        installed.add(r.slug);btn.classList.remove('pri');btn.replaceChildren(t('icreload'));btn.title=t('icreload');btn.setAttribute('aria-label',t('icreload')+': '+r.name);btn.disabled=false;
         toast(r.slug+'.'+ext+' '+t('uploaded'));
         onInstalled&&onInstalled();
-      }catch(e){btn.disabled=false;toast(e.message,false);}
-    });
-    const img=el('img',{src:idbBytesUrl(r.slug,'gif'),alt:r.slug,loading:'lazy',
+      }catch(e){btn.disabled=false;btn.textContent=t('idbinst');
+        toast(e.message,false,e.code==='iconConflict'?[
+          {label:t('ickeep'),fn:()=>{}},{label:t('icreplace'),fn:()=>install(true)}]:undefined);
+      }
+    }
+    btn.addEventListener('click',()=>install());
+    const img=el('img',{src:idbBytesUrl(r.slug,'gif'),alt:r.name,width:r.w,height:r.h,loading:'lazy',
       onerror:()=>{if(/\.gif$/.test(img.src))img.src=idbBytesUrl(r.slug,'jpg');}});
     return el('div',{class:'tile'},
-      el('div',{class:'pw'},img,el('div',{class:'acts'},btn)),
+      el('div',{class:'pw'},img),
       el('div',{class:'ft'},
-        el('span',{class:'nm cp',title:r.slug===r.name?t('idbcopy'):r.slug+' — '+t('idbcopy'),
+        el('button',{type:'button',class:'nm cp',title:r.slug===r.name?t('idbcopy'):r.slug+' — '+t('idbcopy'),
           onclick:()=>copyText(r.slug).then(()=>toast(r.slug+' '+t('copied')))},r.name),
-        el('span',{class:'sz'},r.w+'×'+r.h)));
+        el('span',{class:'sz'},r.w+'×'+r.h+(r.frames>1?' · '+t('icanimated'):''))),
+      el('div',{class:'acts'},btn),
+      el('div',{class:'idb-actions'},
+        el('button',{type:'button',onclick:()=>copyText('# @icons '+r.slug).then(()=>toast(t('copied')))},t('idbscript')),
+        el('a',{href:iconDbUrl()+encodeURIComponent(r.slug),target:'_blank',rel:'noopener'},t('idbdetails'))));
   }
   function paint(reset){
     if(!loaded)return;
@@ -3698,30 +4002,35 @@ function iconDbCard(onInstalled){
   size.addEventListener('change',()=>paint(true));
   anim.addEventListener('change',()=>paint(true));
   more.addEventListener('click',()=>{shown+=IDB_PAGE;paint(false);});
-  (async()=>{
-    if(navigator.onLine===false){
-      info.replaceChildren(t('lamneed'));
-      q.disabled=size.disabled=anim.disabled=true;
-      return;
-    }
-    try{rows=await idbLoad();loaded=true;paint(true);}
-    catch(e){info.replaceChildren(t('idbfail'));}
-  })();
+  const refresh=el('button',{type:'button'},t('idbrefresh'));
+  async function load(force=false){
+    refresh.disabled=true;info.textContent=t('idbloading');
+    q.disabled=size.disabled=anim.disabled=true;
+    try{
+      if(navigator.onLine===false)throw new Error(t('lamneed'));
+      if(force)idbCache=null;
+      rows=await idbLoad();loaded=true;paint(true);
+    }catch(e){info.textContent=navigator.onLine===false?t('lamneed'):t('idbfail');}
+    finally{refresh.disabled=false;q.disabled=size.disabled=anim.disabled=!loaded;}
+  }
+  refresh.addEventListener('click',()=>load(true));
+  load();
   return{
     node:el('div',{class:'idb'},
-      el('div',{class:'ghelp'},t('idbhelp')),
-      el('div',{class:'row'},q,size,el('label',{class:'row',style:'gap:6px'},anim,t('idbanim'))),
+      el('div',{class:'row idb-intro'},el('div',{class:'ghelp grow'},t('idbhelp')),refresh),
+      el('div',{class:'row idb-toolbar'},q,size,el('label',{class:'row',style:'gap:6px'},anim,t('idbanim'))),
       info,grid,moreRow),
     setInstalled(ids){installed=ids;paint(false);}
   };
 }
 function lametricCard(onDone){
-  const idIn=el('input',{type:'text',placeholder:t('lamid'),inputmode:'numeric'});
+  const idIn=el('input',{type:'text',placeholder:t('lamid'),'aria-label':t('lamid'),inputmode:'numeric'});
   const getBtn=el('button',null,t('fetch'));
   const saveBtn=el('button',{class:'pri',disabled:true},t('lamsave'));
   const prev=el('img',{class:'prev',style:'display:none'});
   const note=el('div',{class:'help'},navigator.onLine===false?t('lamneed'):'');
   let blob=null,ext='jpg';
+  idIn.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();getBtn.click();}});
   getBtn.addEventListener('click',async()=>{
     const id=idIn.value.trim().replace(/\D/g,'');
     if(!id)return;
@@ -3774,6 +4083,56 @@ function postToPiskel(msg){
 function notifyPiskelTheme(){postToPiskel({type:'theme',theme:document.documentElement.dataset.theme==='light'?'light':'dark'});}
 let pendingEditIcon=null;
 let piskelReady=false;
+let piskelDraftId=null,piskelDraftProject=null,piskelDraftStamp=null,piskelDraftLoading=false;
+let piskelDraftSwitching=false;
+const piskelProjectRequests=new Map();
+function piskelProjectRequest(type,data={}){return new Promise((resolve,reject)=>{
+  const requestId='ng-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+  const timer=setTimeout(()=>{piskelProjectRequests.delete(requestId);reject(new Error(t('edDraftError')));},15000);
+  piskelProjectRequests.set(requestId,{resolve,reject,timer});postToPiskel({type,requestId,...data});
+});}
+const PISKEL_DRAFT_KEY='awtrixEditorDraftsV1';
+function piskelDraftRead(){try{const d=JSON.parse(localStorage.getItem(PISKEL_DRAFT_KEY)||'[]');return Array.isArray(d)?d:[];}catch(e){return[];}}
+function piskelDraftList(){
+  const select=$('#piskelDraftList');if(!select)return;
+  const selected=select.value;select.replaceChildren(el('option',{value:''},t('edDrafts')));
+  for(const d of piskelDraftRead())select.append(el('option',{value:d.id},(d.project.name||'Untitled')+' · '+new Date(d.updated).toLocaleString()));
+  select.value=piskelDraftId||selected;
+}
+function piskelDraftPersist(m){
+  if(piskelDraftLoading)return;
+  const project=m.project;
+  if(!project||project.version!==1||!project.piskel)return;
+  piskelDraftProject=project;
+  let ok=false;
+  try{
+    const drafts=piskelDraftRead(),prior=drafts.find(d=>d.id===piskelDraftId);
+    // A second tab never silently replaces a newer saved draft.
+    if(prior&&piskelDraftStamp!==null&&prior.updated!==piskelDraftStamp)piskelDraftId=null;
+    if(!piskelDraftId)piskelDraftId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+    const record={id:piskelDraftId,project,updated:Date.now()};
+    const next=[record,...drafts.filter(d=>d.id!==record.id)];
+    if(next.length>30||JSON.stringify(next).length>3500000)throw new Error('draftLimit');
+    localStorage.setItem(PISKEL_DRAFT_KEY,JSON.stringify(next));piskelDraftStamp=record.updated;ok=true;piskelDraftList();
+  }catch(e){}
+  const status=$('#piskelDraftStatus');if(status)status.textContent=t(ok?'edDraftSaved':'edDraftError');
+  postToPiskel({type:m.type==='project-save'?'project-save-result':'project-saved',requestId:m.requestId,revision:m.revision,ok,message:t(ok?'edDraftSaved':'edDraftError'),error:ok?undefined:'storageFailed'});
+  return ok;
+}
+async function piskelDraftSwitch(record=null){
+  if(piskelDraftSwitching||!piskelReady)return;
+  piskelDraftSwitching=true;
+  try{
+    const current=await piskelProjectRequest('project-request');
+    if(!piskelDraftPersist({...current,type:'project-changed'}))throw new Error(t('edDraftError'));
+    piskelDraftLoading=true;
+    await piskelProjectRequest(record?'project-load':'project-new',record?{project:record.project}:{width:8,height:8});
+    piskelDraftId=record?.id||null;piskelDraftStamp=record?.updated||null;piskelDraftProject=record?.project||null;
+    piskelDraftList();
+  }catch(e){toast(e.message,false);}finally{piskelDraftLoading=false;piskelDraftSwitching=false;}
+}
+function piskelDraftLoad(record){if(record?.project)return piskelDraftSwitch(record);}
+
 function b64ToBlob(b64,mime){
   const bin=atob(b64),len=bin.length,arr=new Uint8Array(len);
   for(let i=0;i<len;i++)arr[i]=bin.charCodeAt(i);
@@ -3792,48 +4151,103 @@ async function piskelSendList(){
   }catch(e){postToPiskel({type:'list-result',files:[],error:e.message});}
 }
 async function piskelSendIcon(name){
-  try{const r=await fetch('/ICONS/'+encodeURIComponent(name),{cache:'no-store'});
+  if(piskelDraftSwitching)return;
+  const target=$('#piskelFrame')?.contentWindow;
+  piskelDraftSwitching=true;
+  try{
+    if(piskelDraftProject){const snapshot=await piskelProjectRequest('project-request');if(!piskelDraftPersist({...snapshot,type:'project-changed'}))throw new Error(t('edDraftError'));}
+    const r=await fetch('/ICONS/'+encodeURIComponent(name),{cache:'no-store'});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const blob=await r.blob();
-    postToPiskel({type:'load-result',name,mime:blob.type||'image/gif',dataBase64:await blobToB64(blob)});
-  }catch(e){toast(e.message,false);}
+    let origin=null;
+    try{const{data}=await api('/api/v1/icons/origins');origin=(data.icons||[]).find(o=>o.name===name&&validIconOrigin(o))||null;}catch(e){}
+    if(target!==$('#piskelFrame')?.contentWindow)return;
+    piskelDraftLoading=true;
+    await piskelProjectRequest('load-result',{name,mime:blob.type||'image/gif',dataBase64:await blobToB64(blob),origin,
+      based_on:origin&&origin.hub===iconApiUrl()?origin.slug:null});
+    piskelDraftId=null;piskelDraftStamp=null;piskelDraftProject=null;
+  }catch(e){toast(e.message,false);}finally{piskelDraftLoading=false;piskelDraftSwitching=false;}
 }
 async function piskelSave(m){
+  const target=$('#piskelFrame')?.contentWindow,origin=piskelOrigin();
+  const reply=message=>target?.postMessage({ns:'awtrix',...message},origin);
   const id=iconIdFrom(m.name),fn=id+'.gif';
   let blob=b64ToBlob(m.dataBase64,m.mime||'image/gif');
   try{
     if(m.mime==='image/jpeg')blob=await imgToGif(blob);
     await uploadFile(blob,'/ICONS',fn,null);
     await dropStale('/ICONS',id+'.jpg',fn);
-    postToPiskel({type:'save-result',ok:true,name:fn});
+    if(m.origin&&validIconOrigin({...m.origin,name:fn})){
+      try{await saveIconOrigin(fn,m.origin.slug,m.origin.sha256,m.origin.hub);}catch(e){toast(t('icoriginfail'),false);}
+    }
+    reply({type:'save-result',ok:true,name:fn});
     toast(fn+' '+t('uploaded'));
-  }catch(e){postToPiskel({type:'save-result',ok:false,name:fn,error:e.message});toast(e.message,false);}
+  }catch(e){reply({type:'save-result',ok:false,name:fn,error:e.message});toast(e.message,false);}
 }
 const LIVE_NAME='draw-preview';
-let piskelLiveOn=false,lastLiveErr='';
+let piskelPublishing=false;
+async function piskelPublish(m){
+  const target=$('#piskelFrame')?.contentWindow,frameOrigin=piskelOrigin();
+  const reply=message=>target?.postMessage({ns:'awtrix',...message},frameOrigin);
+  if(piskelPublishing){reply({type:'publish-result',requestId:m.requestId,ok:false,error:'busy',message:t('idbinstalling')});return;}
+  piskelPublishing=true;
+  try{
+    if(!['image/gif','image/jpeg'].includes(m.mime)||typeof m.dataBase64!=='string'||m.dataBase64.length>90000)throw new Error(t('idbfail'));
+    const blob=b64ToBlob(m.dataBase64,m.mime);
+    let update=null;
+    if(m.action==='update'){
+      if(!/^[-a-z0-9_]{1,32}$/.test(m.slug||'')||!/^[a-f0-9]{64}$/.test(m.expected_sha256||''))throw new Error(t('idbfail'));
+      update={slug:m.slug,sha256:m.expected_sha256};
+    }
+    const d=await idbSubmit(blob,String(m.name||''),/^[-a-z0-9_]{1,32}$/.test(m.based_on||'')?m.based_on:null,update);
+    const origin={hub:iconApiUrl(),slug:d.slug,sha256:await iconBlobHash(blob)};
+    const name=iconIdFrom(m.name)+'.gif';
+    try{if(await iconBlobHash(await readIconBlob(name))===origin.sha256)await saveIconOrigin(name,origin.slug,origin.sha256,origin.hub);}catch(e){}
+    reply({type:'publish-result',requestId:m.requestId,ok:true,...d,origin});
+  }catch(e){reply({type:'publish-result',requestId:m.requestId,ok:false,error:e.code||'failed',message:e.message,pr:e.pr||'',slug:e.slug||''});}
+  finally{piskelPublishing=false;}
+}
+let piskelLiveOn=false,lastLiveErr='',piskelLiveGeneration=0,piskelLiveQueue=Promise.resolve();
 async function piskelLive(m){
   piskelLiveOn=true;
+  const generation=piskelLiveGeneration;
   const body=m.mode==='bitmap'
     ?{hold:true,stack:false,name:LIVE_NAME,text:'',draw:[['bitmap',0,0,m.w,m.h,m.dataBase64]]}
     :{hold:true,stack:false,name:LIVE_NAME,text:'',icon:m.dataBase64};
-  try{await post('/api/v1/notifications',body);lastLiveErr='';}
-  catch(e){if(e.message!==lastLiveErr){lastLiveErr=e.message;toast(e.message,false);}}
+  piskelLiveQueue=piskelLiveQueue.catch(()=>{}).then(async()=>{
+    if(!piskelLiveOn||generation!==piskelLiveGeneration)return;
+    try{await post('/api/v1/notifications',body);lastLiveErr='';}
+    catch(e){if(e.message!==lastLiveErr){lastLiveErr=e.message;toast(e.message,false);}}
+  });
+  return piskelLiveQueue;
 }
 async function piskelLiveOff(){
   piskelLiveOn=false;
+  const generation=++piskelLiveGeneration;
+  await piskelLiveQueue;
+  if(piskelLiveOn||generation!==piskelLiveGeneration)return;
   try{await api('/api/v1/notifications/'+LIVE_NAME,{method:'DELETE'});}catch(e){}
 }
 window.addEventListener('message',e=>{
-  if(!$('#piskelFrame'))return;
-  if(e.origin!==piskelOrigin())return;
+  const frame=$('#piskelFrame');
+  if(!frame||e.source!==frame.contentWindow||e.origin!==piskelOrigin())return;
   const m=e.data;if(!m||m.ns!=='awtrix')return;
+  const waiting=piskelProjectRequests.get(m.requestId);
+  if(waiting&&['project-result','project-load-result','icon-load-result'].includes(m.type)){
+    clearTimeout(waiting.timer);piskelProjectRequests.delete(m.requestId);
+    if(m.ok===false)waiting.reject(new Error(m.message||m.error||t('edDraftError')));else waiting.resolve(m);
+    return;
+  }
   if(m.type==='ready'){
     piskelReady=true;
     const l=$('#piskelFrame')&&document.querySelector('.piskelload');if(l)l.remove();
     notifyPiskelTheme();
-    postToPiskel({type:'config',sizes:['8x8','32x8']});
+    postToPiskel({type:'config',host:'awtrix',draftViaParent:true,sizes:['8x8','32x8'],publishViaParent:true});
     if(pendingEditIcon){const n=pendingEditIcon;pendingEditIcon=null;piskelSendIcon(n);}
-  }else if(m.type==='save')piskelSave(m);
+   }else if(m.type==='project-changed'||m.type==='project-save')piskelDraftPersist(m);
+  else if(m.type==='project-load-result'){piskelDraftLoading=false;if(!m.ok)toast(m.error||t('edDraftError'),false);else piskelDraftList();}
+  else if(m.type==='save')piskelSave(m);
+  else if(m.type==='publish')piskelPublish(m);
   else if(m.type==='list')piskelSendList();
   else if(m.type==='load'&&m.name)piskelSendIcon(m.name);
   else if(m.type==='live')piskelLive(m);
@@ -3844,16 +4258,37 @@ window.addEventListener('pagehide',()=>{if(piskelLiveOn){try{fetch('/api/v1/noti
 function viewEditor(view){
   if(piskelLiveOn)piskelLiveOff();
   piskelReady=false;
+  piskelDraftId=null;piskelDraftStamp=null;piskelDraftProject=null;piskelDraftLoading=false;
   const url=getPiskelUrl();
   const theme=document.documentElement.dataset.theme==='light'?'light':'dark';
   // The editor is handed the same Hub the gallery uses. Without it a framed
   // editor falls back to whatever host it was built against, and an override in
   // localStorage would reach the gallery but not the editor inside it.
   const src=url+(url.includes('?')?'&':'?')+'theme='+encodeURIComponent(theme)+
-    '&sizes=8x8,32x8&host=awtrix&iconapi='+encodeURIComponent(iconApiUrl());
+    '&sizes=8x8,32x8&host=awtrix&iconapi='+encodeURIComponent(iconApiUrl())+'&v='+Date.now();
   const loading=el('div',{class:'piskelload'},el('span',{class:'spin'}),el('span',null,t('edLoading')));
   const frame=el('iframe',{id:'piskelFrame',src,title:t('editorTab'),allow:'clipboard-read; clipboard-write'});
-  view.append(el('div',{class:'piskelwrap wide'},loading,frame));
+  const draftSelect=el('select',{id:'piskelDraftList','aria-label':t('edDrafts')});
+  const input=el('input',{type:'file',accept:'.json,.piskel,application/json',hidden:'hidden',onchange:async()=>{
+    const file=input.files[0];if(!file)return;
+    try{if(file.size>2000000)throw new Error(t('edDraftError'));let project=JSON.parse(await file.text());
+      if(project.modelVersion)project={version:1,name:project.piskel?.name||'',piskel:project};
+      piskelDraftLoad({id:null,updated:null,project});
+    }catch(e){toast(e.message,false);}input.value='';
+  }});
+  const remove=el('button',{type:'button'},t('edDraftDelete'));
+  armable(remove,()=>{const id=draftSelect.value;if(!id)return;try{
+    localStorage.setItem(PISKEL_DRAFT_KEY,JSON.stringify(piskelDraftRead().filter(d=>d.id!==id)));
+    if(id===piskelDraftId){piskelDraftId=null;piskelDraftStamp=null;}piskelDraftList();
+  }catch(e){toast(t('edDraftError'),false);}});
+  view.append(el('div',{class:'card wide'},el('div',{class:'row'},draftSelect,
+    el('button',{type:'button',onclick:()=>piskelDraftLoad(piskelDraftRead().find(d=>d.id===draftSelect.value))},t('edDraftOpen')),
+    el('button',{type:'button',onclick:()=>piskelDraftSwitch()},t('edDraftNew')),
+    el('button',{type:'button',onclick:async()=>{try{const out=await piskelProjectRequest('project-request');const a=el('a',{download:iconIdFrom(out.project.name)+'.piskel.json',href:URL.createObjectURL(new Blob([JSON.stringify(out.project)],{type:'application/json'}))});a.click();setTimeout(()=>URL.revokeObjectURL(a.href),30000);}catch(e){toast(e.message,false);}}},t('edDraftDownload')),
+    el('button',{type:'button',onclick:()=>input.click()},t('edDraftImport')),remove,input),
+    el('p',{class:'help'},t('edDraftOnly')),el('p',{class:'help',id:'piskelDraftStatus',role:'status'})),
+    el('div',{class:'piskelwrap wide'},loading,frame));
+  piskelDraftList();
   setTimeout(()=>{
     if(!piskelReady&&document.contains(loading)){
       loading.classList.add('err');

@@ -85,6 +85,7 @@ async function scenarioIconButton() {
   const { window, store } = await boot();
   const $ = q(window);
   store.iconBytes = { '2105': 'GIF89a-2105', '2106': 'GIF89a-2106' };
+  store.iconDb = {v:1,icons:[['2105','',8,8,1,11],['2106','',8,8,1,11]]};
   store.files['/ICONS'].set('2105.gif', 1);
   const uploads = [];
   stubXhr(window, uploads, store);

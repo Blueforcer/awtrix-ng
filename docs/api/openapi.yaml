@@ -1494,6 +1494,64 @@ paths:
                   next: { type: integer }
                   lines: { type: array, items: { type: string } }
 
+  /api/v1/icons/origins:
+    description: |
+      Durable local provenance, available offline. Normal icon overwrite retains the recorded
+      SHA256 so callers can detect local edits; deleting an icon removes its link. These are
+      user-supplied associations, not signatures or proof of authorship. GET is allowed in AP mode;
+      PUT and DELETE are blocked by the existing read-only provisioning policy.
+      Storage is bounded to 64 records and 16 KiB; writes replace the store atomically.
+    get:
+      tags: [files]
+      summary: List installed icon origins
+      responses:
+        "200":
+          description: Existing icon files with saved origins, no pagination within the hard limit
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [icons]
+                properties:
+                  icons:
+                    type: array
+                    maxItems: 64
+                    items: { $ref: "#/components/schemas/IconOrigin" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { description: "storageError: unreadable or corrupt origin metadata" }
+    put:
+      tags: [files]
+      summary: Associate an existing local icon with a published original
+      description: Idempotent complete record upsert keyed by filename. Maximum body 1024 bytes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IconOrigin" }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { description: invalidOrigin }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { description: payloadTooLarge }
+        "507": { description: "insufficientStorage: record or byte limit reached" }
+        "500": { description: "storageError: read or atomic write failed" }
+    delete:
+      tags: [files]
+      summary: Remove a local origin association without deleting the image
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,32}\.(gif|jpg)$' }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { description: invalidName }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { description: "storageError: read or atomic write failed" }
+
   /api/v1/files:
     get:
       tags: [files]
@@ -1610,6 +1668,26 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    IconOrigin:
+      type: object
+      required: [name, hub, slug, sha256]
+      properties:
+        name:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{1,32}\.(gif|jpg)$'
+          description: Existing local filename including extension
+        hub:
+          type: string
+          maxLength: 240
+          pattern: '^https://[^@?#%\\ ]+/icons/$'
+          description: HTTPS icon base; no credentials, query, fragment, escapes or dot-segments
+        slug:
+          type: string
+          pattern: '^[a-z0-9_-]{1,32}$'
+        sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: SHA256 of local bytes when linked; not updated by normal file overwrite
     ScriptMeta:
       type: object
       description: >
@@ -1711,6 +1789,8 @@ components:
               type: string
               enum:
                 - badRequest            # 400, POST /api/v1/system/restore only - no backup file received
+                - invalidOrigin         # 400, malformed icon origin record
+                - storageError          # 500, icon provenance persistence failed
                 - invalidJson           # 400
                 - invalidPath           # 400, file routes only - outside the asset folders or contains ".."
                 - invalidPinConfig      # 400, PUT /api/v1/system only

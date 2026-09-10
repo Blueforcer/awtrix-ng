@@ -90,7 +90,7 @@ async function run() {
     'a row menu starts closed');
 
   const rowsOf = card => [...card.querySelectorAll('.approw')];
-  // Every row action lives behind the row's menu now, labelled with words.
+  // Other row actions live behind the row's menu, labelled with words.
   const btn = (row, label) => {
     const m = row.querySelector('.rowmenu .mbtn');
     if (m) m.click();
@@ -179,7 +179,7 @@ async function run() {
   const rowFor = name => [...window.document.querySelectorAll('.approw')]
     .find(r => r.querySelector('.nm') &&
                r.querySelector('.nm').firstChild.textContent === name);
-  const gearOf = row => btn(row, 'Settings');
+  const gearOf = row => row.querySelector(':scope > .cfgbtn');
 
   assert(!!gearOf(rowFor('Weather')), 'a script with settings offers Settings');
   assert(!gearOf(rowFor('Doorbell')), 'a script without settings does not');
@@ -278,10 +278,12 @@ async function run() {
   assert(ctl('city').querySelector('input[type=text]').value === 'Graz',
     'with the unsaved edit still in it');
 
-  // While the panel is open the row's menu button IS the close button, so
-  // getting back out is one click and not a trip through the menu.
-  const closeBtn = rowFor('Weather').querySelector('.rowmenu .mbtn');
-  assert(closeBtn.title === 'Close settings', 'the menu button becomes a close button');
+  // The direct settings button also closes the panel; actions stay accessible.
+  const closeBtn = gearOf(rowFor('Weather'));
+  assert(closeBtn.title === 'Close settings', 'the settings button closes an open panel');
+  assert(closeBtn.nextElementSibling.classList.contains('rowmenu'),
+    'settings is directly left of the actions dropdown');
+  assert(!btn(rowFor('Weather'), 'Settings'), 'settings is absent from the dropdown');
   closeBtn.click();
   await flush(20);
   assert(panel.hidden, 'and closes it again');

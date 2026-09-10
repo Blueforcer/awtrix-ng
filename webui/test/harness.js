@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
+const { createHash } = require('node:crypto');
 
 const HTML_PATH = path.join(__dirname, '..', 'index.html');
 
@@ -72,6 +73,9 @@ function makeStore() {
     // directly, so it is mocked by absolute URL rather than by path.
     iconDb: { v: 1, icons: [] }, // what index.json answers
     iconBytes: {},               // slug -> bytes served from icons/<slug>.<ext>
+    localIconBytes: {},          // actual on-device content, independent of names
+    iconOrigins: new Map(),      // durable firmware metadata, survives page navigation
+    originFailure: false,
     iconExt: {},                 // slug -> 'gif' (default) or 'jpg'; the Hub serves only that one
     submitted: [],               // FormData bodies POSTed to the submit service
     submittedHeaders: [],        // the headers each of those carried
@@ -99,6 +103,7 @@ function mockFetch(store, netlog, win) {
     ok, status,
     json: async () => body,
     blob: async () => new win.Blob([String(body == null ? '' : body)], { type: 'image/gif' }),
+    arrayBuffer: async () => new TextEncoder().encode(String(body == null ? '' : body)).buffer,
     text: async () => JSON.stringify(body),
   });
   return async function fetch(input, opts = {}) {
@@ -120,6 +125,12 @@ function mockFetch(store, netlog, win) {
       if (url.startsWith(ICON_DB)) {
         const rest = url.slice(ICON_DB.length);
         if (rest === 'index.json') return ext(store.iconDb);
+        const meta = rest.match(/^([^/]+)\/metadata\.json$/);
+        if (meta) {
+          const slug = decodeURIComponent(meta[1]);
+          if (!(slug in store.iconBytes)) return ext({}, false, 404);
+          return ext({slug,filename:slug+'.'+(store.iconExt[slug]||'gif'),sha256:createHash('sha256').update(store.iconBytes[slug]).digest('hex')});
+        }
         // The Hub serves the bytes directly under the catalogue prefix - no
         // second 'icons/' segment. This pattern is what pins that.
         const icon = rest.match(/^([^/]+)\.(gif|jpg)$/);
@@ -150,6 +161,12 @@ function mockFetch(store, netlog, win) {
       return resp({ ok: true });
     }
     if (p === '/api/v1/scripts/shared') return resp([]);
+    if (p === '/api/v1/icons/origins') {
+      if (store.originFailure) return resp({error:{message:'storage full'}},false,507);
+      if (method === 'PUT') {const o=JSON.parse(opts.body);store.iconOrigins.set(o.name,o);return resp({ok:true});}
+      if (method === 'DELETE') {store.iconOrigins.delete(q.get('name'));return resp({ok:true});}
+      return resp({icons:[...store.iconOrigins.values()]});
+    }
 
     if (p === '/api/v1/files') {
       if (method === 'GET') {
@@ -163,6 +180,7 @@ function mockFetch(store, netlog, win) {
         const dir = full.slice(0, slash), name = full.slice(slash + 1);
         if (!store.files[dir] || !store.files[dir].delete(name))
           return resp({ error: { code: 'notFound', message: full } }, false, 404);
+        if (dir === '/ICONS') {store.iconOrigins.delete(name);delete store.localIconBytes[name];}
         return resp({ ok: true });
       }
     }
@@ -171,7 +189,8 @@ function mockFetch(store, netlog, win) {
     if (p.startsWith('/ICONS/')) {
       const name = decodeURIComponent(p.slice(7));
       if (!store.files['/ICONS'].has(name)) return ext({ error: 'notFound' }, false, 404);
-      return ext('GIF89a-' + name);
+      const slug=name.replace(/\.[^.]+$/,'');
+      return ext(store.localIconBytes[name] ?? store.iconBytes[slug] ?? ('GIF89a-' + name));
     }
 
     if (p === '/api/v1/audio/melodies' && method === 'GET') return resp({ melodies: store.melodies });
@@ -318,12 +337,17 @@ function stubXhr(window, log, store) {
       if (body && typeof body.entries === 'function')
         for (const [field, v] of body.entries()) entry.files.push({ field, name: v && v.name });
       log.push(entry);
+      const reads=[];
       if (store) {
         const dir = new URL(this.url, 'http://localhost').searchParams.get('dir');
-        if (dir && store.files[dir])
-          for (const f of entry.files) if (f.name) store.files[dir].set(f.name, 1);
+        if (dir && store.files[dir] && body && typeof body.entries === 'function')
+          for (const [,file] of body.entries()) if (file.name) {
+            store.files[dir].set(file.name,file.size);
+            if (dir === '/ICONS') reads.push(new Promise(resolve=>{const reader=new window.FileReader();reader.onload=()=>{
+              store.localIconBytes[file.name]=new TextDecoder().decode(reader.result);resolve();};reader.readAsArrayBuffer(file);}));
+          }
       }
-      setTimeout(() => this.onload && this.onload(), 0);
+      Promise.all(reads).then(()=>setTimeout(() => this.onload && this.onload(), 0));
     }
   };
 }

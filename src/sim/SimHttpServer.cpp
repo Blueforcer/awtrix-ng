@@ -28,6 +28,7 @@
 #include "core/net/HostName.h"
 #include "persistence/DeviceConfig.h"
 #include "persistence/FsRestoreSink.h"
+#include "persistence/IconOriginsStore.h"
 #include "persistence/SystemConfigApply.h"
 #include "sim/SimBoard.h"
 #include "sim/SimStore.h"
@@ -399,6 +400,10 @@ void SimHttpServer::Impl::handleFiles(const httplib::Request& req, const std::st
       return;
     }
     std::error_code ec;
+    if (fn.rfind("/ICONS/", 0) == 0 && iconorigins::validName(fn.substr(7))) {
+      const auto result = iconorigins::handle(iconorigins::storage(), "DELETE", {}, fn.substr(7));
+      if (result.status != 200) { sendJson(res, result.status, result.body); return; }
+    }
     const bool ok = stdfs::remove(stdfs::u8path(sim::hostPath(fn)), ec) && !ec;
     if (ok) {
       if (onAssetsChanged) onAssetsChanged();
@@ -545,6 +550,14 @@ void SimHttpServer::Impl::route(const httplib::Request& req, httplib::Response& 
 
   if (path == "/api/v1/audio/melodies" || path.rfind("/api/v1/audio/melodies/", 0) == 0) {
     handleSounds(req, method, res);
+    return;
+  }
+
+  if (path == "/api/v1/icons/origins") {
+    const auto result = iconorigins::handle(iconorigins::storage(), method, req.body,
+        req.has_param("name") ? req.get_param_value("name") : "");
+    res.set_header("Cache-Control", "no-store");
+    sendJson(res, result.status, result.body);
     return;
   }
 

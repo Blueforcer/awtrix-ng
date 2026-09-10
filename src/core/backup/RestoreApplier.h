@@ -24,7 +24,7 @@ class RestoreApplier : public ZipVisitor {
  private:
   enum class Kind {
     Manifest, Wifi, System, Settings, AppLoop, RadioStations,
-    Icon, Melody, Palette, Mp3, Script, Unknown
+    IconOrigins, Icon, Melody, Palette, Mp3, Script, Unknown
   };
 
   static Kind classify(const std::string& name);
@@ -39,6 +39,8 @@ class RestoreApplier : public ZipVisitor {
   std::string name_;
   bool buffering_ = false;
   std::string buf_;
+  std::string pendingIconOrigins_;
+  bool originsTooLarge_ = false;
   bool fileOpen_ = false;
   bool fileRejected_ = false;
   bool contentChecked_ = false;

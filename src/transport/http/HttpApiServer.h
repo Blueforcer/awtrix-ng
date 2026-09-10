@@ -69,6 +69,7 @@ class HttpApiServer {
   bool serveSystem(const Request& req);
   bool serveSounds(const Request& req);
   bool serveFiles(const Request& req);
+  bool serveIconOrigins(const Request& req);
   bool serveMp3(const Request& req);
   void listDir(const char* dir);
 

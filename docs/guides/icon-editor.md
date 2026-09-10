@@ -15,26 +15,50 @@ straight away, ready to use in any app or notification as `"icon":"<name>"`.
 
 ## Share an icon with everyone
 
-**Save to Cloud**, next to Save to AWTRIX, submits the drawing to the shared icon database instead
-of storing it on your clock. Type the name you want it listed under and press it.
+Publishing shares your drawing in the **AWTRIX Hub** gallery. Give it a descriptive name such as
+“Sunny sky”. A LaMetric number such as “12345” is not accepted as a publication name: rename it
+before publishing. Numbers can still be part of a name, for example “Battery 50”.
 
-Publishing needs an **AWTRIX Hub** account. The editor you see here is framed by a page served from
-your clock, and a Hub sign-in cannot travel that far - so from this tab the status line says so and
-offers a link to the Hub's own editor, where the same drawing publishes under your account. There it
-appears in the collection immediately; there is no review queue, and the status line links straight
-to the published icon.
+Publishing needs an AWTRIX Hub account. On the device, open **Publish your own icons** in the
+Icons tab and connect using your Hub device token. The token stays in this browser; the embedded
+editor does not receive it. You can also use the editor on the Hub, where your sign-in is sufficient.
 
-The other answer you may see is a refusal - most often because the identical image is already in the
-collection, in which case it names the entry that holds it.
+If the same image or animation is already published, the Hub links to that entry instead of adding
+a duplicate. Editing a Hub icon and publishing different content creates a new variation, preserving
+the original. Saving on AWTRIX only updates your local file and never publishes it.
 
-Saving to the cloud does **not** put the icon on your clock; use Save to AWTRIX for that, and do
-both if you want it in each place.
+Authors can also choose **Update my published icon** to keep the same public ID. The Hub
+checks the version you opened before accepting the update. If another window has already
+changed it, your draft is kept and the update is rejected until you open the current version.
+
+## Keep an editable draft
+
+**Save draft** and **Ctrl+S** preserve the full project in this browser, including layers,
+animation timing and Hub origin. **My drafts** lets you return to it later. **Download project**
+and **Open project** move editable projects between NG and the Hub. These actions do not
+change a device icon or publish it. In the Hub, signed-in drafts also sync privately to your
+account; a conflicting edit is kept as a separate browser copy.
+
+The Hub studio always shows a browser preview. Its optional **Preview on your AWTRIX NG**
+connection sends a temporary preview directly from your browser; device credentials never go
+to the Hub. Large animations that exceed the device's inline payload limit preview as a still
+frame on the device while the full animation remains visible in the browser.
 
 ## Edit an icon you already have
 
-Press the **pencil** button on any tile in the [Icons](../getting-started/web-ui.md#icons) tab. It
+Choose **Edit** from a tile's actions menu in the [Icons](../getting-started/web-ui.md#icons) tab. It
 opens in the editor with that icon loaded - change it and save under the same name to replace it, or
 a new name to keep both.
+
+The gallery distinguishes **From the Hub**, **Locally changed**, and **Only on this device** by
+checking the file's contents against its saved origin. Installing a Hub icon with the same filename
+does not silently replace a different local drawing. Existing numeric filenames keep working with
+local apps and scripts even when you publish the drawing under a descriptive Hub name.
+
+For linked icons, **Reload from Hub** fetches the latest image even when its ID is unchanged.
+Local edits require explicit replacement. Existing scripts keep using their local file until you
+reload it; the `@icons` line and icon ID stay the same. A removed Hub entry does not delete an
+installed copy or trigger a background notice.
 
 ## Live preview on the matrix
 

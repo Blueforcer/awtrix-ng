@@ -141,6 +141,20 @@ async function testRoundTripAgainstSim() {
 
 async function main() {
   await testZipStructure();
+  if(!SIM){
+    const{window,store}=await boot();
+    store.files['/ICONS'].set('mail.gif',12);
+    const origin={name:'mail.gif',hub:'https://hub.flows.blueforcer.de/icons/',slug:'mail',sha256:'a'.repeat(64)};
+    store.iconOrigins.set('mail.gif',origin);
+    const entries=await window.collectBackup({icons:true});
+    const metadata=entries.find(e=>e.name==='config/icon-origins.json');
+    assert(entries.some(e=>e.name==='ICONS/mail.gif'),'icon backup includes actual file');
+    assert(JSON.parse(metadata.data).icons[0].sha256===origin.sha256,'icon backup retains original content reference');
+    store.originFailure=true;let failed=false;
+    try{await window.collectBackup({icons:true});}catch(e){failed=true;}
+    assert(failed,'metadata storage failure cannot silently produce incomplete backup');
+    window.close();
+  }
   if (SIM) {
     await testRoundTripAgainstSim();
   } else {
