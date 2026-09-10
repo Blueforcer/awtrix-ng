@@ -4,14 +4,16 @@
  * Provenance
  * ----------
  * Vendored from https://github.com/berry-lang/berry at tag v1.1.0
- * (commit b5ede66721937533fbf5c286ef44a5111ea30c75). Everything under
- * lib/berry/src/ and lib/berry/default/ is upstream code, unmodified EXCEPT
- * one memory-safety fix (marked "AWTRIX (candidate for upstream)"): be_vm.c
+ * (commit b5ede66721937533fbf5c286ef44a5111ea30c75), subsequently rebased on
+ * Berry master. Local deviations are marked AWTRIX. In particular, be_vm.c
  * and be_exec.c nil-fill freshly allocated/grown VM stack memory, because
  * premark_stack scans up to vm->top and precall raises top over slots no
  * instruction has written yet -- malloc garbage there that happens to look
  * like a GC object makes the mark phase dereference a wild pointer. Found
  * 2026-07-31 via a page-guard allocator on the host suite.
+ * be_parser.c keeps float constant tables out of ESP32 IRAM. be_exec.c and
+ * be_mem.c also provide the host's best-effort idle-stack/trace release seam;
+ * ordinary Berry calls and the public diagnostics API keep upstream behavior.
  * This file is ours: it is a copy of upstream's default/berry_conf.h with
  * AWTRIX values substituted. Deviations from upstream are marked "AWTRIX:".
  *
@@ -214,14 +216,16 @@
 #define BE_STACK_START                  50
 
 /* Macro: BE_CONST_SEARCH_SIZE
- * Constants in function are limited to 255. However the compiler
- * will look for a maximum of pre-existing constants to avoid
- * performance degradation. This may cause the number of constants
- * to be higher than required.
+ * The first 256 constants can be addressed directly by an instruction. The
+ * compiler searches at most this many pre-existing entries to avoid excessive
+ * compile time. A smaller search can retain duplicates in the constant table.
  * Increase is you need to solidify functions.
  * Default: 50
  **/
-#define BE_CONST_SEARCH_SIZE            50
+/* AWTRIX: search all directly addressable constant slots. Repeated literals
+ * after slot 49 otherwise allocate duplicates for the lifetime of the script.
+ * Keep a bounded linear search so large unique tables remain cheap to compile. */
+#define BE_CONST_SEARCH_SIZE            256
 
 /* Macro: BE_STACK_FREE_MIN
  * The short string will hold the hash value when the value is

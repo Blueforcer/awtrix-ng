@@ -66,6 +66,7 @@ class BerryVM {
   // Non-empty until the prelude has run. Loading an app or a module refuses while it is
   // set, because both rely on prelude globals such as _app_anchor.
   std::string bootstrapErr_;
+  unsigned callsSinceTrim_ = 0;
 };
 
 }

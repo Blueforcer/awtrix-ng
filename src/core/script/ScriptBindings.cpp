@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include <vector>
 
@@ -888,8 +889,10 @@ int b_re_search(bvm* vm) {
 
   bool pushed = false;
   if (be_top(vm) >= 4 && be_isstring(vm, 1) && be_isstring(vm, 2)) {
-    const std::string pattern(be_tostring(vm, 1), static_cast<size_t>(be_strlen(vm, 1)));
-    const std::string text(be_tostring(vm, 2), static_cast<size_t>(be_strlen(vm, 2)));
+    // The arguments stay rooted on the Berry stack until the result strings are copied.
+    // Preserve their explicit lengths: both patterns and subjects can contain NUL bytes.
+    const std::string_view pattern(be_tostring(vm, 1), static_cast<size_t>(be_strlen(vm, 1)));
+    const std::string_view text(be_tostring(vm, 2), static_cast<size_t>(be_strlen(vm, 2)));
     const int from = argInt(vm, 3);
     const bool anchored = argInt(vm, 4) != 0;
 

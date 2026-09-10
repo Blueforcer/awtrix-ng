@@ -12,6 +12,7 @@ extern "C" void be_throw(bvm* vm, int errorcode);
 extern "C" size_t be_gc_memcount(bvm* vm);
 extern "C" void be_gc_collect(bvm* vm);
 extern "C" void be_gc_setsteprate(bvm* vm, int rate);
+extern "C" void be_vm_release_idle(bvm* vm, bool trim);
 struct blexer;
 extern "C" int be_protectedparser(bvm* vm, const char* fname,
                                   const char* (*reader)(struct blexer*, void*, size_t*),
@@ -68,6 +69,19 @@ void armBudget() {
 struct SourceBuf {
   const char* text;
   size_t len;
+};
+
+// Destruction runs after return values and diagnostics have been copied, including every
+// early error return. Keep ordinary callbacks allocation-free; consider shrinking only
+// periodically or when the host explicitly collects after an install/unload.
+struct CompletedCall {
+  bvm* vm;
+  unsigned& callsSinceTrim;
+  ~CompletedCall() {
+    const bool trim = ++callsSinceTrim >= 32;
+    if (trim) callsSinceTrim = 0;
+    be_vm_release_idle(vm, trim);
+  }
 };
 
 // Hands the whole source to be_protectedparser in one go, then reports EOF by returning
@@ -142,6 +156,7 @@ bool BerryVM::load(const std::string& source) {
     err_ = "vm alloc failed";
     return false;
   }
+  const CompletedCall completed{vm_, callsSinceTrim_};
   armBudget();
   int rc = be_loadbuffer(vm_, "script", source.c_str(), source.size());
   if (!captureError(rc)) return false;
@@ -157,6 +172,7 @@ bool BerryVM::loadSolidifiedPrelude() {
     err_ = "vm alloc failed";
     return false;
   }
+  const CompletedCall completed{vm_, callsSinceTrim_};
   armBudget();
   awtrix_push_solidified_prelude(vm_);
   int rc = be_pcall(vm_, 0);
@@ -175,6 +191,7 @@ bool BerryVM::loadApp(const std::string& appKey, const std::string& source,
     err_ = "vm alloc failed";
     return false;
   }
+  const CompletedCall completed{vm_, callsSinceTrim_};
   if (!bootstrapErr_.empty()) {
     err_ = bootstrapErr_;
     return false;
@@ -217,6 +234,7 @@ bool BerryVM::loadModule(const std::string& importName, const std::string& sourc
     err_ = "vm alloc failed";
     return false;
   }
+  const CompletedCall completed{vm_, callsSinceTrim_};
   if (!bootstrapErr_.empty()) {
     err_ = bootstrapErr_;
     return false;
@@ -242,7 +260,10 @@ bool BerryVM::loadModule(const std::string& importName, const std::string& sourc
 }
 
 void BerryVM::dropModule(const std::string& importName) {
-  if (vm_) awtrix_module_cache_drop(vm_, importName.c_str());
+  if (vm_) {
+    const CompletedCall completed{vm_, callsSinceTrim_};
+    awtrix_module_cache_drop(vm_, importName.c_str());
+  }
 }
 
 // Calls appKey's `name` method and reads back at most one of out/boolOut/intOut. Slots are
@@ -254,6 +275,7 @@ bool BerryVM::doMethod(const std::string& appKey, const char* name, int argc,
     err_ = "vm alloc failed";
     return false;
   }
+  const CompletedCall completed{vm_, callsSinceTrim_};
 
   const int base = be_top(vm_);
 
@@ -333,7 +355,12 @@ bool BerryVM::dropApp(const std::string& appKey) {
 }
 
 void BerryVM::gcCollect() {
-  if (vm_) be_gc_collect(vm_);
+  if (vm_) {
+    be_vm_release_idle(vm_, true);
+    be_gc_collect(vm_);
+    be_vm_release_idle(vm_, false);
+    callsSinceTrim_ = 0;
+  }
 }
 
 bool BerryVM::hasFunction(const char* name) const {
@@ -351,6 +378,7 @@ bool BerryVM::doCall(const char* name, int argc, const std::string* a,
     err_ = "vm alloc failed";
     return false;
   }
+  const CompletedCall completed{vm_, callsSinceTrim_};
   be_getglobal(vm_, name);
   if (!be_isfunction(vm_, -1)) {
     be_pop(vm_, 1);

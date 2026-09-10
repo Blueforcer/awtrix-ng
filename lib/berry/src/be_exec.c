@@ -525,3 +525,59 @@ void be_save_stacktrace(bvm *vm)
         }
     }
 }
+
+/* Empty vectors keep a small non-pooled buffer. Unlike be_vector_release(),
+ * this is best effort and keeps the empty-vector end-pointer convention.
+ * Requiring both a 2x excess and 256 bytes avoids reallocating tiny reserves. */
+static void trim_idle_vector(bvm *vm, bvector *vector)
+{
+    size_t capacity = (64 + vector->size - 1) / vector->size;
+    size_t old_size = (size_t)vector->capacity * vector->size;
+    size_t new_size;
+    void *data;
+    if (capacity < 2) capacity = 2;
+    new_size = capacity * vector->size;
+    if (vector->count || old_size < new_size * 2 || old_size - new_size < 256) {
+        return;
+    }
+    data = be_try_shrink(vm, vector->data, old_size, new_size);
+    if (data) {
+        vector->data = data;
+        vector->capacity = (int)capacity;
+        vector->end = (char*)data - vector->size;
+    }
+}
+
+/* AWTRIX: the host has copied the result/error and returned from all protected
+ * calls. Trace snapshots also arise from caught exceptions and stop_iteration;
+ * keeping them would keep otherwise unreachable closures and captures alive. */
+void be_vm_release_idle(bvm *vm, bbool trim)
+{
+    if (vm->errjmp || be_stack_count(&vm->callstack)) {
+        return;
+    }
+    be_stack_clear(&vm->tracestack);
+    if (!trim || vm->top != vm->stack || vm->reg != vm->stack ||
+        be_stack_count(&vm->exceptstack) || be_stack_count(&vm->refstack)) {
+        return;
+    }
+    /* No live callframe/exception/reference pointers can point into these
+     * buffers. An uncaught exit can leave open upvalues, so keep their backing
+     * register stack until the VM has closed them through its normal path. */
+    if (!vm->upvalist) {
+        size_t old_size = (vm->stacktop - vm->stack) * sizeof(bvalue);
+        size_t new_size = BE_STACK_START * sizeof(bvalue);
+        if (old_size >= new_size * 2 && old_size - new_size >= 256) {
+            bvalue *stack = be_try_shrink(vm, vm->stack, old_size, new_size);
+            if (stack) {
+                vm->stack = vm->reg = vm->top = stack;
+                vm->stacktop = stack + BE_STACK_START;
+            }
+        }
+    }
+    trim_idle_vector(vm, &vm->callstack);
+    vm->cf = be_stack_top(&vm->callstack);
+    trim_idle_vector(vm, &vm->exceptstack);
+    trim_idle_vector(vm, &vm->refstack);
+    trim_idle_vector(vm, &vm->tracestack);
+}

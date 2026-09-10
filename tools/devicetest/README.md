@@ -76,3 +76,28 @@ before flashing.
 - `thttp` is pointed at `--host` by the runner, so the script fetches the device it runs on.
 - Eight scripts cost about 29 KB of the Berry heap on an ESP32 without PSRAM. A device already
   carrying scripts may answer `507` on install; the run stops there and says so.
+
+## RAM regressions
+
+`ram.py` checks captured-data reclamation after a caught exception, deep recursion and later
+stack growth, regex captures and binary inputs, maximum-length regex programs, and repeated
+constants. It uses a temporary headless app named `tramcheck`, refuses to overwrite that name
+if it already exists, and removes its app on exit. The stack check waits about 40 seconds.
+
+```bash
+python tools/devicetest/ram.py --host 192.168.178.39 --output .pio/ram-device/after.json
+```
+
+Use `--baseline` on older firmware to record retained bytes without requiring reclamation.
+Functional checks still apply; an older firmware may run out of memory on the maximum regex.
+`--auth user:pass` works as in the main runner. The output JSON records the measurements and
+device state before and after the run.
+
+`gif.py` checks exact framebuffer pixels for static transparency, streamed global/local
+palettes, full-width animation, and reopening after streaming. It sends the native test
+fixtures as inline GIFs to its own temporary pushed app, then removes it and restores the
+previously displayed app. No icon files or settings are changed.
+
+```bash
+python tools/devicetest/gif.py --host 192.168.178.39
+```

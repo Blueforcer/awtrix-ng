@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "berry.h"
 #include "core/apps/IApp.h"
 #include "core/render/Canvas.h"
 #include "core/render/TextRenderer.h"
@@ -1433,6 +1434,42 @@ static void test_re_module_search_match_matchall() {
   TEST_ASSERT_EQUAL_HEX32(6u, c.getPixel(5, 0));
 }
 
+static void test_re_module_keeps_binary_arguments_alive_during_matchall() {
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(loadWithPrelude(vm, R"(
+def draw(needle, pattern, subject)
+  var m = re.search(pattern, subject)
+  if m != nil && size(m[0]) == 3 && m[1] == needle pixel(0, 0, 1) end
+  var all = re.matchall(needle, subject)
+  if size(all) == 128 && all[0] == needle && all[127] == needle pixel(1, 0, 2) end
+  var anchored = re.match(needle, needle)
+  if anchored != nil && anchored[0] == needle pixel(2, 0, 3) end
+  if re.match(needle, 'a') == nil pixel(3, 0, 4) end
+end
+)"));
+  Canvas c(32, 8);
+  RenderCtx ctx;
+  script::BindingScope scope(&c, &ctx, "T");
+  // Berry source literals stop at NUL in the lexer. Supply explicit-length API values,
+  // as a native caller can, so this exercises binary matching rather than literal parsing.
+  const std::string needle("a\0b", 3);
+  const std::string pattern("(a\0b)", 5);
+  std::string subject;
+  for (int i = 0; i < 128; ++i) subject += "x" + needle;
+  be_getglobal(vm.raw(), "draw");
+  be_pushnstring(vm.raw(), needle.data(), needle.size());
+  be_pushnstring(vm.raw(), pattern.data(), pattern.size());
+  be_pushnstring(vm.raw(), subject.data(), subject.size());
+  const int rc = be_pcall(vm.raw(), 3);
+  if (rc != BE_OK) TEST_MESSAGE(be_tostring(vm.raw(), -1));
+  TEST_ASSERT_EQUAL_INT(BE_OK, rc);
+  be_pop(vm.raw(), be_top(vm.raw()));
+  TEST_ASSERT_EQUAL_HEX32(1u, c.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(2u, c.getPixel(1, 0));
+  TEST_ASSERT_EQUAL_HEX32(3u, c.getPixel(2, 0));
+  TEST_ASSERT_EQUAL_HEX32(4u, c.getPixel(3, 0));
+}
+
 int main(int, char**) {
   static long t = 0;
   g_svc.monotonicMs = []() { return t += 10; };
@@ -1509,5 +1546,6 @@ int main(int, char**) {
   RUN_TEST(test_app_dispatches_http_to_its_own_callback);
   RUN_TEST(test_two_apps_are_isolated);
   RUN_TEST(test_re_module_search_match_matchall);
+  RUN_TEST(test_re_module_keeps_binary_arguments_alive_during_matchall);
   return UNITY_END();
 }

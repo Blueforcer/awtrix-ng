@@ -183,6 +183,26 @@ BERRY_API void* be_move_to_aligned(bvm *vm, void *ptr, size_t size) {
     return ptr;
 }
 
+/* AWTRIX: releasing optional reserve must never fail the completed script or
+ * run destructors. Stay outside small-object pools so the ordinary realloc
+ * contract preserves the old block on failure and no new pool is needed. */
+void* be_try_shrink(bvm *vm, void *ptr, size_t old_size, size_t new_size)
+{
+    void *block;
+    if (!ptr || new_size <= POOL32_SIZE || new_size >= old_size) {
+        return NULL;
+    }
+#if BE_USE_PERF_COUNTERS
+    vm->counter_mem_alloc++;
+    vm->counter_mem_realloc++;
+#endif
+    block = realloc(ptr, new_size);
+    if (block) {
+        vm->gc.usage -= old_size - new_size;
+    }
+    return block;
+}
+
 /* Special allocator for structures under 32 bytes */
 typedef uint8_t mem16[16];      /* memory line of 16 bytes */
 typedef uint8_t mem32[32];      /* memory line of 32 bytes */

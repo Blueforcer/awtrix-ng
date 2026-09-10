@@ -1,6 +1,7 @@
 #include "core/backup/ZipReader.h"
 
 #include <algorithm>
+#include <array>
 
 namespace awtrix {
 namespace backup {
@@ -27,25 +28,22 @@ uint32_t rd32(const std::string& b, std::size_t off) {
          static_cast<uint32_t>(static_cast<uint8_t>(b[off + 3])) << 24;
 }
 
-// Standard reflected CRC-32 (poly 0xEDB88320), the one ZIP uses. The table is built on first use
-// so its kilobyte does not sit in .data on a device that never restores anything.
-const uint32_t* crcTable() {
-  static uint32_t table[256];
-  static bool built = false;
-  if (!built) {
-    for (uint32_t i = 0; i < 256; ++i) {
-      uint32_t c = i;
-      for (int k = 0; k < 8; ++k) c = (c & 1u) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
-      table[i] = c;
-    }
-    built = true;
+// Standard reflected CRC-32 (poly 0xEDB88320), computed at compile time so the table stays in
+// flash. A lazily filled static array still reserves its full size in RAM at boot.
+constexpr std::array<uint32_t, 256> makeCrcTable() {
+  std::array<uint32_t, 256> table{};
+  for (uint32_t i = 0; i < table.size(); ++i) {
+    uint32_t c = i;
+    for (int k = 0; k < 8; ++k) c = (c & 1u) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+    table[i] = c;
   }
   return table;
 }
 
+constexpr auto kCrcTable = makeCrcTable();
+
 uint32_t crcUpdate(uint32_t crc, const uint8_t* data, std::size_t n) {
-  const uint32_t* t = crcTable();
-  for (std::size_t i = 0; i < n; ++i) crc = t[(crc ^ data[i]) & 0xffu] ^ (crc >> 8);
+  for (std::size_t i = 0; i < n; ++i) crc = kCrcTable[(crc ^ data[i]) & 0xffu] ^ (crc >> 8);
   return crc;
 }
 

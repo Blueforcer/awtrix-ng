@@ -10,11 +10,14 @@
 #include "berry.h"
 
 #include "core/script/BerryVM.h"
+#include "core/script/ScriptHeapTesting.h"
+
+extern "C" void be_gc_collect(bvm* vm);
 
 using namespace awtrix;
 
 void setUp() {}
-void tearDown() {}
+void tearDown() { script::heap::testing::setReallocFailure(false); }
 
 static void test_berry_runs_arithmetic() {
   bvm* vm = be_vm_new();
@@ -454,6 +457,178 @@ static void test_vm_dropapp_unloads() {
   TEST_ASSERT_EQUAL_INT(0, be_top(vm.raw()));
 }
 
+// Clear the last external reference without running another Berry callback: the completed
+// callback must already have released its private traceback roots before the collector runs.
+static void expect_completed_callback_releases_capture(const char* body, bool succeeds) {
+  script::BerryVM vm;
+  const std::string source =
+      "var abandoned = nil\n"
+      "def prepare()\n"
+      "  var held = [] held.resize(1024)\n"
+      "  def work()\n"
+      "    var n = size(held)\n" + std::string(body) +
+      "\n    return n\n"
+      "  end\n"
+      "  abandoned = work\n"
+      "end\n";
+  TEST_ASSERT_TRUE_MESSAGE(vm.load(source), vm.lastError().c_str());
+  be_gc_collect(vm.raw());
+  const std::size_t baseline = vm.heapBytes();
+  TEST_ASSERT_TRUE_MESSAGE(vm.call("prepare"), vm.lastError().c_str());
+  TEST_ASSERT_EQUAL(succeeds, vm.call("abandoned"));
+  if (!succeeds)
+    TEST_ASSERT_EQUAL_STRING("value_error: captured payload", vm.lastError().c_str());
+  TEST_ASSERT_EQUAL_INT(0, be_top(vm.raw()));
+  be_pushnil(vm.raw());
+  be_setglobal(vm.raw(), "abandoned");
+  be_pop(vm.raw(), 1);
+  be_gc_collect(vm.raw());
+  TEST_ASSERT_LESS_THAN_UINT32(baseline + 4096, vm.heapBytes());
+}
+
+static void test_vm_failed_callback_releases_trace_captures() {
+  expect_completed_callback_releases_capture("raise 'value_error', 'captured payload'", false);
+}
+
+static void test_vm_caught_exception_releases_trace_captures() {
+  expect_completed_callback_releases_capture(
+      "try raise 'value_error', 'caught' except .. end", true);
+}
+
+static void test_vm_completed_iteration_releases_trace_captures() {
+  expect_completed_callback_releases_capture("for i : [1, 2, 3] n += i end", true);
+}
+
+static void expect_stack_reclamation_preserves_closures(bool explicitCollection) {
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE_MESSAGE(vm.load(
+      "var saved = nil\n"
+      "def dive(n)\n"
+      "  var value = n\n"
+      "  if n > 0 return dive(n - 1) + 1 end\n"
+      "  saved = def () return value + 9 end\n"
+      "  return 0\n"
+      "end\n"
+      "def deep() return dive(80) end\n"
+      "def shallow() return saved() end\n"), vm.lastError().c_str());
+  vm.gcCollect();
+  const std::size_t baseline = vm.heapBytes();
+  std::string out;
+  // Repeating the cycle also exercises growth after the backing arrays have moved.
+  for (int cycle = 0; cycle < 3; ++cycle) {
+    TEST_ASSERT_TRUE_MESSAGE(vm.callString("deep", out), vm.lastError().c_str());
+    TEST_ASSERT_EQUAL_STRING("80", out.c_str());
+    if (explicitCollection) {
+      vm.gcCollect();
+    } else {
+      for (int i = 0; i < 64; ++i) {
+        TEST_ASSERT_TRUE_MESSAGE(vm.callString("shallow", out), vm.lastError().c_str());
+        TEST_ASSERT_EQUAL_STRING("9", out.c_str());
+      }
+      be_gc_collect(vm.raw());
+    }
+    TEST_ASSERT_LESS_THAN_UINT32(baseline + 4096, vm.heapBytes());
+    TEST_ASSERT_TRUE_MESSAGE(vm.callString("shallow", out), vm.lastError().c_str());
+    TEST_ASSERT_EQUAL_STRING("9", out.c_str());
+    TEST_ASSERT_EQUAL_INT(0, be_top(vm.raw()));
+  }
+}
+
+static void test_vm_collection_reclaims_stacks_and_preserves_closures() {
+  expect_stack_reclamation_preserves_closures(true);
+}
+
+static void test_vm_callbacks_reclaim_stacks_and_preserve_closures() {
+  expect_stack_reclamation_preserves_closures(false);
+}
+
+static std::string constant_probe_source(int repetitions) {
+  std::string source = "def probe() var x ";
+  for (int i = 0; i < 60; ++i)
+    source += "x='value" + std::to_string(i) + "' ";
+  for (int i = 0; i < repetitions; ++i) source += "x='value55' ";
+  source += "return 'value55' end";
+  return source;
+}
+
+static void test_vm_repeated_late_constants_do_not_duplicate_values() {
+  script::BerryVM simple;
+  script::BerryVM repeated;
+  TEST_ASSERT_TRUE(simple.load(constant_probe_source(0)));
+  TEST_ASSERT_TRUE(repeated.load(constant_probe_source(100)));
+  simple.gcCollect();
+  repeated.gcCollect();
+  // Extra assignments still need bytecode. They should not also retain 100 copies
+  // of the identical constant just because its first occurrence follows slot 49.
+  TEST_ASSERT_LESS_THAN_UINT32(simple.heapBytes() + 1000, repeated.heapBytes());
+  std::string out;
+  TEST_ASSERT_TRUE(repeated.callString("probe", out));
+  TEST_ASSERT_EQUAL_STRING("value55", out.c_str());
+}
+
+static void test_vm_stack_reclamation_survives_exceptions_and_hard_abort() {
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE_MESSAGE(vm.load(
+      "def nested(n)\n"
+      "  try\n"
+      "    if n > 0 return nested(n - 1) end\n"
+      "    raise 'value_error', 'nested'\n"
+      "  except .. as e, m return m end\n"
+      "end\n"
+      "def fail(n)\n"
+      "  if n > 0 return fail(n - 1) end\n"
+      "  raise 'value_error', 'deep failure'\n"
+      "end\n"
+      "def spin(n)\n"
+      "  if n > 0 return spin(n - 1) end\n"
+      "  while true try while true end except .. end end\n"
+      "end\n"
+      "def caught() return nested(40) end\n"
+      "def failure() return fail(80) end\n"
+      "def budget() return spin(80) end\n"
+      "def alive() return 'alive' end\n"), vm.lastError().c_str());
+  vm.gcCollect();
+  const std::size_t baseline = vm.heapBytes();
+  std::string out;
+  for (int cycle = 0; cycle < 2; ++cycle) {
+    TEST_ASSERT_TRUE_MESSAGE(vm.callString("caught", out), vm.lastError().c_str());
+    TEST_ASSERT_EQUAL_STRING("nested", out.c_str());
+    vm.gcCollect();
+    TEST_ASSERT_LESS_THAN_UINT32(baseline + 4096, vm.heapBytes());
+    TEST_ASSERT_FALSE(vm.call("failure"));
+    TEST_ASSERT_EQUAL_STRING("value_error: deep failure", vm.lastError().c_str());
+    vm.gcCollect();
+    TEST_ASSERT_LESS_THAN_UINT32(baseline + 4096, vm.heapBytes());
+    TEST_ASSERT_FALSE(vm.call("budget"));
+    TEST_ASSERT_TRUE(vm.lastError().find("instruction") != std::string::npos);
+    vm.gcCollect();
+    TEST_ASSERT_LESS_THAN_UINT32(baseline + 4096, vm.heapBytes());
+    TEST_ASSERT_TRUE_MESSAGE(vm.callString("alive", out), vm.lastError().c_str());
+    TEST_ASSERT_EQUAL_STRING("alive", out.c_str());
+    TEST_ASSERT_EQUAL_INT(0, be_top(vm.raw()));
+  }
+}
+
+static void test_vm_failed_stack_shrink_preserves_the_completed_call() {
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(vm.load(
+      "def dive(n) if n > 0 return dive(n - 1) end return 0 end\n"
+      "def deep() return dive(80) end\n"
+      "def shallow() return 42 end\n"));
+  vm.gcCollect();
+  const std::size_t baseline = vm.heapBytes();
+  TEST_ASSERT_TRUE(vm.call("deep"));
+  script::heap::testing::setReallocFailure(true);
+  for (int i = 0; i < 64; ++i) TEST_ASSERT_TRUE(vm.call("shallow"));
+  TEST_ASSERT_EQUAL_STRING("", vm.lastError().c_str());
+  TEST_ASSERT_GREATER_THAN_UINT32(baseline + 4096, vm.heapBytes());
+  script::heap::testing::setReallocFailure(false);
+  for (int i = 0; i < 64; ++i) TEST_ASSERT_TRUE(vm.call("shallow"));
+  be_gc_collect(vm.raw());
+  TEST_ASSERT_LESS_THAN_UINT32(baseline + 4096, vm.heapBytes());
+  TEST_ASSERT_TRUE(vm.call("deep"));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_berry_runs_arithmetic);
@@ -486,5 +661,13 @@ int main(int, char**) {
   RUN_TEST(test_vm_loadapp_reload_replaces_instance);
   RUN_TEST(test_vm_method_on_unknown_app_is_an_error);
   RUN_TEST(test_vm_dropapp_unloads);
+  RUN_TEST(test_vm_failed_callback_releases_trace_captures);
+  RUN_TEST(test_vm_caught_exception_releases_trace_captures);
+  RUN_TEST(test_vm_completed_iteration_releases_trace_captures);
+  RUN_TEST(test_vm_collection_reclaims_stacks_and_preserves_closures);
+  RUN_TEST(test_vm_callbacks_reclaim_stacks_and_preserve_closures);
+  RUN_TEST(test_vm_repeated_late_constants_do_not_duplicate_values);
+  RUN_TEST(test_vm_stack_reclamation_survives_exceptions_and_hard_abort);
+  RUN_TEST(test_vm_failed_stack_shrink_preserves_the_completed_call);
   return UNITY_END();
 }

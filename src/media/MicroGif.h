@@ -15,6 +15,7 @@ class MicroGif {
   static constexpr int kMaxW = 32;
   static constexpr int kMaxH = 8;
 
+  // The input, including its palettes, must stay alive until the last frame is decoded.
   bool begin(const uint8_t* data, std::size_t len);
 
   int width() const { return w_; }
@@ -48,7 +49,7 @@ class MicroGif {
   int w_ = 0, h_ = 0;
   int bgIndex_ = 0;
   int globalColors_ = 0;
-  uint32_t palette_[256];
+  const uint8_t* palette_ = nullptr;
 
   int transparent_ = -1;
   int disposal_ = 0;
