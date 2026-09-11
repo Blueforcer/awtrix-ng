@@ -482,7 +482,7 @@ async function testSameIdReload(){
 async function testEditorDraftRecovery(){
   const {window,store}=await withGallery();await goto(window,'#/editor');await flush(20);
   const frame=window.document.querySelector('#piskelFrame'),messages=[];frame.contentWindow.postMessage=m=>messages.push(m);
-  const send=(m,source=frame.contentWindow)=>window.dispatchEvent(new window.MessageEvent('message',{source,origin:'https://hub.flows.blueforcer.de',data:{ns:'awtrix',...m}}));
+  const send=(m,source=frame.contentWindow)=>window.dispatchEvent(new window.MessageEvent('message',{source,origin:'https://awtrix.de',data:{ns:'awtrix',...m}}));
   const project={version:1,name:'Cloud',piskel:{layers:['pixels'],fps:8},based_on:'mail'};
   send({type:'project-changed',revision:1,project},window);
   assert(!window.localStorage.getItem('awtrixEditorDraftsV1'),'another window cannot write a draft');
@@ -497,10 +497,10 @@ async function testEditorDraftRecovery(){
   assert(window.document.querySelector('#piskelDraftList').options.length===2,'saved draft is available after reopening the editor');
   const newer=window.document.querySelector('#piskelFrame');newer.contentWindow.postMessage=m=>{
     messages.push(m);
-    if(m.type==='project-request')queueMicrotask(()=>window.dispatchEvent(new window.MessageEvent('message',{source:newer.contentWindow,origin:'https://hub.flows.blueforcer.de',data:{ns:'awtrix',type:'project-result',requestId:m.requestId,ok:true,project,revision:3}})));
-    if(m.type==='project-load')queueMicrotask(()=>window.dispatchEvent(new window.MessageEvent('message',{source:newer.contentWindow,origin:'https://hub.flows.blueforcer.de',data:{ns:'awtrix',type:'project-load-result',requestId:m.requestId,ok:true}})));
+    if(m.type==='project-request')queueMicrotask(()=>window.dispatchEvent(new window.MessageEvent('message',{source:newer.contentWindow,origin:'https://awtrix.de',data:{ns:'awtrix',type:'project-result',requestId:m.requestId,ok:true,project,revision:3}})));
+    if(m.type==='project-load')queueMicrotask(()=>window.dispatchEvent(new window.MessageEvent('message',{source:newer.contentWindow,origin:'https://awtrix.de',data:{ns:'awtrix',type:'project-load-result',requestId:m.requestId,ok:true}})));
   };
-  window.dispatchEvent(new window.MessageEvent('message',{source:newer.contentWindow,origin:'https://hub.flows.blueforcer.de',data:{ns:'awtrix',type:'ready'}}));
+  window.dispatchEvent(new window.MessageEvent('message',{source:newer.contentWindow,origin:'https://awtrix.de',data:{ns:'awtrix',type:'ready'}}));
   window.document.querySelector('#piskelDraftList').value=records[0].id;
   [...window.document.querySelectorAll('button')].find(b=>b.textContent==='Open draft').click();
   await flush(30);
@@ -524,7 +524,7 @@ async function testContentAndOrigins(){
   assert(changed.querySelector('[data-state=modified]')?.textContent==='Locally changed','same-size edits are detected after page navigation');
   assert(!card(window).querySelector('.tile .acts button').disabled,'changed same-name icon is not labelled installed');
   assert(openMenu(changed)[2].textContent==='Publish as a variant','changed Hub copy offers publishing a variant');
-  assert(!window.validIconOrigin({name:'../mail.gif',slug:'mail',hub:'https://hub.flows.blueforcer.de/icons/',sha256:hash('x')}),'origin cannot escape icon folder');
+  assert(!window.validIconOrigin({name:'../mail.gif',slug:'mail',hub:'https://awtrix.de/icons/',sha256:hash('x')}),'origin cannot escape icon folder');
   assert(!window.validIconOrigin({name:'mail.gif',slug:'mail',hub:'javascript:alert(1)',sha256:hash('x')}),'origin cannot create an executable link');
   assert(!window.validIconOrigin({name:'mail.gif',slug:'mail',hub:'https://user:secret@example.com/icons/',sha256:hash('x')}),'origin cannot include credentials');
   store.originFailure=true;
@@ -554,8 +554,8 @@ async function testResolvedPublication(){
   const {window,store}=await withGallery(ctx=>{
     ctx.store.files['/ICONS'].set('own.gif',100);
     ctx.store.localIconBytes['own.gif']='changed drawing';
-    ctx.store.iconOrigins.set('own.gif',{name:'own.gif',hub:'https://hub.flows.blueforcer.de/icons/',slug:'mail',sha256:createHash('sha256').update('old drawing').digest('hex')});
-    ctx.store.submitReply={ok:true,status:'existing',slug:'supermario',pr:'https://hub.flows.blueforcer.de/icons/supermario'};
+    ctx.store.iconOrigins.set('own.gif',{name:'own.gif',hub:'https://awtrix.de/icons/',slug:'mail',sha256:createHash('sha256').update('old drawing').digest('hex')});
+    ctx.store.submitReply={ok:true,status:'existing',slug:'supermario',pr:'https://awtrix.de/icons/supermario'};
   });
   const tile=ownGrid(window).querySelector('.tile');openMenu(tile)[2].click();tile.querySelector('.ft button').click();await flush(130);
   assert(store.submitted[0].get('response')==='resolve','publisher opts into non-error duplicate resolution');
@@ -571,9 +571,9 @@ async function testEditorProvenanceBridge(){
   await goto(window,'#/editor');await flush(30);
   const frame=window.document.querySelector('#piskelFrame'),messages=[];
   frame.contentWindow.postMessage=message=>messages.push(message);
-  const original={hub:'https://hub.flows.blueforcer.de/icons/',slug:'mail',sha256:window.iconSha256(new window.TextEncoder().encode('original'))};
+  const original={hub:'https://awtrix.de/icons/',slug:'mail',sha256:window.iconSha256(new window.TextEncoder().encode('original'))};
   const uploads=[];stubXhr(window,uploads,store);
-  const send=(source,data)=>window.dispatchEvent(new window.MessageEvent('message',{source,origin:'https://hub.flows.blueforcer.de',data:{ns:'awtrix',...data}}));
+  const send=(source,data)=>window.dispatchEvent(new window.MessageEvent('message',{source,origin:'https://awtrix.de',data:{ns:'awtrix',...data}}));
   const publication={type:'publish',requestId:'test-1',name:'draft',mime:'image/gif',dataBase64:window.btoa('GIF89a-new'),based_on:'mail'};
   send(window,publication);await flush(30);
   assert(store.submitted.length===0,'same-origin message from another window cannot publish');

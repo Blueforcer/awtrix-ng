@@ -144,7 +144,7 @@ async function main() {
   if(!SIM){
     const{window,store}=await boot();
     store.files['/ICONS'].set('mail.gif',12);
-    const origin={name:'mail.gif',hub:'https://hub.flows.blueforcer.de/icons/',slug:'mail',sha256:'a'.repeat(64)};
+    const origin={name:'mail.gif',hub:'https://awtrix.de/icons/',slug:'mail',sha256:'a'.repeat(64)};
     store.iconOrigins.set('mail.gif',origin);
     const entries=await window.collectBackup({icons:true});
     const metadata=entries.find(e=>e.name==='config/icon-origins.json');

@@ -3753,8 +3753,8 @@ async function iconAsSubmission(name){
 // constants stay separate so a test hub can take submissions while the icons
 // still come from production. The localStorage keys below override both and are
 // the only lever if the Hub ever moves hostname.
-const ICONDB_URL_DEFAULT='https://hub.flows.blueforcer.de/icons/';
-const ICONAPI_URL_DEFAULT='https://hub.flows.blueforcer.de/icons/';
+const ICONDB_URL_DEFAULT='https://awtrix.de/icons/';
+const ICONAPI_URL_DEFAULT='https://awtrix.de/icons/';
 function cfgUrl(key,def){
   let u=def;
   try{u=localStorage[key]||def;}catch(e){}
@@ -4070,7 +4070,7 @@ function lametricCard(onDone){
 // index.html is spelled out on purpose: whether the Hub's web server resolves a
 // bare /piskel/ to the directory index is not something this repo can promise,
 // and a miss would frame a 404 instead of the editor.
-const PISKEL_URL_DEFAULT='https://hub.flows.blueforcer.de/piskel/index.html';
+const PISKEL_URL_DEFAULT='https://awtrix.de/piskel/index.html';
 function hubToken(){try{return localStorage.awtrixHubToken||'';}catch(e){return'';}}
 function hubAccountUrl(){try{return new URL('/account/settings',iconApiUrl()).href;}catch(e){return iconApiUrl();}}
 function hubTermsUrl(){try{return new URL('/terms-of-service',iconApiUrl()).href;}catch(e){return iconApiUrl();}}

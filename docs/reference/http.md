@@ -1911,7 +1911,7 @@ curl -X POST http://<awtrix-ip>/api/v1/restore -F "file=@backup.zip"
 Lists durable links between installed icons and their published Hub originals:
 
 ```json
-{"icons":[{"name":"mail.gif","hub":"https://hub.flows.blueforcer.de/icons/","slug":"mail","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}
+{"icons":[{"name":"mail.gif","hub":"https://awtrix.de/icons/","slug":"mail","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}
 ```
 
 This local metadata is available offline and across reboots. `sha256` is the lowercase
