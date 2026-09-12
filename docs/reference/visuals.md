@@ -328,19 +328,26 @@ the `palette` field.
 A transition animates the change from one app's page to the next. It is a **device-wide setting**,
 not a per-app key: there is no way to give one app its own transition.
 
-On the wire `transitionEffect` is a **name** (a string), sent to `PATCH /api/v1/settings`:
+On the wire `transitionEffect` and `transitionDirection` are **names** (strings), sent to
+`PATCH /api/v1/settings`:
 
 ```bash
 curl -X PATCH http://<awtrix-ip>/api/v1/settings \
   -H 'Content-Type: application/json' \
-  -d '{"transitionEffect":"Pixelate","transitionDurationMs":600}'
+  -d '{"transitionEffect":"Slide","transitionDirection":"reverse","transitionDurationMs":600}'
 ```
 
 | Setting | Type | Range | Default | Units | Meaning |
 |---|---|---|---|---|---|
 | `transitionEffect` | string | one of the 22 names | `"Rain"` | - | How pages change |
+| `transitionDirection` | string | `normal` · `reverse` | `"normal"` | - | Whether direction-aware movement uses its normal or mirrored geometry |
 | `transitionDurationMs` | int | 0 … `INT_MAX` | `1000` | ms | How long one transition takes |
 | `autoTransition` | bool | - | `true` | - | Whether AWTRIX rotates through apps at all |
+
+`reverse` flips horizontal effects left/right and vertical effects up/down, which is why the
+setting is not tied to one axis. It does not reverse the app list: **Next** and automatic rotation
+still select the same next app, while **Previous** remains the opposite motion. Effects marked
+`no` below are symmetric or non-directional and therefore look identical in both modes.
 
 **22 transition names:**
 

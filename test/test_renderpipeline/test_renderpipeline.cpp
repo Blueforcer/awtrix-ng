@@ -590,6 +590,36 @@ static void test_finished_repeats_end_a_pushed_app_before_its_dwell() {
   TEST_ASSERT_TRUE_MESSAGE(left > 0 && left < 5000, "nor must the dwell be waited out");
 }
 
+static void test_reverse_setting_mirrors_a_directional_transition() {
+  auto renderMidSlide = [](Rig& r, int direction) {
+    Settings& s = r.engine.state().settings();
+    s.autoTransition = false;
+    s.transitionEffect = static_cast<int>(Transition::Slide);
+    s.transitionDirection = direction;
+    s.transitionDurationMs = 1000;
+    r.engine.execute(cmd(CommandType::SetPushedApp, "one",
+                         "{\"text\":\"\",\"backgroundColor\":\"#FF0000\"}"));
+    r.engine.execute(cmd(CommandType::SetPushedApp, "two",
+                         "{\"text\":\"\",\"backgroundColor\":\"#0000FF\"}"));
+    r.engine.tick(0);
+    r.engine.execute(switchFast("one"));
+    r.pipe->renderFrame(r.canvas, 0);
+    r.engine.execute(cmd(CommandType::SwitchApp, "two"));
+    r.engine.tick(500);
+    r.pipe->renderFrame(r.canvas, 500);
+  };
+
+  Rig normal;
+  renderMidSlide(normal, kTransitionNormal);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, normal.canvas.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x0000FFu, normal.canvas.getPixel(31, 0));
+
+  Rig reverse;
+  renderMidSlide(reverse, kTransitionReverse);
+  TEST_ASSERT_EQUAL_HEX32(0x0000FFu, reverse.canvas.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, reverse.canvas.getPixel(31, 0));
+}
+
 static void test_incoming_icon_decoded_during_transition() {
   Rig r;
   r.engine.execute(cmd(CommandType::SetPushedApp, "one", "{\"text\":\"A\",\"icon\":\"1\"}"));
@@ -865,6 +895,7 @@ int main(int, char**) {
   RUN_TEST(test_static_text_still_obeys_the_dwell);
   RUN_TEST(test_a_finished_pass_does_not_carry_over_to_the_next_notification);
   RUN_TEST(test_finished_repeats_end_a_pushed_app_before_its_dwell);
+  RUN_TEST(test_reverse_setting_mirrors_a_directional_transition);
   RUN_TEST(test_incoming_icon_decoded_during_transition);
   RUN_TEST(test_incoming_page_is_drawn_with_its_own_scroll);
   RUN_TEST(test_incoming_scroll_survives_the_page_change);

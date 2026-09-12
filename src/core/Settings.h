@@ -62,6 +62,7 @@ constexpr int kSepSteady = 0, kSepBlink = 1, kSepPulse = 2;
 constexpr int kDateOrderDMY = 0, kDateOrderMDY = 1, kDateOrderYMD = 2;
 constexpr int kDateSepDot = 0, kDateSepSlash = 1, kDateSepDash = 2;
 constexpr int kYearNone = 0, kYearTwoDigit = 1, kYearFourDigit = 2;
+constexpr int kTransitionNormal = 0, kTransitionReverse = 1;
 
 // The defaults below are also what a settings reset restores. JSON key names, ranges and the
 // validation rules for every field live in the Field table in Settings.cpp.
@@ -72,6 +73,7 @@ struct Settings {
   uint32_t textColor = 0xFFFFFFu;
   // Index into kTransitionNames; 19 is Rain. 0 (Random) picks a fresh effect per transition.
   int transitionEffect = 19;
+  int transitionDirection = kTransitionNormal;
   int transitionDurationMs = 1000;
   long appDurationMs = 7000;
   int timeMode = 1;

@@ -14,7 +14,7 @@ info:
       (`#FFFFFF`) is a settable value distinct from `null`.
     - Durations are integer **milliseconds** with an `...Ms` key suffix.
     - Names are matched **case-insensitively**: `effect`, `overlay`, `palette`,
-      `transitionEffect` and the string enums (`timeSeparatorMode`,
+      `transitionEffect` and the string enums (`transitionDirection`, `timeSeparatorMode`,
       `dateOrder`, `dateSeparator`, `dateYearMode`) accept any casing, so
       `"matrix"`, `"Matrix"` and `"MATRIX"` are the same name.
       `GET /api/v1/capabilities` lists the spelling the API returns.
@@ -2013,6 +2013,13 @@ components:
         transitionEffect:
           type: string
           description: One of capabilities.transitions (e.g. "Slide", "Random")
+        transitionDirection:
+          type: string
+          enum: [normal, reverse]
+          default: normal
+          description: >
+            Reverses the movement of direction-aware transitions without
+            changing app order. Symmetric transitions are unaffected.
         transitionDurationMs: { type: integer, minimum: 0 }
         appDurationMs: { type: integer, minimum: 0 }
         timeMode:

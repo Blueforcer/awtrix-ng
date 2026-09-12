@@ -358,8 +358,10 @@ Notes:
   [Sounds](#post-apiv1audioplay).
 * `transitionEffect` is matched **case-insensitively** against the names from
   [`GET /api/v1/capabilities`](#get-apiv1capabilities) - `"slide"`, `"Slide"` and `"SLIDE"` are the
-  same transition. The other name strings (`timeSeparatorMode`, `dateOrder`, `dateSeparator`,
-  `dateYearMode`) accept any casing too. Responses always come back in one fixed spelling.
+  same transition. The other name strings (`transitionDirection`, `timeSeparatorMode`, `dateOrder`,
+  `dateSeparator`, `dateYearMode`) accept any casing too. Responses always come back in one fixed
+  spelling. `transitionDirection: "reverse"` flips only directional animation geometry; it never
+  changes the app order.
 * `scroll` is the device-wide text motion - `mode` (`static` · `wrap` · `loop` · `bounce`),
   `direction` (`left` · `right`), `entry` (`inline` · `offscreen`), `whenFits`
   (`static` · `scroll`), `speed` in percent of 21 px/s, `gap` in pixels and `holdMs` in

@@ -270,7 +270,9 @@ void RenderPipeline::renderFrame(Canvas& out, int64_t nowMs) {
     // Seeding on the phase start keeps a Random transition on one pick for its whole run.
     const Transition effect =
         render::resolveTransition(s.transitionEffect, static_cast<uint32_t>(ah.phaseStartMs()));
-    render::composeTransition(out, *transA_, *transB_, effect, p, ah.direction());
+    const int direction =
+        s.transitionDirection == kTransitionReverse ? -ah.direction() : ah.direction();
+    render::composeTransition(out, *transA_, *transB_, effect, p, direction);
   } else {
     transA_.reset();
     transB_.reset();

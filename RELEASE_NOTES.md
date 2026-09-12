@@ -6,6 +6,7 @@
 - Scripts can swallow a button press: return `true` from `on_button()`.
 - Scripts can switch the matrix with `display.power()` and read its state with `display.is_on()` (#56).
 - DIY panels can select their physical LED colour order in the Panel settings (#54).
+- Directional app transitions can run in their normal or reversed direction (#49).
 - `progress()` takes an x offset.
 - Scripting tutorials on the documentation site.
 

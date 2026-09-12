@@ -1219,6 +1219,8 @@ const FIELDS={
  autoTransition:F('apps','toggle','Auto rotation|Automatischer Wechsel','Moves to the next app on its own.|Wechselt von selbst zur nächsten App.'),
  transitionDurationMs:F('apps','number','Transition duration|Übergangsdauer','Length of the switch. 0 = instant.|Dauer des Wechsels. 0 = sofort.',{min:0,max:5000,unit:'ms'}),
  transitionEffect:F('apps','select','Transition effect|Übergangseffekt','Animation between two apps.|Animation zwischen zwei Apps.',{opt:'transitions'}),
+ transitionDirection:F('apps','select','Transition direction|Übergangsrichtung','Flips movement for directional effects.|Kehrt die Bewegung gerichteter Effekte um.',{opt:[
+   ['normal','Normal|Normal'],['reverse','Reverse|Umgekehrt']]}),
  blockNavigation:F('apps','toggle','Block buttons|Tasten sperren','Ignore buttons and API for app switching.|App-Wechsel per Taste und API ignorieren.'),
  timeMode:F('clock','select','Clock layout|Uhr-Layout','What the clock app draws.|Was die Uhr-App zeichnet.',{opt:[
    [0,'Time only|Nur Uhrzeit'],[1,'Calendar, weekday bar below|Kalenderblatt, Wochentage unten'],

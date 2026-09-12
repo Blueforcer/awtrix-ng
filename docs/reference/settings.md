@@ -72,7 +72,7 @@ the next one.
 The tables below are the complete set of settings keys. Any other key fails validation with `422`
 and `"message": "unknown field"`.
 
-A successful `PATCH` responds **`200` with all 40 settings, updated** - use that response instead
+A successful `PATCH` responds **`200` with all 42 settings, updated** - use that response instead
 of a follow-up `GET`. Every change takes effect at once; no setting needs a reboot.
 
 ---
@@ -172,6 +172,7 @@ curl -X PATCH http://<awtrix-ip>/api/v1/settings \
 | `autoTransition` | boolean | - | `true` | - | Advance through the apps automatically. When `false` the rotation only moves on a button press or an API call. |
 | `appDurationMs` | integer | ≥ 0 | `7000` | ms | How long each app is shown before the rotation advances. Also the default lifetime of a notification. No upper bound. |
 | `transitionEffect` | string | see below | `"Rain"` | - | The animation played when the rotation changes app. |
+| `transitionDirection` | string | `normal` · `reverse` | `"normal"` | - | Reverse the movement of direction-aware transitions without changing the app order. |
 | `transitionDurationMs` | integer | 0–2147483647 | `1000` | ms | Length of that animation. `0` = instant. |
 
 Auto-rotation needs **at least two apps** in the list - with a single app there is nothing to
@@ -190,8 +191,12 @@ names**.
 ```bash
 curl -X PATCH http://<awtrix-ip>/api/v1/settings \
   -H "Content-Type: application/json" \
-  -d '{"transitionEffect": "Ripple", "transitionDurationMs": 800}'
+  -d '{"transitionEffect": "Ripple", "transitionDirection": "reverse", "transitionDurationMs": 800}'
 ```
+
+`normal` keeps the established direction for automatic and **Next** transitions. `reverse` flips
+that movement; **Previous** still travels in the opposite direction. Transitions without a
+direction, such as `Fade`, look the same with either value.
 
 ---
 
@@ -426,10 +431,11 @@ curl -X PATCH http://<awtrix-ip>/api/v1/settings \
 
 ### Name strings
 
-`transitionEffect`, `timeSeparatorMode`, `dateOrder`, `dateSeparator` and `dateYearMode` are
+`transitionEffect`, `transitionDirection`, `timeSeparatorMode`, `dateOrder`, `dateSeparator` and
+`dateYearMode` are
 **name strings**, never numbers, and all of them resolve **case-insensitively** - `"pulse"`,
 `"Pulse"` and `"PULSE"` are the same value. `GET /api/v1/capabilities` lists the spelling of
-`transitionEffect`; the other four are spelled out in the tables on this page. In every case it is
+`transitionEffect`; the other five are spelled out in the tables on this page. In every case it is
 the spelling `GET /api/v1/settings` returns. Passing a number gives you the same error as passing a
 wrong name:
 
