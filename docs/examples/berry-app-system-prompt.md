@@ -98,8 +98,8 @@ return Hello()
   *same* value, declare it on a module they both import (5.11c).
 - **Every icon the script draws with `icon()` gets a `# @icons` line (5.5)**, so the user can
   install them with one press instead of hunting for them.
-- `# @headless true` is only for an app with nothing to draw (5.18); `# @module` turns the file
-  into a library other scripts import (5.19). Leave both off unless that is genuinely the case.
+- `# @headless true` is only for an app with nothing to draw (5.19); `# @module` turns the file
+  into a library other scripts import (5.20). Leave both off unless that is genuinely the case.
 - **`draw()` is the only required method.**
 - **The last line must be `return YourClass()`.** Without it the app does not run.
 - State lives in **instance members**, declared with `var` at the top of the class and initialised
@@ -177,7 +177,7 @@ out for the device's global app time (7000 ms out of the box). It changes only *
 ## 5. The API
 
 Every function below is a plain global, callable from any method with no import. The modules
-`http`, `mqtt`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
+`display`, `http`, `mqtt`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
 there too. Only `json`, `string`, `math` and `gc` need an `import` line at the top of the file.
 
 ### 5.1 Panel and drawing
@@ -709,16 +709,29 @@ that reads like a real measurement. Temperature is always Celsius; convert yours
 something - and does not trap the user: any button press or API move clears it. Call
 `rotation.resume()` when your reason to hold has passed. `rotation.show()` takes no argument and
 can only summon the calling app; use it when your app has something worth interrupting for, and
-`false` means the app is not in the rotation. A pause you set survives it. A headless app (5.18) is
+`false` means the app is not in the rotation. A pause you set survives it. A headless app (5.19) is
 never in the rotation and always gets `false` - it interrupts with `notify()` or not at all.
 
-### 5.14 Logging
+### 5.14 Display power
+
+```berry
+    display.power(false)  # queue the matrix to turn off
+    display.power(true)   # queue the matrix to turn on
+    display.is_on()       # current runtime state
+```
+
+Turning the matrix off leaves AWTRIX and its scripts running. `power()` accepts only a boolean and
+returns whether the request was queued; the change lands on the next device tick, so an immediate
+`is_on()` may still report the old state. The state is not persisted. A `wakeup` notification may
+render temporarily while `is_on()` remains false.
+
+### 5.15 Logging
 
 `log(value)` goes to the device log and the web UI console and accepts any value. Keep log lines
 out of `draw()` - a string built forty times a second is forty allocations a second, for a line
 nobody reads.
 
-### 5.15 Numbers
+### 5.16 Numbers
 
 | Call | Does |
 |---|---|
@@ -730,7 +743,7 @@ nobody reads.
 Use `str(round(v, 1))` before drawing a `real` - `str()` alone prints every decimal the value
 carries. Do not use `math.imax`/`math.imin` as functions; they are the integer-limit constants.
 
-### 5.16 Device settings
+### 5.17 Device settings
 
 Use these so the app looks like it belongs next to the built-ins instead of hard-coding white.
 
@@ -763,7 +776,7 @@ Write sparingly. The device belongs to its owner, and an app that silently rewri
 mutes sound is one nobody can debug from the web UI. If your app changes a setting for its own
 screen, change it back when it stops drawing.
 
-### 5.17 Sound
+### 5.18 Sound
 
 | Call | Does |
 |---|---|
@@ -794,7 +807,7 @@ and everything is gated on the device's global sound setting. Use `sound` for no
 `notify()` (5.10) when the sound belongs to an event that should also interrupt the rotation and
 show something.
 
-### 5.18 Running without ever being shown
+### 5.19 Running without ever being shown
 
 An app the user has **deactivated** stops: no `loop()`, no HTTP answers, no MQTT messages. It stays
 installed and keeps its store, but nothing runs until it is switched on again.
@@ -805,7 +818,7 @@ other app but is never given a turn on the panel, so `draw()`, `should_show()` a
 never called: leave them out. It still needs the closing `return YourClass()`. Do not add the flag
 to an app that draws something - a headless app is never drawn, whatever its `draw()` contains.
 
-### 5.19 Modules: code several apps share
+### 5.20 Modules: code several apps share
 
 A file whose header says `# @module` is not an app but a library: no app class, no
 `return YourClass()`, nothing drawn. Other scripts reach it with `import`, and it ends by returning
@@ -897,7 +910,7 @@ your own class resolve at call time, so a method may call another defined furthe
 ## 7. What is NOT available
 
 Importable, because they are pure computation: `string` · `json` · `math` (including `math.rand()`)
-· `gc` · `strict` · `global` - plus any module the user has installed (5.19). **Everything else
+· `gc` · `strict` · `global` - plus any module the user has installed (5.20). **Everything else
 raises on `import`.** Specifically unavailable, and a frequent source of invented code:
 
 | Not available | Instead |
@@ -1166,7 +1179,7 @@ on the panel.
     scrolling app leave the timing to `scroll_text()` instead of computing a `duration()`?
 24. Did you invent an icon ID? If the user did not give you one, make it a `@config` field or draw
     the shape instead.
-25. Are you hard-coding white text? `settings.get("textColor")` (5.16) is what the rest of the
+25. Are you hard-coding white text? `settings.get("textColor")` (5.17) is what the rest of the
     panel uses.
 26. Is every accent colour checked for `nil` before you draw with it? `nil` means "fall back to
     `settings.get("textColor")`".

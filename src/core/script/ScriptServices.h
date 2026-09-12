@@ -151,6 +151,7 @@ struct ScriptServices {
   std::function<const Settings*()> settings;
   std::function<const RuntimeState*()> runtime;
   std::function<bool(const std::string& json)> setSettings;
+  std::function<bool(bool)> setDisplayPower;
   std::function<bool(SoundAction, const std::string&)> sound;
   std::function<bool()> soundPlaying;
   // Which outputs this board actually has, as a bitmask: buzzer 1, track 2, mp3 4,

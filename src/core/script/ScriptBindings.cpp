@@ -673,6 +673,19 @@ int b_battery_volts(bvm* vm) {
   be_return(vm);
 }
 
+int b_display_is_on(bvm* vm) {
+  const RuntimeState* rt = runtime();
+  be_pushbool(vm, rt && !rt->matrixOff);
+  be_return(vm);
+}
+
+int b_display_power(bvm* vm) {
+  const bool ok = g_svc && g_svc->setDisplayPower && be_top(vm) >= 1 && be_isbool(vm, 1) &&
+                  g_svc->setDisplayPower(be_tobool(vm, 1) != 0);
+  be_pushbool(vm, ok);
+  be_return(vm);
+}
+
 int b_hour(bvm* vm) {
   be_pushint(vm, g_ctx.rctx ? g_ctx.rctx->hour : kNoClock);
   be_return(vm);
@@ -1155,6 +1168,8 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "_native_light", b_light);
   be_regfunc(b, "_native_battery", b_battery);
   be_regfunc(b, "_native_battery_volts", b_battery_volts);
+  be_regfunc(b, "_native_display_power", b_display_power);
+  be_regfunc(b, "_native_display_is_on", b_display_is_on);
   be_regfunc(b, "_native_rotation_hold", b_rotation_hold);
   be_regfunc(b, "_native_shared_set", b_shared_set);
   be_regfunc(b, "_native_shared_get", b_shared_get);

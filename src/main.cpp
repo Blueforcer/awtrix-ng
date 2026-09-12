@@ -442,6 +442,12 @@ void setup() {
     c.source = Source::Internal;
     return g_engine->submit(c);
   };
+  g_scriptSvc.setDisplayPower = [](bool on) {
+    Command c(CommandType::SetDisplay);
+    c.payload = on ? "{\"power\":true}" : "{\"power\":false}";
+    c.source = Source::Internal;
+    return g_engine->submit(c);
+  };
   g_scriptSvc.sound = [](script::SoundAction a, const std::string& payload) {
     Command c = scriptSoundCommand(a, payload);
     return g_engine->submit(c);

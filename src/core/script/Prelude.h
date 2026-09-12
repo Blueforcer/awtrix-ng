@@ -270,6 +270,19 @@ settings.get = _settings_get
 settings.set = _settings_set
 settings.apply_case = _settings_apply_case
 
+# ---- display ---------------------------------------------------------------
+# Runtime display power, separate from saved settings. Turning the matrix off
+# leaves the device and its scripts running.
+display = module('display')
+def _display_power(on) # display.power(on)
+  return _native_display_power(on)
+end
+def _display_is_on() # display.is_on()
+  return _native_display_is_on()
+end
+display.power = _display_power
+display.is_on = _display_is_on
+
 # ---- sound -----------------------------------------------------------------
 # Queued for the device to play, not played inside your draw call: the request
 # takes the same route POST /api/v1/audio/play does, so the "sound is switched

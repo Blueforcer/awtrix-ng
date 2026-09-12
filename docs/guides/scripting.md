@@ -121,6 +121,7 @@ row that sounds like the app you have in mind, and follow it.
 | [Making a noise](#sound) | `sound.play()` `sound.mp3()` `sound.melody()` `sound.track()` `sound.rtttl()` `sound.stop()` `sound.playing()` `sound.sinks()` |
 | [What the device measures](#reading-the-sensors) | `sensor.temperature()` `sensor.humidity()` `sensor.pressure()` `sensor.light()` `sensor.battery()` |
 | [What the owner configured](#device-settings) | `settings.get()` `settings.set()` `settings.apply_case()` |
+| [Turning the matrix on and off](#display-power) | `display.power()` `display.is_on()` |
 | [Moving the rotation along](#driving-the-rotation) | `rotation.show()` `rotation.next()` `rotation.previous()` `rotation.pause()` `rotation.resume()` |
 | [Working out what went wrong](#logging) | `log()` |
 | [Which firmware is running](#which-firmware-is-running) | `version()` |
@@ -436,7 +437,7 @@ and keeps you there.
 
 ## The API
 
-Everything below is callable from any of your class's methods, with nothing to import: the drawing, time and number calls are plain global functions, and `http`, `mqtt`, `store`, `shared`, `settings`, `sound`, `rotation` and `re` are ready-made objects. Only the general-purpose modules - `json`, `string`, `math` - want one `import` line at the top of the file, and the [HTTP example](#http) shows it in place.
+Everything below is callable from any of your class's methods, with nothing to import: the drawing, time and number calls are plain global functions, and `http`, `mqtt`, `store`, `shared`, `settings`, `display`, `sound`, `rotation` and `re` are ready-made objects. Only the general-purpose modules - `json`, `string`, `math` - want one `import` line at the top of the file, and the [HTTP example](#http) shows it in place.
 
 The short examples in this section show a single method for brevity - read them as living inside your class, alongside `draw()` and a `return YourClass()` at the end of the file.
 
@@ -1358,6 +1359,22 @@ end
 `notify()` returns `true` when AWTRIX accepted the notification, `false` on
 a malformed payload or a full queue. This is the one script call
 that reaches past your own app - use it for events, not for your regular frame.
+
+### Display power
+
+The `display` module controls the matrix without stopping AWTRIX or its scripts:
+
+```berry
+display.power(false)  # queue the matrix to turn off
+display.power(true)   # queue the matrix to turn on
+display.is_on()       # current runtime state
+```
+
+`display.power()` accepts only a boolean and returns `true` when the request was queued. The
+change lands on the next device tick, so `display.is_on()` called immediately afterwards may still
+show the old state. Nothing is persisted: after a reboot the normal display state applies again.
+A notification with `wakeup: true` may render while the configured state remains off, so
+`display.is_on()` still returns `false` during that temporary wake-up.
 
 ### Sound
 

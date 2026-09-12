@@ -4,6 +4,7 @@
 - **Icons from the AWTRIX Hub in the Icons tab.** Search the shared catalogue, install one with a click, and send your own the other way. Your browser does the fetching, the clock never reaches the internet.
 - The browser tab carries the hostname, so several AWTRIX open at once are told apart (#18).
 - Scripts can swallow a button press: return `true` from `on_button()`.
+- Scripts can switch the matrix with `display.power()` and read its state with `display.is_on()` (#56).
 - `progress()` takes an x offset.
 - Scripting tutorials on the documentation site.
 
