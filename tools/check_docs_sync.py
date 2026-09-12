@@ -72,6 +72,8 @@ def ground_truth():
     errors |= set(re.findall(r'return \{"([a-zA-Z]+)", [0-9]+,', router))
     errors |= set(re.findall(r'err = \{[0-9]+, "([a-zA-Z]+)"',
                              read("src/persistence/SystemConfigApply.cpp")))
+    errors |= set(re.findall(r'\berror\([0-9]+,\s*"([a-zA-Z]+)"',
+                             read("src/core/icons/IconOrigins.cpp")))
     return settings, system, device, errors
 
 
