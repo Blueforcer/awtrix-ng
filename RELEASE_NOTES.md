@@ -1,20 +1,26 @@
 **Added**
 
 - **The live display on a page of its own**: `http://<awtrix-ip>/fullscreen`, made for an iframe on a Home Assistant dashboard (#29).
-- **Icons from the AWTRIX Hub in the Icons tab.** Search the shared catalogue, install one with a click, and send your own the other way. Your browser does the fetching, the clock never reaches the internet.
+- **The AWTRIX Hub is built into the Icons tab.** Browsing needs no account; a connection key stored only in the browser enables installing, reloading and publishing icons. The browser transfers the files, while the clock itself never needs internet access.
+- **Scripts can declare their Hub icons** with `# @icons ...`. The editor and Apps tab show missing icons and install them in one action.
+- **Installed Hub icons retain their origin.** The UI distinguishes unchanged Hub icons, locally modified icons and device-only icons. Updates never silently overwrite local changes, and the origin metadata is included in backups. The new `/api/v1/icons/origins` endpoint exposes the same information.
+- **The icon editor keeps editable drafts in the browser.** Projects can be opened, downloaded, imported and published as a new variant or as an update to an existing Hub icon.
 - The browser tab carries the hostname, so several AWTRIX open at once are told apart (#18).
 - Scripts can swallow a button press: return `true` from `on_button()`.
 - Scripts can switch the matrix with `display.power()` and read its state with `display.is_on()` (#56).
+- **More DIY audio hardware is supported.** `pinI2sMclk` supplies DACs requiring a master clock, while `pinAmpEnable` controls amplifiers with an enable input.
 - DIY panels can select their physical LED colour order in the Panel settings (#54).
 - Directional app transitions can run in their normal or reversed direction (#49).
 - Auto brightness can be switched directly from the dashboard; manual brightness stays disabled while it is active (#38).
 - Backup creation has an **All** switch that selects every available category at once (#43).
-- `progress()` takes an x offset.
+- `progress()`, `bar_chart()` and `line_chart()` take an optional x offset.
+- Script HTTP requests accept `cap` to choose how much of a response may be retained, bounded by available memory.
 - Scripting tutorials on the documentation site.
 
 **Changed**
 
-- **`scriptLimit` and `scriptMaxBytes` are gone.** The free memory on the device decides how large a script may be and how many run alongside each other. Sending the two keys is ignored rather than refused, but a backup or an automation that still writes them needs looking at.
+- **Berry scripts now use available memory instead of most fixed caps.** Besides removing `scriptLimit` and `scriptMaxBytes`, fixed limits on configuration fields, select options, imports, shared values, stores and HTTP request data were replaced with available-memory checks. Sending the two removed keys is ignored rather than refused, but a backup or an automation that still writes them needs looking at.
+- Berry VMs, regular expressions and GIF decoding retain less temporary memory, improving reliability when several scripts or animations run together.
 
 **Fixed**
 
