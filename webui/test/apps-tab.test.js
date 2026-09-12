@@ -188,6 +188,7 @@ async function run() {
   assert(!!btn(rowFor('Weather'), 'Install icons'), 'a script that names icons offers to fetch them');
   assert(!btn(rowFor('Doorbell'), 'Install icons'), 'a script that names none does not');
 
+  window.localStorage.awtrixHubToken = 'apps-test-token';
   store.iconBytes = { '2105': 'GIF89a-2105', '2106': 'GIF89a-2106' };
   store.files['/ICONS'].set('2105.gif', 1);
   const uploads = [];

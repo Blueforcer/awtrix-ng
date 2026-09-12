@@ -84,6 +84,7 @@ async function scenarioIconButton() {
   if (USE_SIM) { console.log('  SKIP: needs the mocked icon database'); return; }
   const { window, store } = await boot();
   const $ = q(window);
+  window.localStorage.awtrixHubToken = 'script-test-token';
   store.iconBytes = { '2105': 'GIF89a-2105', '2106': 'GIF89a-2106' };
   store.iconDb = {v:1,icons:[['2105','',8,8,1,11],['2106','',8,8,1,11]]};
   store.files['/ICONS'].set('2105.gif', 1);

@@ -548,6 +548,10 @@ are still missing; in the **Apps** tab the row menu offers **Install icons**. Ic
 clock are left as they are, and an ID the database does not have is named in a message while the
 rest still arrive.
 
+Downloads require your Hub connection key in **Icons → Connect to Hub**. Get it from
+[your Hub account](https://awtrix.de/account/settings). Already installed icons continue to
+work when you remove the key; new downloads and deliberate reloads need a valid key.
+
 ### Styled and scrolling text
 
 The plain `text()` draws one solid colour. These draw the same styled and moving

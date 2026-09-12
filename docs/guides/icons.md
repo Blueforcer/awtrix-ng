@@ -9,13 +9,18 @@ The quickest way to fill `/ICONS` is the **Icons** tab of the built-in web UI. I
 tab searches a shared community collection; one click on a result downloads it and installs it
 under its name - the name you then write in a payload or in a script.
 
+Browsing shows enlarged previews and needs no account. Installing or reloading an original
+requires a Hub connection key: sign in at [AWTRIX Hub](https://awtrix.de/account/settings),
+create a key, and paste it into **Icons → Connect to Hub**. The key stays in this browser;
+it is not stored on AWTRIX. The same key authorizes publishing and `@icons` installation.
+
 The search runs in your browser, not on AWTRIX. The catalogue is fetched once per visit and
 filtered locally, so typing is instant. The clock never contacts the internet for this - your
 browser does, then uploads the bytes to AWTRIX over the local network. In provisioning AP mode,
 where the browser has no internet access, the tab says so and stays disabled.
 
 Filter by size (8×8 or 32×8) and by whether an icon is animated. Icons already on the clock are
-marked and cannot be installed twice. Click an icon's name to copy it, then use it in a payload or
+marked and offer **Reload from Hub** to fetch an author's update under the same name. Click an icon's name to copy it, then use it in a payload or
 in a script's [`# @icons`](scripting.md#the-icons-your-script-needs) line.
 
 ### Contribute an icon back
@@ -25,7 +30,7 @@ Every icon on the clock offers **To database** in its tile menu, and the
 the icon to the shared collection with a display name you choose.
 
 Publishing needs an **AWTRIX Hub** account, and the sign-in lives on the Hub rather than on your
-clock - so from the web UI the answer is a link that takes you there to finish. The upload is
+clock. Use the same connection key as for downloading. The upload is
 checked first - it has to be a GIF no larger than 32×8 and under 64 KB - and refused right away if
 the exact same image is already in the collection, naming the icon that holds it. What passes is
 published immediately; there is no review queue, and anything that should not be there is taken

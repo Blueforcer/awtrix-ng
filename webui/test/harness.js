@@ -135,6 +135,9 @@ function mockFetch(store, netlog, win) {
         // second 'icons/' segment. This pattern is what pins that.
         const icon = rest.match(/^([^/]+)\.(gif|jpg)$/);
         if (icon) {
+          store.iconDownloadRequests ||= [];
+          store.iconDownloadRequests.push({url, options:opts});
+          if (!opts.headers?.Authorization || (store.requiredIconToken && opts.headers.Authorization !== 'Bearer '+store.requiredIconToken)) return ext({error:'authenticationRequired'},false,401);
           const slug = decodeURIComponent(icon[1]);
           if (!(slug in store.iconBytes)) return ext({ error: 'notFound' }, false, 404);
           if ((store.iconExt[slug] || 'gif') !== icon[2])

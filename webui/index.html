@@ -908,9 +908,9 @@ const I18N={en:{
   idbmore:'Show more',idbempty:'The collection is still empty',idbinst:'Install',idbon:'Installed',idbfail:'The Hub is unavailable. Check your internet connection and try again.',
   idbcopy:'Copy icon name',
   idbterms:'Publishing means you accept the terms of service.',
-  hubConnect:'Publish your own icons',hubReady:'Connection key saved',hubIntro:'Installing icons needs no account. To publish your own, create a connection key (token) in your Hub account and paste it here.',hubSave:'Save key',hubStorageFail:'Your browser could not save the token. Allow site storage and try again.',idbrefresh:'Refresh collection',idbloading:'Loading the collection…',idbinstalling:'Installing…',idbdetails:'Details',idbscript:'Copy @icons',
-  hubSection:'AWTRIX Hub',hubSectionH:'Needed to publish your icons to the shared collection.',
-  hubTokenLbl:'Connection key (token)',hubTokenH:'Stored in this browser only, not on AWTRIX.',
+  hubConnect:'Connect to Hub',hubReady:'Connection key saved',hubIntro:'Browse previews freely. To install, reload or publish icons, create a connection key (token) in your Hub account and paste it here.',hubSave:'Save key',hubStorageFail:'Your browser could not save the token. Allow site storage and try again.',idbrefresh:'Refresh collection',idbloading:'Loading the collection…',idbinstalling:'Installing…',idbdetails:'Details',idbscript:'Copy @icons',
+  hubSection:'AWTRIX Hub',hubSectionH:'Connect your account to download, reload and publish icons.',
+  hubAuthRequired:'Connect to the Hub in Icons → Connect to Hub to download icons.',hubAuthRejected:'Your Hub key was rejected. Replace it in Icons → Connect to Hub.',hubWrongHost:'This icon belongs to a different Hub. Open it in the configured Hub before downloading.',hubTokenLbl:'Connection key (token)',hubTokenH:'Stored in this browser only, not on AWTRIX.',
   hubOn:'Key saved',hubOff:'No key saved',hubClear:'Remove',hubCleared:'Connection key removed',hubStored:'Connection key saved in this browser',
   hubGetLbl:'Where to get one',hubGetH:'Opens your account page on the Hub.',hubGet:'Open the Hub',
   icfromhub:'From the Hub',icmodified:'Locally changed',iclocal:'Only on this device',icchecking:'Checking origin…',icunknown:'Could not check origin',
@@ -1096,9 +1096,9 @@ const I18N={en:{
   idbmore:'Mehr anzeigen',idbempty:'Die Sammlung ist noch leer',idbinst:'Installieren',idbon:'Installiert',idbfail:'Der Hub ist nicht erreichbar. Prüfe deine Internetverbindung und versuche es erneut.',
   idbcopy:'Icon-Namen kopieren',
   idbterms:'Mit dem Veröffentlichen akzeptierst du die Nutzungsbedingungen.',
-  hubConnect:'Eigene Icons veröffentlichen',hubReady:'Verbindungsschlüssel gespeichert',hubIntro:'Zum Installieren brauchst du kein Konto. Um eigene Icons zu veröffentlichen, erstelle einen Verbindungsschlüssel (Token) in deinem Hub-Konto und füge ihn hier ein.',hubSave:'Schlüssel speichern',hubStorageFail:'Dein Browser konnte das Token nicht speichern. Erlaube den Website-Speicher und versuche es erneut.',idbrefresh:'Sammlung aktualisieren',idbloading:'Sammlung wird geladen…',idbinstalling:'Wird installiert…',idbdetails:'Details',idbscript:'@icons kopieren',
-  hubSection:'AWTRIX Hub',hubSectionH:'Nötig, um eigene Icons zu veröffentlichen.',
-  hubTokenLbl:'Verbindungsschlüssel (Token)',hubTokenH:'Nur in diesem Browser gespeichert, nicht auf AWTRIX.',
+  hubConnect:'Mit dem Hub verbinden',hubReady:'Verbindungsschlüssel gespeichert',hubIntro:'Vorschauen kannst du ohne Konto ansehen. Zum Installieren, Neuladen und Veröffentlichen erstelle einen Verbindungsschlüssel (Token) in deinem Hub-Konto und füge ihn hier ein.',hubSave:'Schlüssel speichern',hubStorageFail:'Dein Browser konnte das Token nicht speichern. Erlaube den Website-Speicher und versuche es erneut.',idbrefresh:'Sammlung aktualisieren',idbloading:'Sammlung wird geladen…',idbinstalling:'Wird installiert…',idbdetails:'Details',idbscript:'@icons kopieren',
+  hubSection:'AWTRIX Hub',hubSectionH:'Verbinde dein Konto, um Icons herunterzuladen, neu zu laden und zu veröffentlichen.',
+  hubAuthRequired:'Verbinde dein Konto unter Icons → Mit dem Hub verbinden, um Icons herunterzuladen.',hubAuthRejected:'Dein Hub-Schlüssel wurde abgelehnt. Ersetze ihn unter Icons → Mit dem Hub verbinden.',hubWrongHost:'Dieses Icon gehört zu einem anderen Hub. Öffne es vor dem Download im eingestellten Hub.',hubTokenLbl:'Verbindungsschlüssel (Token)',hubTokenH:'Nur in diesem Browser gespeichert, nicht auf AWTRIX.',
   hubOn:'Gespeichert',hubOff:'Nicht gesetzt',hubClear:'Entfernen',hubCleared:'Verbindungsschlüssel entfernt',hubStored:'Verbindungsschlüssel in diesem Browser gespeichert',
   hubGetLbl:'Schlüssel holen',hubGetH:'Öffnet deine Kontoseite im Hub.',hubGet:'Hub öffnen',
   icfromhub:'Aus dem Hub',icmodified:'Lokal geändert',iclocal:'Nur auf diesem Gerät',icchecking:'Herkunft wird geprüft…',icunknown:'Herkunft nicht geprüft',
@@ -3676,7 +3676,7 @@ function viewIcons(view){
     ...panes.map(p=>p[1]),hubConnectionCard()));
   reload();
 }
-// Publishing is configured where people use it; downloading needs no token.
+// The same connection key authorizes downloads and publication.
 function hubConnectionCard(){
   const input=el('input',{type:'password',autocomplete:'off',spellcheck:'false',value:hubToken(),'aria-label':t('hubTokenLbl')});
   const save=el('button',{type:'button',class:'pri'},t('hubSave'));
@@ -3777,10 +3777,26 @@ async function idbLoad(){
 // would ask the Hub for /icons/icons/<slug>.gif, which is a 404 - the Hub
 // serves the bytes straight under the catalogue prefix.
 const idbBytesUrl=(slug,ext)=>iconDbUrl()+encodeURIComponent(slug)+'.'+ext;
+function hubDownloadError(key){const error=new Error(t(key));error.code='hubAuthentication';return error;}
+async function hubDownloadFile(value){
+  const url=new URL(value),configured=new URL(iconApiUrl());
+  // Provenance files may contain arbitrary hosts. Never forward our token there.
+  if(url.protocol!=='https:'||url.origin!==configured.origin||url.username||url.password)
+    throw new Error(t('hubWrongHost'));
+  const token=hubToken();
+  if(!token)throw hubDownloadError('hubAuthRequired');
+  const response=await fetch(url.href,{headers:{Authorization:'Bearer '+token},credentials:'omit',
+    redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});
+  if(response.status===401||response.status===403)throw hubDownloadError('hubAuthRejected');
+  return response;
+}
+function connectHubAction(){return{label:t('hubConnect'),fn:()=>{
+  location.hash='#/icons';setTimeout(()=>{const panel=$('.hub-connect');if(panel){panel.open=true;panel.querySelector('input')?.focus();}},100);
+}};}
 async function idbFetch(slug){
   let last=404;
   for(const ext of ['gif','jpg']){
-    const r=await fetch(idbBytesUrl(slug,ext),{cache:'no-cache',signal:AbortSignal.timeout(15000)});
+    const r=await hubDownloadFile(idbBytesUrl(slug,ext));
     if(r.ok)return{blob:await r.blob(),ext};
     last=r.status;
     if(r.status!==404)break;
@@ -3881,9 +3897,10 @@ async function idbInstall(slug,{replace=false}={}){
 async function reloadHubIcon(file,{replace=false}={}){
   const origin=file.origin;
   if(!validIconOrigin(origin))throw new Error(t('idbfail'));
-  const metadata=await hubIconMetadata(origin.slug,origin.hub);
+  const sourceHub=origin.hub==='https://hub.flows.blueforcer.de/icons/'&&iconDbUrl()===ICONDB_URL_DEFAULT?ICONDB_URL_DEFAULT:origin.hub;
+  const metadata=await hubIconMetadata(origin.slug,sourceHub);
   if(!new RegExp('^'+origin.slug+'\\.(gif|jpg)$').test(metadata.filename||''))throw new Error(t('idbfail'));
-  const r=await fetch(origin.hub+encodeURIComponent(metadata.filename),{cache:'no-cache',signal:AbortSignal.timeout(15000)});
+  const r=await hubDownloadFile(sourceHub+encodeURIComponent(metadata.filename));
   if(!r.ok)throw new Error('HTTP '+r.status);
   const blob=await r.blob(),hash=await iconBlobHash(blob);
   if(hash!==metadata.sha256)throw new Error(t('idbfail'));
@@ -3893,7 +3910,7 @@ async function reloadHubIcon(file,{replace=false}={}){
   const ext=metadata.filename.split('.').pop(),name=file.name.replace(/\.[^.]+$/,'')+'.'+ext;
   if(current!==hash||name!==file.name)await uploadFile(blob,'/ICONS',name,null);
   await dropStale('/ICONS',name.replace(/\.[^.]+$/,ext==='gif'?'.jpg':'.gif'),name);
-  await saveIconOrigin(name,origin.slug,hash,origin.hub);
+  await saveIconOrigin(name,origin.slug,hash,sourceHub);
   return name;
 }
 async function installedIconIds(){
@@ -3903,10 +3920,11 @@ async function installedIconIds(){
 async function installScriptIcons(ids,have){
   // Always recheck the actual bytes: an editor or another browser may have
   // changed a same-named file since the script page was opened.
+  if(!hubToken()){toast(t('hubAuthRequired'),false,[connectHubAction()]);return 0;}
   const done=[],broke=[];
   for(const id of ids){try{await idbInstall(id);done.push(id);}catch(e){broke.push(id+': '+e.message);}}
   if(done.length)toast(done.join(', ')+' '+t('scriconsok'));
-  if(broke.length)toast(t('scriconserr')+' '+broke.join(', '),false);
+  if(broke.length)toast(t('scriconserr')+' '+broke.join(', '),false,[connectHubAction()]);
   return done.length;
 }
 async function idbSubmit(blob,name,basedOn,update=null){
@@ -3969,12 +3987,11 @@ function iconDbCard(onInstalled){
         onInstalled&&onInstalled();
       }catch(e){btn.disabled=false;btn.textContent=t('idbinst');
         toast(e.message,false,e.code==='iconConflict'?[
-          {label:t('ickeep'),fn:()=>{}},{label:t('icreplace'),fn:()=>install(true)}]:undefined);
+          {label:t('ickeep'),fn:()=>{}},{label:t('icreplace'),fn:()=>install(true)}]:e.code==='hubAuthentication'?[connectHubAction()]:undefined);
       }
     }
     btn.addEventListener('click',()=>install());
-    const img=el('img',{src:idbBytesUrl(r.slug,'gif'),alt:r.name,width:r.w,height:r.h,loading:'lazy',
-      onerror:()=>{if(/\.gif$/.test(img.src))img.src=idbBytesUrl(r.slug,'jpg');}});
+    const img=el('img',{src:iconDbUrl()+encodeURIComponent(r.slug)+'/preview.webp',alt:r.name,width:r.w,height:r.h,loading:'lazy'});
     return el('div',{class:'tile'},
       el('div',{class:'pw'},img),
       el('div',{class:'ft'},

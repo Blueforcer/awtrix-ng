@@ -45,6 +45,7 @@ async function search(window, text) {
 
 async function withGallery(extra) {
   const ctx = await boot();
+  ctx.window.localStorage.awtrixHubToken = 'test-hub-token';
   ctx.store.iconDb = { v: 1, icons: CATALOGUE };
   for (const row of CATALOGUE) ctx.store.iconBytes[row[0]] = 'GIF89a-' + row[0];
   if (extra) extra(ctx);
@@ -191,6 +192,7 @@ async function testSubmit() {
 
 async function testDeviceToken() {
   const { window, store } = await withGallery(ctx => {
+    ctx.window.localStorage.removeItem('awtrixHubToken');
     ctx.store.files['/ICONS'].set('own.gif', 240);
   });
 
