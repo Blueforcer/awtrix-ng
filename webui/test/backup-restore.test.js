@@ -29,10 +29,37 @@ function parseZip(buf) {
     const name = buf.slice(p + 30, p + 30 + nameLen).toString('utf8');
     const dataStart = p + 30 + nameLen + extraLen;
     const data = buf.slice(dataStart, dataStart + size);
-    entries.push({ name, crc, data });
+    entries.push({
+      name, crc, data,
+      dosTime: buf.readUInt16LE(p + 10),
+      dosDate: buf.readUInt16LE(p + 12),
+    });
     p = dataStart + size;
   }
   return entries;
+}
+function parseCentralDirectory(buf) {
+  const entries = [];
+  let p = 0;
+  while (p + 4 <= buf.length && buf.readUInt32LE(p) === 0x04034b50) {
+    p += 30 + buf.readUInt16LE(p + 26) + buf.readUInt16LE(p + 28) + buf.readUInt32LE(p + 18);
+  }
+  while (p + 46 <= buf.length && buf.readUInt32LE(p) === 0x02014b50) {
+    const nameLen = buf.readUInt16LE(p + 28);
+    const extraLen = buf.readUInt16LE(p + 30);
+    const commentLen = buf.readUInt16LE(p + 32);
+    entries.push({
+      name: buf.slice(p + 46, p + 46 + nameLen).toString('utf8'),
+      dosTime: buf.readUInt16LE(p + 12),
+      dosDate: buf.readUInt16LE(p + 14),
+    });
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+function fromDosDateTime(date, time) {
+  return new Date(1980 + (date >>> 9), ((date >>> 5) & 15) - 1, date & 31,
+    time >>> 11, (time >>> 5) & 63, (time & 31) * 2);
 }
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -62,9 +89,12 @@ async function testZipStructure() {
     { name: 'manifest.json', data: '{"app":"awtrix-ng","backupFormat":1}' },
     { name: 'PALETTES/fire.txt', data: 'FF0000\nFFAA00\n' },
   ];
+  const before = Date.now();
   const blob = window.zipStore(entries);
+  const after = Date.now();
   const bytes = await blobBytes(window, blob);
   const got = parseZip(bytes);
+  const central = parseCentralDirectory(bytes);
 
   assert(got.length === 2, 'writer emits both entries (got ' + got.length + ')');
   assert(got[0].name === 'manifest.json', 'manifest.json is written first');
@@ -73,6 +103,9 @@ async function testZipStructure() {
   // The firmware verifies this CRC; an independent recompute must match.
   assert(got[0].crc === crc32(got[0].data), 'manifest CRC is correct');
   assert(got[1].crc === crc32(got[1].data), 'palette CRC is correct');
+  const timestamps = [...got, ...central].map(e => +fromDosDateTime(e.dosDate, e.dosTime));
+  assert(timestamps.length === 4 && timestamps.every(ts => ts >= before - 2000 && ts <= after),
+    'local and central entries carry the backup creation time');
   // End-of-central-directory record present.
   assert(bytes.readUInt32LE(bytes.length - 22) === 0x06054b50, 'EOCD signature present');
   window.close();
