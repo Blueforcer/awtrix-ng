@@ -275,8 +275,8 @@ async function testUnknownError() {
   await flush(80);
 
   const toast = [...window.document.querySelectorAll('.toast')].map(t => t.textContent).join(' ');
-  assert(/somethingNew/.test(toast) && !/idbe_/.test(toast),
-    'an unknown code is shown raw, never as the missing translation key');
+  assert(/could not be published/.test(toast) && !/somethingNew|idbe_|HTTP/.test(toast),
+    'an unknown code gets a helpful message without internal codes');
 }
 
 async function testDuplicate() {
@@ -347,7 +347,7 @@ async function testInlineConnection() {
 async function testRefreshAndRecovery() {
   const { window, store } = await withGallery();
   store.iconDb = { v: 1, icons: [['new-icon', 'Fresh icon', 8, 8, 1, 100]] };
-  const refresh = () => [...card(window).querySelectorAll('button')].find(b => b.textContent === 'Refresh collection');
+  const refresh = () => [...card(window).querySelectorAll('button')].find(b => b.textContent === 'Refresh gallery');
   refresh().click();
   await flush(80);
   assert(tiles(window).join() === 'Fresh icon', 'refresh replaces a stale catalogue');
@@ -519,13 +519,13 @@ async function testContentAndOrigins(){
     assert(window.iconSha256(new window.TextEncoder().encode(input))===hash(input),'SHA-256 agrees with independent implementation for '+input.length+' bytes');
   assert(store.iconOrigins.get('mail.gif')?.sha256===hash('GIF89a-mail'),'existing exact Hub copy is identified and recorded');
   assert(ownGrid(window).querySelector('[data-state=hub]')?.textContent==='From the Hub','Hub origin is visible');
-  assert(ownGrid(window).querySelector('[data-state=local]')?.textContent==='Only on this device','private icon is clearly local');
+  assert(ownGrid(window).querySelector('[data-state=local]')?.textContent==='Only on AWTRIX','private icon is clearly local');
   store.localIconBytes['mail.gif']='different pixels, unchanged filename and listed size';
   await goto(window,'#/apps');await goto(window,'#/icons');await flush(80);
   const changed=[...ownGrid(window).querySelectorAll('.tile')].find(t=>t.querySelector('.nm').textContent==='mail');
-  assert(changed.querySelector('[data-state=modified]')?.textContent==='Locally changed','same-size edits are detected after page navigation');
+  assert(changed.querySelector('[data-state=modified]')?.textContent==='Changed on AWTRIX','same-size edits are detected after page navigation');
   assert(!card(window).querySelector('.tile .acts button').disabled,'changed same-name icon is not labelled installed');
-  assert(openMenu(changed)[2].textContent==='Publish as a variant','changed Hub copy offers publishing a variant');
+  assert(openMenu(changed)[2].textContent==='Share as a new icon','changed Hub copy offers publishing a variant');
   assert(!window.validIconOrigin({name:'../mail.gif',slug:'mail',hub:'https://awtrix.de/icons/',sha256:hash('x')}),'origin cannot escape icon folder');
   assert(!window.validIconOrigin({name:'mail.gif',slug:'mail',hub:'javascript:alert(1)',sha256:hash('x')}),'origin cannot create an executable link');
   assert(!window.validIconOrigin({name:'mail.gif',slug:'mail',hub:'https://user:secret@example.com/icons/',sha256:hash('x')}),'origin cannot include credentials');
@@ -541,7 +541,7 @@ async function testConflictProtection(){
   const uploads=[];stubXhr(window,uploads,store);
   await search(window,'mail');card(window).querySelector('.tile .acts button').click();await flush(90);
   assert(uploads.length===0&&store.localIconBytes['mail.gif']==='private drawing','Hub install never overwrites different same-name contents implicitly');
-  const replace=[...window.document.querySelectorAll('.toast button')].find(b=>b.textContent==='Replace with Hub original');
+  const replace=[...window.document.querySelectorAll('.toast button')].find(b=>b.textContent==='Use Hub version');
   assert(!!replace,'conflict gives an explicit replacement choice');
   replace.click();await flush(120);
   assert(uploads.length===1&&store.localIconBytes['mail.gif']==='GIF89a-mail','explicit replacement installs requested Hub original');
@@ -566,7 +566,7 @@ async function testResolvedPublication(){
   assert(store.iconOrigins.get('own.gif')?.sha256===createHash('sha256').update('changed drawing').digest('hex'),'origin stores actual local bytes, not differently encoded Hub bytes');
   const updated=ownGrid(window).querySelector('.tile');openMenu(updated);
   assert([...updated.querySelectorAll('.tmenu a')].some(a=>a.textContent==='View on Hub'&&a.href.endsWith('/supermario')),'linked copy offers original instead of publishing again');
-  assert([...window.document.querySelectorAll('.toast')].some(t=>t.textContent.includes('already in the gallery')),'existing publication is a friendly successful result');
+  assert([...window.document.querySelectorAll('.toast')].some(t=>t.textContent.includes('already on the Hub')),'existing publication is a friendly successful result');
 }
 async function testEditorProvenanceBridge(){
   const {window,store}=await withGallery();
@@ -606,7 +606,7 @@ async function testDescriptivePublicationName(){
   openMenu(tile)[2].click();
   const field=tile.querySelector('.ft input'),button=tile.querySelector('.ft button');
   assert(field.value==='','a LaMetric number is not prefilled as a publication name');
-  assert(tile.querySelector('.ft').textContent.includes('LaMetric'),'numeric icon explains that a descriptive name is needed');
+  assert(tile.querySelector('.ft').textContent.includes('Numbers alone'),'numeric icon explains that a descriptive name is needed');
   for(const value of ['', '34334', ' 123 456 ', '123-456', '１２３']){
     field.value=value;button.click();await flush(20);
     assert(store.submitted.length===0,'publication rejects an empty or numeric-only name: '+JSON.stringify(value));

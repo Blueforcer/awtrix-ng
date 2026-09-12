@@ -10,7 +10,7 @@ const { boot, goto, flush, stubXhr } = require('./harness');
   await goto(window, '#/icons');
   await flush(80);
   assert.equal(window.document.querySelector('.idb .tile img').src, 'https://awtrix.de/icons/sun/preview.webp');
-  await assert.rejects(window.idbFetch('sun'), /Connect to the Hub/);
+  await assert.rejects(window.idbFetch('sun'), {code: 'hubAuthentication'});
   assert.equal(store.iconDownloadRequests?.length || 0, 0);
   assert.equal(await window.installScriptIcons(['sun']), 0);
   assert.equal(uploads.length, 0);
@@ -33,18 +33,38 @@ const { boot, goto, flush, stubXhr } = require('./harness');
   assert.equal(store.iconDownloadRequests.at(-1).options.headers.Authorization, 'Bearer valid-test-key');
 
   store.requiredIconToken = 'replacement-key';
-  await assert.rejects(window.idbFetch('sun'), /key was rejected/);
+  await assert.rejects(window.idbFetch('sun'), {code: 'hubAuthentication'});
   assert.equal(uploads.length, 2);
   window.localStorage.removeItem('awtrixHubToken');
   const before = store.iconDownloadRequests.length;
-  await assert.rejects(window.reloadHubIcon(file), /Connect to the Hub/);
+  await assert.rejects(window.reloadHubIcon(file), {code: 'hubAuthentication'});
   assert.equal(store.iconDownloadRequests.length, before);
-
   window.localStorage.awtrixHubToken = 'replacement-key';
   await assert.rejects(window.hubDownloadFile('https://other.example/icons/sun.gif'), /different Hub/);
   await assert.rejects(window.hubDownloadFile('http://awtrix.de/icons/sun.gif'), /different Hub/);
   await assert.rejects(window.hubDownloadFile('https://user:pass@awtrix.de/icons/sun.gif'), /different Hub/);
   assert.equal(store.iconDownloadRequests.length, before);
+  store.requiredIconToken = 'replacement-key';
+  await assert.rejects(window.idbFetch('missing'), /no longer available/);
+  const originalFetch = window.fetch;
+  window.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  await assert.rejects(window.idbFetch('sun'), /Check your internet connection/);
+  window.fetch = originalFetch;
+
+  await goto(window, '#/system');
+  await flush(40);
+  const input = window.document.querySelector('#sec-hub input[type=password]');
+  Object.defineProperty(window, 'localStorage', {configurable: true, value: {
+    get awtrixHubToken() { return ''; },
+    set awtrixHubToken(value) { throw new Error('storage denied'); }
+  }});
+  input.value = 'unsaved-key';
+  input.dispatchEvent(new window.Event('change', {bubbles: true}));
+  assert.equal(input.value, '');
+  const message = [...window.document.querySelectorAll('.toast')].at(-1).textContent;
+  assert.match(message, /could not be saved/);
+  assert.doesNotMatch(message, /Hub key saved/);
+
   console.log('icons-auth: previews, token download/reload, revocation, script blocking and host isolation passed');
   window.close();
   process.exit(0);
