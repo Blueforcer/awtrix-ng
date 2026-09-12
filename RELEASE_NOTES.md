@@ -7,6 +7,8 @@
 - Scripts can switch the matrix with `display.power()` and read its state with `display.is_on()` (#56).
 - DIY panels can select their physical LED colour order in the Panel settings (#54).
 - Directional app transitions can run in their normal or reversed direction (#49).
+- Auto brightness can be switched directly from the dashboard; manual brightness stays disabled while it is active (#38).
+- Backup creation has an **All** switch that selects every available category at once (#43).
 - `progress()` takes an x offset.
 - Scripting tutorials on the documentation site.
 
@@ -20,6 +22,7 @@
 - An app pushed under a built-in name like `Temperature` was stored and listed, but the panel kept showing the built-in. The pushed app takes the name over now (#37).
 - An icon that is a PNG under a `.jpg` name counted as drawn, leaving a black gap where the picture should be. The column goes back to the text and the log names the file (#23).
 - One time zone the browser does not know ended the System page halfway, with no maintenance and no backup below MQTT (#25).
+- Files in downloaded backup ZIPs now carry the backup creation time instead of invalid 1979/1601 timestamps (#44).
 - The Icons tab showed a blank pane when the Hub catalogue is empty, and the framed icon editor was not told which Hub to publish to.
 - Delete and duplicate in the icon editor were blank grey chips. Ships with the Hub, not with the firmware, so it is already fixed (#30).
 
