@@ -881,7 +881,7 @@ const I18N={en:{
   bkSection:'Backup & restore',bkSectionH:'Download a ZIP of what you choose, or restore one.',
   bkSectionAp:'Restore',bkSectionApH:'Upload a previously created backup .zip.',
   bkTitle:'Create backup',bkDownload:'Download backup',bkDownloadH:'Pick what to include, then save a .zip.',
-  bkWorking:'Collecting…',bkDone:'Backup downloaded',bkNone:'Select at least one category',
+  bkWorking:'Collecting…',bkDone:'Backup downloaded',bkNone:'Select at least one category',bkAll:'All',
   bkWifi:'WiFi',bkSettings:'Settings',bkIcons:'Icons',bkMelodies:'Melodies',bkPalettes:'Palettes',bkMp3:'MP3s',bkScripts:'Scripts',bkApporder:'App order',
   bkRestoreT:'Restore backup',bkRestore:'Choose backup…',
   bkRestoreH:'Upload a backup .zip.',
@@ -1069,7 +1069,7 @@ const I18N={en:{
   bkSection:'Sicherung & Wiederherstellung',bkSectionH:'Ausgewählte Inhalte als ZIP herunterladen oder eine Sicherung einspielen.',
   bkSectionAp:'Wiederherstellen',bkSectionApH:'Ein zuvor erstelltes Backup-.zip einspielen.',
   bkTitle:'Sicherung erstellen',bkDownload:'Backup herunterladen',bkDownloadH:'Auswählen, was rein soll, dann .zip speichern.',
-  bkWorking:'Sammle…',bkDone:'Backup heruntergeladen',bkNone:'Mindestens eine Kategorie wählen',
+  bkWorking:'Sammle…',bkDone:'Backup heruntergeladen',bkNone:'Mindestens eine Kategorie wählen',bkAll:'Alle',
   bkWifi:'WLAN',bkSettings:'Einstellungen',bkIcons:'Icons',bkMelodies:'Melodien',bkPalettes:'Paletten',bkMp3:'MP3s',bkScripts:'Skripte',bkApporder:'App-Reihenfolge',
   bkRestoreT:'Sicherung wiederherstellen',bkRestore:'Sicherung wählen…',
   bkRestoreH:'Backup-.zip hochladen.',
@@ -3467,10 +3467,14 @@ function backupSection(page,allowBackup){
     const checks={};
     const avail=BK_CATS.filter(([id])=>
       (id!=='melodies'||hasSink('buzzer'))&&(id!=='mp3'||hasSink('mp3')));
-    const boxes=avail.map(([id,lbl])=>{
-      const cb=el('input',{type:'checkbox'});checks[id]=cb;
+    const all=el('input',{type:'checkbox'});
+    const syncAll=()=>{const n=avail.filter(([id])=>checks[id].checked).length;
+      all.checked=n===avail.length;all.indeterminate=n>0&&n<avail.length;};
+    const boxes=[el('label',{style:'display:inline-flex;align-items:center;gap:.3rem;margin-right:1rem'},all,t('bkAll')),...avail.map(([id,lbl])=>{
+      const cb=el('input',{type:'checkbox'});checks[id]=cb;cb.addEventListener('change',syncAll);
       return el('label',{style:'display:inline-flex;align-items:center;gap:.3rem;margin-right:1rem'},cb,t(lbl));
-    });
+    })];
+    all.addEventListener('change',()=>{avail.forEach(([id])=>{checks[id].checked=all.checked;});all.indeterminate=false;});
     const dl=el('button',{class:'pri'},t('bkDownload'));
     dl.addEventListener('click',async()=>{
       const cats={};let any=false;

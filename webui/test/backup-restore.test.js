@@ -6,7 +6,7 @@
      the real /api/v1/restore, and confirm the state came back. The ZIP the
      browser writes is read by the actual firmware ZipReader, so this is the
      writer<->reader interop check the offline test can't be. */
-const { boot, bootSim, flush } = require('./harness');
+const { boot, bootSim, goto, flush } = require('./harness');
 
 const SIM = process.argv.includes('--sim');
 const BASE = 'http://localhost:8080';
@@ -111,6 +111,29 @@ async function testZipStructure() {
   window.close();
 }
 
+async function testSelectAllCategories() {
+  const { window } = await boot();
+  await goto(window, '#/system');
+  const section = window.document.querySelector('#sec-backup');
+  const labels = [...section.querySelectorAll('label')]
+    .filter(label => label.querySelector('input[type=checkbox]'));
+  const all = labels.find(label => label.textContent.trim() === 'All');
+  assert(!!all, 'backup offers an All checkbox');
+  if (all) {
+    const master = all.querySelector('input');
+    master.checked = true;
+    master.dispatchEvent(new window.Event('change', { bubbles: true }));
+    const categories = labels.filter(label => label !== all).map(label => label.querySelector('input'));
+    assert(categories.length > 0 && categories.every(box => box.checked),
+      'All selects every available backup category');
+    categories[0].checked = false;
+    categories[0].dispatchEvent(new window.Event('change', { bubbles: true }));
+    assert(!master.checked && master.indeterminate,
+      'All becomes indeterminate when only some categories are selected');
+  }
+  window.close();
+}
+
 // ---- live simulator: full round-trip ---------------------------------------
 async function postArchive(bytes) {
   const fd = new FormData();
@@ -174,6 +197,7 @@ async function testRoundTripAgainstSim() {
 
 async function main() {
   await testZipStructure();
+  await testSelectAllCategories();
   if(!SIM){
     const{window,store}=await boot();
     store.files['/ICONS'].set('mail.gif',12);
