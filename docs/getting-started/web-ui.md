@@ -77,13 +77,14 @@ Directly under the canvas, acting on what you just saw:
 |---|---|---|
 | **Power** switch | Turns the LED matrix on and off | `PATCH /api/v1/display` `{"power":true}` |
 | **Brightness** slider | 0–255, sent 300 ms after you stop dragging | `PATCH /api/v1/settings` `{"brightness":120}` |
+| **Auto brightness** switch | Lets the ambient light sensor control brightness and disables the manual slider | `PATCH /api/v1/settings` `{"autoBrightness":true}` |
 | **◀ / ▶** | Previous / next app in the rotation | `POST /api/v1/apps/previous` · `/next` |
 | **Bell** | Dismisses the notification currently on screen | `DELETE /api/v1/notifications/active` |
 | **↓** | Saves the preview as a PNG | - |
 | **●** | Records the preview as an animated GIF | - |
 
-If the brightness slider snaps back, check **Display → Brightness → Auto brightness**. While that is
-on, the ambient light sensor owns the brightness value.
+While auto brightness is on, the ambient light sensor owns the brightness value and the manual
+slider is disabled. The same switch also remains under **Display → Brightness**.
 
 ### Vitals
 

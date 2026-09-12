@@ -2076,6 +2076,15 @@ function viewDash(view){
   const briVal=el('span',{class:'val'},String(S.stats?S.stats.brightness:120));
   bri.addEventListener('input',()=>briVal.replaceChildren(bri.value));
   bri.addEventListener('input',debounce(()=>req('PATCH','/api/v1/settings',{brightness:Number(bri.value)}).catch(e=>toast(e.message,false)),300));
+  const autoLabel=tt(FIELDS.autoBrightness.l);
+  const autoSw=mkSwitch(false,async()=>{
+    setAuto(autoSw.input.checked);
+    try{await req('PATCH','/api/v1/settings',{autoBrightness:autoSw.input.checked});}
+    catch(e){toast(e.message,false);}
+  });
+  autoSw.input.setAttribute('aria-label',autoLabel);
+  const setAuto=on=>{autoSw.input.checked=on;bri.disabled=on;};
+  api('/api/v1/settings').then(({data})=>setAuto(!!data.autoBrightness)).catch(()=>{});
   const powerSw=mkSwitch(S.stats?!!S.stats.matrixPower:true,async()=>{
     try{await req('PATCH','/api/v1/display',{power:powerSw.input.checked});}catch(e){toast(e.message,false);}
   });
@@ -2108,6 +2117,7 @@ function viewDash(view){
     el('div',{class:'hctl'},
       powerSw.node,el('span',{class:'lab'},t('power')),
       el('span',{class:'lab'},t('brightness')),bri,briVal,
+      autoSw.node,el('span',{class:'lab'},autoLabel),
       appBtn('prev','/api/v1/apps/previous',t('prevapp')),
       appBtn('next','/api/v1/apps/next',t('nextapp')),
       iconBtn('bell',t('dismiss'),async()=>{
