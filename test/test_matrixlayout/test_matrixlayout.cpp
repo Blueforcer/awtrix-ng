@@ -430,11 +430,14 @@ static void test_sanitize_resets_out_of_range_enums() {
   MatrixLayout in;
   in.panelStart = static_cast<PanelStart>(9);
   in.panelWiring = static_cast<Wiring>(7);
+  in.panelColorOrder = static_cast<PanelColorOrder>(8);
   bool changed = false;
   const MatrixLayout out = sanitizeMatrixLayout(in, &changed);
   TEST_ASSERT_TRUE(changed);
   TEST_ASSERT_EQUAL_INT(static_cast<int>(PanelStart::TopLeft), static_cast<int>(out.panelStart));
   TEST_ASSERT_EQUAL_INT(static_cast<int>(Wiring::Rows), static_cast<int>(out.panelWiring));
+  TEST_ASSERT_EQUAL_INT(static_cast<int>(PanelColorOrder::Grb),
+                        static_cast<int>(out.panelColorOrder));
 }
 
 static void test_enum_name_tables_cover_every_value() {

@@ -120,8 +120,8 @@ do not change the framebuffer [`GET /api/v1/display/screen`](http.md) returns.
 into every pixel (for example `"#FFD6AA"` to warm the panel), not `2700`. `null` turns the
 tint off.
 
-Panel size and wiring - `panelWidth`, `panels`, `panelStart`, `panelWiring`, `panelSerpentine`,
-`mirror` and `rotate` - are system configuration, not settings: see
+Panel size and wiring - `panelWidth`, `panels`, `panelStart`, `panelWiring`, `panelColorOrder`,
+`panelSerpentine`, `mirror` and `rotate` - are system configuration, not settings: see
 [Panel and orientation](system.md#panel-and-orientation).
 
 ---

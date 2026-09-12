@@ -26,6 +26,9 @@ void cfgGet(Preferences& p, const char* k, PanelStart& v) {
 void cfgGet(Preferences& p, const char* k, Wiring& v) {
   v = static_cast<Wiring>(p.getInt(k, static_cast<int>(v)));
 }
+void cfgGet(Preferences& p, const char* k, PanelColorOrder& v) {
+  v = static_cast<PanelColorOrder>(p.getInt(k, static_cast<int>(v)));
+}
 
 void cfgPut(Preferences& p, const char* k, bool v) { p.putBool(k, v); }
 void cfgPut(Preferences& p, const char* k, int v) { p.putInt(k, v); }
@@ -37,6 +40,9 @@ void cfgPut(Preferences& p, const char* k, uint32_t v) { p.putUInt(k, v); }
 void cfgPut(Preferences& p, const char* k, const std::string& v) { p.putString(k, v.c_str()); }
 void cfgPut(Preferences& p, const char* k, PanelStart v) { p.putInt(k, static_cast<int>(v)); }
 void cfgPut(Preferences& p, const char* k, Wiring v) { p.putInt(k, static_cast<int>(v)); }
+void cfgPut(Preferences& p, const char* k, PanelColorOrder v) {
+  p.putInt(k, static_cast<int>(v));
+}
 
 // Matrix geometry keys from older firmware. Nothing reads them any more; save() deletes them so
 // they stop occupying entries in the NVS partition.

@@ -491,13 +491,14 @@ The pixel height is fixed at 8. Everything else about your matrix is configurati
 | `panels` | 1-128 | `1` | How many identical panels the cable runs through, left to right. `panelWidth x panels` must land in 32-128. |
 | `panelStart` | `topLeft` `topRight` `bottomLeft` `bottomRight` | `topLeft` | Corner the first LED sits in. |
 | `panelWiring` | `rows` `columns` | `rows` | Whether the strip runs along rows or down columns. |
+| `panelColorOrder` | `rgb` `rbg` `grb` `gbr` `brg` `bgr` | `grb` | Physical colour-byte order expected by the LEDs. |
 | `panelSerpentine` | bool | `true` | Every second run comes back the other way - the usual zigzag. |
 | `panelChainReverse` | bool | `false` | The cable enters the chain at the other end. Does not change how a panel is wired inside. |
 | `panelChainSerpentine` | bool | `false` | Every second panel is mounted rotated 180°, so its output sits beside the next panel's input. |
 | `mirror` / `rotate` | bool | `false` | A convenience for a panel mounted the wrong way round; each is equivalent to picking a different `panelStart`. `rotate` additionally swaps the left and right button. |
 
-`panelStart`, `panelWiring` and `panelSerpentine` describe one panel; the two chain keys describe
-how the panels are joined to each other. On a single-panel build the chain keys cannot change
+`panelStart`, `panelWiring`, `panelColorOrder` and `panelSerpentine` describe one panel; the two
+chain keys describe how the panels are joined to each other. On a single-panel build they cannot change
 anything.
 
 Common builds:
@@ -509,6 +510,7 @@ Common builds:
 | Four 8 x 8 tiles, each wired from its right edge | `panelWidth` 8, `panels` 4, `panelStart` `topRight`, `panelChainReverse` true |
 | Tiles mounted alternately, output next to input | `panelChainSerpentine` true |
 | 32 x 8 wired in columns | `panelWiring` `columns` |
+| Panel shows red as green and green as red | `panelColorOrder` `rgb` |
 | 64 px wide panel | `panelWidth` 64 |
 
 If the picture comes out scrambled, try `panelSerpentine` first, then `panelStart`, then
@@ -603,6 +605,7 @@ Work down this list; each step isolates one part of the hardware.
 | First pixel wrong colour, rest fine | Missing series resistor or the 1000 uF cap; data edge too sharp |
 | Flicker, colours drift down the strip | 3.3 V data on 5 V pixels - add a level shifter or drop the panel supply to ~4.5 V |
 | Picture scrambled or mirrored | `panelSerpentine`, then `panelStart`, then `panelWiring` |
+| Red, green or blue appear as another colour | Select the panel's `panelColorOrder`; red/green swapped usually needs `rgb` |
 | Panels each correct but in the wrong order | `panelChainReverse` - the cable enters the chain at the other end |
 | Every second panel upside down | `panelChainSerpentine` - the tiles are mounted alternately |
 | Board resets on bright frames | Supply too small, or panel current flowing through the dev board |

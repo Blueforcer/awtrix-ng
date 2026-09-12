@@ -5,6 +5,7 @@
 - The browser tab carries the hostname, so several AWTRIX open at once are told apart (#18).
 - Scripts can swallow a button press: return `true` from `on_button()`.
 - Scripts can switch the matrix with `display.power()` and read its state with `display.is_on()` (#56).
+- DIY panels can select their physical LED colour order in the Panel settings (#54).
 - `progress()` takes an x offset.
 - Scripting tutorials on the documentation site.
 

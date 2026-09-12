@@ -22,7 +22,8 @@ int clampInt(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
 bool sameLayout(const MatrixLayout& a, const MatrixLayout& b) {
   return a.panelWidth == b.panelWidth && a.panels == b.panels && a.panelStart == b.panelStart &&
-         a.panelWiring == b.panelWiring && a.panelSerpentine == b.panelSerpentine;
+         a.panelWiring == b.panelWiring && a.panelColorOrder == b.panelColorOrder &&
+         a.panelSerpentine == b.panelSerpentine;
 }
 
 }
@@ -54,6 +55,8 @@ MatrixLayout sanitizeMatrixLayout(MatrixLayout in, bool* changed) {
   out.panels = clampInt(in.panels, 1, kMatrixWidthMax);
   if (static_cast<int>(in.panelStart) >= kPanelStartCount) out.panelStart = PanelStart::TopLeft;
   if (static_cast<int>(in.panelWiring) >= kWiringCount) out.panelWiring = Wiring::Rows;
+  if (static_cast<int>(in.panelColorOrder) >= kPanelColorOrderCount)
+    out.panelColorOrder = PanelColorOrder::Grb;
 
   // A width/panel-count pair that lands outside the supported range is unusable, so fall back to
   // the stock layout and keep only the orientation flags the user set.
@@ -61,6 +64,7 @@ MatrixLayout sanitizeMatrixLayout(MatrixLayout in, bool* changed) {
     MatrixLayout fallback;
     fallback.mirror = out.mirror;
     fallback.rotate180 = out.rotate180;
+    fallback.panelColorOrder = out.panelColorOrder;
     out = fallback;
   }
   if (changed) *changed = !sameLayout(in, out);

@@ -1628,6 +1628,7 @@ Behaviour to know:
 | `panels` | integer | `1` | 1–128; how many panels the strip runs through |
 | `panelStart` | string | `"topLeft"` | `topLeft` · `topRight` · `bottomLeft` · `bottomRight` |
 | `panelWiring` | string | `"rows"` | `rows` · `columns` |
+| `panelColorOrder` | string | `"grb"` | `rgb` · `rbg` · `grb` · `gbr` · `brg` · `bgr` |
 | `panelSerpentine` | boolean | `true` | every second row or column runs backwards |
 | `mirror` | boolean | `false` | mirrors the displayed image, not the wiring |
 | `rotate` | boolean | `false` | rotates the displayed image 180°; also swaps left/right buttons |

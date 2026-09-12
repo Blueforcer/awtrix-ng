@@ -73,8 +73,8 @@ static int members(const std::string& json) {
 }
 
 static void test_the_reply_carries_every_field() {
-  TEST_ASSERT_EQUAL_INT(66, members(written(seeded(), false)));
-  TEST_ASSERT_EQUAL_INT(69, members(written(seeded(), true)));
+  TEST_ASSERT_EQUAL_INT(67, members(written(seeded(), false)));
+  TEST_ASSERT_EQUAL_INT(70, members(written(seeded(), true)));
 }
 
 static void test_secrets_are_omitted_unless_asked_for() {
@@ -156,6 +156,14 @@ static void test_enum_fields_travel_by_name() {
   changesNothing(R"({"panelWiring":true})");
 }
 
+static void test_panel_color_order_travels_by_name() {
+  TEST_ASSERT_TRUE(written(DeviceConfig{}, false).find("\"panelColorOrder\":\"grb\"") !=
+                   std::string::npos);
+  TEST_ASSERT_EQUAL_INT(
+      static_cast<int>(PanelColorOrder::Rgb),
+      static_cast<int>(after(R"({"panelColorOrder":"rgb"})").panelColorOrder));
+}
+
 static void test_the_whole_table_round_trips() {
   const DeviceConfig src = seeded();
   DeviceConfig back;
@@ -173,6 +181,7 @@ int main(int, char**) {
   RUN_TEST(test_unknown_keys_are_ignored);
   RUN_TEST(test_a_restored_backup_ignores_settings_this_firmware_has_no_field_for);
   RUN_TEST(test_enum_fields_travel_by_name);
+  RUN_TEST(test_panel_color_order_travels_by_name);
   RUN_TEST(test_the_whole_table_round_trips);
   return UNITY_END();
 }

@@ -1459,6 +1459,8 @@ const SYSF={
    ['bottomLeft','Bottom left|Unten links'],['bottomRight','Bottom right|Unten rechts']]}),
  panelWiring:F('panel','select','Wiring direction|Verdrahtungsrichtung','How the strip runs in a panel.|Wie der Strang im Panel läuft.',{opt:[
    ['rows','Along the rows|Entlang der Zeilen'],['columns','Along the columns|Entlang der Spalten']]}),
+ panelColorOrder:F('panel','select','LED color order|LED-Farbreihenfolge','Byte order expected by the panel.|Vom Panel erwartete Byte-Reihenfolge.',{opt:[
+   ['grb','GRB'],['rgb','RGB'],['rbg','RBG'],['gbr','GBR'],['brg','BRG'],['bgr','BGR']]}),
  panelSerpentine:F('panel','toggle','Serpentine|Serpentine','Every second run goes backwards (zigzag).|Jede zweite Reihe läuft rückwärts (Zickzack).'),
  panelChainReverse:F('panel','toggle','Reverse chain|Kette umkehren','The cable enters the panels at the other end.|Das Kabel betritt die Panels am anderen Ende.'),
  panelChainSerpentine:F('panel','toggle','Alternating panels|Wechselnde Panels','Every second panel is mounted rotated 180°.|Jedes zweite Panel ist um 180° gedreht montiert.'),

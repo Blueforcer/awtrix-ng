@@ -2229,6 +2229,14 @@ components:
           description: >
             Whether the strip runs along the rows or down the columns inside a
             panel. Applies on the next frame.
+        panelColorOrder:
+          type: string
+          default: grb
+          enum: [rgb, rbg, grb, gbr, brg, bgr]
+          description: >
+            Physical colour-byte order expected by the LED panel. Matched
+            case-insensitively; any other value is rejected with 422. Applies
+            on the next frame.
         panelSerpentine:
           type: boolean
           default: true

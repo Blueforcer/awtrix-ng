@@ -88,8 +88,8 @@ both fail with `422`); the float fields accept any number in range.
 
 ### What `PUT` does not check
 
-Beyond the numeric ranges, the two enums (`panelStart`, `panelWiring`), the dotted-quad address
-fields and the blanking rules below, strings are not validated, and unknown keys are ignored
+Beyond the numeric ranges, the three enums (`panelStart`, `panelWiring`, `panelColorOrder`), the
+dotted-quad address fields and the blanking rules below, strings are not validated, and unknown keys are ignored
 without error - the resource is a merge, not a replacement. The **deeper GPIO rules**
 (duplicates, input-only pins, the matrix whitelist) are separate and answer
 `400 invalidPinConfig`; the rules and their exact messages are in
@@ -320,13 +320,15 @@ width follows from the first two - `panelWidth × panels` - and the height is al
 | `panels` | int | 1–128 | `1` | How many identical panels the strip runs through, left to right. `panelWidth × panels` must come to 32–128, or the write is `422 validationFailed` on `panelWidth`. | yes, if the total width changes |
 | `panelStart` | enum | `topLeft` `topRight` `bottomLeft` `bottomRight` | `topLeft` | The corner the first LED sits in. Names are case-insensitive; anything else is `422`. | no |
 | `panelWiring` | enum | `rows` `columns` | `rows` | Whether the strip runs along the rows or down the columns inside a panel. | no |
+| `panelColorOrder` | enum | `rgb` `rbg` `grb` `gbr` `brg` `bgr` | `grb` | Physical colour-byte order expected by the LEDs. Use `rgb` when red and green are swapped on an RGB panel. | no |
 | `panelSerpentine` | bool | - | `true` | Every second row (or column) runs backwards - the zigzag most panels are wired in. `false` = every run starts on the same side. | no |
 | `panelChainReverse` | bool | - | `false` | The data cable enters the chain at the other end, without changing how a panel is wired inside. | no |
 | `panelChainSerpentine` | bool | - | `false` | Every second panel along the cable is mounted rotated 180°, so one panel's output sits beside the next panel's input. | no |
 | `mirror` | bool | - | `false` | Flips the picture left to right. | no |
 | `rotate` | bool | - | `false` | Turns the picture 180°. Also swaps the left and right button, which is correct for a physically upside-down panel. | no |
 
-`panelStart`, `panelWiring` and `panelSerpentine` describe how a **panel** is wired;
+`panelStart`, `panelWiring`, `panelColorOrder` and `panelSerpentine` describe how a **panel** is
+wired;
 `panelChainReverse` and `panelChainSerpentine` describe how the **panels are chained**;
 `mirror` and `rotate` describe how the picture is **drawn** on the result. They compose - the
 display transform is applied first, then the chain order, then the wiring map inside a panel.
@@ -346,6 +348,7 @@ exception is the total width, which is fixed at boot: a change to `panelWidth ×
 | Four 8×8 tiles, each wired from its right edge | `panelWidth` 8, `panels` 4, `panelStart` `topRight`, `panelChainReverse` true |
 | Every second tile mounted upside down | `panelChainSerpentine` true |
 | A 32×8 panel wired in columns | `panelWiring` `columns` |
+| A panel where red and green are swapped | `panelColorOrder` `rgb` |
 | A 64-pixel-wide panel | `panelWidth` 64 |
 
 ```bash
@@ -357,6 +360,9 @@ then `panelStart`, then `panelWiring`. If those leave each panel correct but the
 wrong order, or every second panel upside down, reach for `panelChainReverse` and
 `panelChainSerpentine`. The web UI's **Panel** section shows the resulting size
 (`32 × 8 = 256 LEDs`) while you edit.
+
+If the picture geometry is correct but individual colours are wrong, change `panelColorOrder`
+instead. A red/green swap normally means an RGB panel is being driven with the default GRB order.
 
 ## Buttons
 

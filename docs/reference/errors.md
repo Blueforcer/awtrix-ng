@@ -399,8 +399,9 @@ changes nothing and `field` names the offending key:
 | any `pin*` | −1 (disabled), or a GPIO in `0`–`gpioMax` for the running chip; the message is `must be -1 (disabled) or a GPIO in 0..<max>`. The deeper pin rules run separately - see [GPIO validation](#gpio-validation-invalidpinconfig) |
 
 A value of the wrong type answers `must be an integer` (or `must be a number` on the five decimal
-fields); a value of the right type outside the range answers `out of range`. `panelStart` and
-`panelWiring` answer `must be one of: <names>`, and `panelSerpentine`, `mirror` and `rotate`
+fields); a value of the right type outside the range answers `out of range`. `panelStart`,
+`panelWiring` and `panelColorOrder` answer `must be one of: <names>`, and `panelSerpentine`,
+`mirror` and `rotate`
 answer `must be a boolean`.
 
 Three cross-field rules are checked on the **merged** configuration, so a partial body that sets

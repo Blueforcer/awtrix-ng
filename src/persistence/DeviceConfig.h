@@ -47,6 +47,7 @@ struct DeviceConfig {
   int panels = 1;
   PanelStart panelStart = PanelStart::TopLeft;
   Wiring panelWiring = Wiring::Rows;
+  PanelColorOrder panelColorOrder = PanelColorOrder::Grb;
   bool panelSerpentine = true;
   bool panelChainReverse = false, panelChainSerpentine = false;
   bool mirror = false, rotate = false, swapButtons = false;
@@ -89,6 +90,7 @@ struct DeviceConfig {
     l.panels = panels;
     l.panelStart = panelStart;
     l.panelWiring = panelWiring;
+    l.panelColorOrder = panelColorOrder;
     l.panelSerpentine = panelSerpentine;
     l.panelChainReverse = panelChainReverse;
     l.panelChainSerpentine = panelChainSerpentine;

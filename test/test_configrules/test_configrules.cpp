@@ -408,6 +408,19 @@ void test_wiring_enums_are_named_not_numbered() {
   TEST_ASSERT_EQUAL_STRING("must be one of: rows columns", e.message.c_str());
 }
 
+void test_panel_color_order_is_a_named_enum() {
+  cfgrules::ConfigError e;
+  Body valid;
+  valid.set("panelColorOrder", "rgb");
+  TEST_ASSERT_TRUE_MESSAGE(ok(valid, e), e.message.c_str());
+
+  Body invalid;
+  invalid.set("panelColorOrder", "rrg");
+  TEST_ASSERT_FALSE(ok(invalid, e));
+  TEST_ASSERT_EQUAL_STRING("panelColorOrder", e.field.c_str());
+  TEST_ASSERT_EQUAL_STRING("must be one of: rgb rbg grb gbr brg bgr", e.message.c_str());
+}
+
 void test_wiring_booleans_must_be_booleans() {
   cfgrules::ConfigError e;
   Body a;
@@ -484,6 +497,7 @@ int main(int, char**) {
   RUN_TEST(test_panel_width_product_must_fit_the_envelope);
   RUN_TEST(test_panel_fields_are_range_checked);
   RUN_TEST(test_wiring_enums_are_named_not_numbered);
+  RUN_TEST(test_panel_color_order_is_a_named_enum);
   RUN_TEST(test_wiring_booleans_must_be_booleans);
   RUN_TEST(test_i2s_pins_are_all_or_none);
   RUN_TEST(test_mclk_and_amp_enable_need_the_i2s_bus);

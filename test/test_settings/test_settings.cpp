@@ -156,9 +156,9 @@ static void test_pure_black_and_white_are_representable() {
 
 static void test_panel_keys_do_not_live_on_settings() {
   const std::string o = reply(Settings{});
-  for (const char* key : {"panelWidth", "panels", "panelStart", "panelWiring", "panelSerpentine",
-                          "panelChainReverse", "panelChainSerpentine", "matrixWidth",
-                          "matrixLayout"})
+  for (const char* key : {"panelWidth", "panels", "panelStart", "panelWiring",
+                          "panelColorOrder", "panelSerpentine", "panelChainReverse",
+                          "panelChainSerpentine", "matrixWidth", "matrixLayout"})
     TEST_ASSERT_FALSE_MESSAGE(hasKey(o, key), key);
 
   Body d;

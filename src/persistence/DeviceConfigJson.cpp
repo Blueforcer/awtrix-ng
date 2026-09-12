@@ -9,7 +9,7 @@ namespace awtrix {
 
 namespace {
 
-enum class Kind : uint8_t { Str, Bool, Int, Long, U16, U8, Float, Start, Wire };
+enum class Kind : uint8_t { Str, Bool, Int, Long, U16, U8, Float, Start, Wire, ColorOrder };
 
 // One table row per config field: the JSON name, how to convert it, and a pointer-to-member.
 // The union keeps the table constexpr, so it lives in flash rather than costing RAM at boot.
@@ -27,6 +27,7 @@ struct Row {
     float DeviceConfig::*f;
     PanelStart DeviceConfig::*ps;
     Wiring DeviceConfig::*wi;
+    PanelColorOrder DeviceConfig::*co;
   };
 
   constexpr Row(const char* k, bool sec, std::string DeviceConfig::*m)
@@ -47,6 +48,8 @@ struct Row {
       : key(k), kind(Kind::Start), secret(sec), ps(m) {}
   constexpr Row(const char* k, bool sec, Wiring DeviceConfig::*m)
       : key(k), kind(Kind::Wire), secret(sec), wi(m) {}
+  constexpr Row(const char* k, bool sec, PanelColorOrder DeviceConfig::*m)
+      : key(k), kind(Kind::ColorOrder), secret(sec), co(m) {}
 };
 
 // The API key is the stringified member name, not the short NVS key — the wire format stays
@@ -78,6 +81,13 @@ void DeviceConfig::write(api::JsonWriter& w, bool withSecrets) const {
       case Kind::Wire: {
         const int idx = static_cast<int>(this->*r.wi);
         w.member(r.key, kWiringNames[idx >= 0 && idx < kWiringCount ? idx : 0]);
+        break;
+      }
+      case Kind::ColorOrder: {
+        const int idx = static_cast<int>(this->*r.co);
+        const int fallback = static_cast<int>(PanelColorOrder::Grb);
+        w.member(r.key, kPanelColorOrderNames[idx >= 0 && idx < kPanelColorOrderCount ? idx
+                                                                                    : fallback]);
         break;
       }
     }
@@ -126,6 +136,18 @@ int DeviceConfig::applyRead(api::JsonReader r) {
             const int idx = enumIndexByName(kWiringNames, kWiringCount, v);
             if (idx >= 0) {
               this->*row.wi = static_cast<Wiring>(idx);
+              ++n;
+            }
+          }
+          break;
+        }
+        case Kind::ColorOrder: {
+          std::string v;
+          if (r.isString() && r.appendString(v)) {
+            const int idx =
+                enumIndexByName(kPanelColorOrderNames, kPanelColorOrderCount, v);
+            if (idx >= 0) {
+              this->*row.co = static_cast<PanelColorOrder>(idx);
               ++n;
             }
           }

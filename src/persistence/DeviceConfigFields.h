@@ -43,6 +43,7 @@
   X(panels, "pnc", 0)                 \
   X(panelStart, "pstart", 0)          \
   X(panelWiring, "pwire", 0)          \
+  X(panelColorOrder, "pcolor", 0)     \
   X(panelSerpentine, "pserp", 0)      \
   X(panelChainReverse, "pchrev", 0)   \
   X(panelChainSerpentine, "pchserp", 0) \

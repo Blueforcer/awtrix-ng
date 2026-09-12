@@ -70,6 +70,7 @@ inline const EnumRule* findEnum(const std::string& key) {
   static const EnumRule kEnums[] = {
       {"panelStart", kPanelStartNames, kPanelStartCount},
       {"panelWiring", kWiringNames, kWiringCount},
+      {"panelColorOrder", kPanelColorOrderNames, kPanelColorOrderCount},
   };
   for (const EnumRule& e : kEnums)
     if (key == e.key) return &e;

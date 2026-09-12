@@ -586,8 +586,8 @@ rejected with `422 validationFailed` and `"field":"draw[<index>]"`.
 ## Panel wiring
 
 How the LED strip runs through your panel is system configuration, not a display setting:
-`panelWidth`, `panels`, `panelStart`, `panelWiring` and `panelSerpentine`, documented under
-[Panel and orientation](system.md#panel-and-orientation). Get it wrong and the image comes out
+`panelWidth`, `panels`, `panelStart`, `panelWiring`, `panelColorOrder` and `panelSerpentine`,
+documented under [Panel and orientation](system.md#panel-and-orientation). Get it wrong and the image comes out
 mirrored, scrambled or split into blocks; the web UI's **Panel** section is where you fix it.
 
 ---
