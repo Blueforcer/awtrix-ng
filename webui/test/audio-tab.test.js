@@ -191,6 +191,64 @@ async function playingIndicator() {
     'the playing row is marked');
 }
 
+function transportState(button, on, name) {
+  assert(button.classList.contains('playing') === on,
+    name + ' button ' + (on ? 'shows' : 'leaves') + ' the stop state');
+  assert(button.textContent === (on ? '■' : '▶'),
+    name + ' button uses the matching transport symbol');
+  assert(button.getAttribute('aria-pressed') === String(on),
+    name + ' button exposes aria-pressed=' + on);
+  assert(button.getAttribute('aria-label').startsWith(on ? 'Stop on AWTRIX' : 'Play on AWTRIX'),
+    name + ' button has the matching accessible label');
+}
+
+async function rowTransportToggles() {
+  console.log('audio: each device play button becomes its own stop control');
+
+  {
+    const { window, store } = await boot();
+    store.melodies = [{ name: 'beep', rtttl: 'beep:d=4,o=5,b=120:c,e,g', valid: true }];
+    await goto(window, '#/audio');
+    assert(!window.document.querySelector('.audbar'), 'the shared Stop bar is gone');
+    const play = window.document.querySelector('#sec-melodies .device-play');
+    play.click(); await flush(40);
+    assert(store.played.some(p => p.rtttl === 'beep:d=4,o=5,b=120:c,e,g'),
+      'melody starts through the existing play endpoint');
+    transportState(play, true, 'melody');
+    play.click(); await flush(40);
+    assert(store.audioStops === 1, 'second melody click posts to the stop endpoint');
+    transportState(play, false, 'melody');
+  }
+
+  {
+    const { window, store } = await boot();
+    store.files['/MP3'].set('ding.mp3', 4321);
+    await goto(window, '#/audio');
+    const play = window.document.querySelector('#sec-mp3 .device-play');
+    play.click(); await flush(40);
+    assert(store.played.some(p => p.mp3 === 'ding'),
+      'MP3 starts through the existing play endpoint');
+    transportState(play, true, 'MP3');
+    play.click(); await flush(40);
+    assert(store.audioStops === 1, 'second MP3 click posts to the stop endpoint');
+    transportState(play, false, 'MP3');
+  }
+
+  {
+    const { window, store } = await boot();
+    store.radio.stations = [{ name: 'test', url: 'http://example.com/stream' }];
+    await goto(window, '#/audio');
+    const play = window.document.querySelector('#sec-radio .device-play');
+    play.click(); await flush(40);
+    assert(store.radioPlay && store.radioPlay.station === 'test',
+      'radio starts through the existing play endpoint');
+    transportState(play, true, 'radio');
+    play.click(); await flush(40);
+    assert(store.audioStops === 1, 'second radio click posts to the stop endpoint');
+    transportState(play, false, 'radio');
+  }
+}
+
 async function melodiesIntact() {
   console.log('audio: melody editor still works inside the tab');
   const { window, store, netlog } = await boot();
@@ -239,6 +297,7 @@ async function radioIntact() {
   await mp3Upload();
   await mp3ListPlayDelete();
   await playingIndicator();
+  await rowTransportToggles();
   await melodiesIntact();
   await radioIntact();
   console.log(failures ? failures + ' check(s) failed' : 'all checks passed');

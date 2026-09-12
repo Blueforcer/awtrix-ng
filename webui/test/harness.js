@@ -65,6 +65,7 @@ function makeStore() {
     files: { '/ICONS': new Map(), '/MP3': new Map() },
     melodies: [], // [{name, rtttl, valid, notes, durationMs, bytes}]
     played: [],   // bodies POSTed to /api/v1/audio/play
+    audioStops: 0,
     radio: { available: true, mp3: { playing: false, name: '' },
              radio: { playing: false, station: '', title: '', error: '' }, stations: [] },
     radioPlay: null,   // last POST /api/v1/audio/play carrying a station or a url
@@ -207,12 +208,19 @@ function mockFetch(store, netlog, win) {
       if (body.station !== undefined || body.url !== undefined || body.index !== undefined) {
         store.radioPlay = body;
         store.radio.radio.playing = true;
+        store.radio.radio.station = body.station || body.url || String(body.index);
       } else {
         store.played.push(body);
+        if (body.mp3 !== undefined) store.radio.mp3 = { playing: true, name: body.mp3 };
       }
       return resp({ ok: true });
     }
-    if (p === '/api/v1/audio/stop') { store.radio.radio.playing = false; return resp({ ok: true }); }
+    if (p === '/api/v1/audio/stop') {
+      store.audioStops++;
+      store.radio.radio.playing = false;
+      store.radio.mp3 = { playing: false, name: '' };
+      return resp({ ok: true });
+    }
     const mp3 = p.match(/^\/api\/v1\/audio\/mp3\/(.+)$/);
     if (mp3 && method === 'DELETE') {
       const name = decodeURIComponent(mp3[1]) + '.mp3';
