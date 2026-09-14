@@ -67,10 +67,24 @@ async function scenario({ modified = false, conflict = false, draft = false } = 
   } finally { window.close(); }
 }
 
+async function unlinkedScenario() {
+  const { window, store } = await boot();
+  try {
+    store.caps.scriptUpdates = true;
+    store.scripts.set('Local', '# @name Local\nreturn nil');
+    await goto(window, '#/scripts');
+    await flush(100);
+    window.document.querySelector('.ftitem').click();
+    await flush();
+    assert.equal(window.document.querySelector('.script-hub-panel').hidden, true);
+  } finally { window.close(); }
+}
+
 (async () => {
+  await unlinkedScenario();
   await scenario();
   await scenario({ modified: true });
   await scenario({ conflict: true });
   await scenario({ draft: true });
-  console.log('hub-script-updates: 4 workflows passed (update, copy, conflict, in-flight draft)');
+  console.log('hub-script-updates: 5 workflows passed (unlinked, update, copy, conflict, in-flight draft)');
 })().catch(error => { console.error(error); process.exitCode = 1; });
