@@ -373,11 +373,14 @@ instead. A red/green swap normally means an RGB panel is being driven with the d
 
 `buttonCallback` lets the buttons trigger something in your house - a lamp, a scene, a Node-RED
 flow. Set it to the URL of your listener and AWTRIX sends it a `POST` with
-`Content-Type: application/x-www-form-urlencoded` and this body:
+`Content-Type: application/json` and this body:
 
+```json
+{"button":"left","state":true,"uid":"dcda0c29dcb8"}
 ```
-button=<left|middle|right>&state=<1|0>&uid=<mac>
-```
+
+`button` is `left`, `middle` or `right`, `state` is `true` when the button goes down and `false`
+when it is released, and `uid` is the device id from `GET /api/v1/device`.
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/system \
@@ -387,8 +390,8 @@ curl -X PUT http://<awtrix-ip>/api/v1/system \
 
 What to expect from it:
 
-* **One press is two calls** - `state=1` when the button goes down, `state=0` when it is released.
-  Act on `state=1` and ignore the other, or measure the gap to detect a hold.
+* **One press is two calls** - `"state":true` when the button goes down, `"state":false` when it
+  is released. Act on `true` and ignore the other, or measure the gap to detect a hold.
 * **The buttons keep their normal job.** The webhook runs alongside app switching; use
   [`blockNavigation`](settings.md#buttons) if left/right should only drive your automation, or a
   script that returns `true` from `on_button()` to take single presses on its own screen.

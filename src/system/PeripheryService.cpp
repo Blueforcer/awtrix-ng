@@ -23,8 +23,9 @@ void postButton(const std::string& url, const char* btn, bool state, const std::
   http.setConnectTimeout(300);
   http.setTimeout(300);
   if (!http.begin(wc, url.c_str())) return;
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-  String body = String("button=") + btn + "&state=" + (state ? "1" : "0") + "&uid=" + uid.c_str();
+  http.addHeader("Content-Type", "application/json");
+  String body = String("{\"button\":\"") + btn + "\",\"state\":" + (state ? "true" : "false") +
+                ",\"uid\":\"" + uid.c_str() + "\"}";
   http.POST(body);
   http.end();
 }

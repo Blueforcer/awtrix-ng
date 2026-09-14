@@ -21,6 +21,7 @@
 
 **Changed**
 
+- **The button webhook sends JSON.** `buttonCallback` now posts `{"button":"left","state":true,"uid":"…"}` with `Content-Type: application/json` instead of a form-encoded body. A listener that reads `button=…&state=1` needs adjusting.
 - **Berry scripts now use available memory instead of most fixed caps.** Besides removing `scriptLimit` and `scriptMaxBytes`, fixed limits on configuration fields, select options, imports, shared values, stores and HTTP request data were replaced with available-memory checks. Sending the two removed keys is ignored rather than refused, but a backup or an automation that still writes them needs looking at.
 - Berry VMs, regular expressions and GIF decoding retain less temporary memory, improving reliability when several scripts or animations run together.
 
