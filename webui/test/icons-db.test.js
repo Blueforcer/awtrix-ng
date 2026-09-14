@@ -16,13 +16,8 @@ const CATALOGUE = [
   ['clock', '', 32, 8, 1, 400],
 ];
 
-function card(window) {
-  return window.document.querySelector('.idb');
-}
-// The icons on the clock and the catalogue both render into .grid-icons; only
-// the catalogue's sits inside .idb.
 function ownGrid(window) {
-  return [...window.document.querySelectorAll('.grid-icons')].find(g => !g.closest('.idb'));
+  return window.document.querySelector('.grid-icons');
 }
 function segments(window) {
   return [...window.document.querySelectorAll('.segbar button')];
@@ -32,16 +27,6 @@ function openMenu(tile) {
   tile.querySelector('.acts button').click();
   return [...tile.querySelectorAll('.tmenu button')];
 }
-function tiles(window) {
-  return [...card(window).querySelectorAll('.tile .nm')].map(n => n.textContent);
-}
-async function search(window, text) {
-  const input = card(window).querySelector('input[type=text]');
-  input.value = text;
-  input.dispatchEvent(new window.Event('input'));
-  await flush(260); // the field is debounced by 200 ms
-}
-
 async function withGallery(extra) {
   const ctx = await boot();
   ctx.window.localStorage.awtrixHubToken = 'test-hub-token';
@@ -51,118 +36,6 @@ async function withGallery(extra) {
   await goto(ctx.window, '#/icons');
   await flush(60);
   return ctx;
-}
-
-async function testBrowse() {
-  const { window } = await withGallery();
-  assert(!!card(window), 'the gallery is mounted on #/icons');
-  assert(tiles(window).length === 4, 'all four catalogue entries render');
-  assert(tiles(window).includes('SuperMario'),
-    'a display name that differs from the slug is shown, not the slug');
-  const firstTile = card(window).querySelector('.tile');
-  const install = firstTile.querySelector('.acts button');
-  const details = firstTile.querySelector('.acts a');
-  assert(install.textContent === '' && install.querySelector('use')?.getAttribute('href') === '#i-import',
-    'install uses a download icon instead of text');
-  assert(details?.textContent === '' && details.querySelector('use')?.getAttribute('href') === '#i-info' &&
-    /^Details: /.test(details.getAttribute('aria-label')), 'details uses an accessible info icon');
-  assert(!/Copy for script/.test(firstTile.textContent), 'the redundant script-copy action is absent');
-
-  await search(window, 'mario');
-  assert(tiles(window).join() === 'SuperMario', 'search matches the display name');
-  await search(window, 'clo');
-  assert(tiles(window).join() === 'clock', 'search matches the slug');
-  await search(window, 'nothing-like-this');
-  assert(card(window).querySelectorAll('.tile').length === 0 &&
-    !!card(window).querySelector('.empty'), 'a search with no hits shows the empty note');
-  await search(window, '');
-
-  const size = card(window).querySelector('select');
-  size.value = '32x8';
-  size.dispatchEvent(new window.Event('change'));
-  await flush(20);
-  assert(tiles(window).sort().join() === 'Firepit,clock', 'the size filter keeps only 32x8');
-  size.value = '';
-  size.dispatchEvent(new window.Event('change'));
-
-  const anim = card(window).querySelector('input[type=checkbox]');
-  anim.checked = true;
-  anim.dispatchEvent(new window.Event('change'));
-  await flush(20);
-  assert(tiles(window).sort().join() === 'Firepit,SuperMario',
-    'the animated filter keeps only multi-frame icons');
-}
-
-async function testInstall() {
-  const { window, store } = await withGallery();
-  const uploads = [];
-  stubXhr(window, uploads, store);
-
-  await search(window, 'mario');
-  const button = card(window).querySelector('.tile .acts button');
-  assert(button.disabled === false, 'an icon that is not on the clock can be installed');
-  button.click();
-  await flush(80);
-
-  assert(uploads.length === 1, 'installing uploads exactly once (got ' + uploads.length + ')');
-  assert(uploads[0] && uploads[0].url.includes('dir=%2FICONS'),
-    'the upload targets the ICONS directory');
-  assert(uploads[0] && uploads[0].files.some(f => f.name === 'supermario.gif'),
-    'the file is named after the slug');
-  assert(card(window).querySelector('.tile .acts button').disabled === false,
-    'an installed icon remains available for deliberate reload');
-}
-
-async function testJpegEntry() {
-  const { window, store } = await withGallery(ctx => { ctx.store.iconExt.firepit = 'jpg'; });
-  const uploads = [];
-  stubXhr(window, uploads, store);
-
-  await search(window, 'firepit');
-  card(window).querySelector('.tile .acts button').click();
-  await flush(120);
-
-  assert(uploads.length === 1, 'a JPEG entry installs (got ' + uploads.length + ' uploads)');
-  assert(uploads[0] && uploads[0].files.some(f => f.name === 'firepit.jpg'),
-    'and lands under .jpg, not .gif');
-  assert(store.files['/ICONS'].has('firepit.jpg'), 'the clock holds the JPEG');
-}
-
-async function testAlreadyInstalled() {
-  const { window } = await withGallery(ctx => {
-    ctx.store.files['/ICONS'].set('mail.gif', 100);
-  });
-  await search(window, 'mail');
-  const button = card(window).querySelector('.tile .acts button');
-  assert(button.disabled === false && button.getAttribute('aria-label') === 'Reload from Hub: mail' &&
-    button.querySelector('use')?.getAttribute('href') === '#i-import', 'an installed icon offers deliberate reload');
-}
-
-/* The Hub launches with nothing in it, so "loaded and empty" is a normal state
-   and has to read differently from "still loading" and from "no search hits". */
-async function testEmptyCatalogue() {
-  const ctx = await boot();
-  ctx.store.iconDb = { v: 1, icons: [] };
-  await goto(ctx.window, '#/icons');
-  await flush(80);
-  const note = card(ctx.window).querySelector('.empty');
-  assert(!!note, 'an empty catalogue says so instead of showing a blank pane');
-  assert(!/matches|gefunden/i.test(note ? note.textContent : ''),
-    'and does not blame the search, which was never run');
-  assert(card(ctx.window).querySelector('.help').textContent === '',
-    'no count is offered when there is nothing to count');
-}
-
-async function testUnreachableCatalogue() {
-  const ctx = await boot();
-  ctx.store.iconDb = null; // json() answers null, so the rows never materialise
-  await goto(ctx.window, '#/icons');
-  await flush(60);
-  const grid = ownGrid(ctx.window);
-  assert(card(ctx.window).querySelectorAll('.tile').length === 0,
-    'no gallery tiles when the catalogue cannot be read');
-  assert(!!grid && grid.querySelectorAll('.tile, .empty').length > 0,
-    'the device icon list still renders when the catalogue is down');
 }
 
 async function testSubmit() {
@@ -305,15 +178,15 @@ async function testDuplicate() {
     'a rejected submission keeps the row open so the name can be changed');
 }
 
-/* The page is about the icons on the clock; the catalogue and the two upload
-   forms are alternatives you switch to, not a queue you scroll past. */
+/* The page only manages local icons. New icons come from a file, the editor,
+   or the full Hub website; there is no second catalogue embedded here. */
 async function testSegments() {
   const { window } = await withGallery(ctx => {
     ctx.store.files['/ICONS'].set('own.gif', 240);
     ctx.store.files['/ICONS'].set('two.gif', 120);
   });
   const segs = segments(window);
-  assert(segs.length === 3, 'three ways in: the clock, the catalogue, adding one');
+  assert(segs.length === 2, 'two ways in: icons on the clock and adding one');
   assert(/\(2\)/.test(segs[0].textContent),
     'the first segment counts what is on the clock (got "' + segs[0].textContent + '")');
 
@@ -321,68 +194,19 @@ async function testSegments() {
   const paneOf = i => segs[i].closest('.card').querySelectorAll(':scope > div')[i + 2];
   assert(segs[0].classList.contains('on') && paneOf(0).hidden === false,
     'the icons on the clock are what the page opens on');
-  assert(paneOf(1).hidden && paneOf(2).hidden, 'the other two start out of the way');
+  assert(paneOf(1).hidden, 'the add panel starts out of the way');
 
   segs[1].click();
-  assert(paneOf(0).hidden && !paneOf(1).hidden, 'picking the catalogue swaps the pane');
+  assert(paneOf(0).hidden && !paneOf(1).hidden, 'picking Add swaps the pane');
   assert(!segs[0].classList.contains('on') && segs[1].classList.contains('on'),
     'exactly one segment reads as current');
-  assert(!!card(window).querySelector('.tile'), 'the catalogue is the pane that got shown');
-
-  segs[2].click();
-  const add = paneOf(2);
-  assert(!add.hidden && !!add.querySelector('.drop') && !!add.querySelector('.lam'),
-    'adding an icon holds both the drop zone and the LaMetric field');
-}
-
-async function testInlineConnection() {
-  const { window } = await withGallery();
-  const panel = window.document.querySelector('.hub-connect');
-  assert(!!panel, 'publishing can be connected directly in the gallery');
-  const input = panel.querySelector('input[type=password]');
-  input.value = '  local-gallery-token  ';
-  panel.querySelector('.pri').click();
-  assert(window.localStorage.awtrixHubToken === 'local-gallery-token', 'save stores the trimmed token');
-  assert(/saved/i.test(panel.querySelector('[role=status]').textContent), 'status confirms storage without claiming server validation');
-  await goto(window, '#/system');
-  assert(window.document.querySelector('#sec-hub input').value === 'local-gallery-token', 'system and gallery share the same token');
-  await goto(window, '#/icons');
-  const restored = window.document.querySelector('.hub-connect');
-  assert(restored.querySelector('input').value === 'local-gallery-token', 'returning restores the token');
-  [...restored.querySelectorAll('button')].find(b => !b.classList.contains('pri')).click();
-  assert(!window.localStorage.awtrixHubToken, 'remove clears the token');
-}
-
-async function testRefreshAndRecovery() {
-  const { window, store } = await withGallery();
-  store.iconDb = { v: 1, icons: [['new-icon', 'Fresh icon', 8, 8, 1, 100]] };
-  const refresh = () => [...card(window).querySelectorAll('button')].find(b => b.textContent === 'Refresh gallery');
-  refresh().click();
-  await flush(80);
-  assert(tiles(window).join() === 'Fresh icon', 'refresh replaces a stale catalogue');
-  store.iconDb = null;
-  refresh().click();
-  await flush(80);
-  assert(!refresh().disabled, 'refresh remains available after a failed request');
-  store.iconDb = { v: 1, icons: CATALOGUE };
-  refresh().click();
-  await flush(80);
-  assert(tiles(window).length === 4, 'a retry recovers without leaving the gallery');
-}
-
-async function testHubHandoff() {
-  const { window } = await withGallery();
-  window.history.replaceState(null, '', '?icon=supermario#/icons');
-  await goto(window, '#/system');
-  await goto(window, '#/icons');
-  await flush(80);
-  assert(segments(window)[1].classList.contains('on'), 'a Hub link opens the community gallery');
-  assert(tiles(window).join() === 'SuperMario', 'the icon from the Hub link is already selected by search');
-  window.history.replaceState(null, '', '?icon=../secret#/icons');
-  await goto(window, '#/system');
-  await goto(window, '#/icons');
-  await flush(80);
-  assert(segments(window)[0].classList.contains('on'), 'invalid incoming icon names are ignored');
+  const addPane = paneOf(1);
+  assert(!!addPane.querySelector('.drop'), 'Add contains local file upload');
+  assert(!addPane.querySelector('.lam') && !/LaMetric/.test(addPane.textContent), 'the LaMetric downloader is gone');
+  const hubLink = addPane.querySelector('.hub-source a');
+  assert(hubLink?.href === 'https://awtrix.de/icons/' && hubLink.target === '_blank',
+    'Add links to the full AWTRIX Hub icon gallery');
+  assert(!window.document.querySelector('.idb'), 'the embedded Hub gallery is gone');
 }
 
 async function testInstalledSearchAndActions() {
@@ -435,8 +259,8 @@ async function testKeyboardNavigationAndUpload() {
   assert(tabs[0].tabIndex === -1 && tabs[1].tabIndex === 0,
     'only the selected tab stays in the tab sequence');
   tabs[1].dispatchEvent(new window.KeyboardEvent('keydown', {key:'End',bubbles:true}));
-  const add = window.document.getElementById(tabs[2].getAttribute('aria-controls'));
-  assert(!add.hidden && tabs[2].getAttribute('aria-selected') === 'true', 'End opens the Add panel');
+  const add = window.document.getElementById(tabs[1].getAttribute('aria-controls'));
+  assert(!add.hidden && tabs[1].getAttribute('aria-selected') === 'true', 'End opens the Add panel');
   const drop = add.querySelector('.drop');
   let chosen = 0;
   add.querySelector('input[type=file]').click = () => { chosen++; };
@@ -454,16 +278,7 @@ async function main() {
   await testEditorProvenanceBridge();
   await testInstalledSearchAndActions();
   await testKeyboardNavigationAndUpload();
-  await testHubHandoff();
-  await testInlineConnection();
-  await testRefreshAndRecovery();
   await testSegments();
-  await testBrowse();
-  await testInstall();
-  await testJpegEntry();
-  await testAlreadyInstalled();
-  await testEmptyCatalogue();
-  await testUnreachableCatalogue();
   await testSubmit();
   await testDeviceToken();
   await testDuplicate();
@@ -533,7 +348,6 @@ async function testContentAndOrigins(){
   await goto(window,'#/apps');await goto(window,'#/icons');await flush(80);
   const changed=[...ownGrid(window).querySelectorAll('.tile')].find(t=>t.querySelector('.nm').textContent==='mail');
   assert(changed.querySelector('[data-state=modified]')?.textContent==='Changed on AWTRIX','same-size edits are detected after page navigation');
-  assert(!card(window).querySelector('.tile .acts button').disabled,'changed same-name icon is not labelled installed');
   assert(openMenu(changed)[1].textContent==='Share as a new icon','changed Hub copy offers publishing a variant');
   assert(!window.validIconOrigin({name:'../mail.gif',slug:'mail',hub:'https://awtrix.de/icons/',sha256:hash('x')}),'origin cannot escape icon folder');
   assert(!window.validIconOrigin({name:'mail.gif',slug:'mail',hub:'javascript:alert(1)',sha256:hash('x')}),'origin cannot create an executable link');
@@ -548,11 +362,9 @@ async function testConflictProtection(){
     ctx.store.localIconBytes['mail.gif']='private drawing';
   });
   const uploads=[];stubXhr(window,uploads,store);
-  await search(window,'mail');card(window).querySelector('.tile .acts button').click();await flush(90);
-  assert(uploads.length===0&&store.localIconBytes['mail.gif']==='private drawing','Hub install never overwrites different same-name contents implicitly');
-  const replace=[...window.document.querySelectorAll('.toast button')].find(b=>b.textContent==='Use Hub version');
-  assert(!!replace,'conflict gives an explicit replacement choice');
-  replace.click();await flush(120);
+  let conflict=false;try{await window.idbInstall('mail');}catch(e){conflict=e.code==='iconConflict';}
+  assert(conflict&&uploads.length===0&&store.localIconBytes['mail.gif']==='private drawing','Hub install never overwrites different same-name contents implicitly');
+  await window.idbInstall('mail',{replace:true});
   assert(uploads.length===1&&store.localIconBytes['mail.gif']==='GIF89a-mail','explicit replacement installs requested Hub original');
   assert(!!store.iconOrigins.get('mail.gif'),'replacement records origin');
   store.localIconBytes['mail.gif']='edited after script page opened';

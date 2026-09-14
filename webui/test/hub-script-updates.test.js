@@ -11,6 +11,7 @@ async function scenario({ modified = false, conflict = false, draft = false } = 
   const { window, store } = await boot();
   try {
     window.AbortSignal = AbortSignal;
+    window.localStorage.awtrixHubToken = 'script-test-token';
     store.caps.scriptUpdates = true;
     const current = old + (modified ? '\n# custom' : '');
     store.scripts.set('Demo', current);
@@ -20,9 +21,13 @@ async function scenario({ modified = false, conflict = false, draft = false } = 
     window.fetch = async (url, opts = {}) => {
       if (String(url).startsWith('https://awtrix.de/api/v1/scripts/')) {
         assert.equal(opts.credentials, 'omit');
-        if (url.endsWith('/release')) return new Response(JSON.stringify({
-          id, revision: 2, sha256: hash(next), notes: '<img src=x onerror=alert(1)>'
-        }));
+        if (url.endsWith('/release')) {
+          assert.equal(opts.headers.Authorization, undefined, 'release metadata stays public');
+          return new Response(JSON.stringify({
+            id, revision: 2, sha256: hash(next), notes: '<img src=x onerror=alert(1)>'
+          }));
+        }
+        assert.equal(opts.headers.Authorization, 'Bearer script-test-token');
         if (draft) await new Promise(resolve => { releaseSource = resolve; });
         return new Response(next);
       }
@@ -67,6 +72,40 @@ async function scenario({ modified = false, conflict = false, draft = false } = 
   } finally { window.close(); }
 }
 
+async function tokenRequiredScenario() {
+  const { window, store } = await boot();
+  try {
+    window.AbortSignal = AbortSignal;
+    store.caps.scriptUpdates = true;
+    store.scripts.set('Demo', old);
+    const fetchDevice = window.fetch;
+    let sourceRequests = 0;
+    window.fetch = async (url, opts = {}) => {
+      if (String(url).endsWith('/release')) return new Response(JSON.stringify({
+        id, revision: 2, sha256: hash(next), notes: ''
+      }));
+      if (String(url).endsWith('/source')) { sourceRequests++; return new Response(next); }
+      return fetchDevice(url, opts);
+    };
+    await goto(window, '#/scripts');
+    await flush(100);
+    window.document.querySelector('.ftitem').click();
+    await flush();
+    window.document.querySelector('.script-hub-panel button').click();
+    window.document.querySelector('.toast .tacts button.pri').click();
+    await flush(100);
+    assert.equal(sourceRequests, 0, 'source is not requested without a Hub token');
+    assert.equal(store.scripts.get('Demo'), old, 'the installed script stays unchanged');
+    const connect = [...window.document.querySelectorAll('.toast .tacts button')]
+      .find(button => button.textContent === 'Connect to Hub');
+    assert.ok(connect, 'the blocked update points to Hub settings');
+    connect.click();
+    await flush(80);
+    assert.equal(window.location.hash, '#/system');
+    assert.equal(window.document.activeElement, window.document.querySelector('#sec-hub input[type=password]'));
+  } finally { window.close(); }
+}
+
 async function unlinkedScenario() {
   const { window, store } = await boot();
   try {
@@ -82,9 +121,10 @@ async function unlinkedScenario() {
 
 (async () => {
   await unlinkedScenario();
+  await tokenRequiredScenario();
   await scenario();
   await scenario({ modified: true });
   await scenario({ conflict: true });
   await scenario({ draft: true });
-  console.log('hub-script-updates: 5 workflows passed (unlinked, update, copy, conflict, in-flight draft)');
+  console.log('hub-script-updates: 6 workflows passed (unlinked, token gate, update, copy, conflict, in-flight draft)');
 })().catch(error => { console.error(error); process.exitCode = 1; });

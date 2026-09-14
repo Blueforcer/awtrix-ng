@@ -238,10 +238,6 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
   font-size:11.5px;text-align:left}
 .tmenu button:hover{background:#ffffff1a}
 .tmenu button.danger{color:#f85149}
-.lam,.idb{display:grid;gap:10px}
-.lam .prev{width:52px;height:52px;flex:none;image-rendering:pixelated;background:#000;border-radius:6px}
-.idb .row>input[type=text]{flex:1 1 140px;width:auto}
-.idb .row>select{flex:0 0 auto;width:auto}
 .tile .ft input{flex:1;min-width:0;padding:2px 5px;font-size:11.5px}
 .tile .ft button{flex:none;padding:2px 7px;font-size:11px}
 .tile .ft.share{flex-wrap:wrap}
@@ -597,11 +593,6 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 }
 
 .script-hub-panel{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap}.script-hub-panel[hidden]{display:none}.script-hub-panel p{width:100%;margin:0}.script-hub-panel a{font-size:12px}.filetree>button{margin:8px;max-width:calc(100% - 16px)}
-.hub-connect{border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:12px 14px}
-.hub-connect summary{cursor:pointer;font-size:13px;font-weight:600}
-.hub-connect summary .help{font-weight:400;margin-left:12px}
-.hub-connect-body{display:grid;gap:10px;margin-top:14px}
-.hub-connect-body input{flex:1 1 200px;min-width:0}
 /* Gallery layout uses the same theme colours as the rest of the device. */
 .icons-page.card{padding:24px;gap:22px;background:none;border:0}
 .icons-page [hidden]{display:none!important}
@@ -638,38 +629,19 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .icons-page .tmenu :is(button,a){display:block;text-align:left;padding:8px;font-size:12px;color:#e6edf3;min-height:34px}
 .icons-page .tmenu button.danger{color:#f85149}
 .icons-page .tmenu a:hover{background:#ffffff1a;border-radius:6px}
-.idb{gap:16px}
-.idb-toolbar{padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--card)}
-.idb-toolbar label{font-size:12px;white-space:nowrap;min-height:32px}
-.idb .tile .idb-ft{padding:10px 10px 9px;gap:7px}
-.idb .tile .ft .nm{border:0;background:none;padding:0;text-align:left;font-weight:600}
-.idb-card-foot{display:flex;align-items:center;justify-content:space-between;width:100%;gap:8px}
-.idb .tile .acts{justify-content:flex-end;padding:0;margin:0;gap:5px}
-.idb .tile .acts button,.idb .tile .acts a{display:inline-flex;align-items:center;justify-content:center;
-  width:32px;min-width:32px;height:32px;min-height:32px;padding:0;border-radius:7px}
-.idb .tile .acts button.pri{background:var(--bna);border-color:#f5a56866;color:var(--acc)}
-.idb .tile .acts button.pri:hover{background:#f5a56820;border-color:var(--acc)}
-.idb .tile .acts a{border:1px solid var(--border);background:var(--card2);color:var(--fg)}
-.idb .tile .acts a:hover{border-color:var(--acc);color:var(--acc)}
-.idb .tile .acts .ic{width:16px;height:16px}
-.icons-page .hub-connect{background:none;border:0;border-top:1px solid var(--border);border-radius:0;padding:17px 0 0}
-.icons-page .hub-connect summary .help{font-size:11px;color:var(--dim)}
-.icons-page .hub-connect-body{max-width:680px;gap:12px;padding:6px 0 0}
 .icons-add{display:grid;grid-template-columns:1.1fr 1fr;gap:20px;align-items:start}
 .icons-add>section{padding:20px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:grid;gap:15px;min-width:0}
 .icons-add h3{font-size:16px;font-weight:600}
 .icons-add .drop{padding:30px 16px;line-height:1.7;background:var(--bg);border-radius:9px;cursor:pointer;font-size:13px}
-.icons-add .lam .orsep{display:none}
-.icons-add .lam>.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px}
-.icons-add .lam>.row>.pri{grid-column:1/-1}
-.icons-add .lam .prev{width:96px;height:96px}
+.icons-add .hub-source{align-content:start}
+.icons-add .hub-source a{justify-self:start}
 .icons-page .empty{grid-column:1/-1;padding:36px 20px;border:1px dashed var(--border);border-radius:12px;text-align:center;color:var(--dim)}
 .icons-page .empty button{display:block;margin:16px auto 0}
 @media(max-width:640px){
   .icons-page.card{padding:8px 0;gap:20px}
   .icons-page h2{font-size:26px}
   .icons-page .ihdr .st{justify-content:start;flex-basis:100%;margin:0}
-  .icons-page .segbar{gap:0;display:grid;grid-template-columns:1fr 1fr 1fr}
+  .icons-page .segbar{gap:0;display:grid;grid-template-columns:1fr 1fr}
   .icons-page .segbar button{font-size:12px;padding:10px 4px}
   .icons-page .grid-icons{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .icons-page .tile .pw img{inset:11px;width:calc(100% - 22px);height:calc(100% - 22px)}
@@ -680,8 +652,6 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
   .icons-toolbar input{flex-basis:100%;max-width:none}
   .icons-add{grid-template-columns:1fr}
   .icons-add>section{padding:16px}
-  .hub-connect summary .help{display:block;margin:5px 0 0}
-  .idb-intro{align-items:start;flex-direction:column;gap:12px}
 }
 
 /* Device console skin: warm graphite around the content, with colour reserved
@@ -718,8 +688,7 @@ tbody tr:hover{background:var(--card2)}
 .icons-page .tile .pw img{inset:8px;width:calc(100% - 16px);height:calc(100% - 16px)}
 .icons-page .tile .acts button.pri{color:#23170e}
 :root[data-theme=light] .icons-page .tile .acts button.pri{color:#fff}
-.idb-toolbar,.icons-add>section{box-shadow:0 10px 26px #00000016}
-.hub-connect summary{min-height:44px;display:flex;align-items:center}
+.icons-add>section{box-shadow:0 10px 26px #00000016}
 .bar>i{background:var(--acc)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
   scroll-behavior:auto!important;transition-duration:.01ms!important}}
@@ -996,18 +965,12 @@ const I18N={en:{
   melonotes:'notes',melobroken:'Does not parse - fix it and save',
   meloexists:'A melody with this name already exists',
   melobadname:'Name: letters, digits, _ and -, up to 24 characters',
-  lametric:"LaMetric gallery",lamhelp:"Enter an icon number from the LaMetric gallery.",
-  lamid:'Icon ID, e.g. 2867',fetch:'Fetch',lamneed:"Your browser needs an internet connection to load icons.",
-  lamsave:'Save to AWTRIX',
-  idb:'Hub gallery',idbhelp:"Find icons for your display. Connect your Hub account to install them.",
-  idbsearch:'Search icons',idbany:'Any size',idbanim:'Animated only',idbnone:"No matching icons",
-  idbmore:'Show more',idbempty:"No icons have been shared yet.",idbinst:'Install',idbon:'Installed',idbfail:"Could not reach the Hub. Check your internet connection and try again.",
-  idbcopy:'Copy icon name',
+  idbnone:"No matching icons",idbfail:"Could not reach the Hub. Check your internet connection and try again.",
   idbterms:"By publishing, you agree to the terms of service.",
-  hubConnect:'Connect to Hub',hubReady:"Key saved",hubIntro:"Copy the connection key from your Hub account and paste it below. You can then install, reload and share icons.",hubSave:'Save key',hubStorageFail:"The key could not be saved. Allow this browser to store website data and try again.",idbrefresh:"Refresh gallery",idbloading:"Loading icons…",idbinstalling:'Installing…',idbdetails:'Details',
+  hubConnect:'Connect to Hub',hubStorageFail:"The key could not be saved. Allow this browser to store website data and try again.",
   hubIconUnavailable:"This icon is no longer available on the Hub.",hubDownloadFailed:"The icon could not be downloaded. Please try again.",hubPublishFailed:"The icon could not be published. Please try again.",hubPublishing:"Publishing…",
-  hubSection:'AWTRIX Hub',hubSectionH:"Connect your Hub account to install and share icons.",
-  hubAuthRequired:"Connect your Hub account to download icons.",hubAuthRejected:"The Hub did not accept this key. Check it or add a new one.",hubWrongHost:"This icon comes from a different Hub. Open its Hub page to download it.",hubTokenLbl:"Hub connection key",hubTokenH:"Saved only in this browser. Connect your account again when using another browser.",
+  hubSection:'AWTRIX Hub',hubSectionH:"Connect your Hub account to download icons and script updates, and to share icons.",
+  hubAuthRequired:"Connect your Hub account to download from the Hub.",hubAuthRejected:"The Hub did not accept this key. Check it or add a new one.",hubWrongHost:"This icon comes from a different Hub. Open its Hub page to download it.",hubTokenLbl:"Hub connection key",hubTokenH:"Saved only in this browser. Connect your account again when using another browser.",
   hubOn:'Key saved',hubOff:"No key saved",hubClear:"Remove key",hubCleared:"Hub key removed from this browser.",hubStored:"Hub key saved in this browser.",
   hubGetLbl:"Get a connection key",hubGetH:"Copy your key from your Hub account settings.",hubGet:"Open Hub account",
   icfromhub:'From the Hub',icmodified:"Changed on AWTRIX",iclocal:"Only on AWTRIX",icchecking:"Checking Hub status…",icunknown:"Hub status unavailable",
@@ -1020,7 +983,7 @@ const I18N={en:{
   scricons:'Install icons',scriconsok:"Icons ready",
   scriconsfail:"Not available on the Hub:",scriconserr:"These icons could not be installed:",idbsend:'Publish',
   icintro:"Choose icons for your display or create your own.",icsearch:'Search installed icons',icclear:'Clear search',icstorage:'Device storage',icdownload:"Download icon",icanimated:'Animated',
-  icupload:"Add an image",icuploadhelp:"Choose an image from your computer. Animated GIFs stay animated.",icdrop:'Choose files or drop them here · GIF, PNG or JPG',iccreate:"Create an icon",iccreatehelp:"Draw an icon or animation and save it to your AWTRIX.",
+  icupload:"Add icon",icuploadhelp:"Choose an image from your computer. Animated GIFs stay animated.",icdrop:'Choose files or drop them here · GIF, PNG or JPG',ichub:"Find icons in the Hub",ichubhelp:"Discover community icons in the AWTRIX Hub and send them to this display.",ichubopen:"Open icon gallery",iccreate:"Create an icon",iccreatehelp:"Draw an icon or animation and save it to your AWTRIX.",
   icown:'On AWTRIX',icadd:'Add',icnone:'No icons on AWTRIX yet',icsend:'Publish to Hub',icshow:'Show on display',
   idbdone:"Your icon is now published on the Hub.",idbopen:"View icon",
   idbdup:"This icon is already on the Hub as",
@@ -1190,18 +1153,12 @@ const I18N={en:{
   melonotes:'Noten',melobroken:'Nicht lesbar - korrigieren und speichern',
   meloexists:'Eine Melodie mit diesem Namen gibt es schon',
   melobadname:'Name: Buchstaben, Ziffern, _ und -, maximal 24 Zeichen',
-  lametric:"LaMetric-Galerie",lamhelp:"Gib die Nummer eines Icons aus der LaMetric-Galerie ein.",
-  lamid:'Icon-ID, z. B. 2867',fetch:'Laden',lamneed:"Zum Laden von Icons benötigt dein Browser Internetzugang.",
-  lamsave:'Auf AWTRIX speichern',
-  idb:'Hub-Galerie',idbhelp:"Entdecke Icons für dein Display. Verbinde dein Hub-Konto, um sie zu installieren.",
-  idbsearch:'Icons suchen',idbany:'Alle Größen',idbanim:'Nur animierte',idbnone:"Keine passenden Icons gefunden",
-  idbmore:'Mehr anzeigen',idbempty:"Hier wurden noch keine Icons veröffentlicht.",idbinst:'Installieren',idbon:'Installiert',idbfail:"Der Hub ist nicht erreichbar. Prüfe deine Internetverbindung und versuche es erneut.",
-  idbcopy:'Icon-Namen kopieren',
+  idbnone:"Keine passenden Icons gefunden",idbfail:"Der Hub ist nicht erreichbar. Prüfe deine Internetverbindung und versuche es erneut.",
   idbterms:"Mit dem Veröffentlichen akzeptierst du die Nutzungsbedingungen.",
-  hubConnect:'Mit dem Hub verbinden',hubReady:"Schlüssel gespeichert",hubIntro:"Kopiere den Verbindungsschlüssel aus deinem Hub-Konto und füge ihn hier ein. Danach kannst du Icons installieren, neu laden und veröffentlichen.",hubSave:'Schlüssel speichern',hubStorageFail:"Der Schlüssel konnte nicht gespeichert werden. Erlaube diesem Browser, Website-Daten zu speichern, und versuche es erneut.",idbrefresh:"Galerie aktualisieren",idbloading:"Icons werden geladen…",idbinstalling:'Wird installiert…',idbdetails:'Details',
+  hubConnect:'Mit dem Hub verbinden',hubStorageFail:"Der Schlüssel konnte nicht gespeichert werden. Erlaube diesem Browser, Website-Daten zu speichern, und versuche es erneut.",
   hubIconUnavailable:"Dieses Icon ist im Hub nicht mehr verfügbar.",hubDownloadFailed:"Das Icon konnte nicht heruntergeladen werden. Versuche es erneut.",hubPublishFailed:"Das Icon konnte nicht veröffentlicht werden. Versuche es erneut.",hubPublishing:"Wird veröffentlicht…",
-  hubSection:'AWTRIX Hub',hubSectionH:"Verbinde dein Hub-Konto, um Icons zu installieren und zu veröffentlichen.",
-  hubAuthRequired:"Verbinde dein Hub-Konto, um Icons herunterzuladen.",hubAuthRejected:"Der Hub akzeptiert diesen Schlüssel nicht. Prüfe ihn oder füge einen neuen ein.",hubWrongHost:"Dieses Icon stammt aus einem anderen Hub. Öffne seine Hub-Seite, um es herunterzuladen.",hubTokenLbl:"Hub-Verbindungsschlüssel",hubTokenH:"Nur in diesem Browser gespeichert. Verbinde dein Konto in anderen Browsern erneut.",
+  hubSection:'AWTRIX Hub',hubSectionH:"Verbinde dein Hub-Konto, um Icons und Script-Updates herunterzuladen und Icons zu veröffentlichen.",
+  hubAuthRequired:"Verbinde dein Hub-Konto, um Inhalte aus dem Hub herunterzuladen.",hubAuthRejected:"Der Hub akzeptiert diesen Schlüssel nicht. Prüfe ihn oder füge einen neuen ein.",hubWrongHost:"Dieses Icon stammt aus einem anderen Hub. Öffne seine Hub-Seite, um es herunterzuladen.",hubTokenLbl:"Hub-Verbindungsschlüssel",hubTokenH:"Nur in diesem Browser gespeichert. Verbinde dein Konto in anderen Browsern erneut.",
   hubOn:'Gespeichert',hubOff:"Kein Schlüssel gespeichert",hubClear:"Schlüssel entfernen",hubCleared:"Hub-Schlüssel aus diesem Browser entfernt.",hubStored:"Hub-Schlüssel in diesem Browser gespeichert.",
   hubGetLbl:"Verbindungsschlüssel abrufen",hubGetH:"Kopiere deinen Schlüssel aus den Kontoeinstellungen im Hub.",hubGet:"Hub-Konto öffnen",
   icfromhub:'Aus dem Hub',icmodified:"Auf AWTRIX geändert",iclocal:"Nur auf AWTRIX",icchecking:"Hub-Status wird geprüft…",icunknown:"Hub-Status nicht verfügbar",
@@ -1214,7 +1171,7 @@ const I18N={en:{
   scricons:'Icons installieren',scriconsok:"Icons bereit",
   scriconsfail:"Im Hub nicht verfügbar:",scriconserr:"Diese Icons konnten nicht installiert werden:",idbsend:'Veröffentlichen',
   icintro:"Wähle Icons für dein Display aus oder gestalte eigene.",icsearch:'Installierte Icons suchen',icclear:'Suche zurücksetzen',icstorage:'Gerätespeicher',icdownload:"Icon herunterladen",icanimated:'Animiert',
-  icupload:"Bild hinzufügen",icuploadhelp:"Wähle ein Bild von deinem Computer. GIF-Animationen bleiben erhalten.",icdrop:'Dateien auswählen oder hier ablegen · GIF, PNG oder JPG',iccreate:"Icon gestalten",iccreatehelp:"Gestalte ein Icon oder eine Animation und speichere es auf deiner AWTRIX.",
+  icupload:"Icon hinzufügen",icuploadhelp:"Wähle ein Bild von deinem Computer. GIF-Animationen bleiben erhalten.",icdrop:'Dateien auswählen oder hier ablegen · GIF, PNG oder JPG',ichub:"Icons im Hub finden",ichubhelp:"Entdecke Community-Icons im AWTRIX Hub und sende sie an dieses Display.",ichubopen:"Icon-Galerie öffnen",iccreate:"Icon gestalten",iccreatehelp:"Gestalte ein Icon oder eine Animation und speichere es auf deiner AWTRIX.",
   icown:'Auf AWTRIX',icadd:'Hinzufügen',icnone:'Noch keine Icons auf AWTRIX',icsend:'Im Hub veröffentlichen',icshow:'Anzeigen',
   idbdone:"Dein Icon ist jetzt im Hub veröffentlicht.",idbopen:"Icon ansehen",
   idbdup:"Dieses Icon gibt es bereits im Hub als",
@@ -2849,8 +2806,15 @@ function hubScriptLink(id,code){
 }
 async function hubScriptRelease(id,part='release'){
   if(!/^[A-Za-z0-9]{12}$/.test(id)||!['release','source'].includes(part))throw new Error(t('suIntegrity'));
+  const headers={Accept:part==='release'?'application/json':'text/plain'};
+  if(part==='source'){
+    const token=hubToken();
+    if(!token)throw hubDownloadError('hubAuthRequired');
+    headers.Authorization='Bearer '+token;
+  }
   const r=await fetch('https://awtrix.de/api/v1/scripts/'+id+'/'+part,
-    {credentials:'omit',redirect:'error',cache:'no-store',headers:{Accept:part==='release'?'application/json':'text/plain'},signal:AbortSignal.timeout(15000)});
+    {credentials:'omit',redirect:'error',cache:'no-store',headers,signal:AbortSignal.timeout(15000)});
+  if(r.status===401||r.status===403)throw hubDownloadError('hubAuthRejected');
   if(!r.ok){const e=new Error(t(r.status===404?'suMissing':'suOffline'));e.status=r.status;throw e;}
   if(part==='source')return r.text();
   const m=await r.json();
@@ -3645,10 +3609,17 @@ function hubTokenSection(page){
   clear.addEventListener('click',()=>{inp.value='';if(store(''))toast(t('hubCleared'));});
   open.addEventListener('click',()=>window.open(hubAccountUrl(),'_blank','noopener'));
   paint();
-  page.section('hub',t('hubSection'),t('hubSectionH'),[
+  const section=page.section('hub',t('hubSection'),t('hubSectionH'),[
     actionRow(t('hubTokenLbl'),t('hubTokenH'),[state,inp,clear]),
     actionRow(t('hubGetLbl'),t('hubGetH'),[open]),
   ]);
+  if(focusHubSettings){
+    focusHubSettings=false;
+    requestAnimationFrame(()=>{
+      section.scrollIntoView?.({behavior:'smooth',block:'start'});
+      inp.focus();
+    });
+  }
 }
 function actionRow(label,help,ctls,key){
   return el('div',{class:'frow'},
@@ -3868,29 +3839,24 @@ async function delFile(path){
   await api('/api/v1/files?path='+encodeURIComponent(path),{method:'DELETE'});
   assetRev++;
 }
-function requestedHubIcon(){
-  const slug=new URL(location.href).searchParams.get('icon')||'';
-  return /^[a-z0-9_-]{1,32}$/.test(slug)?slug:'';
-}
 function viewIcons(view){
   const iconsGrid=el('div',{class:'grid-icons'});
-  const db=iconDbCard(()=>reload());
   const meter=el('div',{class:'st'});
   const ownTab=el('button',null,t('icown'));
   const ownSearch=el('input',{type:'search',placeholder:t('icsearch'),'aria-label':t('icsearch')});
   const ownInfo=el('span',{class:'help',role:'status'});
   let ownFiles=[],reloadVersion=0;
-  const add=el('button',{type:'button',onclick:()=>selectPane(2,true)},t('icadd'));
+  const add=el('button',{type:'button',onclick:()=>selectPane(1,true)},t('icadd'));
   const upload=uploadZone('/ICONS','.png,.jpg,.jpeg,.gif',t('icdrop'),reload,true);
   const drop=upload.querySelector('.drop');
   drop.setAttribute('role','button');drop.tabIndex=0;
   drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();drop.click();}});
   const panes=[[ownTab,el('div',null,
     el('div',{class:'icons-toolbar'},ownSearch,ownInfo,add),iconsGrid)],
-    [el('button',null,t('idb')),el('div',{hidden:'hidden'},db.node)],
     [el('button',null,t('icadd')),el('div',{hidden:'hidden'},el('div',{class:'icons-add'},
       el('section',null,el('h3',null,t('icupload')),el('p',{class:'ghelp'},t('icuploadhelp')),upload),
-      el('section',null,el('h3',null,t('lametric')),lametricCard(reload)),
+      el('section',{class:'hub-source'},el('h3',null,t('ichub')),el('p',{class:'ghelp'},t('ichubhelp')),
+        el('a',{class:'pri',href:iconDbUrl(),target:'_blank',rel:'noopener'},t('ichubopen')+' →')),
       el('section',null,el('h3',null,t('iccreate')),el('p',{class:'ghelp'},t('iccreatehelp')),
         el('a',{href:'#/editor'},t('editorTab')+' →'))))]];
   function selectPane(index,focus=false){
@@ -3905,18 +3871,18 @@ function viewIcons(view){
     pane.id='icons-pane-'+i;pane.setAttribute('role','tabpanel');pane.setAttribute('aria-labelledby',tab.id);
     tab.addEventListener('click',()=>selectPane(i));
     tab.addEventListener('keydown',e=>{
-      const next=e.key==='ArrowRight'?(i+1)%3:e.key==='ArrowLeft'?(i+2)%3:e.key==='Home'?0:e.key==='End'?2:null;
+      const next=e.key==='ArrowRight'?(i+1)%panes.length:e.key==='ArrowLeft'?(i+panes.length-1)%panes.length:e.key==='Home'?0:e.key==='End'?panes.length-1:null;
       if(next!==null){e.preventDefault();selectPane(next,true);}
     });
   });
-  selectPane(requestedHubIcon()?1:0);
+  selectPane(0);
   function paintOwn(){
     const needle=ownSearch.value.trim().toLowerCase();
     const files=ownFiles.filter(f=>f.name.toLowerCase().includes(needle));
     ownInfo.textContent=needle?files.length+' '+t('of')+' '+ownFiles.length:'';
     iconsGrid.replaceChildren(...(files.length?files.map(iconTile):[
       el('div',{class:'empty'},t(ownFiles.length?'idbnone':'icnone'),
-        el('button',{type:'button',onclick:()=>{if(ownFiles.length){ownSearch.value='';paintOwn();ownSearch.focus();}else selectPane(2,true);}},
+        el('button',{type:'button',onclick:()=>{if(ownFiles.length){ownSearch.value='';paintOwn();ownSearch.focus();}else selectPane(1,true);}},
           t(ownFiles.length?'icclear':'icadd')))]));
   }
   ownSearch.addEventListener('input',()=>paintOwn());
@@ -3936,7 +3902,6 @@ function viewIcons(view){
       const checked=await iconInventory(files);
       if(version!==reloadVersion)return;
       ownFiles=checked;paintOwn();
-      db.setInstalled(new Set(checked.filter(f=>f.state==='hub'&&f.origin.hub===iconDbUrl()&&f.origin.slug===f.name.replace(/\.[^.]+$/,'')).map(f=>f.origin.slug)));
     }catch(e){toast(e.message,false);}
   }
   function iconTile(f){
@@ -3987,31 +3952,8 @@ function viewIcons(view){
   view.append(el('div',{class:'card wide icons-page'},
     el('div',{class:'ihdr'},el('div',null,el('h2',null,t('icons')),el('p',{class:'ghelp'},t('icintro'))),meter),
     el('div',{class:'segbar',role:'tablist','aria-label':t('icons')},...panes.map(p=>p[0])),
-    ...panes.map(p=>p[1]),hubConnectionCard()));
+    ...panes.map(p=>p[1])));
   reload();
-}
-// The same connection key authorizes downloads and publication.
-function hubConnectionCard(){
-  const input=el('input',{type:'password',autocomplete:'off',spellcheck:'false',value:hubToken(),'aria-label':t('hubTokenLbl')});
-  const save=el('button',{type:'button',class:'pri'},t('hubSave'));
-  const remove=el('button',{type:'button'},t('hubClear'));
-  const status=el('span',{class:'help',role:'status'});
-  const summary=el('summary',null,t('hubConnect'),status);
-  const panel=el('details',{class:'hub-connect'},summary,
-    el('div',{class:'hub-connect-body'},el('p',{class:'help'},t('hubIntro')),
-      el('a',{href:hubAccountUrl()+'#device-token',target:'_blank',rel:'noopener'},t('hubGet')),
-      el('div',{class:'row'},input,save,remove),el('p',{class:'help'},t('hubTokenH'))));
-  function paint(){status.textContent=hubToken()?t('hubReady'):t('hubOff');remove.disabled=!hubToken();}
-  function store(value){
-    try{
-      if(value)localStorage.awtrixHubToken=value;else localStorage.removeItem('awtrixHubToken');
-      input.value=value;paint();toast(t(value?'hubStored':'hubCleared'));
-    }catch(e){toast(t('hubStorageFail'),false);}
-  }
-  save.addEventListener('click',()=>store(input.value.trim()));
-  remove.addEventListener('click',()=>store(''));
-  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();save.click();}});
-  paint();return panel;
 }
 // Swaps a tile's footer into a name field, so submitting needs no dialog.
 function descriptiveIconName(name){return /\p{L}/u.test(String(name||'').trim());}
@@ -4045,7 +3987,7 @@ function shareRow(f,base,ft,onDone){
         const has=!!hubToken();
         toast(t(has?'idbauthbad':'idbauth'),false,[
           e.pr?{label:t('idbsignin'),pri:!has,fn:()=>window.open(e.pr,'_blank','noopener')}:null,
-          {label:t('hubConnect'),pri:has,fn:()=>{const p=document.querySelector('.hub-connect');if(p){p.open=true;p.querySelector('input').focus();}else location.hash='#/system';}},
+          {label:t('hubConnect'),pri:has,fn:goToHubSettings},
           {label:t('close'),fn:()=>{}},
         ].filter(Boolean));
       }else toast(e.slug?t('idbdup')+' '+e.slug:e.message,false);
@@ -4106,9 +4048,19 @@ async function hubDownloadFile(value){
   if(response.status===401||response.status===403)throw hubDownloadError('hubAuthRejected');
   return response;
 }
-function connectHubAction(){return{label:t('hubConnect'),fn:()=>{
-  location.hash='#/icons';setTimeout(()=>{const panel=$('.hub-connect');if(panel){panel.open=true;panel.querySelector('input')?.focus();}},100);
-}};}
+let focusHubSettings=false;
+function goToHubSettings(){
+  focusHubSettings=true;
+  const section=$('#sec-hub');
+  if(currentRoute()==='system'&&section){
+    focusHubSettings=false;
+    section.scrollIntoView?.({behavior:'smooth',block:'start'});
+    section.querySelector('input')?.focus();
+    return;
+  }
+  location.hash='#/system';
+}
+function connectHubAction(){return{label:t('hubConnect'),fn:goToHubSettings};}
 async function idbFetch(slug){
   let last=404;
   for(const ext of ['gif','jpg']){
@@ -4272,140 +4224,6 @@ async function idbSubmit(blob,name,basedOn,update=null){
   err.slug=d.slug&&d.error==='duplicate'?d.slug:null;
   err.pr=d.pr||'';
   throw err;
-}
-const IDB_PAGE=60;
-function iconDbCard(onInstalled){
-  const q=el('input',{type:'text',placeholder:t('idbsearch'),class:'grow','aria-label':t('idbsearch')});
-  q.value=requestedHubIcon();
-  const size=el('select',{'aria-label':t('idbany')},el('option',{value:''},t('idbany')),
-    el('option',{value:'8x8'},'8×8'),el('option',{value:'32x8'},'32×8'));
-  const anim=el('input',{type:'checkbox'});
-  const info=el('div',{class:'help',role:'status','aria-live':'polite'});
-  const grid=el('div',{class:'grid-icons'});
-  const more=el('button',null,t('idbmore'));
-  const moreRow=el('div',{style:'text-align:center',hidden:'hidden'},more);
-  // 'loaded' is not the same question as 'rows.length': a catalogue that is
-  // simply still empty has to say so, not sit there blank.
-  let rows=[],loaded=false,shown=IDB_PAGE,installed=new Set();
-  function tile(r){
-    const on=installed.has(r.slug);
-    const btn=el('button',{class:on?'':'pri',title:on?t('icreload'):t('idbinst'),'aria-label':(on?t('icreload'):t('idbinst'))+': '+r.name,
-      disabled:false},icon('import'));
-    function labelInstall(installedNow,busy=false){
-      const label=busy?t('idbinstalling'):installedNow?t('icreload'):t('idbinst');
-      btn.title=label;btn.setAttribute('aria-label',label+': '+r.name);
-      btn.toggleAttribute('aria-busy',busy);
-      btn.replaceChildren(icon('import'));
-    }
-    async function install(replace=false){
-      btn.disabled=true;labelInstall(installed.has(r.slug),true);
-      try{
-        let ext;
-        if(installed.has(r.slug)){
-          const files=await iconInventory(),file=files.find(f=>f.origin&&f.origin.hub===iconDbUrl()&&f.origin.slug===r.slug&&f.name.replace(/\.[^.]+$/,'')===r.slug);
-          if(file)ext=(await reloadHubIcon(file,{replace})).split('.').pop();else ext=await idbInstall(r.slug,{replace});
-        }else ext=await idbInstall(r.slug,{replace});
-        installed.add(r.slug);btn.classList.remove('pri');labelInstall(true);btn.disabled=false;
-        toast(t('idbon')+': '+r.name);
-        onInstalled&&onInstalled();
-      }catch(e){btn.disabled=false;labelInstall(installed.has(r.slug));
-        toast(e.message,false,e.code==='iconConflict'?[
-          {label:t('ickeep'),fn:()=>{}},{label:t('icreplace'),fn:()=>install(true)}]:e.code==='hubAuthentication'?[connectHubAction()]:undefined);
-      }
-    }
-    btn.addEventListener('click',()=>install());
-    const img=el('img',{src:iconDbUrl()+encodeURIComponent(r.slug)+'/preview.webp',alt:r.name,width:r.w,height:r.h,loading:'lazy'});
-    return el('div',{class:'tile'},
-      el('div',{class:'pw'},img),
-      el('div',{class:'ft idb-ft'},
-        el('button',{type:'button',class:'nm cp',title:r.slug===r.name?t('idbcopy'):r.slug+' — '+t('idbcopy'),
-          onclick:()=>copyText(r.slug).then(()=>toast(r.slug+' '+t('copied')))},r.name),
-        el('div',{class:'idb-card-foot'},
-          el('span',{class:'sz'},r.w+'×'+r.h+(r.frames>1?' · '+t('icanimated'):'')),
-          el('div',{class:'acts'},btn,
-            el('a',{href:iconDbUrl()+encodeURIComponent(r.slug),target:'_blank',rel:'noopener',
-              title:t('idbdetails'),'aria-label':t('idbdetails')+': '+r.name},icon('info'))))));
-  }
-  function paint(reset){
-    if(!loaded)return;
-    if(reset)shown=IDB_PAGE;
-    const needle=q.value.trim().toLowerCase(),sz=size.value,onlyAnim=anim.checked;
-    const hits=rows.filter(r=>(!needle||r.key.indexOf(needle)>=0)&&
-      (!sz||r.w+'x'+r.h===sz)&&(!onlyAnim||r.frames>1));
-    grid.replaceChildren(...(hits.length?hits.slice(0,shown).map(tile)
-      :[el('div',{class:'empty'},rows.length?t('idbnone'):t('idbempty'))]));
-    info.replaceChildren(!rows.length?'':hits.length===rows.length?rows.length+' '+t('icons')
-      :hits.length+' '+t('of')+' '+rows.length);
-    moreRow.hidden=hits.length<=shown;
-  }
-  q.addEventListener('input',debounce(()=>paint(true),200));
-  size.addEventListener('change',()=>paint(true));
-  anim.addEventListener('change',()=>paint(true));
-  more.addEventListener('click',()=>{shown+=IDB_PAGE;paint(false);});
-  const refresh=el('button',{type:'button'},t('idbrefresh'));
-  async function load(force=false){
-    refresh.disabled=true;info.textContent=t('idbloading');
-    q.disabled=size.disabled=anim.disabled=true;
-    try{
-      if(navigator.onLine===false)throw new Error(t('lamneed'));
-      if(force)idbCache=null;
-      rows=await idbLoad();loaded=true;paint(true);
-    }catch(e){info.textContent=navigator.onLine===false?t('lamneed'):t('idbfail');}
-    finally{refresh.disabled=false;q.disabled=size.disabled=anim.disabled=!loaded;}
-  }
-  refresh.addEventListener('click',()=>load(true));
-  load();
-  return{
-    node:el('div',{class:'idb'},
-      el('div',{class:'row idb-intro'},el('div',{class:'ghelp grow'},t('idbhelp')),refresh),
-      el('div',{class:'row idb-toolbar'},q,size,el('label',{class:'row',style:'gap:6px'},anim,t('idbanim'))),
-      info,grid,moreRow),
-    setInstalled(ids){installed=ids;paint(false);}
-  };
-}
-function lametricCard(onDone){
-  const idIn=el('input',{type:'text',placeholder:t('lamid'),'aria-label':t('lamid'),inputmode:'numeric'});
-  const getBtn=el('button',null,t('fetch'));
-  const saveBtn=el('button',{class:'pri',disabled:true},t('lamsave'));
-  const prev=el('img',{class:'prev',style:'display:none'});
-  const note=el('div',{class:'help'},navigator.onLine===false?t('lamneed'):'');
-  let blob=null,ext='jpg';
-  idIn.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();getBtn.click();}});
-  getBtn.addEventListener('click',async()=>{
-    const id=idIn.value.trim().replace(/\D/g,'');
-    if(!id)return;
-    getBtn.disabled=true;saveBtn.disabled=true;
-    try{
-      const r=await fetch('https://developer.lametric.com/content/apps/icon_thumbs/'+encodeURIComponent(id));
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      const raw=await r.blob();
-      ext='gif';
-      if(raw.type==='image/gif')blob=raw;
-      else{
-        const bmp=await createImageBitmap(raw);
-        const big=bmp.width>ICON_MAX||bmp.height>ICON_MAX;
-        blob=await imgToGif(bmp,big?8:0,big?8:0);
-      }
-      prev.src=URL.createObjectURL(blob);prev.style.display='';
-      saveBtn.disabled=false;
-    }catch(e){toast(e.message,false);}
-    getBtn.disabled=false;
-  });
-  saveBtn.addEventListener('click',async()=>{
-    const id=idIn.value.trim().replace(/\D/g,'');
-    saveBtn.disabled=true;
-    try{
-      await uploadFile(blob,'/ICONS',id+'.'+ext,null);
-      await dropStale('/ICONS',id+'.jpg',id+'.'+ext);
-      toast(id+'.'+ext+' '+t('uploaded'));onDone();
-    }catch(e){toast(e.message,false);saveBtn.disabled=false;}
-  });
-  if(navigator.onLine===false){idIn.disabled=true;getBtn.disabled=true;}
-  idIn.classList.add('grow');
-  return el('div',{class:'lam'},
-    el('div',{class:'orsep'},el('span',null,t('lametric'))),
-    el('div',{class:'ghelp'},t('lamhelp')),
-    el('div',{class:'row'},idIn,getBtn,prev,saveBtn),note);
 }
 // index.html is spelled out on purpose: whether the Hub's web server resolves a
 // bare /piskel/ to the directory index is not something this repo can promise,

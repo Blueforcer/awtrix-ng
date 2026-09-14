@@ -9,7 +9,7 @@ const { boot, goto, flush, stubXhr } = require('./harness');
   stubXhr(window, uploads, store);
   await goto(window, '#/icons');
   await flush(80);
-  assert.equal(window.document.querySelector('.idb .tile img').src, 'https://awtrix.de/icons/sun/preview.webp');
+  assert.equal(window.document.querySelector('.idb'), null, 'the device no longer embeds the Hub gallery');
   await assert.rejects(window.idbFetch('sun'), {code: 'hubAuthentication'});
   assert.equal(store.iconDownloadRequests?.length || 0, 0);
   assert.equal(await window.installScriptIcons(['sun']), 0);
