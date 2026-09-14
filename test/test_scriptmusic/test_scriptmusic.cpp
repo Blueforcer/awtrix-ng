@@ -53,8 +53,8 @@ static void run(const char* body, int64_t nowMs = 0, Canvas* canvas = nullptr) {
 static bool logged(const char* needle) { return g_log.find(needle) != std::string::npos; }
 
 static const char* kAll =
-    "log(str(size(audio.bands(4))) + '/' + str(audio.bands(4)) + '/' + str(audio.level()) + '/' + "
-    "str(audio.beat()) + '/' + str(audio.active()))";
+    "log(str(size(music.bands(4))) + '/' + str(music.bands(4)) + '/' + str(music.level()) + '/' + "
+    "str(music.beat()) + '/' + str(music.playing()))";
 
 static void test_without_a_service_everything_is_zero_never_nil() {
   g_svc.audioStats = nullptr;
@@ -63,8 +63,8 @@ static void test_without_a_service_everything_is_zero_never_nil() {
 }
 
 static void test_n_is_clamped() {
-  run("log(str(size(audio.bands())) + '/' + str(size(audio.bands(0))) + '/' + "
-      "str(size(audio.bands(99))) + '/' + str(size(audio.bands(1))))");
+  run("log(str(size(music.bands())) + '/' + str(size(music.bands(0))) + '/' + "
+      "str(size(music.bands(99))) + '/' + str(size(music.bands(1))))");
   TEST_ASSERT_TRUE(logged("32/32/32/1"));
 }
 
@@ -73,8 +73,8 @@ static void test_bands_merge_by_max_and_scale() {
   g_stats.bands[1] = 10;
   g_stats.bands[2] = 127;
   g_stats.bands[3] = 0;
-  run("var b = audio.bands(16, 8) log(str(b[0]) + '/' + str(b[1]) + '/' + "
-      "str(audio.bands(32)[2]) + '/' + str(audio.bands(16)[1]))");
+  run("var b = music.bands(16, 8) log(str(b[0]) + '/' + str(b[1]) + '/' + "
+      "str(music.bands(32)[2]) + '/' + str(music.bands(16)[1]))");
   TEST_ASSERT_TRUE(logged("8/4/127/127"));
 }
 
@@ -97,7 +97,7 @@ static void test_beat_level_and_active_pass_through() {
 
 static void test_active_follows_mp3_playback_too() {
   g_rt.mp3Playing = true;
-  run("log(str(audio.active()))");
+  run("log(str(music.playing()))");
   TEST_ASSERT_TRUE(logged("true"));
 }
 
@@ -114,7 +114,7 @@ static void test_bar_chart_takes_bands_directly() {
   g_stats.bands[0] = 255;
   g_stats.bands[1] = 255;
   Canvas c(32, 8);
-  run("bar_chart(audio.bands(16, 8), 0x00FF00, false)", 0, &c);
+  run("bar_chart(music.bands(16, 8), 0x00FF00, false)", 0, &c);
   TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 0));
   TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 7));
   TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(2, 7));

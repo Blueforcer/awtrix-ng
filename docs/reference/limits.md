@@ -52,7 +52,7 @@ Berry scripts run under their own caps. How each one behaves in practice is in
 | Setting key | 1–24 characters of `A–Z`, `a–z`, `0–9`, `_`, starting with a letter | the line is skipped and the settings panel says so |
 | Setting text value | 256 characters, or `maxlen=` if you set one | the change is refused, `422`, nothing is written |
 | Shared key names | 1–24 characters of `A–Z`, `a–z`, `0–9`, `_`, `-` | `shared.set()` returns `false`, nothing changes |
-| Music bands | 32 | `audio.bands(n)` answers at most 32 values; a smaller `n` merges neighbours |
+| Music bands | 32 | `music.bands(n)` answers at most 32 values; a smaller `n` merges neighbours |
 
 The instruction limit is per **entry into script code** - one `draw()`, one `loop()`, one button
 press, one HTTP callback each get the full 200 000 again, and it is not a limit a `try`/`except`

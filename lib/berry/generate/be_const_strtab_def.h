@@ -5,7 +5,7 @@ be_define_const_str(_X28_X29, "()", 685372826u, 0, 2, &be_const_str_asin);
 be_define_const_str(_X2B, "+", 772578730u, 0, 1, &be_const_str__dispatch_http_fail);
 be_define_const_str(_X2E_X2E, "..", 2748622605u, 0, 2, &be_const_str__http_cap);
 be_define_const_str(_X2Elen, ".len", 850842136u, 0, 4, &be_const_str__native_re_search);
-be_define_const_str(_X2Ep, ".p", 1171526419u, 0, 2, &be_const_str__native_audio_active);
+be_define_const_str(_X2Ep, ".p", 1171526419u, 0, 2, &be_const_str_width);
 be_define_const_str(_X2Esize, ".size", 1965188224u, 0, 5, &be_const_str__stores);
 be_define_const_str(_X3A_X20, ": ", 2382766391u, 0, 2, &be_const_str_bands);
 be_define_const_str(_X3D_X3D, "==", 2431966415u, 0, 2, &be_const_str__dispatch_mqtt);
@@ -14,7 +14,7 @@ be_define_const_str(GET, "GET", 2531704439u, 0, 3, &be_const_str_issubclass);
 be_define_const_str(PATCH, "PATCH", 3498819145u, 0, 5, &be_const_str_max);
 be_define_const_str(POST, "POST", 1929554311u, 0, 4, NULL);
 be_define_const_str(PUT, "PUT", 3995708942u, 0, 3, &be_const_str_power);
-be_define_const_str(__incr__, "__incr__", 3240913791u, 0, 8, &be_const_str__audio_bands);
+be_define_const_str(__incr__, "__incr__", 3240913791u, 0, 8, &be_const_str_abs);
 be_define_const_str(__iterator__, "__iterator__", 3884039703u, 0, 12, &be_const_str_hour);
 be_define_const_str(__lower__, "__lower__", 123855590u, 0, 9, NULL);
 be_define_const_str(__upper__, "__upper__", 3612202883u, 0, 9, &be_const_str_deg);
@@ -23,10 +23,6 @@ be_define_const_str(_app_drop, "_app_drop", 372897363u, 0, 9, NULL);
 be_define_const_str(_app_forget, "_app_forget", 3429769111u, 0, 11, NULL);
 be_define_const_str(_app_instance, "_app_instance", 4052449945u, 0, 13, NULL);
 be_define_const_str(_apps, "_apps", 761983074u, 0, 5, &be_const_str__native_light);
-be_define_const_str(_audio_active, "_audio_active", 3647304847u, 0, 13, &be_const_str__native_humidity);
-be_define_const_str(_audio_bands, "_audio_bands", 3938209359u, 0, 12, &be_const_str_abs);
-be_define_const_str(_audio_beat, "_audio_beat", 2503526437u, 0, 11, &be_const_str_bool);
-be_define_const_str(_audio_level, "_audio_level", 2899612605u, 0, 12, &be_const_str_day);
 be_define_const_str(_buffer, "_buffer", 2044888568u, 0, 7, &be_const_str__settings_set);
 be_define_const_str(_change_buffer, "_change_buffer", 2101848693u, 0, 14, &be_const_str__re_match);
 be_define_const_str(_dispatch_http, "_dispatch_http", 508305605u, 0, 14, &be_const_str_map);
@@ -48,25 +44,29 @@ be_define_const_str(_http_post, "_http_post", 3586226605u, 0, 10, &be_const_str_
 be_define_const_str(_http_put, "_http_put", 3349281288u, 0, 9, &be_const_str_font);
 be_define_const_str(_http_request, "_http_request", 1380544868u, 0, 13, NULL);
 be_define_const_str(_http_send, "_http_send", 2723371325u, 0, 10, &be_const_str__rotation_pause);
-be_define_const_str(_mqtt_cbs, "_mqtt_cbs", 469686145u, 0, 9, &be_const_str__native_audio_beat);
+be_define_const_str(_mqtt_cbs, "_mqtt_cbs", 469686145u, 0, 9, &be_const_str_circle);
 be_define_const_str(_mqtt_publish, "_mqtt_publish", 4288375744u, 0, 13, &be_const_str__re_matchall);
 be_define_const_str(_mqtt_subscribe, "_mqtt_subscribe", 2899220347u, 0, 15, &be_const_str__native_apply_case);
-be_define_const_str(_name_, "_name_", 4106759638u, 0, 6, NULL);
+be_define_const_str(_music_bands, "_music_bands", 793811922u, 0, 12, NULL);
+be_define_const_str(_music_beat, "_music_beat", 3102448982u, 0, 11, NULL);
+be_define_const_str(_music_level, "_music_level", 4206675868u, 0, 12, &be_const_str__native_settings_get);
+be_define_const_str(_music_playing, "_music_playing", 2694816824u, 0, 14, &be_const_str_break);
+be_define_const_str(_name_, "_name_", 4106759638u, 0, 6, &be_const_str__native_music_beat);
 be_define_const_str(_native_app, "_native_app", 954921569u, 0, 11, &be_const_str_char);
 be_define_const_str(_native_apply_case, "_native_apply_case", 3935067987u, 0, 18, &be_const_str__native_notify);
-be_define_const_str(_native_audio_active, "_native_audio_active", 1184499691u, 0, 20, &be_const_str_width);
-be_define_const_str(_native_audio_bands, "_native_audio_bands", 1276912843u, 0, 19, NULL);
-be_define_const_str(_native_audio_beat, "_native_audio_beat", 2512546313u, 0, 18, &be_const_str_circle);
-be_define_const_str(_native_audio_level, "_native_audio_level", 1881921601u, 0, 19, &be_const_str__str);
 be_define_const_str(_native_battery, "_native_battery", 4162009115u, 0, 15, &be_const_str_replace);
 be_define_const_str(_native_battery_volts, "_native_battery_volts", 880434840u, 0, 21, NULL);
 be_define_const_str(_native_display_is_on, "_native_display_is_on", 3660621543u, 0, 21, &be_const_str_member);
-be_define_const_str(_native_display_power, "_native_display_power", 3220403510u, 0, 21, NULL);
+be_define_const_str(_native_display_power, "_native_display_power", 3220403510u, 0, 21, &be_const_str__native_music_bands);
 be_define_const_str(_native_http_request, "_native_http_request", 2339602608u, 0, 20, &be_const_str_import);
 be_define_const_str(_native_humidity, "_native_humidity", 3394365775u, 0, 16, &be_const_str_dump);
 be_define_const_str(_native_light, "_native_light", 3035739654u, 0, 13, &be_const_str_isinstance);
 be_define_const_str(_native_mqtt_publish, "_native_mqtt_publish", 87408052u, 0, 20, &be_const_str_continue);
-be_define_const_str(_native_mqtt_subscribe, "_native_mqtt_subscribe", 2458520463u, 0, 22, &be_const_str_active);
+be_define_const_str(_native_mqtt_subscribe, "_native_mqtt_subscribe", 2458520463u, 0, 22, &be_const_str_incr);
+be_define_const_str(_native_music_bands, "_native_music_bands", 2470374118u, 0, 19, NULL);
+be_define_const_str(_native_music_beat, "_native_music_beat", 1374411154u, 0, 18, NULL);
+be_define_const_str(_native_music_level, "_native_music_level", 1228323624u, 0, 19, &be_const_str_clamp);
+be_define_const_str(_native_music_playing, "_native_music_playing", 2233350436u, 0, 21, &be_const_str__rotation_show);
 be_define_const_str(_native_notify, "_native_notify", 1966330703u, 0, 14, NULL);
 be_define_const_str(_native_pressure, "_native_pressure", 3959441949u, 0, 16, &be_const_str_stop);
 be_define_const_str(_native_re_search, "_native_re_search", 859627724u, 0, 17, &be_const_str_size);
@@ -122,8 +122,7 @@ be_define_const_str(_stores, "_stores", 1505680420u, 0, 7, NULL);
 be_define_const_str(_str, "_str", 2811624257u, 0, 4, &be_const_str_melody);
 be_define_const_str(abs, "abs", 709362235u, 0, 3, NULL);
 be_define_const_str(acos, "acos", 1006755615u, 0, 4, &be_const_str_assert);
-be_define_const_str(active, "active", 3648362799u, 0, 6, &be_const_str_incr);
-be_define_const_str(add, "add", 993596020u, 0, 3, NULL);
+be_define_const_str(add, "add", 993596020u, 0, 3, &be_const_str_music);
 be_define_const_str(addfloat, "addfloat", 937731078u, 0, 8, &be_const_str_compile);
 be_define_const_str(age, "age", 742476188u, 0, 3, &be_const_str_bytes);
 be_define_const_str(allocated, "allocated", 429986098u, 0, 9, NULL);
@@ -137,7 +136,6 @@ be_define_const_str(assert, "assert", 2774883451u, 0, 6, &be_const_str_return);
 be_define_const_str(asstring, "asstring", 1298225088u, 0, 8, &be_const_str_sound);
 be_define_const_str(atan, "atan", 108579519u, 0, 4, NULL);
 be_define_const_str(atan2, "atan2", 3173440503u, 0, 5, &be_const_str_mqtt);
-be_define_const_str(audio, "audio", 3764468121u, 0, 5, NULL);
 be_define_const_str(bands, "bands", 2948397679u, 0, 5, &be_const_str_circle_fill);
 be_define_const_str(bar_chart, "bar_chart", 2570301737u, 0, 9, &be_const_str_search);
 be_define_const_str(battery, "battery", 4251585678u, 0, 7, NULL);
@@ -255,6 +253,7 @@ be_define_const_str(module, "module", 3617558685u, 0, 6, &be_const_str_remove);
 be_define_const_str(month, "month", 3598321157u, 0, 5, &be_const_str_setmember);
 be_define_const_str(mp3, "mp3", 2625189937u, 0, 3, &be_const_str_ramp_text);
 be_define_const_str(mqtt, "mqtt", 353147387u, 0, 4, &be_const_str_pixel);
+be_define_const_str(music, "music", 2677821396u, 0, 5, NULL);
 be_define_const_str(nan, "nan", 797905850u, 0, 3, &be_const_str_pi);
 be_define_const_str(next, "next", 1555467752u, 0, 4, &be_const_str_super);
 be_define_const_str(nil, "nil", 228849900u, 65, 3, &be_const_str_rgb);
@@ -382,7 +381,7 @@ static const bstring* const m_string_table[] = {
     (const bstring *)&be_const_str_light,
     (const bstring *)&be_const_str_insert,
     (const bstring *)&be_const_str_append,
-    NULL,
+    (const bstring *)&be_const_str__music_beat,
     (const bstring *)&be_const_str__app_forget,
     (const bstring *)&be_const_str__native_rotation_show,
     (const bstring *)&be_const_str_http,
@@ -413,7 +412,7 @@ static const bstring* const m_string_table[] = {
     (const bstring *)&be_const_str_progress,
     (const bstring *)&be_const_str__http_headers,
     (const bstring *)&be_const_str_def,
-    (const bstring *)&be_const_str__audio_beat,
+    (const bstring *)&be_const_str_bool,
     (const bstring *)&be_const_str_clear,
     (const bstring *)&be_const_str_atan,
     (const bstring *)&be_const_str__settings_get,
@@ -440,7 +439,7 @@ static const bstring* const m_string_table[] = {
     (const bstring *)&be_const_str__mqtt_cbs,
     (const bstring *)&be_const_str__native_sound_sinks,
     (const bstring *)&be_const_str__native_battery,
-    (const bstring *)&be_const_str_clamp,
+    (const bstring *)&be_const_str__native_music_level,
     NULL,
     (const bstring *)&be_const_str_instance,
     (const bstring *)&be_const_str_appendb64,
@@ -464,13 +463,13 @@ static const bstring* const m_string_table[] = {
     (const bstring *)&be_const_str__change_buffer,
     (const bstring *)&be_const_str__http_next,
     (const bstring *)&be_const_str___upper__,
-    (const bstring *)&be_const_str__rotation_show,
-    (const bstring *)&be_const_str_audio,
+    (const bstring *)&be_const_str__native_music_playing,
+    NULL,
     (const bstring *)&be_const_str__sound_sinks,
     NULL,
     (const bstring *)&be_const_str__native_shared_get,
     (const bstring *)&be_const_str__native_app,
-    NULL,
+    (const bstring *)&be_const_str__music_bands,
     (const bstring *)&be_const_str__native_shared_age,
     (const bstring *)&be_const_str__X2Elen,
     (const bstring *)&be_const_str_stop_iteration,
@@ -481,10 +480,10 @@ static const bstring* const m_string_table[] = {
     (const bstring *)&be_const_str___lower__,
     (const bstring *)&be_const_str_buzzer,
     (const bstring *)&be_const_str__http_request,
-    (const bstring *)&be_const_str__native_audio_level,
+    (const bstring *)&be_const_str__str,
     NULL,
     (const bstring *)&be_const_str__http_cbs,
-    (const bstring *)&be_const_str_break,
+    (const bstring *)&be_const_str__music_playing,
     (const bstring *)&be_const_str__http_post,
     (const bstring *)&be_const_str__display_power,
     (const bstring *)&be_const_str_subscribe,
@@ -495,7 +494,7 @@ static const bstring* const m_string_table[] = {
     (const bstring *)&be_const_str__sensor_humidity,
     (const bstring *)&be_const_str__sensor_temperature,
     (const bstring *)&be_const_str__X28_X29,
-    (const bstring *)&be_const_str__audio_active,
+    (const bstring *)&be_const_str__native_humidity,
     (const bstring *)&be_const_str__http_find,
     (const bstring *)&be_const_str_bar_chart,
     (const bstring *)&be_const_str__native_store_flush,
@@ -509,17 +508,17 @@ static const bstring* const m_string_table[] = {
     (const bstring *)&be_const_str__X2B,
     (const bstring *)&be_const_str__display_is_on,
     (const bstring *)&be_const_str_count,
-    (const bstring *)&be_const_str__audio_level,
+    (const bstring *)&be_const_str_day,
     (const bstring *)&be_const_str_appendhex,
     NULL,
-    (const bstring *)&be_const_str__native_settings_get,
+    (const bstring *)&be_const_str__music_level,
     (const bstring *)&be_const_str_floor,
     (const bstring *)&be_const_str__sound_stop,
     (const bstring *)&be_const_str_GET,
     (const bstring *)&be_const_str_false,
     (const bstring *)&be_const_str_beat,
     (const bstring *)&be_const_str__X1F,
-    (const bstring *)&be_const_str__native_audio_bands,
+    NULL,
     (const bstring *)&be_const_str_cos,
     (const bstring *)&be_const_str_rtttl,
     NULL,
@@ -544,6 +543,6 @@ static const bstring* const m_string_table[] = {
 
 static const struct bconststrtab m_const_string_table = {
     .size = 172,
-    .count = 365,
+    .count = 364,
     .table = m_string_table
 };

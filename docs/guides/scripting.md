@@ -119,7 +119,7 @@ row that sounds like the app you have in mind, and follow it.
 | [Sharing code between apps](#sharing-code-between-scripts) | a `# @module` file, then `import` |
 | [Interrupting with an alert](#notifications) | `notify()` |
 | [Making a noise](#sound) | `sound.play()` `sound.mp3()` `sound.melody()` `sound.track()` `sound.rtttl()` `sound.stop()` `sound.playing()` `sound.sinks()` |
-| [Reacting to the music](#music) | `audio.bands()` `audio.level()` `audio.beat()` `audio.active()` |
+| [Reacting to the music](#music) | `music.bands()` `music.level()` `music.beat()` `music.playing()` |
 | [What the device measures](#reading-the-sensors) | `sensor.temperature()` `sensor.humidity()` `sensor.pressure()` `sensor.light()` `sensor.battery()` |
 | [What the owner configured](#device-settings) | `settings.get()` `settings.set()` `settings.apply_case()` |
 | [Turning the matrix on and off](#display-power) | `display.power()` `display.is_on()` |
@@ -438,7 +438,7 @@ and keeps you there.
 
 ## The API
 
-Everything below is callable from any of your class's methods, with nothing to import: the drawing, time and number calls are plain global functions, and `http`, `mqtt`, `store`, `shared`, `settings`, `display`, `sound`, `audio`, `rotation` and `re` are ready-made objects. Only the general-purpose modules - `json`, `string`, `math` - want one `import` line at the top of the file, and the [HTTP example](#http) shows it in place.
+Everything below is callable from any of your class's methods, with nothing to import: the drawing, time and number calls are plain global functions, and `http`, `mqtt`, `store`, `shared`, `settings`, `display`, `sound`, `music`, `rotation` and `re` are ready-made objects. Only the general-purpose modules - `json`, `string`, `math` - want one `import` line at the top of the file, and the [HTTP example](#http) shows it in place.
 
 The short examples in this section show a single method for brevity - read them as living inside your class, alongside `draw()` and a `return YourClass()` at the end of the file.
 
@@ -1444,17 +1444,17 @@ noise.
 
 ### Music
 
-On an ESP32-S3 with a speaker, `audio` describes the music the device itself is
+On an ESP32-S3 with a speaker, `music` describes the music the device itself is
 playing - an internet station or a stored MP3 - as numbers you can draw. AWTRIX
 decodes a good tenth of a second ahead of what you hear, and every reading is
 timed to when it comes out of the speaker, so the picture and the sound match.
 
 | Call | Answer |
 |---|---|
-| `audio.bands(n?, max?)` | a list of `n` numbers, bass on the left, treble on the right - `n` from 1 to 32 (default 32), each scaled from 0 to `max` (default 255) |
-| `audio.level()` | how loud it is right now, 0 to 255 - between the quietest and the loudest moment of the last few seconds, so a compressed station still moves the needle |
-| `audio.beat()` | `true` for exactly one frame each time a beat lands |
-| `audio.active()` | `true` while a station or an MP3 is playing |
+| `music.bands(n?, max?)` | a list of `n` numbers, bass on the left, treble on the right - `n` from 1 to 32 (default 32), each scaled from 0 to `max` (default 255) |
+| `music.level()` | how loud it is right now, 0 to 255 - between the quietest and the loudest moment of the last few seconds, so a compressed station still moves the needle |
+| `music.beat()` | `true` for exactly one frame each time a beat lands |
+| `music.playing()` | `true` while a station or an MP3 is playing |
 
 **None of them ever answers `nil`.** A board without an audio output, a paused
 radio and plain silence all answer zeros and `false`, so the same script runs
@@ -1465,7 +1465,7 @@ A spectrum display is one line. `bar_chart()` with `autoscale` off draws a fixed
 
 ```berry
 def draw()
-  bar_chart(audio.bands(16, 8), "Rainbow", false)
+  bar_chart(music.bands(16, 8), "Rainbow", false)
 end
 ```
 
@@ -1487,11 +1487,11 @@ class Spectrum
   end
 
   def should_show()
-    return audio.active()
+    return music.playing()
   end
 
   def draw()
-    var bands = audio.bands(16, 8)
+    var bands = music.bands(16, 8)
     var bar_w = (width() - 15) / 16
     bar_chart(bands, "Rainbow", false)
     for i: 0..15
@@ -1513,14 +1513,14 @@ end
 return Spectrum()
 ```
 
-`audio.beat()` is for a pulse rather than a spectrum - a circle that flares on
+`music.beat()` is for a pulse rather than a spectrum - a circle that flares on
 every beat and shrinks again:
 
 ```berry
   var glow
 
   def draw()
-    if audio.beat() self.glow = 4 end
+    if music.beat() self.glow = 4 end
     if self.glow > 0
       circle_fill(width() / 2, height() / 2, self.glow, hsv(300, 100, 100))
       self.glow -= 1
@@ -1532,11 +1532,11 @@ Worth knowing:
 
 - The levels adjust themselves: a quiet track fills the panel just as a loud
   one does, and the volume setting does not change the picture.
-- Read `audio.beat()` in `draw()`, never in `loop()` - `loop()` runs once a
+- Read `music.beat()` in `draw()`, never in `loop()` - `loop()` runs once a
   second and would miss nearly every beat.
 - The music is only analysed while a script is asking, so an AWTRIX without
   such a script pays nothing for the feature.
-- `audio.active()` turns `true` the moment playback starts; the first numbers
+- `music.playing()` turns `true` the moment playback starts; the first numbers
   follow a fraction of a second later.
 
 ### Device settings

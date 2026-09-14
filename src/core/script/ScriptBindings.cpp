@@ -1073,7 +1073,7 @@ const audio::FrameStats& audioStats(bool& fresh) {
   return g_audio.stats;
 }
 
-int b_audio_bands(bvm* vm) {
+int b_music_bands(bvm* vm) {
   int n = argInt(vm, 1);
   if (n <= 0 || n > audio::kBandCount) n = audio::kBandCount;
   int top = argInt(vm, 2);
@@ -1094,13 +1094,13 @@ int b_audio_bands(bvm* vm) {
   be_return(vm);
 }
 
-int b_audio_level(bvm* vm) {
+int b_music_level(bvm* vm) {
   bool fresh;
   be_pushint(vm, audioStats(fresh).level);
   be_return(vm);
 }
 
-int b_audio_beat(bvm* vm) {
+int b_music_beat(bvm* vm) {
   bool fresh;
   const bool beat = audioStats(fresh).beat;
   be_pushbool(vm, fresh && beat);
@@ -1109,7 +1109,7 @@ int b_audio_beat(bvm* vm) {
 
 // Playback, not data freshness: should_show() is asked only at rotation time, and it must be able
 // to say yes before any frame has been analysed.
-int b_audio_active(bvm* vm) {
+int b_music_playing(bvm* vm) {
   bool fresh;
   audioStats(fresh);
   const RuntimeState* rt = runtime();
@@ -1223,10 +1223,10 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "_native_sound", b_sound);
   be_regfunc(b, "_native_sound_playing", b_sound_playing);
   be_regfunc(b, "_native_sound_sinks", b_sound_sinks);
-  be_regfunc(b, "_native_audio_bands", b_audio_bands);
-  be_regfunc(b, "_native_audio_level", b_audio_level);
-  be_regfunc(b, "_native_audio_beat", b_audio_beat);
-  be_regfunc(b, "_native_audio_active", b_audio_active);
+  be_regfunc(b, "_native_music_bands", b_music_bands);
+  be_regfunc(b, "_native_music_level", b_music_level);
+  be_regfunc(b, "_native_music_beat", b_music_beat);
+  be_regfunc(b, "_native_music_playing", b_music_playing);
   be_regfunc(b, "_native_rotation_next", b_rotation_next);
   be_regfunc(b, "_native_rotation_prev", b_rotation_prev);
   be_regfunc(b, "_native_rotation_show", b_rotation_show);

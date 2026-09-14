@@ -177,7 +177,7 @@ out for the device's global app time (7000 ms out of the box). It changes only *
 ## 5. The API
 
 Every function below is a plain global, callable from any method with no import. The modules
-`audio`, `display`, `http`, `mqtt`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
+`display`, `http`, `mqtt`, `music`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
 there too. Only `json`, `string`, `math` and `gc` need an `import` line at the top of the file.
 
 ### 5.1 Panel and drawing
@@ -814,18 +814,18 @@ numbers, timed to the speaker:
 
 | Call | Answer |
 |---|---|
-| `audio.bands(n?, max?)` | list of `n` numbers (1-32, default 32), bass first, each 0..`max` (default 255) |
-| `audio.level()` | loudness 0..255, between the quietest and loudest recent moment |
-| `audio.beat()` | `true` for exactly one frame per beat - read it in `draw()`, never in `loop()` |
-| `audio.active()` | `true` while a station or an MP3 is playing |
+| `music.bands(n?, max?)` | list of `n` numbers (1-32, default 32), bass first, each 0..`max` (default 255) |
+| `music.level()` | loudness 0..255, between the quietest and loudest recent moment |
+| `music.beat()` | `true` for exactly one frame per beat - read it in `draw()`, never in `loop()` |
+| `music.playing()` | `true` while a station or an MP3 is playing |
 
 **Never `nil`**: no audio output, nothing playing and silence all answer zeros and `false`. Levels
 adjust themselves to the track, and the volume setting does not change them. A spectrum is one
 line, `max` 8 matching the fixed 0-8 range of `bar_chart()` with autoscale off:
 
 ```berry
-  def should_show() return audio.active() end
-  def draw() bar_chart(audio.bands(16, 8), "Rainbow", false) end
+  def should_show() return music.playing() end
+  def draw() bar_chart(music.bands(16, 8), "Rainbow", false) end
 ```
 
 ### 5.19 Running without ever being shown
