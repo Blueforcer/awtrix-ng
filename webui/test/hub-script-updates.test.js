@@ -42,6 +42,7 @@ async function scenario({ modified = false, conflict = false, draft = false } = 
     window.document.querySelector('.ftitem').click();
     await flush();
     const panel = window.document.querySelector('.script-hub-panel');
+    assert.equal(panel.querySelector('a').textContent, 'Hub publication 2');
     assert.equal(panel.querySelectorAll('img').length, 0, 'release notes are plain text');
     assert.ok(panel.querySelector('button'), 'an available update has an action');
     panel.querySelector('button').click();

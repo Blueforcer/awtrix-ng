@@ -532,8 +532,9 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
   .filetree .fthead h2{flex:0 1 auto}
   .filetree .chev{display:inline-flex;margin-left:auto;transition:transform .2s}
   .filetree.open .chev{transform:rotate(180deg)}
-  .filetree>.ftpane,.filetree>.shpanel{max-height:0;opacity:0;overflow:hidden;
+  .filetree>.ftpane,.filetree>.shpanel{max-height:0;opacity:0;overflow:hidden;visibility:hidden;
     transition:max-height .24s ease,opacity .18s ease}
+  .filetree.open>.ftpane,.filetree.open>.shpanel{visibility:visible}
   .ftpane{flex:0 0 auto;max-height:none}
   .filetree.open>.ftpane{max-height:40vh;opacity:1}
   .filetree.open>.ftpane.mods{max-height:30vh}
@@ -937,6 +938,7 @@ const I18N={en:{
   chipGone:'no data',chipGoneH:'This app is switched on and keeps its slot, but nothing has sent it any data yet. It draws again on the next push.',
   orderSaved:'App order saved',
   suCheck:'Check for updates',suChecking:'Checking for updates…',suReady:'Update available',suCurrent:'Up to date',suLocal:'Changed on AWTRIX',suMissing:'No longer available on the Hub',suOffline:'Hub check unavailable',suUpdate:'Update script',suCopy:'Install as a new script',suConfirm:'Install this Hub version? Your compatible script settings are kept.',suModified:'Your code has local changes. Install the Hub version as a separate script to keep your work.',suBusy:'Updating script…',suDone:'Script updated',suFirmware:'Update your AWTRIX firmware to use script updates.',suChanged:'The script changed. Check for updates again.',suIntegrity:'The Hub version changed during download. Try again.',suUnlinked:'This script is not linked to a Hub contribution. New Hub downloads include this link.',suUnknown:'No update information yet',
+  suRevision:'Hub publication',
   cfgTitle:'Settings',cfgHide:'Close settings',cfgLoading:'Loading settings…',cfgNone:'This script offers no settings.',
   cfgSaved:'Settings saved - the app restarted',cfgDefaults:'Use defaults',
   cfgWarnH:'The script’s settings header has a problem. Fix it in the editor.',
@@ -1129,6 +1131,7 @@ const I18N={en:{
   chipGone:'keine Daten',chipGoneH:'Diese App ist eingeschaltet und behält ihren Platz, aber es hat noch niemand Daten geschickt. Beim nächsten Push zeichnet sie wieder.',
   orderSaved:'App-Reihenfolge gespeichert',
   suCheck:'Nach Updates suchen',suChecking:'Updates werden geprüft…',suReady:'Update verfügbar',suCurrent:'Aktuell',suLocal:'Auf AWTRIX geändert',suMissing:'Im Hub nicht mehr verfügbar',suOffline:'Hub-Prüfung nicht verfügbar',suUpdate:'Script aktualisieren',suCopy:'Als neues Script installieren',suConfirm:'Diese Hub-Version installieren? Kompatible Script-Einstellungen bleiben erhalten.',suModified:'Dein Code wurde lokal geändert. Installiere die Hub-Version als zusätzliches Script, um deine Arbeit zu behalten.',suBusy:'Script wird aktualisiert…',suDone:'Script aktualisiert',suFirmware:'Aktualisiere die AWTRIX-Firmware, um Script-Updates zu nutzen.',suChanged:'Das Script wurde geändert. Suche erneut nach Updates.',suIntegrity:'Die Hub-Version hat sich beim Herunterladen geändert. Versuche es erneut.',suUnlinked:'Dieses Script ist keinem Hub-Beitrag zugeordnet. Neue Hub-Downloads enthalten diese Verknüpfung.',suUnknown:'Noch keine Update-Informationen',
+  suRevision:'Hub-Veröffentlichung',
   cfgTitle:'Einstellungen',cfgHide:'Einstellungen schließen',cfgLoading:'Einstellungen werden geladen…',
   cfgNone:'Dieses Skript bietet keine Einstellungen.',
   cfgSaved:'Einstellungen gespeichert - die App wurde neu gestartet',cfgDefaults:'Standardwerte',
@@ -3167,7 +3170,7 @@ function viewScripts(view){
     hubPanel.replaceChildren(el('span',{class:'help'},t(item?.state==='suCurrent'&&item.modified?'suLocal':item?.state||(origin?'suUnknown':'suUnlinked'))));
     if(!item?.release)return;
     const local=item.modified||ed.value!==onDevice.src;
-    hubPanel.append(el('a',{href:'https://awtrix.de/flow/'+item.release.id,target:'_blank',rel:'noopener'},'Hub · v'+item.release.revision));
+    hubPanel.append(el('a',{href:'https://awtrix.de/flow/'+item.release.id,target:'_blank',rel:'noopener'},t('suRevision')+' '+item.release.revision));
     if(item.state!=='suReady')return;
     if(item.release.notes)hubPanel.append(el('p',{class:'help',style:'white-space:pre-wrap'},item.release.notes));
     if(local)hubPanel.append(el('p',{class:'help'},t('suModified')));
@@ -3381,8 +3384,15 @@ function viewScripts(view){
   const modPane=el('div',{class:'ftpane mods',role:'group','aria-label':t('modules')},
     el('div',{class:'ftgrp',title:t('modulesH')},t('modules'),modCount,newModBtn),modlist);
   const filetree=el('div',{class:'filetree'},treeHead,checkHubBtn,scrPane,modPane,shpanel);
-  const toggleTree=()=>filetree.classList.toggle('open');
-  const closeTree=()=>filetree.classList.remove('open');
+  function setTreeOpen(open){
+    if(!open&&matchMedia('(max-width:720px)').matches&&
+      [scrPane,modPane,shpanel].some(p=>p.contains(document.activeElement)))treeHead.focus();
+    filetree.classList.toggle('open',open);
+    treeHead.setAttribute('aria-expanded',String(open));
+  }
+  treeHead.setAttribute('aria-expanded','false');
+  const toggleTree=()=>setTreeOpen(!filetree.classList.contains('open'));
+  const closeTree=()=>setTreeOpen(false);
   treeHead.addEventListener('click',toggleTree);
   treeHead.addEventListener('keydown',e=>{
     if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleTree();}});
