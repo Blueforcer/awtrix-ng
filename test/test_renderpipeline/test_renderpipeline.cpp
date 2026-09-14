@@ -73,15 +73,19 @@ struct SlowCaptureEffect : CaptureEffect {
 // The pipeline no longer owns any sound policy, so the counter sits where the sound really lands.
 struct FakeTone : sound::IToneSink {
   int plays = 0;
+  int rtttlPlays = 0;
+  int melodyPlays = 0;
   bool playing = false;
   void begin() override {}
   void setVolume(uint8_t) override {}
   bool playRtttl(const std::string&) override {
     ++plays;
+    ++rtttlPlays;
     return true;
   }
   bool playMelodyFile(const std::string&) override {
     ++plays;
+    ++melodyPlays;
     return true;
   }
   void stop() override {}
@@ -503,6 +507,18 @@ static void test_notification_sound_plays_once_on_appear() {
   TEST_ASSERT_EQUAL_INT(1, r.tone.plays);
 }
 
+static void test_notification_rtttl_takes_priority_over_a_named_sound() {
+  Rig r;
+  r.engine.execute(cmd(
+      CommandType::Notify, "",
+      "{\"text\":\"A\",\"sound\":\"ding\",\"soundRtttl\":\"x:d=8,o=5,b=120:c\"}"));
+  r.engine.tick(0);
+
+  r.pipe->renderFrame(r.canvas, 0);
+  TEST_ASSERT_EQUAL_INT(1, r.tone.rtttlPlays);
+  TEST_ASSERT_EQUAL_INT(0, r.tone.melodyPlays);
+}
+
 static void test_loopsound_retriggers_only_when_finished() {
   Rig r;
   r.engine.execute(
@@ -888,6 +904,7 @@ int main(int, char**) {
   RUN_TEST(test_repeat_one_opts_into_the_wait);
   RUN_TEST(test_static_scroll_is_not_held_by_repeat);
   RUN_TEST(test_notification_sound_plays_once_on_appear);
+  RUN_TEST(test_notification_rtttl_takes_priority_over_a_named_sound);
   RUN_TEST(test_loopsound_retriggers_only_when_finished);
   RUN_TEST(test_repeat_holds_rotation_until_cycles_done);
   RUN_TEST(test_finished_repeats_end_a_notification_before_its_dwell);

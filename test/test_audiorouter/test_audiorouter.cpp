@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "core/sound/AudioRouter.h"
+#include "core/sound/SoundMp3.h"
 
 using namespace awtrix;
 // awtrix::Source is the transport a command came in on; the sound source stays spelled out.
@@ -272,6 +273,13 @@ void test_mp3_rejects_a_name_that_cannot_be_a_path(void) {
   TEST_ASSERT_EQUAL_size_t(0, rig.pcm.mp3s.size());
 }
 
+void test_mp3_name_round_trips_through_its_path(void) {
+  TEST_ASSERT_EQUAL_STRING("ding", sound::mp3NameFor(sound::mp3PathFor("ding")).c_str());
+  TEST_ASSERT_EQUAL_STRING("Alarm_2", sound::mp3NameFor("/MP3/Alarm_2.mp3").c_str());
+  TEST_ASSERT_TRUE(sound::mp3NameFor("/MELODIES/ding.mp3").empty());
+  TEST_ASSERT_TRUE(sound::mp3NameFor("/MP3/ding.txt").empty());
+}
+
 void test_track_range_is_enforced(void) {
   Rig rig;
 
@@ -534,6 +542,7 @@ int main(int, char**) {
   RUN_TEST(test_mp3_does_not_settle_for_a_melody);
   RUN_TEST(test_melody_does_not_settle_for_an_mp3);
   RUN_TEST(test_mp3_rejects_a_name_that_cannot_be_a_path);
+  RUN_TEST(test_mp3_name_round_trips_through_its_path);
   RUN_TEST(test_track_range_is_enforced);
   RUN_TEST(test_a_broken_payload_outranks_a_missing_sink);
   RUN_TEST(test_unparsable_rtttl_is_a_validation_error);

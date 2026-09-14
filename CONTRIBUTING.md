@@ -30,7 +30,8 @@ In rough order of value:
 
 ## Setting up
 
-You need [PlatformIO](https://platformio.org/) and Python 3.12+:
+You need [PlatformIO](https://platformio.org/), Python 3.12+, CMake 3.20+, Ninja
+and a GCC C/C++ toolchain:
 
 ```bash
 pip install -U platformio
@@ -45,7 +46,7 @@ before it is embedded) and for the web UI tests.
 pio run  -e awtrix        # ESP32 firmware (stock pin defaults)
 pio run  -e awtrix_s3_octal     # ESP32-S3 firmware, octal PSRAM
 pio run  -e awtrix_s3_quad      # ESP32-S3 firmware, quad PSRAM
-pio test -e native        # host unit tests for the portable core
+python scripts/test_native.py  # host unit tests for the portable core
 pio run  -e native_sim    # host simulator: full firmware + web UI, no hardware
 ```
 
@@ -59,7 +60,7 @@ and the HTTP API all behave as they do on the device.
 Every push runs, and your PR needs all of it green:
 
 ```bash
-pio test -e native                     # host unit tests
+python scripts/test_native.py          # host unit tests
 pio run -e awtrix                      # both firmware images build
 pio run -e awtrix_s3_octal
 python tools/check_docs_sync.py        # docs match the firmware's real fields

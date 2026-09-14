@@ -4,15 +4,15 @@ AWTRIX NG is a [PlatformIO](https://platformio.org/) project. Five environments 
 `platformio.ini` cover the device firmware, the host unit tests and the host
 simulator.
 
-You need PlatformIO, Python 3 and Node.js. Node is used only by the pre-build step
-that embeds the [web UI](#the-embedded-web-ui), but a firmware build stops without
-it.
+You need PlatformIO, Python 3 and Node.js. The host tests additionally need CMake
+3.20+, Ninja and GCC. Node is used only by the pre-build step that embeds the
+[web UI](#the-embedded-web-ui), but a firmware build stops without it.
 
 ```bash
 pio run  -e awtrix            # ESP32 firmware (the default environment)
 pio run  -e awtrix_s3_octal   # ESP32-S3 firmware, octal PSRAM
 pio run  -e awtrix_s3_quad    # ESP32-S3 firmware, quad PSRAM
-pio test -e native            # host unit tests for the portable core
+python scripts/test_native.py # host unit tests for the portable core
 pio run  -e native_sim        # host simulator: firmware + web UI without an ESP32
 ```
 
@@ -125,8 +125,9 @@ pio run -e awtrix_probe -t upload -t monitor
 ### `native` - host unit tests
 
 The `core/` layer is Arduino- and FastLED-free portable C++17, so it can be compiled
-and tested on your development machine. The `native` environment builds and runs
-those tests with the Unity framework - no ESP32, no emulator.
+and tested on your development machine. The fast native runner uses CMake, Ninja
+and CTest with the Unity framework - no ESP32, no emulator. PlatformIO still
+provides the declared native dependencies.
 
 | Property | Value |
 |---|---|
@@ -137,9 +138,14 @@ those tests with the Unity framework - no ESP32, no emulator.
 | Optimisation | `-O2` |
 
 ```bash
-pio test -e native            # run the core host unit tests
-pio test -e native -v         # verbose (exactly what CI runs)
+python scripts/test_native.py              # build and run every host suite
+python scripts/test_native.py -R payload   # run matching suites after the build
+pio test -e native                         # slower PlatformIO-compatible fallback
 ```
+
+The CMake runner compiles the portable core once, links the suite executables in
+parallel and runs them in parallel with CTest. Its generated files live under
+`.pio/native-tests/`.
 
 On Windows, `scripts/native_toolchain.py` links the GCC runtimes statically into the
 host binaries - see [Host toolchain](#host-toolchain).
@@ -270,7 +276,7 @@ for the firmware builds and the web UI tests:
 
 | Job | Command | Covers |
 |---|---|---|
-| Core host unit tests | `pio test -e native -v` | The portable `core/` layer |
+| Core host unit tests | `python scripts/test_native.py` | The portable `core/` layer |
 | Web UI tests (jsdom) | `npm test` (in `webui/test`) | The web UI JS logic, loaded from the shipped `webui/index.html` via jsdom |
 | Firmware build | `pio run -e <env>`, then `scripts/factory_image.py --all` | Every device image - the matrix is `awtrix`, `awtrix_s3_octal`, `awtrix_s3_quad` - and a USB install image per flash size |
 | API docs match the firmware | `tools/check_docs_sync.py`, `tools/check_berry_api.py`, `tools/check_prelude_solidified.py`, `tools/check_font_sync.py`, `tools/check_partitions.py` | Documented fields and error codes, the editor's Berry table, the solidified prelude, the generated panel font, and every partition table |

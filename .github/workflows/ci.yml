@@ -27,7 +27,7 @@ jobs:
       - name: Install PlatformIO
         run: pip install -U platformio
       - name: Run native unit tests
-        run: pio test -e native -v
+        run: python scripts/test_native.py
 
   webui-tests:
     name: Web UI tests (jsdom)

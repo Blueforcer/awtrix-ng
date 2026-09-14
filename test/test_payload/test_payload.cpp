@@ -296,8 +296,20 @@ static void test_fragment_keys_are_spelled_out() {
 static void test_unknown_key_is_rejected() {
   AppSpec s;
   DispatchDetail err;
-  TEST_ASSERT_FALSE(payload::parse("{\"progressC\":\"#FF0000\"}", false, s, nullptr, nullptr, &err));
+  TEST_ASSERT_FALSE(payload::parse("{\"textColor\":\"invalid\",\"progressC\":\"#FF0000\"}",
+                                   false, s, nullptr, nullptr, &err));
   TEST_ASSERT_EQUAL_STRING("progressC", err.field.c_str());
+}
+
+static void test_wrong_optional_types_keep_their_defaults() {
+  AppSpec s;
+  TEST_ASSERT_TRUE(payload::parse(
+      "{\"textCenter\":\"yes\",\"textInFront\":1,\"repeat\":\"many\",\"text\":42}",
+      false, s));
+  TEST_ASSERT_TRUE(s.textCenter);
+  TEST_ASSERT_FALSE(s.textInFront);
+  TEST_ASSERT_EQUAL_INT(0, s.repeat);
+  TEST_ASSERT_TRUE(s.text.empty());
 }
 
 static void test_notification_key_on_an_app_is_rejected() {
@@ -653,6 +665,7 @@ int main(int, char**) {
   RUN_TEST(test_renamed_keys_parse);
   RUN_TEST(test_fragment_keys_are_spelled_out);
   RUN_TEST(test_unknown_key_is_rejected);
+  RUN_TEST(test_wrong_optional_types_keep_their_defaults);
   RUN_TEST(test_notification_key_on_an_app_is_rejected);
   RUN_TEST(test_notification_keys_pass_on_a_notification);
   RUN_TEST(test_an_unparsable_sound_rtttl_is_rejected);

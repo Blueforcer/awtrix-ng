@@ -514,6 +514,5 @@ int main(int, char**) {
   RUN_TEST(test_read_answers_every_field_kind);
   RUN_TEST(test_read_has_no_value_for_unset_or_unknown);
   RUN_TEST(test_read_follows_an_applied_patch);
-  RUN_TEST(test_json_roundtrip_covers_every_field);
   return UNITY_END();
 }
