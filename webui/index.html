@@ -392,7 +392,9 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .ftgrp{display:flex;align-items:center;gap:7px;flex:none;
   padding:6px 13px;background:var(--card2);border-bottom:1px solid var(--brd2);
   font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
-.ftgrp button{margin-left:auto;padding:2px 8px}
+.ftgrp button{position:relative;display:inline-flex;align-items:center;justify-content:center;
+  margin-left:auto;padding:0;width:28px;height:28px;min-height:28px;flex:none;border-radius:6px;line-height:1}
+.ftgrp button::before{content:"";position:absolute;inset:-6px}
 .ftitem{display:flex;align-items:center;gap:8px;padding:3px 8px;border-radius:6px;cursor:pointer;
   font-size:13px;color:var(--fg);min-width:0;border:1px solid transparent}
 .ftitem:hover{background:var(--card2)}
