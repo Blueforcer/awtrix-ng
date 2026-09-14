@@ -3,6 +3,8 @@
 The Web UI checks linked scripts on opening Scripts, with two concurrent requests.
 An explicit check refreshes the results. Updates always require a click. The Hub
 never contacts the display and receives neither local code nor device credentials.
+As with other browser CORS requests, the browser's Origin header can contain the
+local Web UI address; that address is not sent in the request payload.
 
 ## Identity and release contract
 
