@@ -14,8 +14,8 @@ constexpr float kPi = 3.14159265358979f;
 
 float toDb(float power) { return 10.f * std::log10(power + 1e-12f); }
 
-uint8_t scale(float db, float ref) {
-  const float t = (db - (ref - SpectrumAnalyzer::kRangeDb)) / SpectrumAnalyzer::kRangeDb;
+uint8_t scale(float db, float ref, float range) {
+  const float t = (db - (ref - range)) / range;
   const float c = t < 0.f ? 0.f : (t > 1.f ? 1.f : t);
   return static_cast<uint8_t>(c * 255.f + 0.5f);
 }
@@ -108,10 +108,10 @@ bool SpectrumAnalyzer::analyze(const int16_t* pcm, int samples, int channels, in
     frameMax = std::max(frameMax, bandDb[i]);
   }
   ref_ = std::max(frameMax, std::max(kAgcFloorDb, ref_ - kAgcDecayDbPerSec * secs));
-  for (int i = 0; i < kBandCount; ++i) out.bands[i] = scale(bandDb[i], ref_);
+  for (int i = 0; i < kBandCount; ++i) out.bands[i] = scale(bandDb[i], ref_, kRangeDb);
 
   levelRef_ = std::max(levelDb, std::max(kLevelFloorDb, levelRef_ - kAgcDecayDbPerSec * secs));
-  out.level = scale(levelDb, levelRef_);
+  out.level = scale(levelDb, levelRef_, kLevelRangeDb);
 
   float bass = 0.f;
   for (int k = bassLo_; k < bassHi_; ++k) bass += re[k];

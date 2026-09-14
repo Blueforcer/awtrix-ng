@@ -15,8 +15,10 @@ class SpectrumAnalyzer {
  public:
   static constexpr float kMinBandHz = 50.f;
   static constexpr float kMaxBandHz = 16000.f;
-  // Dynamic range on the panel, below a reference that follows the loudest band.
+  // Dynamic range on the panel, below a reference that follows the loudest band. The loudness
+  // gets a much narrower one: compressed music moves only a few dB, and that must show.
   static constexpr float kRangeDb = 45.f;
+  static constexpr float kLevelRangeDb = 20.f;
   static constexpr float kAgcDecayDbPerSec = 8.f;
   // Band dB of a -60 dBFS tone; the reference never sinks below it, so hiss is not amplified.
   static constexpr float kAgcFloorDb = -12.f;

@@ -151,9 +151,14 @@ void test_level_tracks_rms() {
   g.fill(1000.f, 1.0f);
   g.run(a, s);
   TEST_ASSERT_EQUAL_UINT8(255, s.level);
+  // 10 dB under the running maximum is half of the 20 dB loudness range.
+  g.fill(1000.f, 0.316f);
+  g.run(a, s);
+  TEST_ASSERT_UINT8_WITHIN(12, 128, s.level);
+  // 20 dB under it is the floor, give or take the reference's own decay since the loud frame.
   g.fill(1000.f, 0.1f);
   g.run(a, s);
-  TEST_ASSERT_UINT8_WITHIN(12, 142, s.level);
+  TEST_ASSERT_TRUE(s.level < 12);
   g.fill(1000.f, 0.f);
   g.run(a, s);
   TEST_ASSERT_EQUAL_UINT8(0, s.level);
