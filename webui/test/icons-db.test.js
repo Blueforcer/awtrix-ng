@@ -213,6 +213,12 @@ async function testInstalledSearchAndActions() {
   const { window, store } = await withGallery(ctx => {
     ctx.store.files['/ICONS'].set('weather-cloud.gif', 240);
     ctx.store.files['/ICONS'].set('coffee.gif', 120);
+    const bytes = 'GIF89a-weather-cloud';
+    ctx.store.localIconBytes['weather-cloud.gif'] = bytes;
+    ctx.store.iconOrigins.set('weather-cloud.gif', {
+      name:'weather-cloud.gif', hub:'https://hub.flows.blueforcer.de/icons/', slug:'weather-cloud',
+      sha256:require('node:crypto').createHash('sha256').update(bytes).digest('hex')
+    });
   });
   const search = window.document.querySelector('input[type=search]');
   search.value = 'WEATHER';
@@ -235,7 +241,10 @@ async function testInstalledSearchAndActions() {
   await flush(20);
   assert(notification && notification.icon === 'weather-cloud' && notification.durationMs === 3000,
     'display preview uses the selected icon for a short notification');
-  openMenu(tile);
+  const menuItems = openMenu(tile);
+  assert(window.document.activeElement === menuItems[0], 'opening the icon menu focuses its first action');
+  const hubLink = tile.querySelector('.tmenu a:not([download])');
+  assert(hubLink?.href === 'https://awtrix.de/icons/weather-cloud', 'old Hub origins open on the current hostname');
   const download = tile.querySelector('.tmenu a[download]');
   assert(download && download.getAttribute('download') === 'weather-cloud.gif' &&
     download.getAttribute('href') === '/ICONS/weather-cloud.gif', 'download points at the original device file');

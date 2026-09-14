@@ -3,34 +3,29 @@
 AWTRIX ships with an empty `/ICONS` directory. This page is about filling it: getting an
 8×8 image in there, giving it a name, and putting that name in a payload.
 
-## Install from the icon database
+## Install from the AWTRIX Hub
 
-The quickest way to fill `/ICONS` is the **Icons** tab of the built-in web UI. Its **Icon database**
-tab searches a shared community collection; one click on a result downloads it and installs it
-under its name - the name you then write in a payload or in a script.
+Open **Icons → Add → Open icon gallery** in the built-in web UI, or go directly to the
+[AWTRIX Hub](https://awtrix.de/icons). Search the community collection, open an icon and choose
+**Send to your AWTRIX**. Your browser downloads the original and transfers it directly to the
+display on your local network. AWTRIX itself never contacts the internet.
 
-Browsing shows enlarged previews and needs no account. Installing or reloading an original
-requires a Hub connection key: sign in at [AWTRIX Hub](https://awtrix.de/account/settings),
-create a key, and paste it into **Icons → Connect to Hub**. The key stays in this browser;
-it is not stored on AWTRIX. The same key authorizes publishing and `@icons` installation.
+Downloading an original requires signing in to the Hub. Reloading an installed Hub icon,
+publishing and automatic [`# @icons`](scripting.md#the-icons-your-script-needs) installation also
+use a Hub connection key. Create one in [your Hub account](https://awtrix.de/account/settings) and
+paste it into **System → AWTRIX Hub**. The key stays in this browser and is not stored on AWTRIX.
 
-The search runs in your browser, not on AWTRIX. The catalogue is fetched once per visit and
-filtered locally, so typing is instant. The clock never contacts the internet for this - your
-browser does, then uploads the bytes to AWTRIX over the local network. In provisioning AP mode,
-where the browser has no internet access, the tab says so and stays disabled.
-
-Filter by size (8×8 or 32×8) and by whether an icon is animated. Icons already on the clock are
-marked and offer **Reload from Hub** to fetch an author's update under the same name. Click an icon's name to copy it, then use it in a payload or
-in a script's [`# @icons`](scripting.md#the-icons-your-script-needs) line.
+Installed Hub icons are marked in the device gallery and offer **Reload from Hub** to fetch an
+author's update under the same name. Use that name in a payload or in a script's `# @icons` line.
 
 ### Contribute an icon back
 
-Every icon on the clock offers **To database** in its tile menu, and the
-[Icon editor](icon-editor.md) has a **Save to Cloud** button next to Save to AWTRIX. Both send
+Every icon on the clock offers **Publish to Hub** in its tile menu, and the
+[Icon editor](icon-editor.md) can publish the current drawing. Both send
 the icon to the shared collection with a display name you choose.
 
 Publishing needs an **AWTRIX Hub** account, and the sign-in lives on the Hub rather than on your
-clock. Use the same connection key as for downloading. The upload is
+clock. Save the connection key under **System → AWTRIX Hub**. The upload is
 checked first - it has to be a GIF no larger than 32×8 and under 64 KB - and refused right away if
 the exact same image is already in the collection, naming the icon that holds it. What passes is
 published immediately; there is no review queue, and anything that should not be there is taken

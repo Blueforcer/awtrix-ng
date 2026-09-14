@@ -41,8 +41,10 @@ button{font:inherit;color:var(--fg);background:var(--card2);border:1px solid var
 button:hover{border-color:var(--acc);background:var(--border)}
 button:active:not(:disabled){transform:translateY(1px)}
 button:disabled{opacity:.45;cursor:default;border-color:var(--border)}
-button.pri{background:var(--pri);border-color:var(--pri);color:#23170e;font-weight:650}
-:root[data-theme=light] button.pri{color:#fff}
+button.pri,a.pri{background:var(--pri);border-color:var(--pri);color:#23170e;font-weight:650}
+a.pri{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 14px;border:1px solid var(--pri);border-radius:9px}
+a.pri:hover{filter:brightness(1.06)}
+:root[data-theme=light] :is(button,a).pri{color:#fff}
 button.danger{color:var(--err);border-color:var(--errbrd)}
 button.danger.armed{background:var(--err);color:#fff;border-color:var(--err)}
 button.icon{padding:7px 10px}
@@ -494,6 +496,8 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .ac div.on .g{color:#fffc}
 .badge{border-radius:6px;padding:4px 9px;font:11.5px/1.4 var(--mono);word-break:break-word}
 #sec-hub .badge{flex:none;white-space:nowrap;word-break:normal}
+#sec-hub .ctl{flex-wrap:wrap}
+#sec-hub .ctl input[type=password]{flex:1 1 180px}
 .badge.bad{color:var(--badfg);background:var(--badbg);border:1px solid var(--err);flex-basis:100%}
 .badge.good{color:var(--ok);border:1px solid #2ea04355}
 @media(min-width:721px){
@@ -516,6 +520,8 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
   .frow .ctl{justify-content:flex-start;min-width:0}
   .frow .ctl input,.frow .ctl select,.frow .ctl .tzctl,.frow .ctl .tzrow,.frow .ctl .days{min-width:0;max-width:100%}
   .frow .ctl input[type=text],.frow .ctl input[type=password],.frow .ctl select{width:100%}
+  #sec-hub .ctl{width:100%}
+  #sec-hub .badge{white-space:normal}
   .tzrow select{flex:1 1 auto}
   .wifiwrap{width:100%}
 }
@@ -2812,8 +2818,10 @@ async function hubScriptRelease(id,part='release'){
     if(!token)throw hubDownloadError('hubAuthRequired');
     headers.Authorization='Bearer '+token;
   }
-  const r=await fetch('https://awtrix.de/api/v1/scripts/'+id+'/'+part,
-    {credentials:'omit',redirect:'error',cache:'no-store',headers,signal:AbortSignal.timeout(15000)});
+  let r;
+  try{r=await fetch('https://awtrix.de/api/v1/scripts/'+id+'/'+part,
+    {credentials:'omit',redirect:'error',cache:'no-store',headers,signal:AbortSignal.timeout(15000)});}
+  catch(e){throw new Error(t('suOffline'));}
   if(r.status===401||r.status===403)throw hubDownloadError('hubAuthRejected');
   if(!r.ok){const e=new Error(t(r.status===404?'suMissing':'suOffline'));e.status=r.status;throw e;}
   if(part==='source')return r.text();
@@ -3586,9 +3594,9 @@ function paintMqtt(node,m){
   node.replaceChildren(parts.join(' · '));
 }
 function hubTokenSection(page){
-  const inp=el('input',{type:'password',autocomplete:'off',spellcheck:'false',value:hubToken()});
+  const inp=el('input',{type:'password',autocomplete:'off',spellcheck:'false',value:hubToken(),'aria-label':t('hubTokenLbl')});
   const clear=el('button',null,t('hubClear'));
-  const open=el('button',null,t('hubGet'));
+  const open=el('a',{href:hubAccountUrl(),target:'_blank',rel:'noopener'},t('hubGet'));
   const state=el('div',{class:'badge'});
   function paint(){
     const has=!!hubToken();
@@ -3607,7 +3615,6 @@ function hubTokenSection(page){
   });
   inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();});
   clear.addEventListener('click',()=>{inp.value='';if(store(''))toast(t('hubCleared'));});
-  open.addEventListener('click',()=>window.open(hubAccountUrl(),'_blank','noopener'));
   paint();
   const section=page.section('hub',t('hubSection'),t('hubSectionH'),[
     actionRow(t('hubTokenLbl'),t('hubTokenH'),[state,inp,clear]),
@@ -3911,7 +3918,7 @@ function viewIcons(view){
         t(({hub:'icfromhub',modified:'icmodified',checking:'icchecking',unknown:'icunknown'})[f.state]||'iclocal')));
     const pw=el('div',{class:'pw'},
       el('img',{src:'/ICONS/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev,alt:f.name,loading:'lazy'}));
-    const open=el('button',{title:t('more'),'aria-label':t('more')+': '+base,'aria-expanded':'false'},'⋯');
+    const open=el('button',{title:t('more'),'aria-label':t('more')+': '+base,'aria-haspopup':'menu','aria-expanded':'false'},'⋯');
     const shut=()=>{const m=pw.querySelector('.tmenu');if(m)m.remove();open.setAttribute('aria-expanded','false');};
     const show=el('button',{type:'button',class:'icon-show','aria-label':t('icshow')+': '+base},t('icshow'));
     show.addEventListener('click',async()=>{
@@ -3926,24 +3933,26 @@ function viewIcons(view){
       document.querySelectorAll('.icons-page .tmenu').forEach(m=>{const b=m.closest('.tile').querySelector('[aria-expanded]');if(b)b.setAttribute('aria-expanded','false');m.remove();});
       open.setAttribute('aria-expanded','true');
       const item=(label,fn,danger)=>{
-        const b=el('button',danger?{class:'danger'}:null,label);
+        const b=el('button',danger?{class:'danger',role:'menuitem'}:{role:'menuitem'},label);
         if(danger)armable(b,()=>{shut();fn();});
         else b.addEventListener('click',()=>{shut();fn();});
         return b;
       };
-      pw.append(el('div',{class:'tmenu'},
+      const menu=el('div',{class:'tmenu',role:'menu'},
         item(t('edit'),()=>{pendingEditIcon=f.name;location.hash='#/editor';}),
-        f.state==='hub'?el('a',{href:f.origin.hub+encodeURIComponent(f.origin.slug),target:'_blank',rel:'noopener'},t('icviewhub')):
+        f.state==='hub'?el('a',{href:iconOriginHub(f.origin.hub)+encodeURIComponent(f.origin.slug),target:'_blank',rel:'noopener',role:'menuitem'},t('icviewhub')):
           item(t(f.state==='modified'?'icvariant':'icsend'),()=>shareRow(f,base,ft,reload)),
         ...(f.origin?[item(t('icreload'),()=>{
           const run=async(replace=false)=>{try{await reloadHubIcon(f,{replace});toast(t('icreloaded'));reload();}
             catch(e){toast(e.message,false,e.code==='iconConflict'?[{label:t('ickeep'),fn:()=>{}},{label:t('icreplace'),fn:()=>run(true)}]:e.code==='hubAuthentication'?[connectHubAction()]:undefined);}};
           run();
         })]:[]),
-        el('a',{href:'/ICONS/'+encodeURIComponent(f.name),download:f.name},t('icdownload')),
+        el('a',{href:'/ICONS/'+encodeURIComponent(f.name),download:f.name,role:'menuitem'},t('icdownload')),
         item(t('del'),async()=>{
           try{await delFile('/ICONS/'+f.name);toast(t('deleted'));reload();}catch(e){toast(e.message,false);}
-        },true)));
+        },true));
+      pw.append(menu);
+      menu.querySelector('[role="menuitem"]')?.focus();
     });
     const tile=el('div',{class:'tile'},pw,ft,el('div',{class:'icon-tile-actions'},show,el('div',{class:'acts'},open)));
     tile.addEventListener('keydown',e=>{if(e.key==='Escape'&&pw.querySelector('.tmenu')){shut();open.focus();}});
@@ -4018,6 +4027,7 @@ function cfgUrl(key,def){
 }
 const iconDbUrl=()=>cfgUrl('awtrixIconDbUrl',ICONDB_URL_DEFAULT);
 const iconApiUrl=()=>cfgUrl('awtrixIconApiUrl',ICONAPI_URL_DEFAULT);
+const iconOriginHub=hub=>hub==='https://hub.flows.blueforcer.de/icons/'&&iconDbUrl()===ICONDB_URL_DEFAULT?ICONDB_URL_DEFAULT:hub;
 let idbCache=null;
 async function idbLoad(){
   if(!idbCache){
@@ -4167,7 +4177,7 @@ async function idbInstall(slug,{replace=false}={}){
 async function reloadHubIcon(file,{replace=false}={}){
   const origin=file.origin;
   if(!validIconOrigin(origin))throw new Error(t('idbfail'));
-  const sourceHub=origin.hub==='https://hub.flows.blueforcer.de/icons/'&&iconDbUrl()===ICONDB_URL_DEFAULT?ICONDB_URL_DEFAULT:origin.hub;
+  const sourceHub=iconOriginHub(origin.hub);
   const metadata=await hubIconMetadata(origin.slug,sourceHub);
   if(!new RegExp('^'+origin.slug+'\\.(gif|jpg)$').test(metadata.filename||''))throw new Error(t('idbfail'));
   const r=await hubDownloadFile(sourceHub+encodeURIComponent(metadata.filename));
@@ -4185,7 +4195,7 @@ async function reloadHubIcon(file,{replace=false}={}){
 }
 async function installedIconIds(){
   const files=await iconInventory();
-  return new Set(files.filter(f=>f.state==='hub'&&f.origin.hub===iconDbUrl()&&f.origin.slug===f.name.replace(/\.[^.]+$/,'')).map(f=>f.origin.slug));
+  return new Set(files.filter(f=>f.state==='hub'&&iconOriginHub(f.origin.hub)===iconDbUrl()&&f.origin.slug===f.name.replace(/\.[^.]+$/,'')).map(f=>f.origin.slug));
 }
 async function installScriptIcons(ids,have){
   // Always recheck the actual bytes: an editor or another browser may have

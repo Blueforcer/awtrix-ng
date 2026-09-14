@@ -1,7 +1,7 @@
 **Added**
 
 - **The live display on a page of its own**: `http://<awtrix-ip>/fullscreen`, made for an iframe on a Home Assistant dashboard (#29).
-- **The AWTRIX Hub is built into the Icons tab.** Browsing needs no account; a connection key stored only in the browser enables installing, reloading and publishing icons. The browser transfers the files, while the clock itself never needs internet access.
+- **The Icons tab links directly to the AWTRIX Hub.** Browse the full community gallery there and send an icon to your display from its detail page. A connection key stored only in the browser enables reloading and publishing icons as well as script dependencies. The clock itself never needs internet access.
 - **Scripts can declare their Hub icons** with `# @icons ...`. The editor and Apps tab show missing icons and install them in one action.
 - **Installed Hub icons retain their origin.** The UI distinguishes unchanged Hub icons, locally modified icons and device-only icons. Updates never silently overwrite local changes, and the origin metadata is included in backups. The new `/api/v1/icons/origins` endpoint exposes the same information.
 - **The icon editor keeps editable drafts in the browser.** Projects can be opened, downloaded, imported and published as a new variant or as an update to an existing Hub icon.
@@ -33,7 +33,7 @@
 - An icon that is a PNG under a `.jpg` name counted as drawn, leaving a black gap where the picture should be. The column goes back to the text and the log names the file (#23).
 - One time zone the browser does not know ended the System page halfway, with no maintenance and no backup below MQTT (#25).
 - Files in downloaded backup ZIPs now carry the backup creation time instead of invalid 1979/1601 timestamps (#44).
-- The Icons tab showed a blank pane when the Hub catalogue is empty, and the framed icon editor was not told which Hub to publish to.
+- The Icons tab could show an empty Hub area, and the framed icon editor was not told which Hub to publish to.
 - Delete and duplicate in the icon editor were blank grey chips. Ships with the Hub, not with the firmware, so it is already fixed (#30).
 
 ---

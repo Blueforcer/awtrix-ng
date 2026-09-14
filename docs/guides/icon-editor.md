@@ -19,9 +19,9 @@ Publishing shares your drawing in the **AWTRIX Hub** gallery. Give it a descript
 “Sunny sky”. A LaMetric number such as “12345” is not accepted as a publication name: rename it
 before publishing. Numbers can still be part of a name, for example “Battery 50”.
 
-Publishing needs an AWTRIX Hub account. On the device, open **Publish your own icons** in the
-Icons tab and connect using your Hub device token. The token stays in this browser; the embedded
-editor does not receive it. You can also use the editor on the Hub, where your sign-in is sufficient.
+Publishing needs an AWTRIX Hub account. Create a connection key in your Hub account and save it in
+the device web UI under **System → AWTRIX Hub**. The key stays in this browser; the embedded editor
+does not receive it. You can also use the editor on the Hub, where your sign-in is sufficient.
 
 If the same image or animation is already published, the Hub links to that entry instead of adding
 a duplicate. Editing a Hub icon and publishing different content creates a new variation, preserving

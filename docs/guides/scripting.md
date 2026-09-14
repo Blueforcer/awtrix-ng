@@ -541,16 +541,15 @@ pictures. Name them in the header instead:
 # @icons 2105, 2106, 2107
 ```
 
-Each value is an icon name from the [icon database](icons.md#install-from-the-icon-database) - the
-name under the picture in the **Icon database** tab, which you can click to copy. Separate them with
-commas or spaces, and use as many `# @icons` lines as you like. Up to 32 icons.
+Each value is an icon name from the [AWTRIX Hub](icons.md#install-from-the-awtrix-hub). Separate
+them with commas or spaces, and use as many `# @icons` lines as you like. Up to 32 icons.
 
 Then one press gets them. In the script editor a button appears in the toolbar showing how many
 are still missing; in the **Apps** tab the row menu offers **Install icons**. Icons already on the
 clock are left as they are, and an ID the database does not have is named in a message while the
 rest still arrive.
 
-Downloads require your Hub connection key in **Icons → Connect to Hub**. Get it from
+Downloads require your Hub connection key under **System → AWTRIX Hub**. Get it from
 [your Hub account](https://awtrix.de/account/settings). Already installed icons continue to
 work when you remove the key; new downloads and deliberate reloads need a valid key.
 

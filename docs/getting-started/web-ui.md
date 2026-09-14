@@ -24,7 +24,7 @@ hash, so you can bookmark or link any of them directly:
 | **Dashboard** | `#/` | Live matrix preview, power/brightness, vitals |
 | **Apps** | `#/apps` | Reorder, switch off and delete apps |
 | **Scripts** | `#/scripts` | Write, install and debug Berry apps |
-| **Icons** | `#/icons` | Icon files, storage, LaMetric downloader |
+| **Icons** | `#/icons` | Manage, upload, preview and edit icon files |
 | **Icon Editor** | `#/editor` | Draw 8×8/32×8 icons in an embedded editor and save them to AWTRIX |
 | **Audio** | `#/audio` | MP3s, melodies and internet radio |
 | **Palettes** | `#/palettes` | Build colour ramps for effects, text and charts |
@@ -360,18 +360,16 @@ plain form. Keep it where you would keep the passwords themselves.
 
 ## Icons
 
-Three tabs, and a storage bar in the header (used / total, turning red past 90 % full):
+Two tabs, and a storage bar in the header (used / total, turning red past 90 % full):
 
 | Tab | What it holds |
 |---|---|
 | **On AWTRIX** | every icon on the clock, with the count in the tab label |
-| **Icon database** | the shared community collection |
-| **Add** | the upload zone, and the LaMetric field |
+| **Add** | upload an icon, open the Hub gallery or create one in the editor |
 
-**On AWTRIX** opens first. Each tile carries one **⋯** button; it covers the icon with the four
-things you can do with it: **Show** puts it on the panel for three seconds, **Edit** opens it in the
-[Icon Editor](#icon-editor), **To database** submits it to the shared collection, and **Delete**
-removes it after a second click to confirm.
+**On AWTRIX** opens first. **Show on display** puts an icon on the panel for three seconds. The
+**⋯** menu opens the other actions: edit it, publish it to the Hub, reload a linked Hub icon,
+download the file or delete it after a second click to confirm.
 
 **Add** takes `.png`, `.jpg`, `.jpeg` and `.gif`, 8×8 for a static icon. PNG and JPG are turned into
 a GIF as they upload - sharper on the panel and smaller on AWTRIX - so `smiley.png` becomes
@@ -388,23 +386,14 @@ curl -X POST 'http://<awtrix-ip>/api/v1/files?dir=/ICONS' \
   -F 'file=@smiley.jpg'
 ```
 
-The **Icon database** tab searches the shared community collection. The catalogue is fetched once
-*in your browser* - AWTRIX never talks to the internet for this - and filtered locally, so search is
-instant. Narrow it by size (8×8 or 32×8) or to animated icons only; icons already on AWTRIX are
-marked and their install button is locked. One click downloads an icon and uploads it under its
-name, which copies on click so you can paste it into a payload or a script.
+**Open icon gallery** takes you to the [AWTRIX Hub](https://awtrix.de/icons). Choose an icon there
+and use **Send to your AWTRIX** on its detail page. Your browser transfers the file directly to the
+display on your local network; AWTRIX itself does not contact the Hub.
 
-**To database** in a tile's menu sends that icon the other way, into the collection. Give it a
-display name and submit; publishing needs an AWTRIX Hub account, and the web UI hands you a link to
-sign in there. What passes the check is published straight away. An icon whose bytes are already in
-the collection is refused on the spot, naming the icon that holds it.
-
-**LaMetric icon download** fetches an icon from the LaMetric gallery *in your browser* - AWTRIX
-never talks to the internet for this either - converts it to GIF, then uploads it. Paste a numeric
-icon ID, hit **Fetch**, preview it, then **Save to AWTRIX**.
-
-Both sections are disabled when your browser is offline, so they are unavailable in provisioning
-mode.
+**Publish to Hub** in a tile's menu sends an icon to the community collection. Publishing, reloading
+a linked icon and installing a script's declared icons require a Hub connection key. Create one in
+[your Hub account](https://awtrix.de/account/settings) and save it under **System → AWTRIX Hub**.
+The key stays in this browser and is not stored on the display.
 
 More: [HTTP API → Files](../reference/http.md#files) · [Payload → Icon](../reference/payload.md#icon).
 

@@ -7,7 +7,7 @@ const linked = code => `# @hub ${id} ${hash(code)}\n${code}`;
 const old = linked('old source');
 const next = 'new source';
 
-async function scenario({ modified = false, conflict = false, draft = false } = {}) {
+async function scenario({ modified = false, conflict = false, draft = false, network = false } = {}) {
   const { window, store } = await boot();
   try {
     window.AbortSignal = AbortSignal;
@@ -27,6 +27,7 @@ async function scenario({ modified = false, conflict = false, draft = false } = 
             id, revision: 2, sha256: hash(next), notes: '<img src=x onerror=alert(1)>'
           }));
         }
+        if (network) throw new TypeError('Failed to fetch');
         assert.equal(opts.headers.Authorization, 'Bearer script-test-token');
         if (draft) await new Promise(resolve => { releaseSource = resolve; });
         return new Response(next);
@@ -61,6 +62,13 @@ async function scenario({ modified = false, conflict = false, draft = false } = 
       releaseSource();
     }
     await flush(150);
+    if (network) {
+      assert.equal(writes.length, 0, 'a failed source download never writes the script');
+      assert.equal(store.scripts.get('Demo'), current, 'a failed source download keeps the installed script');
+      const message = [...window.document.querySelectorAll('.toast')].at(-1).textContent;
+      assert.match(message, /Hub check unavailable/, 'network failures use the translated Hub message');
+      return;
+    }
     assert.equal(writes.length, 1);
     assert.equal(store.scripts.get('Demo'), modified || conflict ? current : linked(next));
     if (modified) {
@@ -126,5 +134,6 @@ async function unlinkedScenario() {
   await scenario({ modified: true });
   await scenario({ conflict: true });
   await scenario({ draft: true });
-  console.log('hub-script-updates: 6 workflows passed (unlinked, token gate, update, copy, conflict, in-flight draft)');
+  await scenario({ network: true });
+  console.log('hub-script-updates: 7 workflows passed (unlinked, token gate, update, copy, conflict, in-flight draft, network failure)');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -15,9 +15,10 @@ This marker records origin, not a signature or an ownership claim. Local code
 changes retain the marker and are detected by a different hash.
 
 `GET https://awtrix.de/api/v1/scripts/{id}/release` returns
-`{id,name,revision,sha256,notes}`. `GET .../source` returns the exact raw source.
-Both endpoints serve public NG contributions only, return 404 for unavailable
-content, use no-store caching, and support credential-free CORS. A source hash
+`{id,name,revision,sha256,notes}`. `GET .../source` returns the exact raw source and
+requires `Authorization: Bearer <Hub connection key>`. Both endpoints serve public NG
+contributions only, return 404 for unavailable content, use no-store caching, and support
+CORS without cookies. A source hash
 mismatch aborts installation if a publisher changed the release during download.
 Only code changes increment the release number; descriptions and cover images do not.
 
