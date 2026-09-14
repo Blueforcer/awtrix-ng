@@ -56,6 +56,7 @@ int SpectrumAnalyzer::bandForHz(float hz) const {
 void SpectrumAnalyzer::reset() {
   ref_ = kAgcFloorDb;
   levelRef_ = kLevelFloorDb;
+  levelMin_ = 1e9f;
   bassAvg_ = 0.f;
   samplesSinceBeat_ = 1 << 30;
   frames_ = 0;
@@ -111,7 +112,9 @@ bool SpectrumAnalyzer::analyze(const int16_t* pcm, int samples, int channels, in
   for (int i = 0; i < kBandCount; ++i) out.bands[i] = scale(bandDb[i], ref_, kRangeDb);
 
   levelRef_ = std::max(levelDb, std::max(kLevelFloorDb, levelRef_ - kAgcDecayDbPerSec * secs));
-  out.level = scale(levelDb, levelRef_, kLevelRangeDb);
+  levelMin_ = std::min(levelDb, levelMin_ + kAgcDecayDbPerSec * secs);
+  const float span = std::min(kLevelRangeDb, std::max(kLevelMinRangeDb, levelRef_ - levelMin_));
+  out.level = scale(levelDb, levelRef_, span);
 
   float bass = 0.f;
   for (int k = bassLo_; k < bassHi_; ++k) bass += re[k];

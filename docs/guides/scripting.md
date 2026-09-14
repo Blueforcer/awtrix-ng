@@ -1452,7 +1452,7 @@ timed to when it comes out of the speaker, so the picture and the sound match.
 | Call | Answer |
 |---|---|
 | `audio.bands(n?, max?)` | a list of `n` numbers, bass on the left, treble on the right - `n` from 1 to 32 (default 32), each scaled from 0 to `max` (default 255) |
-| `audio.level()` | how loud it is right now, 0 to 255 |
+| `audio.level()` | how loud it is right now, 0 to 255 - between the quietest and the loudest moment of the last few seconds, so a compressed station still moves the needle |
 | `audio.beat()` | `true` for exactly one frame each time a beat lands |
 | `audio.active()` | `true` while a station or an MP3 is playing |
 

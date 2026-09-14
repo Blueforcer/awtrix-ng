@@ -18,7 +18,10 @@ class SpectrumAnalyzer {
   // Dynamic range on the panel, below a reference that follows the loudest band. The loudness
   // gets a much narrower one: compressed music moves only a few dB, and that must show.
   static constexpr float kRangeDb = 45.f;
+  // The loudness window spans the quietest to the loudest recent frame, never narrower than
+  // kLevelMinRangeDb (a steady tone sits at the top) and never wider than kLevelRangeDb.
   static constexpr float kLevelRangeDb = 20.f;
+  static constexpr float kLevelMinRangeDb = 6.f;
   static constexpr float kAgcDecayDbPerSec = 8.f;
   // Band dB of a -60 dBFS tone; the reference never sinks below it, so hiss is not amplified.
   static constexpr float kAgcFloorDb = -12.f;
@@ -53,6 +56,8 @@ class SpectrumAnalyzer {
   int rateHz_ = 0;
   float ref_ = kAgcFloorDb;
   float levelRef_ = kLevelFloorDb;
+  // Starts above any reading so the first frame sets it; from then on it only creeps up.
+  float levelMin_ = 1e9f;
   float bassAvg_ = 0.f;
   int samplesSinceBeat_ = 1 << 30;
   int frames_ = 0;

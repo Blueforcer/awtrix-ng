@@ -815,7 +815,7 @@ numbers, timed to the speaker:
 | Call | Answer |
 |---|---|
 | `audio.bands(n?, max?)` | list of `n` numbers (1-32, default 32), bass first, each 0..`max` (default 255) |
-| `audio.level()` | loudness 0..255 |
+| `audio.level()` | loudness 0..255, between the quietest and loudest recent moment |
 | `audio.beat()` | `true` for exactly one frame per beat - read it in `draw()`, never in `loop()` |
 | `audio.active()` | `true` while a station or an MP3 is playing |
 
