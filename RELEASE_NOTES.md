@@ -25,6 +25,7 @@
 
 **Fixed**
 
+- An I2S amplifier crackled and hissed from power-on until the first sound played: the I2S lines floated until then. They are now held low from boot.
 - A notification with an empty `soundRtttl` was refused outright, so clients that send their whole schema - Home Assistant among them - got nothing at all (#27).
 - An app pushed under a built-in name like `Temperature` was stored and listed, but the panel kept showing the built-in. The pushed app takes the name over now (#37).
 - An icon that is a PNG under a `.jpg` name counted as drawn, leaving a black gap where the picture should be. The column goes back to the text and the log names the file (#23).

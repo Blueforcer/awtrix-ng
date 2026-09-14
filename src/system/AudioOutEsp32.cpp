@@ -87,6 +87,13 @@ AudioOutEsp32::AudioOutEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int 
       pinMclk_(pinMclk),
       pinAmpEnable_(pinAmpEnable) {
   lock_ = xSemaphoreCreateMutex();
+  // Driven low until the first stream installs the driver: floating clock lines make the
+  // amplifier crackle, a still BCLK sends it to sleep.
+  for (int pin : {pinBclk_, pinLrclk_, pinDout_, pinMclk_}) {
+    if (pin < 0) continue;
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, LOW);
+  }
   // Held high for good: the amplifier's own mute click is worse than its idle noise, and a
   // notification sound must not wait for it to come up.
   if (pinAmpEnable_ >= 0) {
