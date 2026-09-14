@@ -27,8 +27,7 @@ function ownGrid(window) {
 function segments(window) {
   return [...window.document.querySelectorAll('.segbar button')];
 }
-// Four icon buttons never fit the narrowest tile, so every action sits behind
-// the one button the tile does show.
+// The icon actions stay behind the one menu button shown on each tile.
 function openMenu(tile) {
   tile.querySelector('.acts button').click();
   return [...tile.querySelectorAll('.tmenu button')];
@@ -60,6 +59,14 @@ async function testBrowse() {
   assert(tiles(window).length === 4, 'all four catalogue entries render');
   assert(tiles(window).includes('SuperMario'),
     'a display name that differs from the slug is shown, not the slug');
+  const firstTile = card(window).querySelector('.tile');
+  const install = firstTile.querySelector('.acts button');
+  const details = firstTile.querySelector('.acts a');
+  assert(install.textContent === '' && install.querySelector('use')?.getAttribute('href') === '#i-import',
+    'install uses a download icon instead of text');
+  assert(details?.textContent === '' && details.querySelector('use')?.getAttribute('href') === '#i-info' &&
+    /^Details: /.test(details.getAttribute('aria-label')), 'details uses an accessible info icon');
+  assert(!/Copy for script/.test(firstTile.textContent), 'the redundant script-copy action is absent');
 
   await search(window, 'mario');
   assert(tiles(window).join() === 'SuperMario', 'search matches the display name');
@@ -127,7 +134,8 @@ async function testAlreadyInstalled() {
   });
   await search(window, 'mail');
   const button = card(window).querySelector('.tile .acts button');
-  assert(button.disabled === false && button.textContent === 'Reload from Hub', 'an installed icon offers deliberate reload');
+  assert(button.disabled === false && button.getAttribute('aria-label') === 'Reload from Hub: mail' &&
+    button.querySelector('use')?.getAttribute('href') === '#i-import', 'an installed icon offers deliberate reload');
 }
 
 /* The Hub launches with nothing in it, so "loaded and empty" is a normal state
@@ -164,9 +172,10 @@ async function testSubmit() {
   const grid = ownGrid(window);
   const tile = grid.querySelector('.tile');
   const actions = openMenu(tile);
-  assert(actions.length === 4, 'the menu offers script reference, edit, publish and delete');
+  assert(actions.length === 3, 'the menu offers edit, publish and delete');
+  assert(!/Copy for script/.test(tile.textContent), 'installed icons no longer offer the script-copy action');
 
-  actions[2].click();
+  actions[1].click();
   const footer = tile.querySelector('.ft');
   assert(footer.querySelector('input') && footer.querySelector('input').value === 'own',
     'the submit row is prefilled with the icon name');
@@ -198,7 +207,7 @@ async function testDeviceToken() {
 
   const submit = () => {
     const tile = ownGrid(window).querySelector('.tile');
-    openMenu(tile)[2].click();
+    openMenu(tile)[1].click();
     tile.querySelector('.ft button').click();
   };
 
@@ -243,7 +252,7 @@ async function testNotLoggedIn() {
   });
   const grid = ownGrid(window);
   const tile = grid.querySelector('.tile');
-  openMenu(tile)[2].click();
+  openMenu(tile)[1].click();
   tile.querySelector('.ft button').click();
   await flush(80);
 
@@ -270,7 +279,7 @@ async function testUnknownError() {
   });
   const grid = ownGrid(window);
   const tile = grid.querySelector('.tile');
-  openMenu(tile)[2].click();
+  openMenu(tile)[1].click();
   tile.querySelector('.ft button').click();
   await flush(80);
 
@@ -286,7 +295,7 @@ async function testDuplicate() {
   });
   const grid = ownGrid(window);
   const tile = grid.querySelector('.tile');
-  openMenu(tile)[2].click();
+  openMenu(tile)[1].click();
   tile.querySelector('.ft button').click();
   await flush(80);
 
@@ -525,7 +534,7 @@ async function testContentAndOrigins(){
   const changed=[...ownGrid(window).querySelectorAll('.tile')].find(t=>t.querySelector('.nm').textContent==='mail');
   assert(changed.querySelector('[data-state=modified]')?.textContent==='Changed on AWTRIX','same-size edits are detected after page navigation');
   assert(!card(window).querySelector('.tile .acts button').disabled,'changed same-name icon is not labelled installed');
-  assert(openMenu(changed)[2].textContent==='Share as a new icon','changed Hub copy offers publishing a variant');
+  assert(openMenu(changed)[1].textContent==='Share as a new icon','changed Hub copy offers publishing a variant');
   assert(!window.validIconOrigin({name:'../mail.gif',slug:'mail',hub:'https://awtrix.de/icons/',sha256:hash('x')}),'origin cannot escape icon folder');
   assert(!window.validIconOrigin({name:'mail.gif',slug:'mail',hub:'javascript:alert(1)',sha256:hash('x')}),'origin cannot create an executable link');
   assert(!window.validIconOrigin({name:'mail.gif',slug:'mail',hub:'https://user:secret@example.com/icons/',sha256:hash('x')}),'origin cannot include credentials');
@@ -559,7 +568,7 @@ async function testResolvedPublication(){
     ctx.store.iconOrigins.set('own.gif',{name:'own.gif',hub:'https://awtrix.de/icons/',slug:'mail',sha256:createHash('sha256').update('old drawing').digest('hex')});
     ctx.store.submitReply={ok:true,status:'existing',slug:'supermario',pr:'https://awtrix.de/icons/supermario'};
   });
-  const tile=ownGrid(window).querySelector('.tile');openMenu(tile)[2].click();tile.querySelector('.ft button').click();await flush(130);
+  const tile=ownGrid(window).querySelector('.tile');openMenu(tile)[1].click();tile.querySelector('.ft button').click();await flush(130);
   assert(store.submitted[0].get('response')==='resolve','publisher opts into non-error duplicate resolution');
   assert(store.submitted[0].get('based_on')==='mail','variant carries known original to Hub');
   assert(store.iconOrigins.get('own.gif')?.slug==='supermario','duplicate result links local icon to existing public entry');
@@ -603,7 +612,7 @@ async function testDescriptivePublicationName(){
     ctx.store.localIconBytes['34334.gif']='GIF89a-local-lametric';
   });
   const tile=ownGrid(window).querySelector('.tile');
-  openMenu(tile)[2].click();
+  openMenu(tile)[1].click();
   const field=tile.querySelector('.ft input'),button=tile.querySelector('.ft button');
   assert(field.value==='','a LaMetric number is not prefilled as a publication name');
   assert(tile.querySelector('.ft').textContent.includes('Numbers alone'),'numeric icon explains that a descriptive name is needed');

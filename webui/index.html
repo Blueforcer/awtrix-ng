@@ -641,10 +641,17 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .idb{gap:16px}
 .idb-toolbar{padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--card)}
 .idb-toolbar label{font-size:12px;white-space:nowrap;min-height:32px}
+.idb .tile .idb-ft{padding:10px 10px 9px;gap:7px}
 .idb .tile .ft .nm{border:0;background:none;padding:0;text-align:left;font-weight:600}
-.idb-actions{display:flex;align-items:center;justify-content:space-between;gap:4px;padding:0 12px 12px;font-size:11px}
-.idb-actions button{padding:5px 6px;font-size:10px;background:transparent}
-.idb-actions a{padding:5px 2px}
+.idb-card-foot{display:flex;align-items:center;justify-content:space-between;width:100%;gap:8px}
+.idb .tile .acts{justify-content:flex-end;padding:0;margin:0;gap:5px}
+.idb .tile .acts button,.idb .tile .acts a{display:inline-flex;align-items:center;justify-content:center;
+  width:32px;min-width:32px;height:32px;min-height:32px;padding:0;border-radius:7px}
+.idb .tile .acts button.pri{background:var(--bna);border-color:#f5a56866;color:var(--acc)}
+.idb .tile .acts button.pri:hover{background:#f5a56820;border-color:var(--acc)}
+.idb .tile .acts a{border:1px solid var(--border);background:var(--card2);color:var(--fg)}
+.idb .tile .acts a:hover{border-color:var(--acc);color:var(--acc)}
+.idb .tile .acts .ic{width:16px;height:16px}
 .icons-page .hub-connect{background:none;border:0;border-top:1px solid var(--border);border-radius:0;padding:17px 0 0}
 .icons-page .hub-connect summary .help{font-size:11px;color:var(--dim)}
 .icons-page .hub-connect-body{max-width:680px;gap:12px;padding:6px 0 0}
@@ -674,7 +681,6 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
   .icons-add{grid-template-columns:1fr}
   .icons-add>section{padding:16px}
   .hub-connect summary .help{display:block;margin:5px 0 0}
-  .idb-actions{padding:0 10px 10px;flex-wrap:wrap}
   .idb-intro{align-items:start;flex-direction:column;gap:12px}
 }
 
@@ -769,6 +775,7 @@ tbody tr:hover{background:var(--card2)}
 <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V5"/><path d="M8 9l4-4 4 4"/><path d="M5 17v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2"/></symbol>
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
 <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4H5.5A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></symbol>
 <symbol id="i-logo" viewBox="0 0 15 15"><path fill="currentColor" opacity=".16" d="M0 0h3v3H0zM12 0h3v3h-3zM4 4h3v3H4zM8 4h3v3H8zM4 12h3v3H4zM8 12h3v3h-3z"/><path fill="currentColor" d="M4 0h3v3H4zM8 0h3v3H8zM0 4h3v3H0zM12 4h3v3h-3zM0 8h3v3H0zM4 8h3v3H4zM8 8h3v3H8zM12 8h3v3h-3zM0 12h3v3H0zM12 12h3v3h-3z"/></symbol>
 <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6.5C10.5 5 8.5 4.5 6 4.5H4v13h2c2.5 0 4.5.5 6 2 1.5-1.5 3.5-2 6-2h2v-13h-2c-2.5 0-4.5.5-6 2z"/><path d="M12 6.5v13"/></symbol>
 <symbol id="i-grip" viewBox="0 0 24 24"><path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/></symbol>
@@ -997,7 +1004,7 @@ const I18N={en:{
   idbmore:'Show more',idbempty:"No icons have been shared yet.",idbinst:'Install',idbon:'Installed',idbfail:"Could not reach the Hub. Check your internet connection and try again.",
   idbcopy:'Copy icon name',
   idbterms:"By publishing, you agree to the terms of service.",
-  hubConnect:'Connect to Hub',hubReady:"Key saved",hubIntro:"Copy the connection key from your Hub account and paste it below. You can then install, reload and share icons.",hubSave:'Save key',hubStorageFail:"The key could not be saved. Allow this browser to store website data and try again.",idbrefresh:"Refresh gallery",idbloading:"Loading icons…",idbinstalling:'Installing…',idbdetails:'Details',idbscript:"Copy for script",
+  hubConnect:'Connect to Hub',hubReady:"Key saved",hubIntro:"Copy the connection key from your Hub account and paste it below. You can then install, reload and share icons.",hubSave:'Save key',hubStorageFail:"The key could not be saved. Allow this browser to store website data and try again.",idbrefresh:"Refresh gallery",idbloading:"Loading icons…",idbinstalling:'Installing…',idbdetails:'Details',
   hubIconUnavailable:"This icon is no longer available on the Hub.",hubDownloadFailed:"The icon could not be downloaded. Please try again.",hubPublishFailed:"The icon could not be published. Please try again.",hubPublishing:"Publishing…",
   hubSection:'AWTRIX Hub',hubSectionH:"Connect your Hub account to install and share icons.",
   hubAuthRequired:"Connect your Hub account to download icons.",hubAuthRejected:"The Hub did not accept this key. Check it or add a new one.",hubWrongHost:"This icon comes from a different Hub. Open its Hub page to download it.",hubTokenLbl:"Hub connection key",hubTokenH:"Saved only in this browser. Connect your account again when using another browser.",
@@ -1191,7 +1198,7 @@ const I18N={en:{
   idbmore:'Mehr anzeigen',idbempty:"Hier wurden noch keine Icons veröffentlicht.",idbinst:'Installieren',idbon:'Installiert',idbfail:"Der Hub ist nicht erreichbar. Prüfe deine Internetverbindung und versuche es erneut.",
   idbcopy:'Icon-Namen kopieren',
   idbterms:"Mit dem Veröffentlichen akzeptierst du die Nutzungsbedingungen.",
-  hubConnect:'Mit dem Hub verbinden',hubReady:"Schlüssel gespeichert",hubIntro:"Kopiere den Verbindungsschlüssel aus deinem Hub-Konto und füge ihn hier ein. Danach kannst du Icons installieren, neu laden und veröffentlichen.",hubSave:'Schlüssel speichern',hubStorageFail:"Der Schlüssel konnte nicht gespeichert werden. Erlaube diesem Browser, Website-Daten zu speichern, und versuche es erneut.",idbrefresh:"Galerie aktualisieren",idbloading:"Icons werden geladen…",idbinstalling:'Wird installiert…',idbdetails:'Details',idbscript:"Für Script kopieren",
+  hubConnect:'Mit dem Hub verbinden',hubReady:"Schlüssel gespeichert",hubIntro:"Kopiere den Verbindungsschlüssel aus deinem Hub-Konto und füge ihn hier ein. Danach kannst du Icons installieren, neu laden und veröffentlichen.",hubSave:'Schlüssel speichern',hubStorageFail:"Der Schlüssel konnte nicht gespeichert werden. Erlaube diesem Browser, Website-Daten zu speichern, und versuche es erneut.",idbrefresh:"Galerie aktualisieren",idbloading:"Icons werden geladen…",idbinstalling:'Wird installiert…',idbdetails:'Details',
   hubIconUnavailable:"Dieses Icon ist im Hub nicht mehr verfügbar.",hubDownloadFailed:"Das Icon konnte nicht heruntergeladen werden. Versuche es erneut.",hubPublishFailed:"Das Icon konnte nicht veröffentlicht werden. Versuche es erneut.",hubPublishing:"Wird veröffentlicht…",
   hubSection:'AWTRIX Hub',hubSectionH:"Verbinde dein Hub-Konto, um Icons zu installieren und zu veröffentlichen.",
   hubAuthRequired:"Verbinde dein Hub-Konto, um Icons herunterzuladen.",hubAuthRejected:"Der Hub akzeptiert diesen Schlüssel nicht. Prüfe ihn oder füge einen neuen ein.",hubWrongHost:"Dieses Icon stammt aus einem anderen Hub. Öffne seine Hub-Seite, um es herunterzuladen.",hubTokenLbl:"Hub-Verbindungsschlüssel",hubTokenH:"Nur in diesem Browser gespeichert. Verbinde dein Konto in anderen Browsern erneut.",
@@ -3948,8 +3955,7 @@ function viewIcons(view){
       catch(e){toast(e.message,false);}finally{show.disabled=false;}
     });
     // A floating menu cannot leave a tile - .tile clips its overflow - so the
-    // actions cover the artwork instead. Four icon buttons never fit the
-    // narrowest column anyway, and words beat glyphs at this size.
+    // icon actions stay in one menu that covers the artwork.
     open.addEventListener('click',()=>{
       if(pw.querySelector('.tmenu'))return shut();
       document.querySelectorAll('.icons-page .tmenu').forEach(m=>{const b=m.closest('.tile').querySelector('[aria-expanded]');if(b)b.setAttribute('aria-expanded','false');m.remove();});
@@ -3961,10 +3967,6 @@ function viewIcons(view){
         return b;
       };
       pw.append(el('div',{class:'tmenu'},
-        item(t('idbscript'),()=>{
-          if(f.state!=='hub')return toast(t('icpublishfirst'),false);
-          copyText('# @icons '+f.origin.slug).then(()=>toast(f.origin.slug===base?t('copied'):t('icreference')+' '+f.origin.slug));
-        }),
         item(t('edit'),()=>{pendingEditIcon=f.name;location.hash='#/editor';}),
         f.state==='hub'?el('a',{href:f.origin.hub+encodeURIComponent(f.origin.slug),target:'_blank',rel:'noopener'},t('icviewhub')):
           item(t(f.state==='modified'?'icvariant':'icsend'),()=>shareRow(f,base,ft,reload)),
@@ -4287,20 +4289,26 @@ function iconDbCard(onInstalled){
   let rows=[],loaded=false,shown=IDB_PAGE,installed=new Set();
   function tile(r){
     const on=installed.has(r.slug);
-    const btn=el('button',{class:on?'':'pri',title:on?t('idbon'):t('idbinst'),'aria-label':(on?t('idbon'):t('idbinst'))+': '+r.name,
-      disabled:false},on?t('icreload'):t('idbinst'));
+    const btn=el('button',{class:on?'':'pri',title:on?t('icreload'):t('idbinst'),'aria-label':(on?t('icreload'):t('idbinst'))+': '+r.name,
+      disabled:false},icon('import'));
+    function labelInstall(installedNow,busy=false){
+      const label=busy?t('idbinstalling'):installedNow?t('icreload'):t('idbinst');
+      btn.title=label;btn.setAttribute('aria-label',label+': '+r.name);
+      btn.toggleAttribute('aria-busy',busy);
+      btn.replaceChildren(icon('import'));
+    }
     async function install(replace=false){
-      btn.disabled=true;btn.textContent=t('idbinstalling');
+      btn.disabled=true;labelInstall(installed.has(r.slug),true);
       try{
         let ext;
         if(installed.has(r.slug)){
           const files=await iconInventory(),file=files.find(f=>f.origin&&f.origin.hub===iconDbUrl()&&f.origin.slug===r.slug&&f.name.replace(/\.[^.]+$/,'')===r.slug);
           if(file)ext=(await reloadHubIcon(file,{replace})).split('.').pop();else ext=await idbInstall(r.slug,{replace});
         }else ext=await idbInstall(r.slug,{replace});
-        installed.add(r.slug);btn.classList.remove('pri');btn.replaceChildren(t('icreload'));btn.title=t('icreload');btn.setAttribute('aria-label',t('icreload')+': '+r.name);btn.disabled=false;
+        installed.add(r.slug);btn.classList.remove('pri');labelInstall(true);btn.disabled=false;
         toast(t('idbon')+': '+r.name);
         onInstalled&&onInstalled();
-      }catch(e){btn.disabled=false;btn.textContent=t('idbinst');
+      }catch(e){btn.disabled=false;labelInstall(installed.has(r.slug));
         toast(e.message,false,e.code==='iconConflict'?[
           {label:t('ickeep'),fn:()=>{}},{label:t('icreplace'),fn:()=>install(true)}]:e.code==='hubAuthentication'?[connectHubAction()]:undefined);
       }
@@ -4309,14 +4317,14 @@ function iconDbCard(onInstalled){
     const img=el('img',{src:iconDbUrl()+encodeURIComponent(r.slug)+'/preview.webp',alt:r.name,width:r.w,height:r.h,loading:'lazy'});
     return el('div',{class:'tile'},
       el('div',{class:'pw'},img),
-      el('div',{class:'ft'},
+      el('div',{class:'ft idb-ft'},
         el('button',{type:'button',class:'nm cp',title:r.slug===r.name?t('idbcopy'):r.slug+' — '+t('idbcopy'),
           onclick:()=>copyText(r.slug).then(()=>toast(r.slug+' '+t('copied')))},r.name),
-        el('span',{class:'sz'},r.w+'×'+r.h+(r.frames>1?' · '+t('icanimated'):''))),
-      el('div',{class:'acts'},btn),
-      el('div',{class:'idb-actions'},
-        el('button',{type:'button',onclick:()=>copyText('# @icons '+r.slug).then(()=>toast(t('copied')))},t('idbscript')),
-        el('a',{href:iconDbUrl()+encodeURIComponent(r.slug),target:'_blank',rel:'noopener'},t('idbdetails'))));
+        el('div',{class:'idb-card-foot'},
+          el('span',{class:'sz'},r.w+'×'+r.h+(r.frames>1?' · '+t('icanimated'):'')),
+          el('div',{class:'acts'},btn,
+            el('a',{href:iconDbUrl()+encodeURIComponent(r.slug),target:'_blank',rel:'noopener',
+              title:t('idbdetails'),'aria-label':t('idbdetails')+': '+r.name},icon('info'))))));
   }
   function paint(reset){
     if(!loaded)return;
