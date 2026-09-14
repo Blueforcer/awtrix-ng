@@ -958,6 +958,50 @@ paths:
         "400": { $ref: "#/components/responses/BadJson" }
         "422": { $ref: "#/components/responses/Invalid" }
 
+  /api/v1/apps/script-update/{name}:
+    put:
+      tags: [scripts]
+      summary: Update a script only if its source has not changed
+      description: |
+        Requires `scriptUpdates` in capabilities. The source comparison and
+        installation run together on the command loop. Use `expected_source: null`
+        to create a separate copy only if the name does not exist. An existing
+        script keeps compatible settings. Compile/setup failures restore the old
+        script; errors in later callbacks cannot be detected here. The combined
+        JSON body must fit the device's current source memory budget.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[A-Za-z0-9_-]{1,32}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_source, source]
+              properties:
+                expected_source:
+                  type: [string, "null"]
+                  description: Exact current source, or null to create only.
+                source: { type: string, minLength: 1 }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadJson" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Source changed or the copy name exists (`scriptChanged`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Invalid" }
+        "503":
+          description: Scripting unavailable or temporarily busy.
+        "507":
+          description: Insufficient script capacity.
+
   /api/v1/apps/script/{name}:
     get:
       tags: [scripts]
@@ -1805,6 +1849,7 @@ components:
                 - payloadTooLarge      # 413, body over 8192 bytes, or a valid
                                        #      body whose parse tree does not fit
                 - validationFailed      # 422
+                - scriptChanged         # 409, source changed or copy name exists
                 - internalError         # 500
                 - serviceBusy           # 503, a request arrived while the same subsystem was still handling one
                 - unavailable           # 503, GET /api/v1/apps/script/{name} or /api/v1/scripts/shared on a build with no scripting platform

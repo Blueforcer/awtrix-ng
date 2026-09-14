@@ -593,6 +593,7 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
   .appcfg .frow .ctl{justify-content:flex-start}
 }
 
+.script-hub-panel{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap}.script-hub-panel[hidden]{display:none}.script-hub-panel p{width:100%;margin:0}.script-hub-panel a{font-size:12px}.filetree>button{margin:8px;max-width:calc(100% - 16px)}
 .hub-connect{border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:12px 14px}
 .hub-connect summary{cursor:pointer;font-size:13px;font-weight:600}
 .hub-connect summary .help{font-weight:400;margin-left:12px}
@@ -933,6 +934,7 @@ const I18N={en:{
   chipSkip:'skipped',chipSkipH:'The script skipped this round. It stays in the rotation.',
   chipGone:'no data',chipGoneH:'This app is switched on and keeps its slot, but nothing has sent it any data yet. It draws again on the next push.',
   orderSaved:'App order saved',
+  suCheck:'Check for updates',suChecking:'Checking for updates…',suReady:'Update available',suCurrent:'Up to date',suLocal:'Changed on AWTRIX',suMissing:'No longer available on the Hub',suOffline:'Hub check unavailable',suUpdate:'Update script',suCopy:'Install as a new script',suConfirm:'Install this Hub version? Your compatible script settings are kept.',suModified:'Your code has local changes. Install the Hub version as a separate script to keep your work.',suBusy:'Updating script…',suDone:'Script updated',suFirmware:'Update your AWTRIX firmware to use script updates.',suChanged:'The script changed. Check for updates again.',suIntegrity:'The Hub version changed during download. Try again.',suUnlinked:'This script is not linked to a Hub contribution. New Hub downloads include this link.',suUnknown:'No update information yet',
   cfgTitle:'Settings',cfgHide:'Close settings',cfgLoading:'Loading settings…',cfgNone:'This script offers no settings.',
   cfgSaved:'Settings saved - the app restarted',cfgDefaults:'Use defaults',
   cfgWarnH:'The script’s settings header has a problem. Fix it in the editor.',
@@ -1124,6 +1126,7 @@ const I18N={en:{
   chipSkip:'übersprungen',chipSkipH:'Das Skript hat diese Runde ausgelassen. Es bleibt in der Rotation.',
   chipGone:'keine Daten',chipGoneH:'Diese App ist eingeschaltet und behält ihren Platz, aber es hat noch niemand Daten geschickt. Beim nächsten Push zeichnet sie wieder.',
   orderSaved:'App-Reihenfolge gespeichert',
+  suCheck:'Nach Updates suchen',suChecking:'Updates werden geprüft…',suReady:'Update verfügbar',suCurrent:'Aktuell',suLocal:'Auf AWTRIX geändert',suMissing:'Im Hub nicht mehr verfügbar',suOffline:'Hub-Prüfung nicht verfügbar',suUpdate:'Script aktualisieren',suCopy:'Als neues Script installieren',suConfirm:'Diese Hub-Version installieren? Kompatible Script-Einstellungen bleiben erhalten.',suModified:'Dein Code wurde lokal geändert. Installiere die Hub-Version als zusätzliches Script, um deine Arbeit zu behalten.',suBusy:'Script wird aktualisiert…',suDone:'Script aktualisiert',suFirmware:'Aktualisiere die AWTRIX-Firmware, um Script-Updates zu nutzen.',suChanged:'Das Script wurde geändert. Suche erneut nach Updates.',suIntegrity:'Die Hub-Version hat sich beim Herunterladen geändert. Versuche es erneut.',suUnlinked:'Dieses Script ist keinem Hub-Beitrag zugeordnet. Neue Hub-Downloads enthalten diese Verknüpfung.',suUnknown:'Noch keine Update-Informationen',
   cfgTitle:'Einstellungen',cfgHide:'Einstellungen schließen',cfgLoading:'Einstellungen werden geladen…',
   cfgNone:'Dieses Skript bietet keine Einstellungen.',
   cfgSaved:'Einstellungen gespeichert - die App wurde neu gestartet',cfgDefaults:'Standardwerte',
@@ -2822,6 +2825,35 @@ function mkCodeEditor(){
     repaint(){lines=0;schedule();},
   };
 }
+// HUB SCRIPT UPDATES BEGIN — no credentials or device addresses are sent to the Hub.
+function hubScriptOrigin(source){
+  const match=/^# @hub ([A-Za-z0-9]{12}) ([a-f0-9]{64})\r?\n/.exec(source);
+  return match?{id:match[1],sha256:match[2],code:source.slice(match[0].length)}:null;
+}
+function hubScriptHash(source){return iconSha256(new TextEncoder().encode(source));}
+function hubScriptLink(id,code){
+  if(!/^[A-Za-z0-9]{12}$/.test(id))throw new Error(t('suIntegrity'));
+  return '# @hub '+id+' '+hubScriptHash(code)+'\n'+code;
+}
+async function hubScriptRelease(id,part='release'){
+  if(!/^[A-Za-z0-9]{12}$/.test(id)||!['release','source'].includes(part))throw new Error(t('suIntegrity'));
+  const r=await fetch('https://awtrix.de/api/v1/scripts/'+id+'/'+part,
+    {credentials:'omit',redirect:'error',cache:'no-store',headers:{Accept:part==='release'?'application/json':'text/plain'},signal:AbortSignal.timeout(15000)});
+  if(!r.ok){const e=new Error(t(r.status===404?'suMissing':'suOffline'));e.status=r.status;throw e;}
+  if(part==='source')return r.text();
+  const m=await r.json();
+  if(m.id!==id||!Number.isSafeInteger(m.revision)||m.revision<1||!/^[a-f0-9]{64}$/.test(m.sha256)||typeof m.notes!=='string')throw new Error(t('suIntegrity'));
+  return m;
+}
+async function prepareHubScriptUpdate(previous,release,readSource=hubScriptRelease){
+  const origin=hubScriptOrigin(previous);
+  if(!origin||origin.id!==release.id)throw new Error(t('suChanged'));
+  const code=await readSource(origin.id,'source');
+  if(hubScriptHash(code)!==release.sha256)throw new Error(t('suIntegrity'));
+  return {source:hubScriptLink(origin.id,code),modified:hubScriptHash(origin.code)!==origin.sha256};
+}
+// HUB SCRIPT UPDATES END
+
 function viewScripts(view){
   const ed=mkCodeEditor();
   const nameIn=el('input',{type:'text',placeholder:t('name'),maxlength:'32',spellcheck:'false',
@@ -2833,6 +2865,9 @@ function viewScripts(view){
   const top=el('div',{class:'edtop'});
   const enc=new TextEncoder();
   let onDevice=null;
+  let updateBusy=false,checkGeneration=0;
+  const hubUpdates=new Map();
+  const hubPanel=el('div',{class:'script-hub-panel',hidden:true});
   let iconsHave=new Set();
 
   function setStatus(err,name){
@@ -2873,11 +2908,12 @@ function viewScripts(view){
     showPos();
     // The count is for the author to read; whether a save fits is the device's answer to give.
     byteOut.replaceChildren(n+' B');
-    saveBtn.disabled=false;
+    saveBtn.disabled=updateBusy;
     prevBtn.disabled=!onDevice||ed.value!==onDevice.src||!!onDevice.err;
     const dirty=!onDevice||ed.value!==onDevice.src||nameIn.value!==onDevice.name;
     top.classList.toggle('mod',dirty&&!!ed.value);
     paintIcons();
+    paintHubUpdate();
     empty.style.display=ed.value?'none':'';
     scrDraft={name:nameIn.value,src:ed.value,dirty,onDevice};
   }
@@ -2907,15 +2943,17 @@ function viewScripts(view){
   impBtn.addEventListener('click',()=>fileIn.click());
   fileIn.addEventListener('change',async()=>{
     const f=fileIn.files[0];fileIn.value='';
-    if(!f)return;
+    if(!f||updateBusy)return;
     try{
       const src=await f.text();
+      if(updateBusy)return;
       load(scriptName(scriptMeta(src,'name'))||scriptName(f.name.replace(/\.ax$/i,''))||'Imported',src);
       toast(f.name+' '+t('scrimported'));
     }catch(e){toast(e.message,false);}
   });
   const saveBtn=el('button',{class:'pri ico',title:t('save'),'aria-label':t('save')},icon('save'));
   async function save(){
+    if(updateBusy)return false;
     const name=nameIn.value.trim();
     if(!/^[A-Za-z0-9_-]{1,32}$/.test(name)){toast(t('scrbadname'),false);return false;}
     if(!ed.value.trim()){toast(t('scrempty'),false);return false;}
@@ -3095,6 +3133,82 @@ function viewScripts(view){
   let scripts=[],modules=[],selName=null,renaming=false;
   const allFiles=()=>scripts.concat(modules);
   const isDirty=()=>top.classList.contains('mod');
+  async function checkHubUpdates(){
+    if(updateBusy)return;
+    const generation=++checkGeneration;
+    checkHubBtn.disabled=true;checkHubBtn.textContent=t('suChecking');
+    const files=allFiles().slice(),releases=new Map();
+    async function worker(){
+      while(files.length&&generation===checkGeneration&&view.isConnected){
+        const file=files.shift();
+        try{
+          const {text}=await api('/api/v1/apps/script/'+encodeURIComponent(file.name));
+          const origin=hubScriptOrigin(text);
+          if(!origin){hubUpdates.delete(file.name);continue;}
+          if(!releases.has(origin.id))releases.set(origin.id,hubScriptRelease(origin.id));
+          const release=await releases.get(origin.id);
+          if(generation!==checkGeneration)return;
+          hubUpdates.set(file.name,{previous:text,release,modified:hubScriptHash(origin.code)!==origin.sha256,
+            state:release.sha256!==origin.sha256?'suReady':'suCurrent'});
+        }catch(e){if(generation===checkGeneration)hubUpdates.set(file.name,{state:e.status===404?'suMissing':'suOffline'});}
+      }
+    }
+    await Promise.all([worker(),worker()]);
+    if(generation!==checkGeneration||!view.isConnected)return;
+    checkHubBtn.disabled=false;checkHubBtn.textContent=t('suCheck');paintTree();paintHubUpdate();
+  }
+  function paintHubUpdate(){
+    hubPanel.hidden=!onDevice;
+    if(!onDevice)return;
+    const item=hubUpdates.get(onDevice.name);
+    const origin=hubScriptOrigin(onDevice.src);
+    hubPanel.replaceChildren(el('span',{class:'help'},t(item?.state==='suCurrent'&&item.modified?'suLocal':item?.state||(origin?'suUnknown':'suUnlinked'))));
+    if(!item?.release)return;
+    const local=item.modified||ed.value!==onDevice.src;
+    hubPanel.append(el('a',{href:'https://awtrix.de/flow/'+item.release.id,target:'_blank',rel:'noopener'},'Hub · v'+item.release.revision));
+    if(item.state!=='suReady')return;
+    if(item.release.notes)hubPanel.append(el('p',{class:'help',style:'white-space:pre-wrap'},item.release.notes));
+    if(local)hubPanel.append(el('p',{class:'help'},t('suModified')));
+    const name=onDevice.name;
+    const btn=el('button',{class:'pri',disabled:updateBusy,onclick:()=>{
+      if(updateBusy)return;
+      toast(t(local?'suModified':'suConfirm'),false,[
+        {label:t(local?'suCopy':'suUpdate'),pri:true,fn:()=>applyHubUpdate(name,item,local)},
+        {label:t('cancel'),fn:()=>{}}]);
+    }},t(updateBusy?'suBusy':local?'suCopy':'suUpdate'));
+    hubPanel.append(btn);
+  }
+  async function applyHubUpdate(name,item,asCopy){
+    if(updateBusy)return;
+    if(onDevice?.name!==name)return;
+    if(!asCopy&&isDirty()){toast(t('scrunsaved'),false);return;}
+    const editorSource=ed.value,editorName=nameIn.value;
+    updateBusy=true;refresh();
+    try{
+      const {data:caps}=await api('/api/v1/capabilities');
+      if(!caps?.scriptUpdates)throw new Error(t('suFirmware'));
+      const {text:current}=await api('/api/v1/apps/script/'+encodeURIComponent(name));
+      if(current!==item.previous)throw new Error(t('suChanged'));
+      const next=await prepareHubScriptUpdate(current,item.release);
+      if(next.modified&&!asCopy)throw new Error(t('suChanged'));
+      const target=asCopy?freshScriptName(name.slice(0,23)+'-hub'):name;
+      // Existing icons are collision-checked by idbInstall; changed shared icons require
+      // the explicit Icons workflow. A dependency failure never replaces the script.
+      for(const id of scriptIcons(next.source))await idbInstall(id);
+      const {data}=await api('/api/v1/apps/script-update/'+encodeURIComponent(target),
+        {method:'PUT',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({expected_source:asCopy?null:current,source:next.source})});
+      if(data?.error)throw new Error(data.error.message||t('scrbroken'));
+      toast(t('suDone'));
+      if(!asCopy&&onDevice?.name===name){
+        if(ed.value===editorSource&&nameIn.value===editorName){load(name,next.source,null);selName=name;}
+        else{onDevice={name,src:next.source,err:null};refresh();}
+      }
+      // A copy never replaces an unsaved editor draft.
+    }catch(e){toast(e.message,false,e.code==='hubAuthentication'?[connectHubAction()]:undefined);}
+    finally{updateBusy=false;await refreshTree();refresh();}
+  }
+  const checkHubBtn=el('button',{onclick:checkHubUpdates},t('suCheck'));
   async function refreshTree(){
     try{
       const{data}=await api('/api/v1/apps');
@@ -3106,6 +3220,7 @@ function viewScripts(view){
       modules=rows.filter(a=>a.module).sort(byName);
     }catch(e){scripts=[];modules=[];}
     paintTree();
+    checkHubUpdates().catch(()=>{});
   }
   function paintTree(){
     renaming=false;
@@ -3125,6 +3240,7 @@ function viewScripts(view){
   }
   let pendingConfirm=null;
   function guardedSwitch(run){
+    if(updateBusy)return;
     if(!isDirty())return run();
     if(pendingConfirm)pendingConfirm.remove();
     const from=nameIn.value.trim()||t('scrnone');
@@ -3137,6 +3253,7 @@ function viewScripts(view){
   async function reallyOpen(name){
     try{
       const{text}=await api('/api/v1/apps/script/'+encodeURIComponent(name));
+      if(updateBusy)return;
       const s=allFiles().find(x=>x.name===name);
       load(name,text,(s&&s.error)||null);
       selName=name;paintTree();closeTree();
@@ -3167,6 +3284,7 @@ function viewScripts(view){
     const ren=el('button',{title:t('rename'),'aria-label':t('rename')},icon('pen'));
     ren.addEventListener('click',()=>beginRename(s,item));
     const del=armable(el('button',{class:'danger',title:t('del'),'aria-label':t('del')},icon('trash')),async()=>{
+      if(updateBusy)return;
       try{
         await req('DELETE','/api/v1/apps/'+encodeURIComponent(s.name));
         toast(t('deleted'));
@@ -3176,11 +3294,13 @@ function viewScripts(view){
     });
     const fx=el('span',{class:'fx'},ren,del);
     fx.addEventListener('click',e=>e.stopPropagation());
+    const hubState=hubUpdates.get(s.name);
+    if(hubState?.state==='suReady')item.append(el('span',{class:'badge',title:t('suReady')},'↑'));
     item.append(fx);
     return item;
   }
   function beginRename(s,item){
-    if(renaming)return; renaming=true;
+    if(renaming||updateBusy)return; renaming=true;
     let done=false;
     const inp=el('input',{class:'ftren',type:'text',value:s.name,maxlength:'32',spellcheck:'false'});
     item.replaceChildren(icon('file'),inp);
@@ -3258,7 +3378,7 @@ function viewScripts(view){
     el('div',{class:'ftgrp'},t('scriptsTab'),scrCount,newFileBtn),ftlist);
   const modPane=el('div',{class:'ftpane mods',role:'group','aria-label':t('modules')},
     el('div',{class:'ftgrp',title:t('modulesH')},t('modules'),modCount,newModBtn),modlist);
-  const filetree=el('div',{class:'filetree'},treeHead,scrPane,modPane,shpanel);
+  const filetree=el('div',{class:'filetree'},treeHead,checkHubBtn,scrPane,modPane,shpanel);
   const toggleTree=()=>filetree.classList.toggle('open');
   const closeTree=()=>filetree.classList.remove('open');
   treeHead.addEventListener('click',toggleTree);
@@ -3267,7 +3387,7 @@ function viewScripts(view){
 
   top.append(nameIn,dirtyDot,el('span',{class:'grow'}),
     el('div',{class:'sec'},impBtn,expBtn,icoBtn,prevBtn),saveBtn);
-  const edwrap=el('div',{class:'edwrap'},top,ed.node,
+  const edwrap=el('div',{class:'edwrap'},top,hubPanel,ed.node,
     el('div',{class:'edbar'},posOut,byteOut,el('span',{class:'keys'},t('scrkeys')),stateOut),
     errBox);
   const goBtn=el('button',null,t('scroffGo'));

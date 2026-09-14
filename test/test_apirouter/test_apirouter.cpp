@@ -449,6 +449,27 @@ static void test_http_script_put_routes_with_source() {
   TEST_ASSERT_EQUAL_INT((int)Source::Http, (int)c.source);
 }
 
+static void test_http_guarded_update_routes_and_reports_conflicts() {
+  Command c;
+  api::HttpResult imm;
+  const std::string body = "{\"expected_source\":null,\"source\":\"code\"}";
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Routed),
+      ro(api::routeHttp("PUT", "/api/v1/apps/script-update/Demo", std::string(body), c, imm)));
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::ScriptUpdate), ct(c.type));
+  TEST_ASSERT_EQUAL_STRING("Demo", c.name.c_str());
+  TEST_ASSERT_EQUAL_STRING(body.c_str(), c.payload.c_str());
+  TEST_ASSERT_TRUE(api::isRawBodyWrite("PUT", "/api/v1/apps/script-update/Demo"));
+  const auto conflict = api::httpResponse(c, DispatchResult::Conflict, {});
+  TEST_ASSERT_EQUAL_INT(409, conflict.status);
+  TEST_ASSERT_TRUE(conflict.body.find("scriptChanged") != std::string::npos);
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
+      ro(api::routeHttp("PUT", "/api/v1/apps/script-update/../x", "{}", c, imm)));
+  TEST_ASSERT_EQUAL_INT(400, imm.status);
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
+      ro(api::routeHttp("POST", "/api/v1/apps/script-update/Demo", "{}", c, imm)));
+  TEST_ASSERT_EQUAL_INT(405, imm.status);
+}
+
 static void test_http_script_traversal_name_rejected() {
   Command c;
   api::HttpResult imm;
@@ -902,6 +923,7 @@ int main(int, char**) {
   RUN_TEST(test_http_shared_state_is_read_only);
   RUN_TEST(test_app_name_validation);
   RUN_TEST(test_http_script_put_routes_with_source);
+  RUN_TEST(test_http_guarded_update_routes_and_reports_conflicts);
   RUN_TEST(test_http_script_traversal_name_rejected);
   RUN_TEST(test_http_delete_app_is_kind_agnostic);
   RUN_TEST(test_http_reserved_app_paths_are_not_names);

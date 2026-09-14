@@ -9,7 +9,8 @@ import tempfile
 
 Import("env")
 
-BUDGET = 80 * 1024
+# Firmware and Hub update controls share the embedded UI; allow their bounded growth.
+BUDGET = 84 * 1024
 SRC = os.path.join(env["PROJECT_DIR"], "webui", "index.html")
 OUT = os.path.join(env["PROJECT_DIR"], "src", "transport", "http", "WebUiAsset.h")
 

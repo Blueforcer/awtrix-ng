@@ -92,7 +92,12 @@ void ScriptStore::save(const std::string& name, const std::string& source) {
     return;
   }
   flush();
-  writeFile(sourcePath(name), source);
+  const String target = sourcePath(name);
+  const String temporary = target + ".tmp";
+  if (writeFile(temporary, source) && readFile(temporary) == source) {
+    if (!LittleFS.rename(temporary, target)) logf("scripts: cannot replace %s", target.c_str());
+  }
+  if (LittleFS.exists(temporary)) LittleFS.remove(temporary);
   free_.stale();
 }
 

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "core/RuntimeState.h"
+#include "core/api/JsonText.h"
 #include "core/apps/AppRegistry.h"
 #include "core/apps/IApp.h"
 #include "core/render/Canvas.h"
@@ -1987,8 +1988,101 @@ static void test_removing_a_module_releases_its_store() {
   TEST_ASSERT_EQUAL_STRING("Berlin", check(reg, "Sun").c_str());
 }
 
+
+static std::string updateBody(const std::string& before, const std::string& after) {
+  std::string json = "{\"expected_source\":";
+  api::appendJsonString(json, before);
+  json += ",\"source\":";
+  api::appendJsonString(json, after);
+  return json + "}";
+}
+
+static void test_guarded_copy_never_replaces_a_script() {
+  FakeSources files;
+  files.wire(g_svc);
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  script::ScriptService svc(host, [&](const std::string& n, const std::string& code) {
+    files.src[n] = code;
+  }, [&](const std::string& n) { files.src.erase(n); });
+  DispatchDetail detail;
+  const auto source = app("def draw() end");
+  auto body = updateBody("", source);
+  body.replace(body.find("\"\""), 2, "null");
+  TEST_ASSERT_EQUAL(DispatchResult::Ok, svc.updateScript("Copy", body, detail));
+  TEST_ASSERT_EQUAL(DispatchResult::Conflict, svc.updateScript("Copy", body, detail));
+  TEST_ASSERT_EQUAL_STRING(source.c_str(), files.src["Copy"].c_str());
+  body = updateBody("", app("def draw( end"));
+  body.replace(body.find("\"\""), 2, "null");
+  TEST_ASSERT_EQUAL(DispatchResult::ValidationError, svc.updateScript("Broken", body, detail));
+  TEST_ASSERT_TRUE(files.src.find("Broken") == files.src.end());
+  TEST_ASSERT_EQUAL(DispatchResult::ValidationError,
+      svc.updateScript("MissingExpected", "{\"source\":\"code\"}", detail));
+}
+
+static void test_guarded_update_keeps_settings_and_rejects_stale_source() {
+  FakeSources files;
+  files.wire(g_svc);
+  const auto v1 = std::string("# @config city text default=Rom\n") +
+      app("def draw() end\ndef check() return store.get('city') end");
+  const auto v2 = v1 + "\n# updated\n";
+  files.src["S"] = v1;
+  files.store["S"] = "{\"city\":\"Berlin\"}";
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  TEST_ASSERT_TRUE(host.set("S", v1, files.store["S"]));
+  script::ScriptService svc(host, [&](const std::string& n, const std::string& code) {
+    files.src[n] = code;
+  }, nullptr);
+  DispatchDetail detail;
+  TEST_ASSERT_EQUAL(DispatchResult::Conflict, svc.updateScript("S", updateBody("stale", v2), detail));
+  TEST_ASSERT_EQUAL_STRING(v1.c_str(), files.src["S"].c_str());
+  TEST_ASSERT_EQUAL(DispatchResult::Ok, svc.updateScript("S", updateBody(v1, v2), detail));
+  TEST_ASSERT_EQUAL_STRING(v2.c_str(), files.src["S"].c_str());
+  TEST_ASSERT_EQUAL_STRING("Berlin", check(reg, "S").c_str());
+  detail.clear();
+  TEST_ASSERT_EQUAL(DispatchResult::Ok, svc.updateScript("S", updateBody(v2, v2), detail));
+}
+
+static void test_guarded_update_restores_broken_or_unsaved_replacement() {
+  FakeSources files;
+  files.wire(g_svc);
+  FakeSink sink;
+  g_svc.storeSink = &sink;
+  const auto old = app("def draw() end\ndef check() return 'original' end");
+  files.src["S"] = old;
+  files.store["S"] = "{\"secret\":\"private-setting\"}";
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  TEST_ASSERT_TRUE(host.set("S", old, files.store["S"]));
+  int saves = 0;
+  script::ScriptService svc(host, [&](const std::string&, const std::string&) { ++saves; }, nullptr);
+  DispatchDetail detail;
+  TEST_ASSERT_EQUAL(DispatchResult::ValidationError,
+      svc.updateScript("S", updateBody(old, app("def draw( end")), detail));
+  TEST_ASSERT_EQUAL_INT(0, saves);
+  TEST_ASSERT_EQUAL_STRING("original", check(reg, "S").c_str());
+  TEST_ASSERT_EQUAL_STRING(old.c_str(), files.src["S"].c_str());
+  TEST_ASSERT_TRUE(sink.writes.back().find("private-setting") != std::string::npos);
+  detail.clear();
+  TEST_ASSERT_EQUAL(DispatchResult::ValidationError,
+      svc.updateScript("S", updateBody(old, app("def setup() raise 'broken' end\ndef draw() end")), detail));
+  TEST_ASSERT_EQUAL_STRING("original", check(reg, "S").c_str());
+  detail.clear();
+  TEST_ASSERT_EQUAL(DispatchResult::ValidationError,
+      svc.updateScript("S", updateBody(old, old + "\n# new"), detail));
+  TEST_ASSERT_EQUAL_INT(1, saves);
+  TEST_ASSERT_EQUAL_STRING("original", check(reg, "S").c_str());
+  TEST_ASSERT_EQUAL(DispatchResult::NotFound, svc.updateScript("missing", updateBody(old, old), detail));
+  TEST_ASSERT_EQUAL(DispatchResult::ParseError, svc.updateScript("S", "{", detail));
+  TEST_ASSERT_EQUAL(DispatchResult::ValidationError, svc.updateScript("S", "{}", detail));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_guarded_copy_never_replaces_a_script);
+  RUN_TEST(test_guarded_update_keeps_settings_and_rejects_stale_source);
+  RUN_TEST(test_guarded_update_restores_broken_or_unsaved_replacement);
   RUN_TEST(test_set_replace_remove_registry_and_hooks);
   RUN_TEST(test_replace_points_registry_at_the_new_app);
   RUN_TEST(test_installing_many_scripts_succeeds);

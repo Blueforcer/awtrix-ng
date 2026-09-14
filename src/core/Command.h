@@ -33,7 +33,8 @@ enum class CommandType : uint8_t {
   ScriptConfigSet,
   ScriptRemove,
   DeleteApp,
-  SetRadioStations
+  SetRadioStations,
+  ScriptUpdate
 };
 
 enum class Source : uint8_t { Mqtt = 0, Http = 1, Menu = 2, Internal = 3 };
@@ -59,7 +60,8 @@ enum class DispatchResult : uint8_t {
   Busy,
   Unavailable,
   Failed,
-  Unknown
+  Unknown,
+  Conflict
 };
 
 // Why a command failed, in a shape the API can hand back to the sender. line and hook are only

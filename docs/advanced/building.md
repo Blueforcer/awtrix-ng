@@ -177,7 +177,7 @@ locally after changes that touch `src/sim/`, the shared `core/`, or the web UI.
 
 Before compiling, the `pre:scripts/build_webui.py` extra script minifies and gzips
 `webui/index.html` into `src/transport/http/WebUiAsset.h`, a generated header that
-is checked in. The compressed asset has an 80 KB budget, and the header is rewritten
+is checked in. The compressed asset has an 84 KB budget, and the header is rewritten
 only when `webui/index.html` has actually changed, so incremental builds stay
 incremental.
 
