@@ -34,6 +34,7 @@
 #include "persistence/SystemConfigApply.h"
 #include "system/HeapCaps.h"
 #include "system/HeapProbe.h"
+#include "transport/http/UpdateImage.h"
 #include "system/Log.h"
 #include "transport/DeviceStateJson.h"
 #include "transport/http/WebUiAsset.h"
@@ -123,14 +124,8 @@ constexpr uint8_t kEspFlashErasedByte = 0xFF;
 constexpr uint32_t kEspAppDescMagic = 0xABCD5432;
 #if defined(AWTRIX_SOC_ESP32S3)
 constexpr uint16_t kExpectedChipId = 0x0009;
-#if defined(CONFIG_SPIRAM_MODE_QUAD)
-constexpr const char* kUpdateImageName = "firmware-awtrix-ng-s3-quad.bin";
-#else
-constexpr const char* kUpdateImageName = "firmware-awtrix-ng-s3-octal.bin";
-#endif
 #else
 constexpr uint16_t kExpectedChipId = 0x0000;
-constexpr const char* kUpdateImageName = "firmware-awtrix-ng.bin";
 #endif
 
 // The S3 ships as two images - octal PSRAM and quad - and the header above cannot tell them apart:

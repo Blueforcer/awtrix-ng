@@ -14,6 +14,7 @@
 #include "hal/IBoard.h"
 #include "system/HeapCaps.h"
 #include "system/MonotonicClock.h"
+#include "transport/http/UpdateImage.h"
 
 namespace awtrix {
 
@@ -44,6 +45,7 @@ std::string buildDeviceStateJson(CoreEngine& engine, IBoard& board, const std::s
   DeviceFacts facts;
   facts.boardType = kBoardType;
   facts.soc = pins::activeProfile().id;
+  facts.updateImage = kUpdateImageName;
   facts.ipAddress = std::string(WiFi.localIP().toString().c_str());
   const char* hn = WiFi.getHostname();
   facts.hostname = hn ? hn : "";

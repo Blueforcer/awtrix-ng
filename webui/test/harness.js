@@ -70,6 +70,9 @@ function makeStore() {
              radio: { playing: false, station: '', title: '', error: '' }, stations: [] },
     radioPlay: null,   // last POST /api/v1/audio/play carrying a station or a url
     stationsPut: null, // last PUT /api/v1/audio/stations body
+    device: { ipAddress: '192.168.1.5', version: '1.1.1', soc: 'esp32',
+              updateImage: 'firmware-awtrix-ng.bin' },
+    githubLatest: null,
     // The icon database lives outside the device: the browser talks to it
     // directly, so it is mocked by absolute URL rather than by path.
     iconDb: { v: 1, icons: [] }, // what index.json answers
@@ -113,6 +116,8 @@ function mockFetch(store, netlog, win) {
 
     if (/^https?:\/\//.test(url) && !url.startsWith('http://localhost')) {
       netlog.push(method + ' ' + url);
+      if (url.startsWith('https://api.github.com/'))
+        return ext(store.githubLatest || { message: 'Not Found' }, !!store.githubLatest, store.githubLatest ? 200 : 404);
       if (url.endsWith('/submit') && method === 'POST') {
         store.submitted.push(opts.body);
         store.submittedHeaders.push(opts.headers || {});
@@ -154,7 +159,7 @@ function mockFetch(store, netlog, win) {
     const q = u.searchParams;
     netlog.push(method + ' ' + p + (u.search || ''));
 
-    if (p === '/api/v1/device') return resp({ ipAddress: '192.168.1.5', firmware: 'test' });
+    if (p === '/api/v1/device') return resp(store.device);
     if (p === '/api/v1/capabilities')
       return store.caps ? resp(store.caps) : resp({ error: { message: 'offline' } }, false, 503);
     if (p === '/api/v1/system') return resp({ hostname: 'awtrix-ng' });

@@ -35,6 +35,7 @@ std::string buildDeviceJson(CoreEngine& engine, const std::string& uid, const De
   w.member("uid", uid);
   w.member("boardType", facts.boardType);
   w.member("soc", facts.soc);
+  w.member("updateImage", facts.updateImage);
   w.member("ipAddress", facts.ipAddress);
   w.member("hostname", facts.hostname);
   w.member("wifiRssi", facts.wifiRssi);

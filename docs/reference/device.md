@@ -109,7 +109,7 @@ hardware supports them.
 
 ## Always-present fields
 
-These 22 keys are in every response, on every board, in every state.
+These 23 keys are in every response, on every board, in every state.
 
 | Key | Type | Range / format | Units | Meaning |
 | --- | --- | --- | --- | --- |
@@ -117,6 +117,7 @@ These 22 keys are in every response, on every board, in every state.
 | `uid` | string | 12 lowercase hex chars | - | Device identity: the WiFi MAC address, lowercased, colons stripped. Stable across reboots and reflashes. Also the default MQTT topic prefix and MQTT client id. |
 | `boardType` | string | constant `"awtrixng"` | - | A fixed constant in the device firmware - it does **not** vary with your GPIO configuration. The simulator reports `"simulator"` instead. |
 | `soc` | string | `esp32`, `esp32s3` | - | The chip this image was built for. Branch on this only to tell the two firmware images apart; for pin rules read `gpio` in `GET /api/v1/capabilities`. |
+| `updateImage` | string | `firmware-awtrix-ng.bin`, `firmware-awtrix-ng-s3-octal.bin`, `firmware-awtrix-ng-s3-quad.bin` | - | The release file this device updates from - the one `POST /update` accepts. The web UI uses it to offer the right download. Empty in the simulator. |
 | `ipAddress` | string | dotted quad | - | The station-mode IP address. In AP (provisioning) mode this is not the address you reached AWTRIX on. |
 | `hostname` | string | 1 … 32 chars | - | The name AWTRIX answers to on the network and publishes over mDNS. Read the configured value from `GET /api/v1/system`; that one is empty when the name is derived from the MAC (`awtrixng-` plus the last six hex digits of `uid`), which is why the two fields disagree on a device that was never named by hand. |
 | `wifiRssi` | integer | typically −30 (excellent) to −90 (unusable) | dBm | Current signal strength of the station connection. |

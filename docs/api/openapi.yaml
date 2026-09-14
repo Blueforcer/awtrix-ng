@@ -2404,6 +2404,13 @@ components:
             exist and which of them can do what - the full rules are under
             `gpio` in `/api/v1/capabilities`.
           enum: [esp32, esp32s3]
+        updateImage:
+          type: string
+          enum: [firmware-awtrix-ng.bin, firmware-awtrix-ng-s3-octal.bin, firmware-awtrix-ng-s3-quad.bin, ""]
+          description: >
+            The release file this device updates from - the one `POST /update`
+            accepts. The web UI uses it to offer the right download. Empty in
+            the simulator.
         ipAddress: { type: string }
         hostname:
           type: string
