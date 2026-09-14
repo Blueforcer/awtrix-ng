@@ -121,6 +121,7 @@ CAPS = (
      "Memory held back"),
     ("src/core/script/ScriptConfig.cpp", r"kMaxTextLen\s*=\s*([0-9 *]+);", "Setting text value"),
     ("src/core/script/SharedState.h", r"kMaxSharedKeyChars\s*=\s*([0-9 *]+);", "Shared key names"),
+    ("src/core/audio/AudioStats.h", r"kBandCount\s*=\s*([0-9 *]+);", "Music bands"),
 )
 
 LIMITS_PAGE = "docs/reference/limits.md"

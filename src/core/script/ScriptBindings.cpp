@@ -1053,6 +1053,70 @@ int b_sound_playing(bvm* vm) {
   be_return(vm);
 }
 
+// Fetched once per frame: bands(), level() and beat() in one draw() must agree, and the ring
+// reports a beat only once, so a second fetch would swallow it.
+struct AudioCache {
+  int64_t frameMs = -1;
+  bool fresh = false;
+  audio::FrameStats stats;
+};
+AudioCache g_audio;
+
+const audio::FrameStats& audioStats(bool& fresh) {
+  const int64_t now = g_ctx.rctx ? g_ctx.rctx->nowMs : nowMs();
+  if (now != g_audio.frameMs) {
+    g_audio.frameMs = now;
+    g_audio.fresh = g_svc && g_svc->audioStats && g_svc->audioStats(now, g_audio.stats);
+    if (!g_audio.fresh) g_audio.stats = audio::FrameStats{};
+  }
+  fresh = g_audio.fresh;
+  return g_audio.stats;
+}
+
+int b_audio_bands(bvm* vm) {
+  int n = argInt(vm, 1);
+  if (n <= 0 || n > audio::kBandCount) n = audio::kBandCount;
+  int top = argInt(vm, 2);
+  if (top <= 0) top = 255;
+  bool fresh;
+  const audio::FrameStats& s = audioStats(fresh);
+  be_newobject(vm, "list");
+  for (int j = 0; j < n; ++j) {
+    const int lo = (j * audio::kBandCount) / n;
+    const int hi = ((j + 1) * audio::kBandCount) / n;
+    int v = 0;
+    for (int k = lo; k < hi; ++k) v = std::max(v, static_cast<int>(s.bands[k]));
+    be_pushint(vm, (v * top + 127) / 255);
+    be_data_push(vm, -2);
+    be_pop(vm, 1);
+  }
+  be_pop(vm, 1);
+  be_return(vm);
+}
+
+int b_audio_level(bvm* vm) {
+  bool fresh;
+  be_pushint(vm, audioStats(fresh).level);
+  be_return(vm);
+}
+
+int b_audio_beat(bvm* vm) {
+  bool fresh;
+  const bool beat = audioStats(fresh).beat;
+  be_pushbool(vm, fresh && beat);
+  be_return(vm);
+}
+
+// Playback, not data freshness: should_show() is asked only at rotation time, and it must be able
+// to say yes before any frame has been analysed.
+int b_audio_active(bvm* vm) {
+  bool fresh;
+  audioStats(fresh);
+  const RuntimeState* rt = runtime();
+  be_pushbool(vm, rt && (rt->radioPlaying || rt->mp3Playing));
+  be_return(vm);
+}
+
 int b_notify(bvm* vm) {
   bool ok = false;
   if (g_svc && g_svc->notify && be_top(vm) >= 1 && be_isstring(vm, 1))
@@ -1159,6 +1223,10 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "_native_sound", b_sound);
   be_regfunc(b, "_native_sound_playing", b_sound_playing);
   be_regfunc(b, "_native_sound_sinks", b_sound_sinks);
+  be_regfunc(b, "_native_audio_bands", b_audio_bands);
+  be_regfunc(b, "_native_audio_level", b_audio_level);
+  be_regfunc(b, "_native_audio_beat", b_audio_beat);
+  be_regfunc(b, "_native_audio_active", b_audio_active);
   be_regfunc(b, "_native_rotation_next", b_rotation_next);
   be_regfunc(b, "_native_rotation_prev", b_rotation_prev);
   be_regfunc(b, "_native_rotation_show", b_rotation_show);
@@ -1185,7 +1253,10 @@ bool installBindings(BerryVM& vm, std::string& err) {
   return true;
 }
 
-void setServices(const ScriptServices* s) { g_svc = s; }
+void setServices(const ScriptServices* s) {
+  g_svc = s;
+  g_audio = AudioCache{};
+}
 
 const ScriptServices* services() { return g_svc; }
 

@@ -177,7 +177,7 @@ out for the device's global app time (7000 ms out of the box). It changes only *
 ## 5. The API
 
 Every function below is a plain global, callable from any method with no import. The modules
-`display`, `http`, `mqtt`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
+`audio`, `display`, `http`, `mqtt`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
 there too. Only `json`, `string`, `math` and `gc` need an `import` line at the top of the file.
 
 ### 5.1 Panel and drawing
@@ -807,6 +807,27 @@ and everything is gated on the device's global sound setting. Use `sound` for no
 `notify()` (5.10) when the sound belongs to an event that should also interrupt the rotation and
 show something.
 
+### 5.18b Music
+
+The music the device itself plays - a station or a stored MP3 on an ESP32-S3 with a speaker - as
+numbers, timed to the speaker:
+
+| Call | Answer |
+|---|---|
+| `audio.bands(n?, max?)` | list of `n` numbers (1-32, default 32), bass first, each 0..`max` (default 255) |
+| `audio.level()` | loudness 0..255 |
+| `audio.beat()` | `true` for exactly one frame per beat - read it in `draw()`, never in `loop()` |
+| `audio.active()` | `true` while a station or an MP3 is playing |
+
+**Never `nil`**: no audio output, nothing playing and silence all answer zeros and `false`. Levels
+adjust themselves to the track, and the volume setting does not change them. A spectrum is one
+line, `max` 8 matching the fixed 0-8 range of `bar_chart()` with autoscale off:
+
+```berry
+  def should_show() return audio.active() end
+  def draw() bar_chart(audio.bands(16, 8), "Rainbow", false) end
+```
+
 ### 5.19 Running without ever being shown
 
 An app the user has **deactivated** stops: no `loop()`, no HTTP answers, no MQTT messages. It stays
@@ -944,6 +965,7 @@ anything that waits, waits by returning and being called again.
 | MQTT subscriptions | 8 per app | further subscribes ignored |
 | MQTT messages waiting | 32, shared by every script | the oldest is dropped |
 | Chart values | 16 | extras dropped |
+| Music bands | 32 | a smaller `n` merges neighbours |
 | Regex | 256-byte pattern, 7 capturing groups | the call answers `nil` |
 | Frame budget | 25 ms | nothing is dropped; the whole panel's frame rate falls |
 

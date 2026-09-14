@@ -8,6 +8,7 @@
 - The browser tab carries the hostname, so several AWTRIX open at once are told apart (#18).
 - Scripts can swallow a button press: return `true` from `on_button()`.
 - Scripts can switch the matrix with `display.power()` and read its state with `display.is_on()` (#56).
+- **Scripts can react to the music.** On an ESP32-S3 with a speaker, `audio.bands()`, `audio.level()` and `audio.beat()` describe what the radio or a stored MP3 is playing, timed to the speaker. A spectrum display is one line: `bar_chart(audio.bands(16, 8), "Rainbow", false)`. Other boards answer zeros, so the same script runs everywhere.
 - **More DIY audio hardware is supported.** `pinI2sMclk` supplies DACs requiring a master clock, while `pinAmpEnable` controls amplifiers with an enable input.
 - DIY panels can select their physical LED colour order in the Panel settings (#54).
 - Directional app transitions can run in their normal or reversed direction (#49).

@@ -335,6 +335,28 @@ sound.stop = _sound_stop
 sound.playing = _sound_playing
 sound.sinks = _sound_sinks
 
+# ---- audio -----------------------------------------------------------------
+# The music the device itself is playing -- a station or a stored MP3 -- as
+# numbers timed to the speaker. Never nil: a board without an audio output, or
+# silence, answers zeros and false.
+audio = module('audio')
+def _audio_bands(n, hi) # audio.bands(n?, max?)
+  return _native_audio_bands(n, hi)
+end
+def _audio_level() # audio.level()
+  return _native_audio_level()
+end
+def _audio_beat() # audio.beat()
+  return _native_audio_beat()
+end
+def _audio_active() # audio.active()
+  return _native_audio_active()
+end
+audio.bands = _audio_bands
+audio.level = _audio_level
+audio.beat = _audio_beat
+audio.active = _audio_active
+
 # ---- sensor ----------------------------------------------------------------
 # What the device measures, straight from the reading the built-in apps draw.
 # Every call answers nil when the board has no such sensor, so a panel without a

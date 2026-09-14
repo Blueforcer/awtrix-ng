@@ -460,6 +460,12 @@ void setup() {
     return (c.buzzer ? 1 : 0) | (c.track ? 2 : 0) | (c.mp3 ? 4 : 0) |
            (c.radio ? 8 : 0);
   };
+#if defined(AWTRIX_SOC_ESP32S3)
+  if (g_radio)
+    g_scriptSvc.audioStats = [](int64_t now, audio::FrameStats& out) {
+      return g_radio->analysis(now, out);
+    };
+#endif
   g_scriptSvc.rotateNext = [] { g_engine->scriptNextApp(); };
   g_scriptSvc.rotatePrevious = [] { g_engine->scriptPreviousApp(); };
   g_scriptSvc.showApp = [](const std::string& id) { return g_engine->scriptShowApp(id); };

@@ -4,6 +4,7 @@
 #include <string>
 
 #include "core/Command.h"
+#include "core/audio/AudioStats.h"
 
 namespace awtrix {
 namespace sound {
@@ -55,6 +56,14 @@ class IPcmSink {
   virtual void stopStream() = 0;
 
   virtual void tick(int64_t nowMs) = 0;
+
+  // The analysed frame that is audible at nowMs; false when nothing plays or the output cannot
+  // analyse. Asking is what switches the analysis on.
+  virtual bool analysis(int64_t nowMs, audio::FrameStats& out) {
+    (void)nowMs;
+    (void)out;
+    return false;
+  }
 
   virtual uint32_t underruns() const { return 0; }
   virtual uint32_t decodeUs() const { return 0; }

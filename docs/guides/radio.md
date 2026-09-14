@@ -126,6 +126,9 @@ With `radioMeta` on - the default - each new track title appears as it arrives,
 for about seven seconds, then the normal rotation continues. Turn it off to have
 the radio play without ever taking over the display.
 
+A script can draw the music itself - a spectrum, a level meter, a pulse on the
+beat - with the [`audio` module](scripting.md#music).
+
 The title comes from the station itself. Stations repeat it every few seconds;
 AWTRIX shows it only when it actually changes.
 

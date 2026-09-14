@@ -382,6 +382,9 @@ int main(int argc, char** argv) {
     return (c.buzzer ? 1 : 0) | (c.track ? 2 : 0) | (c.mp3 ? 4 : 0) |
            (c.radio ? 8 : 0);
   };
+  g_scriptSvc.audioStats = [](int64_t now, audio::FrameStats& out) {
+    return g_pcm->analysis(now, out);
+  };
   g_scriptSvc.rotateNext = [] { g_engine->scriptNextApp(); };
   g_scriptSvc.rotatePrevious = [] { g_engine->scriptPreviousApp(); };
   g_scriptSvc.showApp = [](const std::string& id) { return g_engine->scriptShowApp(id); };

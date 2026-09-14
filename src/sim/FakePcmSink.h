@@ -2,12 +2,16 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "core/CoreEngine.h"
+#include "core/audio/AudioStatsRing.h"
+#include "core/audio/SpectrumAnalyzer.h"
 #include "core/radio/IcyMetadata.h"
 #include "core/radio/RadioDisplay.h"
 #include "core/sound/AudioSinks.h"
 #include "core/sound/SoundMp3.h"
+#include "sim/SimSong.h"
 
 namespace awtrix {
 namespace sim {
@@ -47,11 +51,45 @@ class FakePcmSink : public sound::IPcmSink {
     nowMs_ = nowMs;
     tickMp3(nowMs);
     tickStream(nowMs);
+    tickSong(nowMs);
+  }
+
+  bool analysis(int64_t nowMs, audio::FrameStats& out) override {
+    stats_.markInterest(nowMs);
+    return stats_.latestAudibleAt(nowMs, out);
   }
 
  private:
   static constexpr long kTitleIntervalMs = 12000;
   static constexpr long kMp3DurationMs = 1500;
+  static constexpr int kSongFrames = 1152;
+  static constexpr int kSongLeadMs = 80;
+
+  // The generated song runs up to kSongLeadMs ahead of the clock, the way the device's DMA queue
+  // does, so the "which frame is audible now" logic is exercised on the host as well.
+  void tickSong(int64_t nowMs) {
+    if (!(streaming_ || mp3Running_) || !stats_.wanted(nowMs)) {
+      songStartMs_ = 0;
+      return;
+    }
+    if (songStartMs_ == 0) {
+      songStartMs_ = nowMs;
+      songSamples_ = 0;
+      song_.reset();
+      analyzer_.reset();
+    }
+    for (int n = 0; n < 8; ++n) {
+      const int64_t at = songStartMs_ + songSamples_ * 1000 / SimSong::kRateHz;
+      if (at >= nowMs + kSongLeadMs) return;
+      song_.fill(pcm_.data(), kSongFrames);
+      audio::FrameStats st;
+      if (analyzer_.analyze(pcm_.data(), kSongFrames, 2, SimSong::kRateHz, st))
+        stats_.publish(st, at);
+      songSamples_ += kSongFrames;
+    }
+    // Too far behind to catch up (a paused debugger): start over from now.
+    if (songStartMs_ + songSamples_ * 1000 / SimSong::kRateHz < nowMs) songStartMs_ = 0;
+  }
 
   void tickMp3(int64_t nowMs) {
     if (!mp3Running_) return;
@@ -113,6 +151,12 @@ class FakePcmSink : public sound::IPcmSink {
   int64_t nextChangeMs_ = 0;
   int64_t mp3EndsAtMs_ = 0;
   int64_t nowMs_ = 0;
+  audio::SpectrumAnalyzer analyzer_;
+  audio::StatsRing stats_;
+  SimSong song_;
+  std::vector<int16_t> pcm_ = std::vector<int16_t>(kSongFrames * 2);
+  int64_t songStartMs_ = 0;
+  int64_t songSamples_ = 0;
 };
 
 }

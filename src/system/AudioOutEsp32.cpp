@@ -22,6 +22,7 @@
 #include "system/HeapCaps.h"
 #include "system/HeapProbe.h"
 #include "system/Log.h"
+#include "system/MonotonicClock.h"
 
 namespace awtrix {
 
@@ -33,6 +34,16 @@ constexpr BaseType_t kTaskCore = 1;
 
 constexpr int kDmaBufferCount = 8;
 constexpr int kDmaBufferFrames = 512;
+
+// When i2s_write returns, (kDmaBufferCount - 1) buffers sit between the end of the frame just
+// handed over and the speaker. kAudibleTrimMs is the knob for what that model gets wrong.
+constexpr int kQueueAheadFrames = (kDmaBufferCount - 1) * kDmaBufferFrames;
+constexpr int kAudibleTrimMs = 0;
+
+int64_t audibleLeadMs(int frameSamples, int rateHz) {
+  return (static_cast<int64_t>(kQueueAheadFrames - frameSamples) * 1000) / rateHz +
+         kAudibleTrimMs;
+}
 
 constexpr std::size_t kNetworkChunkBytes = 1024;
 
@@ -264,6 +275,12 @@ bool AudioOutEsp32::writeDecodedFrame(const mp3::DecodeResult& result, int16_t* 
     i2sStarted_ = true;
   }
 
+  // Analysed before the gain, so the volume setting does not change the picture.
+  audio::FrameStats stats;
+  const bool analyzed =
+      stats_.wanted(monotonicMs()) &&
+      analyzer_.analyze(pcm, result.samples, result.channels, result.sampleRateHz, stats);
+
   const int gain = mp3Playing_.load() ? soundVolume_.load() : streamVolume_.load();
   if (gain < 100) {
     const int count = result.samples * result.channels;
@@ -275,7 +292,14 @@ bool AudioOutEsp32::writeDecodedFrame(const mp3::DecodeResult& result, int16_t* 
   i2s_write(I2S_NUM_0, pcm,
             static_cast<std::size_t>(result.samples) * result.channels * sizeof(int16_t),
             &written, portMAX_DELAY);
+  if (analyzed)
+    stats_.publish(stats, monotonicMs() + audibleLeadMs(result.samples, result.sampleRateHz));
   return true;
+}
+
+bool AudioOutEsp32::analysis(int64_t nowMs, audio::FrameStats& out) {
+  stats_.markInterest(nowMs);
+  return stats_.latestAudibleAt(nowMs, out);
 }
 
 namespace {

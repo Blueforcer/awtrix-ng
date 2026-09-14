@@ -11,7 +11,9 @@
 #include <vector>
 
 #include "core/CoreEngine.h"
+#include "core/audio/AudioStatsRing.h"
 #include "core/audio/Mp3Decoder.h"
+#include "core/audio/SpectrumAnalyzer.h"
 #include "core/sound/AudioSinks.h"
 #include "core/radio/IcyMetadata.h"
 #include "core/radio/IcyStream.h"
@@ -45,6 +47,7 @@ class AudioOutEsp32 : public sound::IPcmSink {
   void stopStream() override;
 
   void tick(int64_t nowMs) override;
+  bool analysis(int64_t nowMs, audio::FrameStats& out) override;
 
   uint32_t underruns() const override { return underruns_.load(); }
   uint32_t decodeUs() const override { return decodeUs_.load(); }
@@ -105,6 +108,8 @@ class AudioOutEsp32 : public sound::IPcmSink {
   radio::TitleTracker tracker_;
   radio::MetadataSplitter splitter_;
   mp3::Decoder decoder_;
+  audio::SpectrumAnalyzer analyzer_;
+  audio::StatsRing stats_;
   int sampleRateHz_ = 0;
   int channels_ = 0;
   bool i2sStarted_ = false;

@@ -5,6 +5,7 @@
 #include <functional>
 #include <string>
 
+#include "core/audio/AudioStats.h"
 #include "core/render/Font.h"
 #include "core/script/HttpHeaders.h"
 #include "core/script/ScriptHeap.h"
@@ -157,6 +158,8 @@ struct ScriptServices {
   // Which outputs this board actually has, as a bitmask: buzzer 1, track 2, mp3 4,
   // radio 8. Lets a script pick a sound its hardware can make.
   std::function<int()> soundSinks;
+  // The analysed frame audible at nowMs; asking is what switches the analysis on.
+  std::function<bool(int64_t nowMs, audio::FrameStats& out)> audioStats;
   std::function<void()> rotateNext;
   std::function<void()> rotatePrevious;
   std::function<bool(const std::string&)> showApp;
