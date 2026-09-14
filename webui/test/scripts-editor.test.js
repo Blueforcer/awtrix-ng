@@ -114,11 +114,35 @@ async function scenarioIconButton() {
   assert(!btn().disabled, 'and the button stays pressable for another try');
 }
 
+async function scenarioCrLfScriptStaysClean() {
+  console.log('\nScenario D: Hub scripts with CRLF line endings stay clean');
+  const { window, store } = await boot();
+  const $ = q(window);
+  const hubId = 'g5wyNFvSbRMv';
+  const hubHash = '27ca9e001fdb522bb8c070d8f95f62aab24a7362e6b7203dec26a1880d7cf9ef';
+  store.scripts.set('HubLinked', `# @hub ${hubId} ${hubHash}\r\n# @name HubLinked\r\nreturn nil`);
+  store.scripts.set('Plain', '# @name Plain\nreturn nil');
+
+  await goto(window, '#/scripts');
+  await flush(100);
+  const row = name => [...window.document.querySelectorAll('.ftitem')]
+    .find(item => item.querySelector('.nm')?.textContent === name);
+  row('HubLinked').click();
+  await flush(60);
+
+  assert(!isDirty(window), 'opening a CRLF Hub script does not create changes');
+  row('Plain').click();
+  await flush(60);
+  assert($('.edtop input[type=text]').value === 'Plain', 'another script opens without a save-or-discard prompt');
+  window.close();
+}
+
 async function main() {
   console.log('Backend: ' + (USE_SIM ? 'SIMULATOR (http://localhost:8080)' : 'in-memory mock'));
   await scenarioStaysClean();
   await scenarioDirtySurvives();
   await scenarioIconButton();
+  await scenarioCrLfScriptStaysClean();
   console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);
 }

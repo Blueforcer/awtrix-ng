@@ -2874,6 +2874,7 @@ function viewScripts(view){
   const hubUpdates=new Map();
   const hubPanel=el('div',{class:'script-hub-panel',hidden:true});
   let iconsHave=new Set();
+  const editorSource=src=>String(src??'').replace(/\r\n?/g,'\n');
 
   function setStatus(err,name){
     ed.markError(err&&err.line?err.line:0);
@@ -2923,6 +2924,7 @@ function viewScripts(view){
     scrDraft={name:nameIn.value,src:ed.value,dirty,onDevice};
   }
   function load(name,src,err){
+    src=editorSource(src);
     nameIn.value=name;ed.value=src;
     onDevice=err===undefined?null:{name,src,err};
     setStatus(err||null,err===undefined?undefined:name);
