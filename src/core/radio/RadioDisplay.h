@@ -9,8 +9,6 @@ namespace radio {
 
 inline constexpr const char kNotificationName[] = "radio";
 
-inline constexpr long kNotificationMs = 7000;
-
 enum class Announcement {
   Station,
   Title,

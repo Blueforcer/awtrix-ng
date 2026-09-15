@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "core/render/Canvas.h"
+#include "media/PodBuffer.h"
 
 namespace awtrix {
 namespace media {
@@ -58,6 +59,9 @@ class MicroGif {
   // frame still on screen has to survive until then.
   int prevDisposal_ = 0;
   int prevX_ = 0, prevY_ = 0, prevW_ = 0, prevH_ = 0;
+  // Disposal 3 restores the pixels that were present before the frame. Allocate only for GIFs
+  // that use it; the panel-sized worst case is 32 * 8 * 4 = 1024 bytes.
+  PodBuffer<uint32_t> restore_;
 };
 
 }

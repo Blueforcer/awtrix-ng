@@ -101,6 +101,7 @@ void MicroGif::rewind() {
   pendingDelayMs_ = 0;
   prevDisposal_ = 0;
   prevW_ = prevH_ = 0;
+  restore_.resize(0);
 }
 
 // Graphic Control Extension: transparency index, disposal method and the frame delay, which the
@@ -176,15 +177,34 @@ MicroGif::Step MicroGif::decodeImage(Canvas& dst) {
   }
   const bool interlaced = (packed & 0x40) != 0;
 
-  // Disposal 2 is restore-to-background and 3 restore-to-previous; with no backbuffer to restore
-  // from, both are approximated by blanking the area the last frame covered.
-  if (prevDisposal_ == 2 || prevDisposal_ == 3)
+  if (prevDisposal_ == 2) {
     dst.fillRect(prevX_, prevY_, prevW_, prevH_, 0x000000u);
+  } else if (prevDisposal_ == 3) {
+    const int n = prevW_ * prevH_;
+    if (restore_.size() == static_cast<std::size_t>(n)) {
+      const uint32_t* saved = restore_.data();
+      for (int y = 0; y < prevH_; ++y)
+        for (int x = 0; x < prevW_; ++x)
+          dst.setPixel(prevX_ + x, prevY_ + y, *saved++);
+    } else {
+      // Preserve the old bounded-memory fallback if the optional snapshot could not be allocated.
+      dst.fillRect(prevX_, prevY_, prevW_, prevH_, 0x000000u);
+    }
+  }
+  restore_.resize(0);
 
   const int minCodeSize = readByte();
   if (minCodeSize < 1 || minCodeSize > 8) return Step::kError;
   const int npix = fw * fh;
   if (!lzwDecode(minCodeSize, *scratch, scratch->index, npix)) return Step::kError;
+
+  // A restore-to-previous frame needs the destination pixels from before it is composited. Keep
+  // only its rectangle, not a second logical-screen canvas.
+  if (disposal_ == 3 && restore_.resize(static_cast<std::size_t>(npix))) {
+    uint32_t* saved = restore_.data();
+    for (int y = 0; y < fh; ++y)
+      for (int x = 0; x < fw; ++x) *saved++ = dst.getPixel(fx + x, fy + y);
+  }
 
   for (int r = 0; r < fh; ++r) {
     const int y = interlaced ? interlacedRow(r, fh) : r;
