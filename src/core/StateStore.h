@@ -31,8 +31,11 @@ class StateStore {
   void subscribe(Listener l) { listeners_.push_back(std::move(l)); }
 
   void emit(StateEvent e) {
-    for (auto& l : listeners_)
-      if (l) l(e);
+    // Index-based on purpose: a listener may call subscribe() from inside a callback, and the
+    // resulting push_back would invalidate the iterators of a range-based for loop.
+    const size_t n = listeners_.size();
+    for (size_t i = 0; i < n && i < listeners_.size(); ++i)
+      if (listeners_[i]) listeners_[i](e);
   }
 
  private:
