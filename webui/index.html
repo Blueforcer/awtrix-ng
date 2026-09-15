@@ -11,7 +11,7 @@
   --bg:#171717;--card:#222221;--card2:#292927;--border:#373632;--brd2:#302f2b;--fg:#f3f1ec;
   --dim:#a6a198;--acc:#f5a568;--pri:#f5a568;--ok:#8fbf72;--err:#ff9d90;--warn:#ffb65c;
   --errbrd:#74443d;--bnw:#3b2d20;--bna:#34261d;--badbg:#412421;--badfg:#ffd6d1;
-  --con:#10100f;--sh:#0008;--trk:#514e47;
+  --con:#10100f;--confg:#f3f1ec;--sh:#0008;--trk:#514e47;
   --tkw:#ff7b72;--tapi:#ffa657;--tcore:#d2a8ff;--tstr:#a5d6ff;--tnum:#79c0ff;
   --tcom:#8b949e;--top:#b1bac4;--tsel:#2d4f76;--tselo:rgba(45,79,118,.45);--tcur:#1f242c;
   --r:12px;font-size:16px;
@@ -24,7 +24,7 @@
   --bg:#f5f4f1;--card:#fff;--card2:#f0eee9;--border:#e2dfd8;--brd2:#ebe8e2;--fg:#242321;
   --dim:#706c65;--acc:#ac470f;--pri:#ac470f;--ok:#3d762e;--err:#b3261e;--warn:#945813;
   --errbrd:#e2afa8;--bnw:#fff0d8;--bna:#fbe9dc;--badbg:#fde9e5;--badfg:#751b15;
-  --con:#181817;--sh:#342a201f;--trk:#c8c3b9;
+  --con:#181817;--confg:#f7f3ec;--sh:#342a201f;--trk:#c8c3b9;
   --tkw:#cf222e;--tapi:#953800;--tcore:#8250df;--tstr:#0a3069;--tnum:#0550ae;
   --tcom:#59636e;--top:#24292f;--tsel:#b6d9ff;--tselo:rgba(137,198,255,.4);--tcur:#f0f3f6;
 }
@@ -258,7 +258,7 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .bar>i{display:block;height:100%;min-width:3px;background:var(--acc);border-radius:4px;transition:width .2s}
 .bar>i.hot{background:var(--err)}
 .storage .lbl{display:flex;justify-content:space-between;color:var(--dim);font-size:12px}
-.console{background:var(--con);border:1px solid var(--border);border-radius:8px;padding:10px;height:60vh;overflow:auto;
+.console{background:var(--con);color:var(--confg);border:1px solid var(--border);border-radius:8px;padding:10px;height:60vh;overflow:auto;
   font:12px ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all}
 .mono{font:12px ui-monospace,Consolas,monospace;color:var(--dim)}
 .palwrap{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,304px) minmax(0,1fr);
@@ -617,6 +617,7 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .icons-page .tile:hover{border-color:var(--border);box-shadow:0 5px 16px #00000018}
 .icons-page .tile .pw{height:auto;aspect-ratio:1;margin:7px 7px 0;border-radius:6px;box-shadow:none;flex:none}
 .icons-page .tile .pw img{position:absolute;inset:14px;width:calc(100% - 28px);height:calc(100% - 28px);padding:0;object-fit:contain}
+.icon-hub-badge{position:absolute;z-index:1;top:8px;right:8px;padding:4px 7px;border:1px solid #f5a56866;border-radius:999px;background:#171717e8;color:var(--acc);box-shadow:0 2px 8px #0008;font:700 9px/1 var(--mono);letter-spacing:.04em;pointer-events:none}
 .icons-page .tile .ft{padding:12px 12px 4px;align-items:start;flex-wrap:wrap;gap:4px}
 .icons-page .tile .ft .nm{flex:1 1 100%;font-size:13px;white-space:normal;overflow-wrap:anywhere;line-height:1.45;color:var(--fg)}
 .icons-page .tile .ft .sz{font:10px/1.5 var(--mono);color:var(--dim)}
@@ -631,10 +632,11 @@ html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-r
 .icon-tile-actions>.icon-show{flex:1;min-width:0;padding:7px 5px;min-height:38px;font-size:12px;white-space:normal;line-height:1.3}
 .icons-page .icon-tile-actions .acts{padding:0;flex:0 0 34px;margin:0}
 .icons-page .icon-tile-actions .acts button{font-size:20px;padding:0;line-height:1}
-.icons-page .tmenu{inset:0 0 auto;min-height:100%;max-height:280px;border-radius:6px;overflow:auto;justify-content:start;padding:7px}
-.icons-page .tmenu :is(button,a){display:block;text-align:left;padding:8px;font-size:12px;color:#e6edf3;min-height:34px}
-.icons-page .tmenu button.danger{color:#f85149}
-.icons-page .tmenu a:hover{background:#ffffff1a;border-radius:6px}
+.icons-page .tmenu{inset:0 0 auto;min-height:100%;max-height:280px;border:1px solid var(--border);border-radius:6px;overflow:auto;justify-content:start;padding:7px;background:var(--card);box-shadow:0 10px 28px var(--sh)}
+.icons-page .tmenu :is(button,a){display:block;min-height:34px;padding:8px;border:0;border-radius:6px;background:transparent;color:var(--fg);font-size:12px;text-align:left;text-decoration:none}
+.icons-page .tmenu :is(button,a):is(:hover,:focus-visible){background:var(--card2);color:var(--acc)}
+.icons-page .tmenu button.danger{color:var(--err)}
+.icons-page .tmenu button.danger:is(:hover,:focus-visible){background:#ff9d9014;color:var(--err)}
 .icons-add{display:grid;grid-template-columns:1.1fr 1fr;gap:20px;align-items:start}
 .icons-add>section{padding:20px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:grid;gap:15px;min-width:0}
 .icons-add h3{font-size:16px;font-weight:600}
@@ -962,6 +964,7 @@ const I18N={en:{
   editorTab:'Icon Editor',
   edLoading:'Loading the editor…',
   edUnreachable:'The editor did not load.',
+  edIconOpenError:'The icon could not be opened.',
   melodies:'Melodies',melodieshelp:'Short ringtones, for notifications and scripts.',
   newmelo:'New melody',meloname:'Name',melortttl:'d=4,o=5,b=120:c,e,g',
   melopre:'Preview here',meloprestop:'Stop preview',meloplay:'Play on AWTRIX',melostop:'Stop on AWTRIX',
@@ -980,7 +983,7 @@ const I18N={en:{
   hubOn:'Key saved',hubOff:"No key saved",hubClear:"Remove key",hubCleared:"Hub key removed from this browser.",hubStored:"Hub key saved in this browser.",
   hubGetLbl:"Get a connection key",hubGetH:"Copy your key from your Hub account settings.",hubGet:"Open Hub account",
   icfromhub:'From the Hub',icmodified:"Changed on AWTRIX",iclocal:"Only on AWTRIX",icchecking:"Checking Hub status…",icunknown:"Hub status unavailable",
-  icreload:'Reload from Hub',icreloaded:"Icon reloaded from the Hub.",edDrafts:'My drafts',edDraftSaved:"Draft saved in this browser.",edDraftError:"The draft could not be saved. Download the project to keep your changes.",edDraftNew:'New draft',edDraftOpen:'Open draft',edDraftDownload:'Download project',edDraftImport:'Open project',edDraftDelete:'Delete draft',edDraftOnly:"Drafts are private and saved in this browser. Choose Save to AWTRIX to use an icon on your display.",icviewhub:'View on Hub',icvariant:"Share as a new icon",icexists:"This icon is already on the Hub.",
+  icreload:'Reload from Hub',icreloaded:"Icon reloaded from the Hub.",icviewhub:'View on Hub',icvariant:"Share as a new icon",icexists:"This icon is already on the Hub.",
   icoriginfail:"The icon is saved on AWTRIX, but its Hub link could not be saved. Try installing it again.",
   icconflict:"A different icon on AWTRIX has the same name:",icreplace:"Use Hub version",ickeep:"Keep my icon",
   icpublishfirst:"Share this icon on the Hub first so others can install it with your script.",icreference:"Use this icon name in your script:",
@@ -1150,6 +1153,7 @@ const I18N={en:{
   editorTab:'Icon-Editor',
   edLoading:'Editor wird geladen…',
   edUnreachable:'Der Editor wurde nicht geladen.',
+  edIconOpenError:'Das Icon konnte nicht geöffnet werden.',
   melodies:'Melodien',melodieshelp:'Kurze Klingeltöne für Meldungen und Skripte.',
   newmelo:'Neue Melodie',meloname:'Name',melortttl:'d=4,o=5,b=120:c,e,g',
   melopre:'Hier anhören',meloprestop:'Vorschau stoppen',meloplay:'Auf AWTRIX abspielen',melostop:'Auf AWTRIX stoppen',
@@ -1168,7 +1172,7 @@ const I18N={en:{
   hubOn:'Gespeichert',hubOff:"Kein Schlüssel gespeichert",hubClear:"Schlüssel entfernen",hubCleared:"Hub-Schlüssel aus diesem Browser entfernt.",hubStored:"Hub-Schlüssel in diesem Browser gespeichert.",
   hubGetLbl:"Verbindungsschlüssel abrufen",hubGetH:"Kopiere deinen Schlüssel aus den Kontoeinstellungen im Hub.",hubGet:"Hub-Konto öffnen",
   icfromhub:'Aus dem Hub',icmodified:"Auf AWTRIX geändert",iclocal:"Nur auf AWTRIX",icchecking:"Hub-Status wird geprüft…",icunknown:"Hub-Status nicht verfügbar",
-  icreload:'Vom Hub neu laden',icreloaded:"Icon vom Hub neu geladen.",edDrafts:'Meine Entwürfe',edDraftSaved:"Entwurf in diesem Browser gespeichert.",edDraftError:"Der Entwurf konnte nicht gespeichert werden. Lade das Projekt herunter, um deine Änderungen zu sichern.",edDraftNew:'Neuer Entwurf',edDraftOpen:'Entwurf öffnen',edDraftDownload:'Projekt herunterladen',edDraftImport:'Projekt öffnen',edDraftDelete:'Entwurf löschen',edDraftOnly:"Entwürfe sind privat und in diesem Browser gespeichert. Mit „Auf AWTRIX speichern“ überträgst du ein Icon auf dein Display.",icviewhub:'Im Hub ansehen',icvariant:"Als neues Icon veröffentlichen",icexists:"Dieses Icon gibt es bereits im Hub.",
+  icreload:'Vom Hub neu laden',icreloaded:"Icon vom Hub neu geladen.",icviewhub:'Im Hub ansehen',icvariant:"Als neues Icon veröffentlichen",icexists:"Dieses Icon gibt es bereits im Hub.",
   icoriginfail:"Das Icon ist auf AWTRIX gespeichert. Die Zuordnung zum Hub fehlt noch. Versuche die Installation erneut.",
   icconflict:"Auf AWTRIX gibt es ein anderes Icon mit diesem Namen:",icreplace:"Hub-Version verwenden",ickeep:"Mein Icon behalten",
   icpublishfirst:"Veröffentliche das Icon zuerst im Hub, damit andere es mit deinem Script installieren können.",icreference:"Verwende diesen Icon-Namen in deinem Script:",
@@ -3913,17 +3917,18 @@ function viewIcons(view){
   }
   function iconTile(f){
     const base=f.name.replace(/\.[^.]+$/,'');
+    const originKey=({modified:'icmodified',checking:'icchecking',unknown:'icunknown'})[f.state]||null;
     const ft=el('div',{class:'ft'},el('span',{class:'nm',title:f.name},base),
-      el('span',{class:'sz'},fmtBytes(f.size)),el('span',{class:'icon-origin','data-state':f.state},
-        t(({hub:'icfromhub',modified:'icmodified',checking:'icchecking',unknown:'icunknown'})[f.state]||'iclocal')));
+      el('span',{class:'sz'},fmtBytes(f.size)),originKey?el('span',{class:'icon-origin','data-state':f.state},t(originKey)):null);
     const pw=el('div',{class:'pw'},
-      el('img',{src:'/ICONS/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev,alt:f.name,loading:'lazy'}));
+      el('img',{src:'/ICONS/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev,alt:f.name,loading:'lazy'}),
+      f.state==='hub'?el('span',{class:'icon-hub-badge','data-state':'hub',title:t('icfromhub')},'Hub'):null);
     const open=el('button',{title:t('more'),'aria-label':t('more')+': '+base,'aria-haspopup':'menu','aria-expanded':'false'},'⋯');
     const shut=()=>{const m=pw.querySelector('.tmenu');if(m)m.remove();open.setAttribute('aria-expanded','false');};
     const show=el('button',{type:'button',class:'icon-show','aria-label':t('icshow')+': '+base},t('icshow'));
     show.addEventListener('click',async()=>{
       show.disabled=true;
-      try{await post('/api/v1/notifications',{icon:base,text:' '+base,durationMs:3000});toast(t('shown'));}
+      try{await post('/api/v1/notifications',{icon:base,text:' '+base,durationMs:3000,stack:false});toast(t('shown'));}
       catch(e){toast(e.message,false);}finally{show.disabled=false;}
     });
     // A floating menu cannot leave a tile - .tile clips its overflow - so the
@@ -4251,55 +4256,11 @@ function postToPiskel(msg){
 function notifyPiskelTheme(){postToPiskel({type:'theme',theme:document.documentElement.dataset.theme==='light'?'light':'dark'});}
 let pendingEditIcon=null;
 let piskelReady=false;
-let piskelDraftId=null,piskelDraftProject=null,piskelDraftStamp=null,piskelDraftLoading=false;
-let piskelDraftSwitching=false;
-const piskelProjectRequests=new Map();
-function piskelProjectRequest(type,data={}){return new Promise((resolve,reject)=>{
-  const requestId='ng-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
-  const timer=setTimeout(()=>{piskelProjectRequests.delete(requestId);reject(new Error(t('edDraftError')));},15000);
-  piskelProjectRequests.set(requestId,{resolve,reject,timer});postToPiskel({type,requestId,...data});
-});}
-const PISKEL_DRAFT_KEY='awtrixEditorDraftsV1';
-function piskelDraftRead(){try{const d=JSON.parse(localStorage.getItem(PISKEL_DRAFT_KEY)||'[]');return Array.isArray(d)?d:[];}catch(e){return[];}}
-function piskelDraftList(){
-  const select=$('#piskelDraftList');if(!select)return;
-  const selected=select.value;select.replaceChildren(el('option',{value:''},t('edDrafts')));
-  for(const d of piskelDraftRead())select.append(el('option',{value:d.id},(d.project.name||'Untitled')+' · '+new Date(d.updated).toLocaleString()));
-  select.value=piskelDraftId||selected;
+let piskelIconLoad=null;
+function resetPiskelIconLoad(){
+  if(piskelIconLoad)clearTimeout(piskelIconLoad.timer);
+  piskelIconLoad=null;
 }
-function piskelDraftPersist(m){
-  if(piskelDraftLoading)return;
-  const project=m.project;
-  if(!project||project.version!==1||!project.piskel)return;
-  piskelDraftProject=project;
-  let ok=false;
-  try{
-    const drafts=piskelDraftRead(),prior=drafts.find(d=>d.id===piskelDraftId);
-    // A second tab never silently replaces a newer saved draft.
-    if(prior&&piskelDraftStamp!==null&&prior.updated!==piskelDraftStamp)piskelDraftId=null;
-    if(!piskelDraftId)piskelDraftId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
-    const record={id:piskelDraftId,project,updated:Date.now()};
-    const next=[record,...drafts.filter(d=>d.id!==record.id)];
-    if(next.length>30||JSON.stringify(next).length>3500000)throw new Error('draftLimit');
-    localStorage.setItem(PISKEL_DRAFT_KEY,JSON.stringify(next));piskelDraftStamp=record.updated;ok=true;piskelDraftList();
-  }catch(e){}
-  const status=$('#piskelDraftStatus');if(status)status.textContent=t(ok?'edDraftSaved':'edDraftError');
-  postToPiskel({type:m.type==='project-save'?'project-save-result':'project-saved',requestId:m.requestId,revision:m.revision,ok,message:t(ok?'edDraftSaved':'edDraftError'),error:ok?undefined:'storageFailed'});
-  return ok;
-}
-async function piskelDraftSwitch(record=null){
-  if(piskelDraftSwitching||!piskelReady)return;
-  piskelDraftSwitching=true;
-  try{
-    const current=await piskelProjectRequest('project-request');
-    if(!piskelDraftPersist({...current,type:'project-changed'}))throw new Error(t('edDraftError'));
-    piskelDraftLoading=true;
-    await piskelProjectRequest(record?'project-load':'project-new',record?{project:record.project}:{width:8,height:8});
-    piskelDraftId=record?.id||null;piskelDraftStamp=record?.updated||null;piskelDraftProject=record?.project||null;
-    piskelDraftList();
-  }catch(e){toast(e.message,false);}finally{piskelDraftLoading=false;piskelDraftSwitching=false;}
-}
-function piskelDraftLoad(record){if(record?.project)return piskelDraftSwitch(record);}
 
 function b64ToBlob(b64,mime){
   const bin=atob(b64),len=bin.length,arr=new Uint8Array(len);
@@ -4319,22 +4280,27 @@ async function piskelSendList(){
   }catch(e){postToPiskel({type:'list-result',files:[],error:e.message});}
 }
 async function piskelSendIcon(name){
-  if(piskelDraftSwitching)return;
+  if(piskelIconLoad)return;
   const target=$('#piskelFrame')?.contentWindow;
-  piskelDraftSwitching=true;
+  if(!target)return;
+  piskelIconLoad={target};
   try{
-    if(piskelDraftProject){const snapshot=await piskelProjectRequest('project-request');if(!piskelDraftPersist({...snapshot,type:'project-changed'}))throw new Error(t('edDraftError'));}
     const r=await fetch('/ICONS/'+encodeURIComponent(name),{cache:'no-store'});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const blob=await r.blob();
     let origin=null;
     try{const{data}=await api('/api/v1/icons/origins');origin=(data.icons||[]).find(o=>o.name===name&&validIconOrigin(o))||null;}catch(e){}
     if(target!==$('#piskelFrame')?.contentWindow)return;
-    piskelDraftLoading=true;
-    await piskelProjectRequest('load-result',{name,mime:blob.type||'image/gif',dataBase64:await blobToB64(blob),origin,
+    const requestId='icon-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+    const timer=setTimeout(()=>{
+      if(piskelIconLoad?.requestId!==requestId)return;
+      resetPiskelIconLoad();
+      if(target===$('#piskelFrame')?.contentWindow)toast(t('edIconOpenError'),false);
+    },15000);
+    piskelIconLoad={requestId,timer,target};
+    postToPiskel({type:'load-result',requestId,name,mime:blob.type||'image/gif',dataBase64:await blobToB64(blob),origin,
       based_on:origin&&origin.hub===iconApiUrl()?origin.slug:null});
-    piskelDraftId=null;piskelDraftStamp=null;piskelDraftProject=null;
-  }catch(e){toast(e.message,false);}finally{piskelDraftLoading=false;piskelDraftSwitching=false;}
+  }catch(e){resetPiskelIconLoad();toast(e.message,false);}
 }
 async function piskelSave(m){
   const target=$('#piskelFrame')?.contentWindow,origin=piskelOrigin();
@@ -4400,21 +4366,18 @@ window.addEventListener('message',e=>{
   const frame=$('#piskelFrame');
   if(!frame||e.source!==frame.contentWindow||e.origin!==piskelOrigin())return;
   const m=e.data;if(!m||m.ns!=='awtrix')return;
-  const waiting=piskelProjectRequests.get(m.requestId);
-  if(waiting&&['project-result','project-load-result','icon-load-result'].includes(m.type)){
-    clearTimeout(waiting.timer);piskelProjectRequests.delete(m.requestId);
-    if(m.ok===false)waiting.reject(new Error(m.message||m.error||t('edDraftError')));else waiting.resolve(m);
+  if(m.type==='icon-load-result'&&piskelIconLoad?.requestId===m.requestId){
+    resetPiskelIconLoad();
+    if(m.ok===false)toast(m.message||m.error||t('edIconOpenError'),false);
     return;
   }
   if(m.type==='ready'){
     piskelReady=true;
     const l=$('#piskelFrame')&&document.querySelector('.piskelload');if(l)l.remove();
     notifyPiskelTheme();
-    postToPiskel({type:'config',host:'awtrix',draftViaParent:true,sizes:['8x8','32x8'],publishViaParent:true});
+    postToPiskel({type:'config',host:'awtrix',sizes:['8x8','32x8'],publishViaParent:true});
     if(pendingEditIcon){const n=pendingEditIcon;pendingEditIcon=null;piskelSendIcon(n);}
-   }else if(m.type==='project-changed'||m.type==='project-save')piskelDraftPersist(m);
-  else if(m.type==='project-load-result'){piskelDraftLoading=false;if(!m.ok)toast(m.error||t('edDraftError'),false);else piskelDraftList();}
-  else if(m.type==='save')piskelSave(m);
+  }else if(m.type==='save')piskelSave(m);
   else if(m.type==='publish')piskelPublish(m);
   else if(m.type==='list')piskelSendList();
   else if(m.type==='load'&&m.name)piskelSendIcon(m.name);
@@ -4426,7 +4389,7 @@ window.addEventListener('pagehide',()=>{if(piskelLiveOn){try{fetch('/api/v1/noti
 function viewEditor(view){
   if(piskelLiveOn)piskelLiveOff();
   piskelReady=false;
-  piskelDraftId=null;piskelDraftStamp=null;piskelDraftProject=null;piskelDraftLoading=false;
+  resetPiskelIconLoad();
   const url=getPiskelUrl();
   const theme=document.documentElement.dataset.theme==='light'?'light':'dark';
   // The editor is handed the same Hub the gallery uses. Without it a framed
@@ -4436,27 +4399,7 @@ function viewEditor(view){
     '&sizes=8x8,32x8&host=awtrix&iconapi='+encodeURIComponent(iconApiUrl())+'&v='+Date.now();
   const loading=el('div',{class:'piskelload'},el('span',{class:'spin'}),el('span',null,t('edLoading')));
   const frame=el('iframe',{id:'piskelFrame',src,title:t('editorTab'),allow:'clipboard-read; clipboard-write'});
-  const draftSelect=el('select',{id:'piskelDraftList','aria-label':t('edDrafts')});
-  const input=el('input',{type:'file',accept:'.json,.piskel,application/json',hidden:'hidden',onchange:async()=>{
-    const file=input.files[0];if(!file)return;
-    try{if(file.size>2000000)throw new Error(t('edDraftError'));let project=JSON.parse(await file.text());
-      if(project.modelVersion)project={version:1,name:project.piskel?.name||'',piskel:project};
-      piskelDraftLoad({id:null,updated:null,project});
-    }catch(e){toast(e.message,false);}input.value='';
-  }});
-  const remove=el('button',{type:'button'},t('edDraftDelete'));
-  armable(remove,()=>{const id=draftSelect.value;if(!id)return;try{
-    localStorage.setItem(PISKEL_DRAFT_KEY,JSON.stringify(piskelDraftRead().filter(d=>d.id!==id)));
-    if(id===piskelDraftId){piskelDraftId=null;piskelDraftStamp=null;}piskelDraftList();
-  }catch(e){toast(t('edDraftError'),false);}});
-  view.append(el('div',{class:'card wide'},el('div',{class:'row'},draftSelect,
-    el('button',{type:'button',onclick:()=>piskelDraftLoad(piskelDraftRead().find(d=>d.id===draftSelect.value))},t('edDraftOpen')),
-    el('button',{type:'button',onclick:()=>piskelDraftSwitch()},t('edDraftNew')),
-    el('button',{type:'button',onclick:async()=>{try{const out=await piskelProjectRequest('project-request');const a=el('a',{download:iconIdFrom(out.project.name)+'.piskel.json',href:URL.createObjectURL(new Blob([JSON.stringify(out.project)],{type:'application/json'}))});a.click();setTimeout(()=>URL.revokeObjectURL(a.href),30000);}catch(e){toast(e.message,false);}}},t('edDraftDownload')),
-    el('button',{type:'button',onclick:()=>input.click()},t('edDraftImport')),remove,input),
-    el('p',{class:'help'},t('edDraftOnly')),el('p',{class:'help',id:'piskelDraftStatus',role:'status'})),
-    el('div',{class:'piskelwrap wide'},loading,frame));
-  piskelDraftList();
+  view.append(el('div',{class:'piskelwrap wide'},loading,frame));
   setTimeout(()=>{
     if(!piskelReady&&document.contains(loading)){
       loading.classList.add('err');

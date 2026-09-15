@@ -239,8 +239,8 @@ async function testInstalledSearchAndActions() {
   };
   tile.querySelector('.icon-show').click();
   await flush(20);
-  assert(notification && notification.icon === 'weather-cloud' && notification.durationMs === 3000,
-    'display preview uses the selected icon for a short notification');
+  assert(notification && notification.icon === 'weather-cloud' && notification.durationMs === 3000 && notification.stack === false,
+    'display preview immediately replaces the current notification');
   const menuItems = openMenu(tile);
   assert(window.document.activeElement === menuItems[0], 'opening the icon menu focuses its first action');
   const hubLink = tile.querySelector('.tmenu a:not([download])');
@@ -279,7 +279,6 @@ async function testKeyboardNavigationAndUpload() {
 
 async function main() {
   await testSameIdReload();
-  await testEditorDraftRecovery();
   await testDescriptivePublicationName();
   await testContentAndOrigins();
   await testConflictProtection();
@@ -314,33 +313,6 @@ async function testSameIdReload(){
   const count=uploads.length;await window.reloadHubIcon((await window.iconInventory()).find(f=>f.name==='mail.gif'));
   assert(uploads.length===count,'unchanged remote version avoids another flash write');
 }
-async function testEditorDraftRecovery(){
-  const {window,store}=await withGallery();await goto(window,'#/editor');await flush(20);
-  const frame=window.document.querySelector('#piskelFrame'),messages=[];frame.contentWindow.postMessage=m=>messages.push(m);
-  const send=(m,source=frame.contentWindow)=>window.dispatchEvent(new window.MessageEvent('message',{source,origin:'https://awtrix.de',data:{ns:'awtrix',...m}}));
-  const project={version:1,name:'Cloud',piskel:{layers:['pixels'],fps:8},based_on:'mail'};
-  send({type:'project-changed',revision:1,project},window);
-  assert(!window.localStorage.getItem('awtrixEditorDraftsV1'),'another window cannot write a draft');
-  send({type:'project-save',revision:1,requestId:'draft-1',project});await flush(10);
-  const records=JSON.parse(window.localStorage.getItem('awtrixEditorDraftsV1'));
-  assert(records.length===1&&records[0].project.based_on==='mail','full draft and origin persist in the browser');
-  assert(messages.some(m=>m.type==='project-save-result'&&m.requestId==='draft-1'&&m.ok),'manual save is acknowledged after persistence');
-  assert(store.submitted.length===0,'draft save never publishes');
-  send({type:'project-changed',revision:2,project:{...project,name:'Renamed cloud'}});await flush(10);
-  assert(JSON.parse(window.localStorage.getItem('awtrixEditorDraftsV1'))[0].id===records[0].id,'renaming keeps the same draft identity');
-  await goto(window,'#/icons');await goto(window,'#/editor');await flush(20);
-  assert(window.document.querySelector('#piskelDraftList').options.length===2,'saved draft is available after reopening the editor');
-  const newer=window.document.querySelector('#piskelFrame');newer.contentWindow.postMessage=m=>{
-    messages.push(m);
-    if(m.type==='project-request')queueMicrotask(()=>window.dispatchEvent(new window.MessageEvent('message',{source:newer.contentWindow,origin:'https://awtrix.de',data:{ns:'awtrix',type:'project-result',requestId:m.requestId,ok:true,project,revision:3}})));
-    if(m.type==='project-load')queueMicrotask(()=>window.dispatchEvent(new window.MessageEvent('message',{source:newer.contentWindow,origin:'https://awtrix.de',data:{ns:'awtrix',type:'project-load-result',requestId:m.requestId,ok:true}})));
-  };
-  window.dispatchEvent(new window.MessageEvent('message',{source:newer.contentWindow,origin:'https://awtrix.de',data:{ns:'awtrix',type:'ready'}}));
-  window.document.querySelector('#piskelDraftList').value=records[0].id;
-  [...window.document.querySelectorAll('button')].find(b=>b.textContent==='Open draft').click();
-  await flush(30);
-  assert(messages.some(m=>m.type==='project-load'&&m.project.name==='Renamed cloud'),'opening restores the full editable project');
-}
 async function testContentAndOrigins(){
   const {createHash}=require('node:crypto');
   const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -351,8 +323,10 @@ async function testContentAndOrigins(){
   for(const input of ['', 'abc', 'a'.repeat(55), 'b'.repeat(56), 'c'.repeat(64), 'pixels'.repeat(1000)])
     assert(window.iconSha256(new window.TextEncoder().encode(input))===hash(input),'SHA-256 agrees with independent implementation for '+input.length+' bytes');
   assert(store.iconOrigins.get('mail.gif')?.sha256===hash('GIF89a-mail'),'existing exact Hub copy is identified and recorded');
-  assert(ownGrid(window).querySelector('[data-state=hub]')?.textContent==='From the Hub','Hub origin is visible');
-  assert(ownGrid(window).querySelector('[data-state=local]')?.textContent==='Only on AWTRIX','private icon is clearly local');
+  const hubBadge=ownGrid(window).querySelector('.pw > .icon-hub-badge[data-state=hub]');
+  assert(hubBadge?.textContent==='Hub'&&hubBadge.title==='From the Hub','Hub origin is a compact badge on the artwork');
+  assert(!ownGrid(window).querySelector('.ft [data-state=hub]'),'Hub origin no longer occupies a footer row');
+  assert(!ownGrid(window).querySelector('.ft [data-state=local]'),'local icon has no redundant origin footer');
   store.localIconBytes['mail.gif']='different pixels, unchanged filename and listed size';
   await goto(window,'#/apps');await goto(window,'#/icons');await flush(80);
   const changed=[...ownGrid(window).querySelectorAll('.tile')].find(t=>t.querySelector('.nm').textContent==='mail');
@@ -399,26 +373,37 @@ async function testResolvedPublication(){
   assert([...window.document.querySelectorAll('.toast')].some(t=>t.textContent.includes('already on the Hub')),'existing publication is a friendly successful result');
 }
 async function testEditorProvenanceBridge(){
-  const {window,store}=await withGallery();
+  const {window,store}=await withGallery(ctx=>{
+    ctx.store.files['/ICONS'].set('mail.gif',100);
+    ctx.store.localIconBytes['mail.gif']='GIF89a-mail';
+  });
   await goto(window,'#/editor');await flush(30);
   const frame=window.document.querySelector('#piskelFrame'),messages=[];
   frame.contentWindow.postMessage=message=>messages.push(message);
   const original={hub:'https://awtrix.de/icons/',slug:'mail',sha256:window.iconSha256(new window.TextEncoder().encode('original'))};
   const uploads=[];stubXhr(window,uploads,store);
   const send=(source,data)=>window.dispatchEvent(new window.MessageEvent('message',{source,origin:'https://awtrix.de',data:{ns:'awtrix',...data}}));
-  const publication={type:'publish',requestId:'test-1',name:'draft',mime:'image/gif',dataBase64:window.btoa('GIF89a-new'),based_on:'mail'};
+  const publication={type:'publish',requestId:'test-1',name:'cloud-edit',mime:'image/gif',dataBase64:window.btoa('GIF89a-new'),based_on:'mail'};
   send(window,publication);await flush(30);
   assert(store.submitted.length===0,'same-origin message from another window cannot publish');
   send(frame.contentWindow,{type:'ready'});await flush(20);
-  assert(messages.some(m=>m.type==='config'&&m.publishViaParent===true),'device requests explicit publication broker');
-  send(frame.contentWindow,{type:'save',name:'draft',mime:'image/gif',dataBase64:window.btoa('GIF89a-new'),origin:original});await flush(90);
-  assert(store.submitted.length===0,'saving an editor draft never publishes it');
-  assert(store.iconOrigins.get('draft.gif')?.sha256===original.sha256,'saving a variant retains original reference for change detection');
+  assert(messages.some(m=>m.type==='config'&&m.host==='awtrix'&&m.publishViaParent===true&&m.sizes.join(',')==='8x8,32x8'),
+    'device configures only the editor features it hosts');
+  assert(window.document.querySelector('main').children.length===1&&window.document.querySelector('main>.piskelwrap'),
+    'icon editor opens directly without a second management toolbar');
+  send(frame.contentWindow,{type:'load',name:'mail.gif'});await flush(90);
+  const opened=messages.find(m=>m.type==='load-result'&&m.name==='mail.gif');
+  assert(opened?.dataBase64===window.btoa('GIF89a-mail')&&opened.requestId,
+    'an icon stored on AWTRIX can be opened for editing');
+  send(frame.contentWindow,{type:'icon-load-result',requestId:opened.requestId,ok:true});await flush(10);
+  send(frame.contentWindow,{type:'save',name:'cloud-edit',mime:'image/gif',dataBase64:window.btoa('GIF89a-new'),origin:original});await flush(90);
+  assert(store.submitted.length===0,'saving an edited icon never publishes it');
+  assert(store.iconOrigins.get('cloud-edit.gif')?.sha256===original.sha256,'saving a variant retains original reference for change detection');
   send(frame.contentWindow,publication);await flush(90);
   const result=messages.find(m=>m.type==='publish-result'&&m.requestId==='test-1');
   assert(result?.ok===true,'explicit publication returns matching request result');
-  assert(result?.origin.sha256===window.iconSha256(new window.TextEncoder().encode('GIF89a-new')),'editor receives hash of its actual exported draft');
-  assert(store.iconOrigins.get('draft.gif')?.slug==='demo','saved published draft persists new public origin');
+  assert(result?.origin.sha256===window.iconSha256(new window.TextEncoder().encode('GIF89a-new')),'editor receives the hash of its exported image');
+  assert(store.iconOrigins.get('cloud-edit.gif')?.slug==='demo','saved published icon persists its public origin');
   assert(store.submitted[0]?.get('based_on')==='mail','editor publication retains variant ancestry');
   send(frame.contentWindow,{...publication,requestId:'numeric-name',name:'34334'});await flush(40);
   const invalid=messages.find(m=>m.type==='publish-result'&&m.requestId==='numeric-name');

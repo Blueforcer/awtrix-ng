@@ -29,15 +29,8 @@ the original. Saving on AWTRIX only updates your local file and never publishes 
 
 Authors can also choose **Update my published icon** to keep the same public ID. The Hub
 checks the version you opened before accepting the update. If another window has already
-changed it, your draft is kept and the update is rejected until you open the current version.
-
-## Keep an editable draft
-
-**Save draft** and **Ctrl+S** preserve the full project in this browser, including layers,
-animation timing and Hub origin. **My drafts** lets you return to it later. **Download project**
-and **Open project** move editable projects between NG and the Hub. These actions do not
-change a device icon or publish it. In the Hub, signed-in drafts also sync privately to your
-account; a conflicting edit is kept as a separate browser copy.
+changed it, your unsaved work stays open and the update is rejected until you open the current
+version.
 
 The Hub studio always shows a browser preview. Its optional **Preview on your AWTRIX NG**
 connection sends a temporary preview directly from your browser; device credentials never go

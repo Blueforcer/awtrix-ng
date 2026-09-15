@@ -1,10 +1,8 @@
 **Added**
 
+- **🎉 The AWTRIX Hub is here!** Discover community-made flows and icons, create your own in the Pixel Studio, and send your favourites straight to your display at [awtrix.de](https://awtrix.de). The Web UI automatically checks Hub-installed scripts for updates and applies them with one click, preserving their settings and protecting local changes.
 - **The live display on a page of its own**: `http://<awtrix-ip>/fullscreen`, made for an iframe on a Home Assistant dashboard (#29).
-- **The Icons tab links directly to the AWTRIX Hub.** Browse the full community gallery there and send an icon to your display from its detail page. A connection key stored only in the browser enables reloading and publishing icons as well as script dependencies. The clock itself never needs internet access.
 - **Scripts can declare their Hub icons** with `# @icons ...`. The editor and Apps tab show missing icons and install them in one action.
-- **Installed Hub icons retain their origin.** The UI distinguishes unchanged Hub icons, locally modified icons and device-only icons. Updates never silently overwrite local changes, and the origin metadata is included in backups. The new `/api/v1/icons/origins` endpoint exposes the same information.
-- **The icon editor keeps editable drafts in the browser.** Projects can be opened, downloaded, imported and published as a new variant or as an update to an existing Hub icon.
 - The browser tab carries the hostname, so several AWTRIX open at once are told apart (#18).
 - Scripts can swallow a button press: return `true` from `on_button()`.
 - Scripts can switch the matrix with `display.power()` and read its state with `display.is_on()` (#56).

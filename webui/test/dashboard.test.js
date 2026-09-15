@@ -33,8 +33,22 @@ async function testShowsStoredAutoBrightness() {
   window.close();
 }
 
+async function testLightThemeConsoleContrast() {
+  const { window } = await boot();
+  window.document.documentElement.dataset.theme = 'light';
+  await goto(window, '#/log');
+  const con = window.document.querySelector('.console');
+  const rootStyle = window.getComputedStyle(window.document.documentElement);
+  assert(!!con && window.getComputedStyle(con).color === 'var(--confg)',
+    'log uses its dedicated terminal text colour');
+  assert(rootStyle.getPropertyValue('--confg').trim() === '#f7f3ec',
+    'light theme keeps log text bright against the graphite console');
+  window.close();
+}
+
 async function main() {
   await testShowsStoredAutoBrightness();
+  await testLightThemeConsoleContrast();
   await flush(20);
   console.log(`dashboard: ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
