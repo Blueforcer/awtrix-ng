@@ -7,7 +7,7 @@ Or write the app yourself, directly on AWTRIX, and let it run on the clock.
 AWTRIX NG is a complete new development - firmware written from scratch, the successor to the well-known AWTRIX 3.
 
 * :material-github: **[Source code](https://github.com/Blueforcer/awtrix-ng)** - the firmware, the web UI and these pages
-* :material-sitemap: **[AWTRIX Flows](https://flows.blueforcer.de/)** - user-made scripts and automations for your AWTRIX
+* :material-store: **[AWTRIX Hub](https://awtrix.de)** - ready-made automations, scripts and icons from the community, sent to your display in one click
 * :material-forum: **[Discord](https://discord.gg/5pbmeCrs3a)** - ask, report, show what you built
 * :material-heart: **[Support](https://ko-fi.com/blueforcer)** - support the development
 

@@ -18,6 +18,10 @@ language built for microcontrollers. Nothing is compiled and nothing is flashed.
 You paste source into the web UI, hit save, and the app is on the panel a moment
 later.
 
+Nothing to write yet? The **[AWTRIX Hub](https://awtrix.de/search?platform=awtrixng)** collects
+finished scripts and automations from the community. Send one to your display from its page, and
+the web UI offers the author's later versions as an update.
+
 !!! tip "Would rather be shown than told?"
     This page is a reference: it explains every call, and you look things up in it.
     [**Learn by building**](../tutorials/first-draw.md) is the other half, three
