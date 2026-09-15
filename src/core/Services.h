@@ -65,6 +65,13 @@ class IScriptService {
   virtual DispatchResult setScript(const std::string& name, const std::string& source,
                                    DispatchDetail& detail) = 0;
   virtual void removeScript(const std::string& name) = 0;
+  virtual DispatchResult updateScript(const std::string& name, const std::string& json,
+                                      DispatchDetail& detail) {
+    (void)name;
+    (void)json;
+    detail.message = "enable scripting before updating a script";
+    return DispatchResult::Unavailable;
+  }
   virtual DispatchResult setScriptConfig(const std::string& name, const std::string& json,
                                          DispatchDetail& detail) {
     (void)name;

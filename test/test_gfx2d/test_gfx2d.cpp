@@ -34,6 +34,39 @@ static void test_progress_honours_x0() {
   TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(8, 7));
 }
 
+static void test_progress_clamps_a_negative_x0() {
+  Canvas c(32, 8);
+  drawProgress(c, 100, 0x00FF00u, 0xFFFFFFu, -4);
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 7));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(31, 7));
+}
+
+static void test_x0_past_the_right_edge_draws_nothing() {
+  Canvas c(32, 8);
+  drawProgress(c, 100, 0x00FF00u, 0xFFFFFFu, 32);
+  drawBars(c, {4, 8}, 0x00FF00u, true, 40);
+  drawLineChart(c, {0, 8}, 0x00FF00u, true, 32);
+  bool lit = false;
+  for (std::size_t i = 0; i < c.size(); ++i) lit |= c.data()[i] != 0;
+  TEST_ASSERT_FALSE(lit);
+}
+
+static void test_bars_honour_x0() {
+  Canvas c(32, 8);
+  drawBars(c, {8}, 0x00FF00u, false, 16);
+  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(15, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(16, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(31, 7));
+}
+
+static void test_line_honours_x0() {
+  Canvas c(32, 8);
+  drawLineChart(c, {0, 8}, 0x00FF00u, true, 16);
+  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(0, 7));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(16, 7));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(31, 0));
+}
+
 static void test_bars_all_positive_anchor_at_bottom() {
   Canvas c(32, 8);
   drawBars(c, {4, 8}, 0x00FF00u, true, 0);
@@ -133,6 +166,10 @@ int main(int, char**) {
   RUN_TEST(test_progress_spans_from_x0);
   RUN_TEST(test_progress_below_zero_draws_nothing);
   RUN_TEST(test_progress_honours_x0);
+  RUN_TEST(test_progress_clamps_a_negative_x0);
+  RUN_TEST(test_x0_past_the_right_edge_draws_nothing);
+  RUN_TEST(test_bars_honour_x0);
+  RUN_TEST(test_line_honours_x0);
   RUN_TEST(test_bars_all_positive_anchor_at_bottom);
   RUN_TEST(test_bars_negative_straddle_zero);
   RUN_TEST(test_bars_capped_at_16_points);

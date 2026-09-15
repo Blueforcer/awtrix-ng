@@ -56,7 +56,8 @@ std::string validated(const char* json) {
 static void test_defaults_serialize_whole() {
   TEST_ASSERT_EQUAL_STRING(
       "{\"autoBrightness\":false,\"brightness\":120,\"autoTransition\":true,\"textColor\":"
-      "\"#FFFFFF\",\"transitionEffect\":\"Rain\",\"transitionDurationMs\":1000,\"appDurationMs\":"
+      "\"#FFFFFF\",\"transitionEffect\":\"Rain\",\"transitionDirection\":\"normal\","
+      "\"transitionDurationMs\":1000,\"appDurationMs\":"
       "7000,\"timeMode\":1,\"calendarHeaderColor\":\"#FF0000\",\"calendarTextColor\":\"#000000\","
       "\"calendarBodyColor\":\"#FFFFFF\",\"time24h\":true,\"timeLeadingZero\":true,"
       "\"timeShowSeconds\":false,\"timeShowAmPm\":false,\"timeSeparatorMode\":\"pulse\","

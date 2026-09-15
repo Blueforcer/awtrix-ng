@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include <vector>
 
@@ -26,10 +27,10 @@
 #include "core/render/TextEncoding.h"
 #include "core/render/TextRenderer.h"
 #include "core/script/BerryVM.h"
-#include "core/script/HttpBodyFilter.h"
 #include "core/script/HttpHeaders.h"
 #include "core/script/Prelude.h"
 #include "core/script/Regex.h"
+#include "core/script/ScriptHeap.h"
 #include "core/script/ScriptServices.h"
 #include "core/script/ScrollBank.h"
 #include "core/script/SharedState.h"
@@ -587,7 +588,7 @@ int b_progress(bvm* vm) {
   render::ColorRamp ramp;
   if (g_ctx.canvas && be_top(vm) >= 1)
     render::drawProgress(*g_ctx.canvas, argInt(vm, 1), argPaintOr(vm, 2, 0x00FF00u, ramp),
-                         argColorOr(vm, 3, 0xFFFFFFu), 0);
+                         argColorOr(vm, 3, 0xFFFFFFu), argInt(vm, 4));
   be_return_nil(vm);
 }
 
@@ -595,7 +596,7 @@ int b_bar_chart(bvm* vm) {
   render::ColorRamp ramp;
   if (g_ctx.canvas)
     render::drawBars(*g_ctx.canvas, argIntList(vm, 1), argPaintOr(vm, 2, 0xFFFFFFu, ramp),
-                     argBoolOr(vm, 3, true), 0);
+                     argBoolOr(vm, 3, true), argInt(vm, 4));
   be_return_nil(vm);
 }
 
@@ -603,7 +604,7 @@ int b_line_chart(bvm* vm) {
   render::ColorRamp ramp;
   if (g_ctx.canvas)
     render::drawLineChart(*g_ctx.canvas, argIntList(vm, 1), argPaintOr(vm, 2, 0xFFFFFFu, ramp),
-                          argBoolOr(vm, 3, true), 0);
+                          argBoolOr(vm, 3, true), argInt(vm, 4));
   be_return_nil(vm);
 }
 
@@ -672,6 +673,19 @@ int b_battery_volts(bvm* vm) {
   be_return(vm);
 }
 
+int b_display_is_on(bvm* vm) {
+  const RuntimeState* rt = runtime();
+  be_pushbool(vm, rt && !rt->matrixOff);
+  be_return(vm);
+}
+
+int b_display_power(bvm* vm) {
+  const bool ok = g_svc && g_svc->setDisplayPower && be_top(vm) >= 1 && be_isbool(vm, 1) &&
+                  g_svc->setDisplayPower(be_tobool(vm, 1) != 0);
+  be_pushbool(vm, ok);
+  be_return(vm);
+}
+
 int b_hour(bvm* vm) {
   be_pushint(vm, g_ctx.rctx ? g_ctx.rctx->hour : kNoClock);
   be_return(vm);
@@ -726,22 +740,25 @@ int b_version(bvm* vm) {
 
 int b_http_request(bvm* vm) {
   bool ok = false;
-  if (g_svc && g_svc->http && be_top(vm) >= 7 && be_isstring(vm, 2) && be_isstring(vm, 3) &&
+  if (g_svc && g_svc->http && be_top(vm) >= 8 && be_isstring(vm, 2) && be_isstring(vm, 3) &&
       be_isstring(vm, 4) && be_isstring(vm, 5) && be_isstring(vm, 6)) {
     HttpRequest req;
     req.id = static_cast<uint32_t>(argInt(vm, 1));
     req.url = be_tostring(vm, 3);
     req.body = be_tostring(vm, 4);
-    req.maxBytes = kMaxHttpBody;
     const std::string headerBlock = be_tostring(vm, 5);
 
     req.find = be_tostring(vm, 6);
     const int keep = argInt(vm, 7);
     req.keep = keep > 0 ? static_cast<std::size_t>(keep) : 0;
 
-    if (normalizeMethod(be_tostring(vm, 2), req.method) &&
-        req.body.size() <= kMaxHttpRequestBody && req.find.size() <= kMaxHttpFind &&
-        keep >= 0 && parseHeaderBlock(headerBlock, req.headers))
+    // A script that asks for more than the default gets it; one that asks for nothing, or
+    // for a non-positive amount, still gets the default.
+    const int cap = argInt(vm, 8);
+    req.maxBytes = cap > 0 ? static_cast<std::size_t>(cap) : kMaxHttpBody;
+
+    if (normalizeMethod(be_tostring(vm, 2), req.method) && keep >= 0 &&
+        parseHeaderBlock(headerBlock, req.headers))
       ok = g_svc->http->request(req);
     else if (g_svc->logDebug)
       g_svc->logDebug("script http: request rejected for " + req.url);
@@ -768,10 +785,11 @@ int b_store_flush(bvm* vm) {
   if (be_top(vm) < 1 || !be_isstring(vm, 1)) be_return_nil(vm);
 
   const std::size_t len = static_cast<std::size_t>(be_strlen(vm, 1));
-  if (len > kMaxStoreBytes) {
+  const std::size_t budget = heap::growthBudget();
+  if (len > budget) {
     if (g_svc && g_svc->log)
       g_svc->log("[script:" + g_ctx.name + "] store not saved: " + std::to_string(len) +
-                 " bytes exceeds the " + std::to_string(kMaxStoreBytes) + " byte limit");
+                 " bytes, only " + std::to_string(budget) + " free");
     be_return_nil(vm);
   }
 
@@ -884,8 +902,10 @@ int b_re_search(bvm* vm) {
 
   bool pushed = false;
   if (be_top(vm) >= 4 && be_isstring(vm, 1) && be_isstring(vm, 2)) {
-    const std::string pattern(be_tostring(vm, 1), static_cast<size_t>(be_strlen(vm, 1)));
-    const std::string text(be_tostring(vm, 2), static_cast<size_t>(be_strlen(vm, 2)));
+    // The arguments stay rooted on the Berry stack until the result strings are copied.
+    // Preserve their explicit lengths: both patterns and subjects can contain NUL bytes.
+    const std::string_view pattern(be_tostring(vm, 1), static_cast<size_t>(be_strlen(vm, 1)));
+    const std::string_view text(be_tostring(vm, 2), static_cast<size_t>(be_strlen(vm, 2)));
     const int from = argInt(vm, 3);
     const bool anchored = argInt(vm, 4) != 0;
 
@@ -1033,6 +1053,70 @@ int b_sound_playing(bvm* vm) {
   be_return(vm);
 }
 
+// Fetched once per frame: bands(), level() and beat() in one draw() must agree, and the ring
+// reports a beat only once, so a second fetch would swallow it.
+struct AudioCache {
+  int64_t frameMs = -1;
+  bool fresh = false;
+  audio::FrameStats stats;
+};
+AudioCache g_audio;
+
+const audio::FrameStats& audioStats(bool& fresh) {
+  const int64_t now = g_ctx.rctx ? g_ctx.rctx->nowMs : nowMs();
+  if (now != g_audio.frameMs) {
+    g_audio.frameMs = now;
+    g_audio.fresh = g_svc && g_svc->audioStats && g_svc->audioStats(now, g_audio.stats);
+    if (!g_audio.fresh) g_audio.stats = audio::FrameStats{};
+  }
+  fresh = g_audio.fresh;
+  return g_audio.stats;
+}
+
+int b_music_bands(bvm* vm) {
+  int n = argInt(vm, 1);
+  if (n <= 0 || n > audio::kBandCount) n = audio::kBandCount;
+  int top = argInt(vm, 2);
+  if (top <= 0) top = 255;
+  bool fresh;
+  const audio::FrameStats& s = audioStats(fresh);
+  be_newobject(vm, "list");
+  for (int j = 0; j < n; ++j) {
+    const int lo = (j * audio::kBandCount) / n;
+    const int hi = ((j + 1) * audio::kBandCount) / n;
+    int v = 0;
+    for (int k = lo; k < hi; ++k) v = std::max(v, static_cast<int>(s.bands[k]));
+    be_pushint(vm, (v * top + 127) / 255);
+    be_data_push(vm, -2);
+    be_pop(vm, 1);
+  }
+  be_pop(vm, 1);
+  be_return(vm);
+}
+
+int b_music_level(bvm* vm) {
+  bool fresh;
+  be_pushint(vm, audioStats(fresh).level);
+  be_return(vm);
+}
+
+int b_music_beat(bvm* vm) {
+  bool fresh;
+  const bool beat = audioStats(fresh).beat;
+  be_pushbool(vm, fresh && beat);
+  be_return(vm);
+}
+
+// Playback, not data freshness: should_show() is asked only at rotation time, and it must be able
+// to say yes before any frame has been analysed.
+int b_music_playing(bvm* vm) {
+  bool fresh;
+  audioStats(fresh);
+  const RuntimeState* rt = runtime();
+  be_pushbool(vm, rt && (rt->radioPlaying || rt->mp3Playing));
+  be_return(vm);
+}
+
 int b_notify(bvm* vm) {
   bool ok = false;
   if (g_svc && g_svc->notify && be_top(vm) >= 1 && be_isstring(vm, 1))
@@ -1106,9 +1190,9 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "hsv", b_hsv);                      // hsv(h, s, v)
   be_regfunc(b, "ramp_text", b_ramp_text);          // ramp_text(x, y, str, palette, span?, speed?)
   be_regfunc(b, "scroll_text", b_scroll_text);      // scroll_text(txt, color?, opts?)
-  be_regfunc(b, "progress", b_progress);            // progress(pct, paint?, bg?)
-  be_regfunc(b, "bar_chart", b_bar_chart);          // bar_chart(list, paint?, autoscale?)
-  be_regfunc(b, "line_chart", b_line_chart);        // line_chart(list, paint?, autoscale?)
+  be_regfunc(b, "progress", b_progress);            // progress(pct, paint?, bg?, x0?)
+  be_regfunc(b, "bar_chart", b_bar_chart);          // bar_chart(list, paint?, autoscale?, x0?)
+  be_regfunc(b, "line_chart", b_line_chart);        // line_chart(list, paint?, autoscale?, x0?)
   be_regfunc(b, "effect", b_effect);                // effect(name, settings?)
   be_regfunc(b, "overlay", b_overlay);              // overlay(name, settings?)
 
@@ -1139,6 +1223,10 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "_native_sound", b_sound);
   be_regfunc(b, "_native_sound_playing", b_sound_playing);
   be_regfunc(b, "_native_sound_sinks", b_sound_sinks);
+  be_regfunc(b, "_native_music_bands", b_music_bands);
+  be_regfunc(b, "_native_music_level", b_music_level);
+  be_regfunc(b, "_native_music_beat", b_music_beat);
+  be_regfunc(b, "_native_music_playing", b_music_playing);
   be_regfunc(b, "_native_rotation_next", b_rotation_next);
   be_regfunc(b, "_native_rotation_prev", b_rotation_prev);
   be_regfunc(b, "_native_rotation_show", b_rotation_show);
@@ -1148,6 +1236,8 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "_native_light", b_light);
   be_regfunc(b, "_native_battery", b_battery);
   be_regfunc(b, "_native_battery_volts", b_battery_volts);
+  be_regfunc(b, "_native_display_power", b_display_power);
+  be_regfunc(b, "_native_display_is_on", b_display_is_on);
   be_regfunc(b, "_native_rotation_hold", b_rotation_hold);
   be_regfunc(b, "_native_shared_set", b_shared_set);
   be_regfunc(b, "_native_shared_get", b_shared_get);
@@ -1163,7 +1253,10 @@ bool installBindings(BerryVM& vm, std::string& err) {
   return true;
 }
 
-void setServices(const ScriptServices* s) { g_svc = s; }
+void setServices(const ScriptServices* s) {
+  g_svc = s;
+  g_audio = AudioCache{};
+}
 
 const ScriptServices* services() { return g_svc; }
 

@@ -5,6 +5,7 @@
 #include "core/api/JsonReader.h"
 #include "persistence/AppOrderStore.h"
 #include "persistence/RadioStore.h"
+#include "persistence/IconOriginsStore.h"
 #include "persistence/NvsSettings.h"
 #include "persistence/SystemConfigApply.h"
 
@@ -68,6 +69,10 @@ bool FsRestoreSink::applyAppLoop(const std::string& json, std::string&) {
 bool FsRestoreSink::applyRadioStations(const std::string& json, std::string&) {
   radiostore::save(json);
   return true;
+}
+
+bool FsRestoreSink::applyIconOrigins(const std::string& json, std::string& err) {
+  return iconorigins::restore(iconorigins::storage(), json, err);
 }
 
 void FsRestoreSink::commit() {

@@ -33,7 +33,7 @@ inline std::string capabilitiesJson(const std::vector<std::string>& effects,
          ",\"audio\":{\"buzzer\":" +
          flag(audio.buzzer) + ",\"track\":" + flag(audio.track) + ",\"mp3\":" + flag(audio.mp3) +
          ",\"radio\":" + flag(audio.radio) + "}" +
-         ",\"gpio\":" + pins::toJson(pins::activeProfile()) + "}";
+         ",\"scriptUpdates\":true,\"gpio\":" + pins::toJson(pins::activeProfile()) + "}";
 }
 
 }

@@ -2,7 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <string>
+#include <string_view>
 #include <vector>
 
 namespace awtrix::script {
@@ -22,16 +22,16 @@ class Regex {
     int end = -1;
   };
 
-  bool compile(const std::string& pattern);
+  bool compile(std::string_view pattern);
   bool ok() const { return !prog_.empty(); }
 
   int groupCount() const { return nGroups_; }
 
-  bool search(const std::string& text, Span* groups, int ngroups);
+  bool search(std::string_view text, Span* groups, int ngroups);
 
-  bool searchFrom(const std::string& text, std::size_t from, Span* groups, int ngroups);
+  bool searchFrom(std::string_view text, std::size_t from, Span* groups, int ngroups);
 
-  bool match(const std::string& text, Span* groups, int ngroups);
+  bool match(std::string_view text, Span* groups, int ngroups);
 
  private:
   static constexpr std::size_t kMaxProgram = 512;
@@ -59,12 +59,13 @@ class Regex {
     int16_t caps[kSlots];
   };
 
-  bool run(const std::string& text, std::size_t from, bool anchored, Span* groups,
+  bool run(std::string_view text, std::size_t from, bool anchored, Span* groups,
            int ngroups);
   void addThread(std::vector<Thread>& list, uint16_t pc, const int16_t* caps,
                  std::size_t pos, std::size_t textLen);
 
   friend class RegexParser;
+  friend struct RegexTestAccess;
 
   std::vector<uint8_t> prog_;
   int nGroups_ = 0;

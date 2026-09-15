@@ -59,9 +59,6 @@ def main():
         check(want in core, "expected %r among the Berry language builtins" % want)
     check("os" not in core, "'os' is disabled in berry_conf.h but appears in the table")
 
-    check(table["max_bytes"] == 8192,
-          "kDefaultMaxSourceBytes read as %r, expected 8192" % table["max_bytes"])
-
     src = os.path.join(ROOT, "webui", "index.html")
     with open(src, "r", encoding="utf-8", newline="") as f:
         html = f.read()

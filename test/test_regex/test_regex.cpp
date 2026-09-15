@@ -5,8 +5,20 @@
 
 #include "core/script/Regex.h"
 
+namespace awtrix::script {
+// Observe reserved storage without adding diagnostics to the script-facing API.
+struct RegexTestAccess {
+  static std::size_t allocatedBytes(const Regex& re) {
+    return re.prog_.capacity() + re.seen_.capacity() +
+           sizeof(Regex::Thread) *
+               (re.list_[0].capacity() + re.list_[1].capacity() + re.stack_.capacity());
+  }
+};
+}
+
 using namespace awtrix;
 using script::Regex;
+using script::RegexTestAccess;
 
 void setUp() {}
 void tearDown() {}
@@ -196,6 +208,129 @@ static void test_long_subject_is_fine() {
   TEST_ASSERT_EQUAL_STRING("7", group("needle=(\\d)", body, 1).c_str());
 }
 
+static void test_json_pattern_has_small_reusable_scratch() {
+  Regex re;
+  TEST_ASSERT_TRUE(re.compile("\"temperature\":([0-9.]+)"));
+  const std::size_t bytes = RegexTestAccess::allocatedBytes(re);
+  TEST_ASSERT_LESS_OR_EQUAL_UINT32(2048, bytes);
+  Regex::Span g[Regex::kMaxGroups];
+  for (int i = 0; i < 300; ++i) {
+    TEST_ASSERT_TRUE(re.search("{\"temperature\":21.5}", g, Regex::kMaxGroups));
+    TEST_ASSERT_EQUAL_INT(15, g[1].begin);
+    TEST_ASSERT_EQUAL_INT(19, g[1].end);
+  }
+  TEST_ASSERT_EQUAL_UINT32(bytes, RegexTestAccess::allocatedBytes(re));
+}
+
+static void test_largest_program_keeps_all_literal_states() {
+  Regex re;
+  const std::string pattern(250, 'a');  // Fills all 512 bytecode bytes.
+  TEST_ASSERT_TRUE(re.compile(pattern));
+  const std::size_t bytes = RegexTestAccess::allocatedBytes(re);
+  TEST_ASSERT_LESS_OR_EQUAL_UINT32(20000, bytes);
+  Regex::Span g[1];
+  TEST_ASSERT_TRUE(re.search("x" + pattern, g, 1));
+  TEST_ASSERT_EQUAL_INT(1, g[0].begin);
+  TEST_ASSERT_EQUAL_INT(251, g[0].end);
+  TEST_ASSERT_FALSE(re.search(std::string(249, 'a'), g, 1));
+  TEST_ASSERT_EQUAL_UINT32(bytes, RegexTestAccess::allocatedBytes(re));
+}
+
+static void test_maximum_pattern_length_with_wildcards() {
+  Regex re;
+  TEST_ASSERT_TRUE(re.compile(std::string(Regex::kMaxPattern, '.')));
+  const std::size_t bytes = RegexTestAccess::allocatedBytes(re);
+  TEST_ASSERT_LESS_OR_EQUAL_UINT32(20000, bytes);
+  Regex::Span g[1];
+  TEST_ASSERT_TRUE(re.match(std::string(Regex::kMaxPattern, 'x'), g, 1));
+  TEST_ASSERT_EQUAL_INT(256, g[0].end);
+  TEST_ASSERT_FALSE(re.match(std::string(Regex::kMaxPattern - 1, 'x'), g, 1));
+  TEST_ASSERT_EQUAL_UINT32(bytes, RegexTestAccess::allocatedBytes(re));
+}
+
+static void test_many_splits_keep_greedy_order_without_scratch_growth() {
+  Regex re;
+  std::string pattern;
+  for (int i = 0; i < 100; ++i) pattern += "a?";  // Also fills 512 bytecode bytes.
+  TEST_ASSERT_TRUE(re.compile(pattern));
+  const std::size_t bytes = RegexTestAccess::allocatedBytes(re);
+  Regex::Span g[1];
+  TEST_ASSERT_TRUE(re.match(std::string(100, 'a'), g, 1));
+  TEST_ASSERT_EQUAL_INT(100, g[0].end);
+  TEST_ASSERT_TRUE(re.match("", g, 1));
+  TEST_ASSERT_EQUAL_INT(0, g[0].end);
+  TEST_ASSERT_EQUAL_UINT32(bytes, RegexTestAccess::allocatedBytes(re));
+}
+
+static void test_all_capture_slots_survive_nullable_branches() {
+  Regex re;
+  TEST_ASSERT_TRUE(re.compile("((a|b)*)(c?)(d?)(e?)(f?)(g?)"));
+  TEST_ASSERT_EQUAL_INT(Regex::kMaxGroups, re.groupCount());
+  const std::size_t bytes = RegexTestAccess::allocatedBytes(re);
+  Regex::Span g[Regex::kMaxGroups];
+  TEST_ASSERT_TRUE(re.match("abacdefg", g, Regex::kMaxGroups));
+  TEST_ASSERT_EQUAL_INT(8, g[0].end);
+  TEST_ASSERT_EQUAL_INT(0, g[1].begin);
+  TEST_ASSERT_EQUAL_INT(3, g[1].end);
+  TEST_ASSERT_EQUAL_INT(2, g[2].begin);
+  TEST_ASSERT_EQUAL_INT(3, g[2].end);
+  for (int i = 3; i < Regex::kMaxGroups; ++i) {
+    TEST_ASSERT_EQUAL_INT(i, g[i].begin);
+    TEST_ASSERT_EQUAL_INT(i + 1, g[i].end);
+  }
+  TEST_ASSERT_TRUE(re.match("", g, Regex::kMaxGroups));
+  TEST_ASSERT_EQUAL_INT(-1, g[2].begin);
+  TEST_ASSERT_EQUAL_UINT32(bytes, RegexTestAccess::allocatedBytes(re));
+}
+
+static void test_recompile_releases_large_and_invalid_pattern_storage() {
+  Regex re;
+  TEST_ASSERT_TRUE(re.compile(std::string(250, 'a')));
+  TEST_ASSERT_TRUE(re.compile("abc"));
+  TEST_ASSERT_LESS_OR_EQUAL_UINT32(1024, RegexTestAccess::allocatedBytes(re));
+  Regex::Span g[1];
+  TEST_ASSERT_TRUE(re.search("xabc", g, 1));
+  TEST_ASSERT_EQUAL_INT(1, g[0].begin);
+  TEST_ASSERT_FALSE(re.compile("a("));
+  TEST_ASSERT_FALSE(re.ok());
+  TEST_ASSERT_EQUAL_UINT32(0, RegexTestAccess::allocatedBytes(re));
+  TEST_ASSERT_FALSE(re.search("abc", g, 1));
+  TEST_ASSERT_TRUE(re.compile("a"));
+  TEST_ASSERT_TRUE(re.search("a", g, 1));
+}
+
+static void test_views_preserve_embedded_nul_and_slice_boundaries() {
+  Regex re;
+  const char pattern[] = {'a', '\0', 'b', '?'};
+  const char text[] = {'x', 'a', '\0', 'b', 'y'};
+  TEST_ASSERT_TRUE(re.compile(std::string_view(pattern, 3)));
+  Regex::Span g[1];
+  TEST_ASSERT_TRUE(re.search(std::string_view(text, sizeof(text)), g, 1));
+  TEST_ASSERT_EQUAL_INT(1, g[0].begin);
+  TEST_ASSERT_EQUAL_INT(4, g[0].end);
+  TEST_ASSERT_FALSE(re.match(std::string_view(text + 1, 2), g, 1));
+  TEST_ASSERT_TRUE(re.match(std::string_view(text + 1, 3), g, 1));
+  TEST_ASSERT_EQUAL_INT(3, g[0].end);
+}
+
+static void test_subject_limit_and_search_from_end_preserve_offsets() {
+  Regex re;
+  TEST_ASSERT_TRUE(re.compile("(z)$"));
+  std::string text(Regex::kMaxInput, 'a');
+  text.back() = 'z';
+  Regex::Span g[2];
+  TEST_ASSERT_TRUE(re.searchFrom(text, text.size() - 1, g, 2));
+  TEST_ASSERT_EQUAL_INT(31999, g[1].begin);
+  TEST_ASSERT_EQUAL_INT(32000, g[1].end);
+  TEST_ASSERT_FALSE(re.searchFrom(text, text.size() + 1, g, 2));
+  text += 'z';
+  TEST_ASSERT_FALSE(re.search(text, g, 2));
+  TEST_ASSERT_TRUE(re.compile("$"));
+  TEST_ASSERT_TRUE(re.searchFrom("abc", 3, g, 1));
+  TEST_ASSERT_EQUAL_INT(3, g[0].begin);
+  TEST_ASSERT_EQUAL_INT(3, g[0].end);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_literal_finds_itself);
@@ -225,5 +360,13 @@ int main(int, char**) {
   RUN_TEST(test_rejects_deep_nesting);
   RUN_TEST(test_pathological_pattern_stays_linear);
   RUN_TEST(test_long_subject_is_fine);
+  RUN_TEST(test_json_pattern_has_small_reusable_scratch);
+  RUN_TEST(test_largest_program_keeps_all_literal_states);
+  RUN_TEST(test_maximum_pattern_length_with_wildcards);
+  RUN_TEST(test_many_splits_keep_greedy_order_without_scratch_growth);
+  RUN_TEST(test_all_capture_slots_survive_nullable_branches);
+  RUN_TEST(test_recompile_releases_large_and_invalid_pattern_storage);
+  RUN_TEST(test_views_preserve_embedded_nul_and_slice_boundaries);
+  RUN_TEST(test_subject_limit_and_search_from_end_preserve_offsets);
   return UNITY_END();
 }

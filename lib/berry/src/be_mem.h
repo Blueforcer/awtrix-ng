@@ -21,6 +21,8 @@ BERRY_API void* be_os_malloc(size_t size);
 BERRY_API void be_os_free(void *ptr);
 BERRY_API void* be_os_realloc(void *ptr, size_t size);
 BERRY_API void* be_realloc(bvm *vm, void *ptr, size_t old_size, size_t new_size);
+/* AWTRIX: shrink a non-pooled block without GC/throw; NULL leaves it unchanged. */
+void* be_try_shrink(bvm *vm, void *ptr, size_t old_size, size_t new_size);
 BERRY_API void be_gc_memory_pools(bvm *vm);
 BERRY_API void be_gc_free_memory_pools(bvm *vm);
 BERRY_API void be_gc_init_memory_pools(bvm *vm);

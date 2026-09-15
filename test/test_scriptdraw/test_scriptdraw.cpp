@@ -144,6 +144,28 @@ static void test_progress_custom_colours() {
   TEST_ASSERT_EQUAL_HEX32(0x202020u, c.getPixel(16, 7));
 }
 
+static void test_progress_takes_a_start_column() {
+  Canvas c(32, 8);
+  draw("def draw() progress(100, 0x00FF00, 0x202020, 9) end", c);
+  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(8, 7));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(9, 7));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(31, 7));
+}
+
+static void test_bar_chart_takes_a_start_column() {
+  Canvas c(32, 8);
+  draw("def draw() bar_chart([8], 0x00FF00, false, 16) end", c);
+  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(15, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(16, 0));
+}
+
+static void test_line_chart_takes_a_start_column() {
+  Canvas c(32, 8);
+  draw("def draw() line_chart([0, 8], 0x00FF00, true, 16) end", c);
+  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(0, 7));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(16, 7));
+}
+
 static void test_bar_chart_from_list() {
   Canvas c(32, 8);
   draw("def draw() bar_chart([4, 8], 0x00FF00) end", c);
@@ -326,6 +348,9 @@ int main(int, char**) {
   RUN_TEST(test_bar_chart_takes_a_palette_name);
   RUN_TEST(test_progress_defaults_match_pushed_app);
   RUN_TEST(test_progress_custom_colours);
+  RUN_TEST(test_progress_takes_a_start_column);
+  RUN_TEST(test_bar_chart_takes_a_start_column);
+  RUN_TEST(test_line_chart_takes_a_start_column);
   RUN_TEST(test_bar_chart_from_list);
   RUN_TEST(test_line_chart_from_list);
   RUN_TEST(test_chart_default_colour_is_white);

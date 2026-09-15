@@ -49,6 +49,7 @@ int jpgOut(JDEC* jd, void* bitmap, JRECT* rect) {
 // driven directly, and the two must agree on pixel placement or the sim lies about what you'd see.
 bool draw(Canvas& canvas, const std::string& iconId, int x, int y) {
   media::PodBuffer<uint8_t> buf;
+  std::string path;
   // Longer than any legal icon name, so treat it as an inline base64 JPEG rather than a lookup.
   if (iconId.size() > 64) {
     const auto* in = reinterpret_cast<const unsigned char*>(iconId.c_str());
@@ -64,11 +65,17 @@ bool draw(Canvas& canvas, const std::string& iconId, int x, int y) {
     }
     buf.resize(n);
   } else {
-    const std::string path = "/ICONS/" + iconId + ".jpg";
+    path = "/ICONS/" + iconId + ".jpg";
     if (!media::readAsset(path, buf)) {
       logf("icon: %s missing or empty", path.c_str());
       return false;
     }
+  }
+
+  const char* label = path.empty() ? "inline icon" : path.c_str();
+  if (isPng(buf.data(), buf.size())) {
+    logf("icon: %s is a PNG, only GIF and JPEG are supported", label);
+    return false;
   }
 
   JpegCtx ctx;
@@ -79,9 +86,16 @@ bool draw(Canvas& canvas, const std::string& iconId, int x, int y) {
   ctx.oy = y;
   JDEC jd;
   uint8_t work[TJPGD_WORKSPACE_SIZE] __attribute__((aligned(4)));
-  if (jd_prepare(&jd, jpgIn, work, sizeof(work), &ctx) != JDR_OK) return false;
+  if (jd_prepare(&jd, jpgIn, work, sizeof(work), &ctx) != JDR_OK) {
+    logf("icon: %s is not a JPEG the decoder can read", label);
+    return false;
+  }
   jd.swap = 0;
-  return jd_decomp(&jd, jpgOut, 0) == JDR_OK;
+  if (jd_decomp(&jd, jpgOut, 0) != JDR_OK) {
+    logf("icon: %s is not a JPEG the decoder can read", label);
+    return false;
+  }
+  return true;
 }
 
 }

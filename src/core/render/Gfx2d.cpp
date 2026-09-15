@@ -39,9 +39,11 @@ float chartT(int v, const ChartRange& r) {
 
 void drawProgress(Canvas& c, int pct, const ColorSource& fill, uint32_t track, int x0) {
   if (pct < 0) return;
+  x0 = std::max(x0, 0);
+  const int w = c.width() - x0;
+  if (w <= 0) return;
   const int prog = pct > 100 ? 100 : pct;
   const int y = c.height() - 1;
-  const int w = c.width() - x0;
   const int filled = (prog * w) / 100;
   const float span = static_cast<float>(w > 1 ? w - 1 : 1);
   for (int x = 0; x < w; ++x)
@@ -52,8 +54,10 @@ void drawBars(Canvas& c, const std::vector<int>& values, const ColorSource& colo
               int x0) {
   const int n = static_cast<int>(chartCount(values));
   if (n == 0) return;
-  const ChartRange range = chartRange(values, n, autoscale);
+  x0 = std::max(x0, 0);
   const int avail = c.width() - x0;
+  if (avail <= 0) return;
+  const ChartRange range = chartRange(values, n, autoscale);
   const int barW = std::max(1, (avail - (n - 1)) / n);
   const auto level = [&](int v) {
     const int l = ((v - range.min) * c.height()) / range.span();
@@ -73,8 +77,10 @@ void drawLineChart(Canvas& c, const std::vector<int>& values, const ColorSource&
                    bool autoscale, int x0) {
   const int n = static_cast<int>(chartCount(values));
   if (n < 2) return;
-  const ChartRange range = chartRange(values, n, autoscale);
+  x0 = std::max(x0, 0);
   const int avail = c.width() - x0;
+  if (avail <= 0) return;
+  const ChartRange range = chartRange(values, n, autoscale);
   auto px = [&](int i) {
     int x = x0 + (i * (avail - 1)) / (n - 1);
     int h = ((values[i] - range.min) * (c.height() - 1)) / range.span();

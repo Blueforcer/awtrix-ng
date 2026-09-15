@@ -65,6 +65,8 @@ inline bool validate(const PinSet& p, const SocProfile& soc, std::string& err) {
       {"pinI2sBclk", p.i2sBclk, p.i2sBclk >= 0, true},
       {"pinI2sLrclk", p.i2sLrclk, p.i2sLrclk >= 0, true},
       {"pinI2sDout", p.i2sDout, p.i2sDout >= 0, true},
+      {"pinI2sMclk", p.i2sMclk, p.i2sMclk >= 0, true},
+      {"pinAmpEnable", p.ampEnable, p.ampEnable >= 0, true},
   };
 
   if (!isMatrixPin(p.matrix, soc)) {

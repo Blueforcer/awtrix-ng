@@ -23,6 +23,12 @@ class RestoreSink {
   virtual bool applyAppLoop(const std::string& json, std::string& err) = 0;
   virtual bool applyRadioStations(const std::string& json, std::string& err) = 0;
 
+  // Optional metadata introduced after backup format 1. Apply after icon files.
+  virtual bool applyIconOrigins(const std::string&, std::string& err) {
+    err = "icon origins are not supported by this restore target";
+    return false;
+  }
+
   virtual void commit() = 0;
 
   // Asset files stream straight to storage rather than being buffered, so a rejected entry has to
@@ -42,6 +48,7 @@ struct RestoreResult {
   int appLoop = 0;
   int radioStations = 0;
   int icons = 0;
+  int iconOrigins = 0;
   int melodies = 0;
   int palettes = 0;
   int mp3 = 0;

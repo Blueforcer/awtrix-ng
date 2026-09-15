@@ -15,8 +15,7 @@ bool buildAnnouncement(const std::string& text, Announcement kind, AppSpec& out)
   out.name = kNotificationName;
   out.isNotification = true;
   out.text = normalised;
-  out.durationMs = kNotificationMs;
-  out.stack = false;
+  out.stack = true;
   out.repeat = 1;
   (void)kind;
   return true;

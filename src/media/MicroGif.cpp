@@ -1,7 +1,6 @@
 #include "media/MicroGif.h"
 
 #include <cstring>
-#include <new>
 
 #include "core/render/Color.h"
 
@@ -10,9 +9,9 @@ namespace media {
 
 namespace {
 
-constexpr int kLzwSlots = 1024;
-static_assert(MicroGif::kMaxW * MicroGif::kMaxH + 258 + 2 <= kLzwSlots,
-              "LZW scratch is sized for the panel; grow kLzwSlots with it");
+// A frame emits at most one new dictionary entry per pixel. Even an 8-bit palette starts
+// with only 258 entries; leave two spare slots for the next-code case and grow with the panel.
+constexpr int kLzwSlots = MicroGif::kMaxW * MicroGif::kMaxH + 258 + 2;
 
 // Interlaced GIFs store rows out of order in four passes (every 8th from 0, every 8th from 4,
 // every 4th from 2, every 2nd from 1). Maps decode order r to the row it belongs on.
@@ -32,7 +31,6 @@ struct MicroGif::LzwScratch {
   uint8_t suffix[kLzwSlots];
   uint8_t stack[kLzwSlots];
   uint8_t index[kMaxW * kMaxH];
-  uint32_t localPal[256];
 };
 
 int MicroGif::readByte() {
@@ -59,8 +57,7 @@ bool MicroGif::skipSubBlocks() {
 }
 
 bool MicroGif::begin(const uint8_t* data, std::size_t len) {
-  data_ = nullptr;
-  w_ = h_ = 0;
+  *this = MicroGif{};
   // 6-byte signature plus the 7-byte logical screen descriptor is the shortest legal header.
   if (!data || len < 13) return false;
   if (std::memcmp(data, "GIF87a", 6) != 0 && std::memcmp(data, "GIF89a", 6) != 0) return false;
@@ -89,10 +86,8 @@ bool MicroGif::begin(const uint8_t* data, std::size_t len) {
       data_ = nullptr;
       return false;
     }
-    for (int i = 0; i < globalColors_; ++i) {
-      palette_[i] = color::pack(data_[pos_], data_[pos_ + 1], data_[pos_ + 2]);
-      pos_ += 3;
-    }
+    palette_ = data_ + pos_;
+    pos_ += static_cast<std::size_t>(globalColors_) * 3;
   }
   firstFramePos_ = pos_;
   rewind();
@@ -106,6 +101,7 @@ void MicroGif::rewind() {
   pendingDelayMs_ = 0;
   prevDisposal_ = 0;
   prevW_ = prevH_ = 0;
+  restore_.resize(0);
 }
 
 // Graphic Control Extension: transparency index, disposal method and the frame delay, which the
@@ -166,33 +162,49 @@ MicroGif::Step MicroGif::decodeImage(Canvas& dst) {
   if (fx < 0 || fy < 0 || fw <= 0 || fh <= 0 || packed < 0) return Step::kError;
   if (fw > kMaxW || fh > kMaxH) return Step::kError;
 
-  // ~5 KB of tables — far too much for the stack, and only ever one GIF decodes at a time, so
+  // These tables are too large for the stack, and only ever one GIF decodes at a time, so
   // a single shared static beats allocating per frame.
   static LzwScratch s_scratch;
   LzwScratch* const scratch = &s_scratch;
 
-  const uint32_t* pal = palette_;
+  const uint8_t* pal = palette_;
   int colors = globalColors_;
   if (packed & 0x80) {
     colors = 1 << ((packed & 7) + 1);
     if (pos_ + static_cast<std::size_t>(colors) * 3 > len_) return Step::kError;
-    for (int i = 0; i < colors; ++i) {
-      scratch->localPal[i] = color::pack(data_[pos_], data_[pos_ + 1], data_[pos_ + 2]);
-      pos_ += 3;
-    }
-    pal = scratch->localPal;
+    pal = data_ + pos_;
+    pos_ += static_cast<std::size_t>(colors) * 3;
   }
   const bool interlaced = (packed & 0x40) != 0;
 
-  // Disposal 2 is restore-to-background and 3 restore-to-previous; with no backbuffer to restore
-  // from, both are approximated by blanking the area the last frame covered.
-  if (prevDisposal_ == 2 || prevDisposal_ == 3)
+  if (prevDisposal_ == 2) {
     dst.fillRect(prevX_, prevY_, prevW_, prevH_, 0x000000u);
+  } else if (prevDisposal_ == 3) {
+    const int n = prevW_ * prevH_;
+    if (restore_.size() == static_cast<std::size_t>(n)) {
+      const uint32_t* saved = restore_.data();
+      for (int y = 0; y < prevH_; ++y)
+        for (int x = 0; x < prevW_; ++x)
+          dst.setPixel(prevX_ + x, prevY_ + y, *saved++);
+    } else {
+      // Preserve the old bounded-memory fallback if the optional snapshot could not be allocated.
+      dst.fillRect(prevX_, prevY_, prevW_, prevH_, 0x000000u);
+    }
+  }
+  restore_.resize(0);
 
   const int minCodeSize = readByte();
   if (minCodeSize < 1 || minCodeSize > 8) return Step::kError;
   const int npix = fw * fh;
   if (!lzwDecode(minCodeSize, *scratch, scratch->index, npix)) return Step::kError;
+
+  // A restore-to-previous frame needs the destination pixels from before it is composited. Keep
+  // only its rectangle, not a second logical-screen canvas.
+  if (disposal_ == 3 && restore_.resize(static_cast<std::size_t>(npix))) {
+    uint32_t* saved = restore_.data();
+    for (int y = 0; y < fh; ++y)
+      for (int x = 0; x < fw; ++x) *saved++ = dst.getPixel(fx + x, fy + y);
+  }
 
   for (int r = 0; r < fh; ++r) {
     const int y = interlaced ? interlacedRow(r, fh) : r;
@@ -201,7 +213,8 @@ MicroGif::Step MicroGif::decodeImage(Canvas& dst) {
       const int idx = src[x];
       if (idx == transparent_) continue;
       if (idx >= colors) continue;
-      dst.setPixel(fx + x, fy + y, pal[idx]);
+      const uint8_t* rgb = pal + idx * 3;
+      dst.setPixel(fx + x, fy + y, color::pack(rgb[0], rgb[1], rgb[2]));
     }
   }
 

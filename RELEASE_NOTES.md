@@ -1,34 +1,38 @@
 **Added**
 
-- **MP3s.** Boards with a connected I2S DAC play your own MP3 files: drop them into the new **Audio** tab, then play one by name - `sound:"ding"` in a notification, from a script, or over the API. 
-- **ESP32-S3 boards with quad PSRAM** (`N8R2`, `N16R2`, `N4R2`) have their own image. The browser flasher recognises which PSRAM a board has and picks for you; the wrong image is refused instead of installed.
-- **Every sound output has its own volume.** Buzzer, DFPlayer, stored MP3s and the radio are four separate sliders now, each 0-100. 
-- **A DFPlayer no longer costs you the buzzer.** The two are separate outputs and both stay live, so a board with an added MP3 module keeps its melodies, its melody editor and its `soundRtttl` in notifications.
-- **Two new keys on `POST /api/v1/audio/play`.** `sound` takes a name and lets AWTRIX pick the output - a stored MP3, else a melody, else a DFPlayer track when the name is a plain number - which is the rule a notification's `sound` has always followed. `track` plays a DFPlayer track by number. The explicit keys - `mp3`, `melody`, `track`, `rtttl` - each name one output and never fall back to another.
-- `POST /api/v1/audio/stop` takes an optional `{"scope":"sounds"|"stream"|"all"}`, so a script can silence its own chime without killing the radio someone is listening to.
-- Scripts can ask whether the device is still making a sound, with `sound.playing()`, which output it has, with `sound.sinks()`, and name one directly with `sound.mp3()`, `sound.melody()` and `sound.track()`.
-- A **converter for AWTRIX 3 flows** on the documentation site turns an old configuration into the AWTRIX NG equivalent.
+- **🎉 The AWTRIX Hub is here!** Discover community-made flows and icons, create your own in the Pixel Studio, and send your favourites straight to your display at [awtrix.de](https://awtrix.de). The Web UI automatically checks Hub-installed scripts for updates and applies them with one click, preserving their settings and protecting local changes.
+- **The live display on a page of its own**: `http://<awtrix-ip>/fullscreen`, made for an iframe on a Home Assistant dashboard (#29).
+- **Scripts can declare their Hub icons** with `# @icons ...`. The editor and Apps tab show missing icons and install them in one action.
+- The browser tab carries the hostname, so several AWTRIX open at once are told apart (#18).
+- Scripts can swallow a button press: return `true` from `on_button()`.
+- Scripts can switch the matrix with `display.power()` and read its state with `display.is_on()` (#56).
+- **The web UI checks for updates.** The System page compares the running version with the latest GitHub release and offers the download for exactly your board; the dashboard shows *update available*. The check runs in the browser, the clock never talks to GitHub. `GET /api/v1/device` now names the file it updates from as `updateImage`.
+- **Scripts can react to the music.** On an ESP32-S3 with a speaker, `music.bands()`, `music.level()` and `music.beat()` describe what the radio or a stored MP3 is playing, timed to the speaker. A spectrum display is one line: `bar_chart(music.bands(16, 8), "Rainbow", false)`. Other boards answer zeros, so the same script runs everywhere.
+- **More DIY audio hardware is supported.** `pinI2sMclk` supplies DACs requiring a master clock, while `pinAmpEnable` controls amplifiers with an enable input.
+- DIY panels can select their physical LED colour order in the Panel settings (#54).
+- Directional app transitions can run in their normal or reversed direction (#49).
+- Auto brightness can be switched directly from the dashboard; manual brightness stays disabled while it is active (#38).
+- Backup creation has an **All** switch that selects every available category at once (#43).
+- `progress()`, `bar_chart()` and `line_chart()` take an optional x offset.
+- Script HTTP requests accept `cap` to choose how much of a response may be retained, bounded by available memory.
+- Scripting tutorials on the documentation site.
 
 **Changed**
-- **The audio API has changed.** Radio and sounds shared one speaker but had two addresses; everything now lives under `/api/v1/audio`, and MQTT under `cmd/audio/*`. Anything that drives sound from outside - Home Assistant, Node-RED, your own scripts - needs adjusting: [HTTP API](https://blueforcer.github.io/awtrix-ng/reference/http/#audio) · [MQTT](https://blueforcer.github.io/awtrix-ng/reference/mqtt/).
-- **Sounds and Radio are one Audio tab**: MP3s, Melodies, Radio.
-- **`volume` is gone**, replaced by `buzzerVolume`, `dfplayerVolume`, `mp3Volume` and `radioVolume`, all on a 0-100 scale instead of 0-30. `radioVolume` keeps its name, its scale and your stored value; the old `volume` is dropped, so the buzzer, DFPlayer and MP3 volumes start at their defaults once - which are the old ones expressed in the new scale, so nothing gets quieter. `PATCH {"volume":10}` now answers `422`: anything driving AWTRIX from Node-RED or Home Assistant needs the new key.
-- **A backup taken before 1.1.0 loses its settings on restore.** Unknown keys are refused outright, so the whole settings category is skipped with a warning while icons, melodies, MP3s, palettes and scripts restore normally. Check your volumes afterwards.
-- **`melody` on a DFPlayer board no longer means a track number.** It means a stored melody, as it does everywhere else, and `{"track":7}` is how you address the SD card. `{"sound":"7"}` still works and now prefers a `/MP3/7.mp3` if you have uploaded one.
-- **`soundEnabled` no longer mutes the radio.** It covers one-shot sounds - melodies, MP3s, tracks, a notification's own melody. A stream is something you started deliberately; use `{"scope":"stream"}` on `/audio/stop` to end it. `sound.stop()` in a script follows the same rule.
-- **`GET /api/v1/capabilities` reports one `audio` object** - `{"buzzer":…,"track":…,"mp3":…,"radio":…}` - in place of the four loose `radio`/`audio`/`melodies`/`sound` flags, two of which could never disagree.
-- A notification whose `soundRtttl` does not parse is now rejected with `422` instead of being accepted and then silently playing nothing.
-- A melody or MP3 you ask for by name on a panel that has no such output answers `503` rather than `422`: the request was fine, the hardware is not there.
-- **Scripts may be twice as long**: `scriptMaxBytes` now defaults to 16 KB instead of 8 KB, still adjustable up to 32 KB.
-- The USB install images come as a single `usb-awtrix-ng.zip`, so the update files are what you see first on this page.
-- Both ESP32-S3 images now say which PSRAM they are for: `firmware-awtrix-ng-s3-octal.bin` for `N8R8`/`N16R8` boards, `firmware-awtrix-ng-s3-quad.bin` for the quad ones. The plain `-s3` name is gone.
+
+- **The button webhook sends JSON.** `buttonCallback` now posts `{"button":"left","state":true,"uid":"…"}` with `Content-Type: application/json` instead of a form-encoded body. A listener that reads `button=…&state=1` needs adjusting.
+- **Berry scripts now use available memory instead of most fixed caps.** Besides removing `scriptLimit` and `scriptMaxBytes`, fixed limits on configuration fields, select options, imports, shared values, stores and HTTP request data were replaced with available-memory checks. Sending the two removed keys is ignored rather than refused, but a backup or an automation that still writes them needs looking at.
+- Berry VMs, regular expressions and GIF decoding retain less temporary memory, improving reliability when several scripts or animations run together.
 
 **Fixed**
-- The **LookingEyes** effect drew small square eyes instead of the full-size ones AWTRIX 3 has. They are back to size, look around properly and blink again.
-- Uploading a script reserved memory for the largest script allowed rather than the one being sent, so a save could be refused on a busy device.
-- An MP3 whose file name cannot be played back - spaces, brackets, accents, over 32 characters - is refused at upload instead of sitting there unplayable.
-- **Internet radio threw away pieces of every stream.** A station that runs ahead of real time keeps the buffer at its limit, and getting back under it meant discarding audio the decoder had not seen yet - two or three gaps a second, for as long as the station played. Nothing is discarded now.
-- **A sound played over the radio stuttered as it ended.** The output was left running unfed while the stream reconnected, so the tail of the sound repeated until the music came back.
+
+- An I2S amplifier crackled and hissed from power-on until the first sound played: the I2S lines floated until then. They are now held low from boot.
+- A notification with an empty `soundRtttl` was refused outright, so clients that send their whole schema - Home Assistant among them - got nothing at all (#27).
+- An app pushed under a built-in name like `Temperature` was stored and listed, but the panel kept showing the built-in. The pushed app takes the name over now (#37).
+- An icon that is a PNG under a `.jpg` name counted as drawn, leaving a black gap where the picture should be. The column goes back to the text and the log names the file (#23).
+- One time zone the browser does not know ended the System page halfway, with no maintenance and no backup below MQTT (#25).
+- Files in downloaded backup ZIPs now carry the backup creation time instead of invalid 1979/1601 timestamps (#44).
+- The Icons tab could show an empty Hub area, and the framed icon editor was not told which Hub to publish to.
+- Delete and duplicate in the icon editor were blank grey chips. Ships with the Hub, not with the firmware, so it is already fixed (#30).
 
 ---
 

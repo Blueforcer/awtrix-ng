@@ -102,6 +102,8 @@ all** - flash it and it works.
     | I2S BCLK | 5 | out | To the DAC's BCLK. |
     | I2S LRCLK | 6 | out | To the DAC's LRC / WS. |
     | I2S DOUT | 4 | out | To the DAC's DIN. |
+    | I2S MCLK | -1 | out | Only for DACs with an MCLK input. |
+    | Amplifier enable | -1 | out | Only for amplifiers with an enable input. |
 
 === "ESP32 (classic)"
 
@@ -260,6 +262,8 @@ Required blocks are the panel and its supply; everything to the left and below i
 | MAX98357A | BCLK | GPIO 5 | not available | - |
 | MAX98357A | LRC / WS | GPIO 6 | not available | - |
 | MAX98357A | DIN | GPIO 4 | not available | - |
+| MAX98357A | SD | free pin, `pinAmpEnable` | not available | only if the breakout needs it |
+| NS4168 | CTRL | free pin, `pinAmpEnable` | not available | - |
 | DFPlayer Mini | RX | GPIO 18 (TX) | GPIO 18 (TX) | 1 k in series |
 | DFPlayer Mini | TX | GPIO 17 (RX) | GPIO 23 (RX) | - |
 
@@ -471,6 +475,10 @@ board needs no separate amplifier. The three I2S pins are validated as a **set**
 assigned, or all three `-1`; a partial set is rejected with a `422`. A UDA1334A or PCM5102A works
 identically.
 
+Two optional pins go with it. A DAC with an **MCLK** input takes `pinI2sMclk`. An amplifier with
+an enable input - **CTRL** on an NS4168, **SD** on a MAX98357A - takes `pinAmpEnable`, which
+AWTRIX holds high from startup so the amplifier plays.
+
 ---
 
 ## 6. Describe the panel
@@ -483,13 +491,14 @@ The pixel height is fixed at 8. Everything else about your matrix is configurati
 | `panels` | 1-128 | `1` | How many identical panels the cable runs through, left to right. `panelWidth x panels` must land in 32-128. |
 | `panelStart` | `topLeft` `topRight` `bottomLeft` `bottomRight` | `topLeft` | Corner the first LED sits in. |
 | `panelWiring` | `rows` `columns` | `rows` | Whether the strip runs along rows or down columns. |
+| `panelColorOrder` | `rgb` `rbg` `grb` `gbr` `brg` `bgr` | `grb` | Physical colour-byte order expected by the LEDs. |
 | `panelSerpentine` | bool | `true` | Every second run comes back the other way - the usual zigzag. |
 | `panelChainReverse` | bool | `false` | The cable enters the chain at the other end. Does not change how a panel is wired inside. |
 | `panelChainSerpentine` | bool | `false` | Every second panel is mounted rotated 180°, so its output sits beside the next panel's input. |
 | `mirror` / `rotate` | bool | `false` | A convenience for a panel mounted the wrong way round; each is equivalent to picking a different `panelStart`. `rotate` additionally swaps the left and right button. |
 
-`panelStart`, `panelWiring` and `panelSerpentine` describe one panel; the two chain keys describe
-how the panels are joined to each other. On a single-panel build the chain keys cannot change
+`panelStart`, `panelWiring`, `panelColorOrder` and `panelSerpentine` describe one panel; the two
+chain keys describe how the panels are joined to each other. On a single-panel build they cannot change
 anything.
 
 Common builds:
@@ -501,6 +510,7 @@ Common builds:
 | Four 8 x 8 tiles, each wired from its right edge | `panelWidth` 8, `panels` 4, `panelStart` `topRight`, `panelChainReverse` true |
 | Tiles mounted alternately, output next to input | `panelChainSerpentine` true |
 | 32 x 8 wired in columns | `panelWiring` `columns` |
+| Panel shows red as green and green as red | `panelColorOrder` `rgb` |
 | 64 px wide panel | `panelWidth` 64 |
 
 If the picture comes out scrambled, try `panelSerpentine` first, then `panelStart`, then
@@ -538,6 +548,8 @@ curl -X PUT http://<awtrix-ip>/api/v1/system \
         "pinI2sBclk": 5,
         "pinI2sLrclk": 6,
         "pinI2sDout": 4,
+        "pinI2sMclk": -1,
+        "pinAmpEnable": -1,
         "dfplayer": false,
         "panelWidth": 32,
         "panels": 1
@@ -593,6 +605,7 @@ Work down this list; each step isolates one part of the hardware.
 | First pixel wrong colour, rest fine | Missing series resistor or the 1000 uF cap; data edge too sharp |
 | Flicker, colours drift down the strip | 3.3 V data on 5 V pixels - add a level shifter or drop the panel supply to ~4.5 V |
 | Picture scrambled or mirrored | `panelSerpentine`, then `panelStart`, then `panelWiring` |
+| Red, green or blue appear as another colour | Select the panel's `panelColorOrder`; red/green swapped usually needs `rgb` |
 | Panels each correct but in the wrong order | `panelChainReverse` - the cable enters the chain at the other end |
 | Every second panel upside down | `panelChainSerpentine` - the tiles are mounted alternately |
 | Board resets on bright frames | Supply too small, or panel current flowing through the dev board |
@@ -602,6 +615,7 @@ Work down this list; each step isolates one part of the hardware.
 | Percentage nonsense | `batteryDividerRatio` still at the default |
 | No temperature | Sensor not on the bus, missing pull-ups, or a second chip answering first |
 | Radio section missing, `/api/v1/audio/play` returns `503` | Not an S3 image, the I2S pins are `-1`, or the device page shows **PSRAM: none** - no PSRAM, or the `-quad-` image is the one this board needs |
+| Radio plays, speaker silent | The amplifier has an enable input - wire it and set `pinAmpEnable` |
 | `invalidPinConfig` on a write | The message names the field and the rule - [Errors](../reference/errors.md#gpio-validation-invalidpinconfig) |
 
 ---

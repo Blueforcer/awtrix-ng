@@ -81,8 +81,7 @@ compiler message in `error`, and the panel renders `ERR:<name>` until another
 runtime error. Fix the cause and `PUT` again - the app keeps its place in the app
 list and its store.
 
-Other statuses: `413` over `scriptMaxBytes` (8192 by default), `507` out of
-memory or over the script limit. `507` means shorten the script - fewer, larger
+Other statuses: `507` out of memory. It means shorten the script - fewer, larger
 methods - or delete an unused one with
 `DELETE /api/v1/apps/{name}`, or reboot to defragment.
 

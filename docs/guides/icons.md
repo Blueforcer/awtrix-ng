@@ -3,6 +3,34 @@
 AWTRIX ships with an empty `/ICONS` directory. This page is about filling it: getting an
 8×8 image in there, giving it a name, and putting that name in a payload.
 
+## Install from the AWTRIX Hub
+
+Open **Icons → Add → Open icon gallery** in the built-in web UI, or go directly to the
+[AWTRIX Hub](https://awtrix.de/icons). Search the community collection, open an icon and choose
+**Send to your AWTRIX**. Your browser downloads the original and transfers it directly to the
+display on your local network. AWTRIX itself never contacts the internet.
+
+Downloading an original requires signing in to the Hub. Reloading an installed Hub icon,
+publishing and automatic [`# @icons`](scripting.md#the-icons-your-script-needs) installation also
+use a Hub connection key. Create one in [your Hub account](https://awtrix.de/account/settings) and
+paste it into **System → AWTRIX Hub**. The key stays in this browser and is not stored on AWTRIX.
+
+Installed Hub icons are marked in the device gallery and offer **Reload from Hub** to fetch an
+author's update under the same name. Use that name in a payload or in a script's `# @icons` line.
+
+### Contribute an icon back
+
+Every icon on the clock offers **Publish to Hub** in its tile menu, and the
+[Icon editor](icon-editor.md) can publish the current drawing. Both send
+the icon to the shared collection with a display name you choose.
+
+Publishing needs an **AWTRIX Hub** account, and the sign-in lives on the Hub rather than on your
+clock. Save the connection key under **System → AWTRIX Hub**. The upload is
+checked first - it has to be a GIF no larger than 32×8 and under 64 KB - and refused right away if
+the exact same image is already in the collection, naming the icon that holds it. What passes is
+published immediately; there is no review queue, and anything that should not be there is taken
+down afterwards.
+
 ## Upload an icon
 
 Two commands: upload the file, then use it.

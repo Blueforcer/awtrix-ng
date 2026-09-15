@@ -557,10 +557,18 @@ static void test_display_patch_is_atomic() {
 static void test_display_overlay_settings_are_stored_and_clamped() {
   Harness h;
   Command c(CommandType::SetDisplay);
-  c.payload = "{\"overlay\":\"rain\",\"overlaySettings\":{\"speed\":0.25}}";
+  c.payload =
+      "{\"overlay\":\"rain\",\"overlaySettings\":{\"speed\":0.25,"
+      "\"palette\":[\"#FF0000\",\"#00FF00\"],\"blend\":false}}";
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(c)));
   TEST_ASSERT_TRUE(h.state.runtime().globalOverlaySettings.hasSpeed);
   TEST_ASSERT_EQUAL_FLOAT(0.25f, h.state.runtime().globalOverlaySettings.speed);
+  TEST_ASSERT_TRUE(h.state.runtime().globalOverlaySettings.ramp.valid());
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u,
+                          h.state.runtime().globalOverlaySettings.ramp.palette().entries[0]);
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u,
+                          h.state.runtime().globalOverlaySettings.ramp.palette().entries[15]);
+  TEST_ASSERT_FALSE(h.state.runtime().globalOverlaySettings.ramp.blend);
 
   Command over(CommandType::SetDisplay);
   over.payload = "{\"overlaySettings\":{\"speed\":99}}";
@@ -586,6 +594,10 @@ static void test_display_overlay_settings_must_be_an_object() {
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError), rc(h.run(c)));
   TEST_ASSERT_EQUAL_STRING("overlaySettings", h.ctx.detail.field.c_str());
   TEST_ASSERT_FALSE(h.state.runtime().matrixOff);
+
+  Command emptyPalette(CommandType::SetDisplay);
+  emptyPalette.payload = "{\"overlaySettings\":{\"palette\":[]}}";
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError), rc(h.run(emptyPalette)));
 }
 
 static void test_sleep_takes_durationMs() {

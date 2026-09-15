@@ -2,6 +2,7 @@
 
 #if defined(AWTRIX_SOC_ESP32S3)
 
+#include <Arduino.h>
 #include <LittleFS.h>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
@@ -21,6 +22,7 @@
 #include "system/HeapCaps.h"
 #include "system/HeapProbe.h"
 #include "system/Log.h"
+#include "system/MonotonicClock.h"
 
 namespace awtrix {
 
@@ -32,6 +34,16 @@ constexpr BaseType_t kTaskCore = 1;
 
 constexpr int kDmaBufferCount = 8;
 constexpr int kDmaBufferFrames = 512;
+
+// When i2s_write returns, (kDmaBufferCount - 1) buffers sit between the end of the frame just
+// handed over and the speaker. kAudibleTrimMs is the knob for what that model gets wrong.
+constexpr int kQueueAheadFrames = (kDmaBufferCount - 1) * kDmaBufferFrames;
+constexpr int kAudibleTrimMs = 0;
+
+int64_t audibleLeadMs(int frameSamples, int rateHz) {
+  return (static_cast<int64_t>(kQueueAheadFrames - frameSamples) * 1000) / rateHz +
+         kAudibleTrimMs;
+}
 
 constexpr std::size_t kNetworkChunkBytes = 1024;
 
@@ -66,9 +78,28 @@ void* AudioOutEsp32::operator new(std::size_t bytes) {
 
 void AudioOutEsp32::operator delete(void* p) { std::free(p); }
 
-AudioOutEsp32::AudioOutEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int pinDout)
-    : engine_(engine), pinBclk_(pinBclk), pinLrclk_(pinLrclk), pinDout_(pinDout) {
+AudioOutEsp32::AudioOutEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int pinDout,
+                             int pinMclk, int pinAmpEnable)
+    : engine_(engine),
+      pinBclk_(pinBclk),
+      pinLrclk_(pinLrclk),
+      pinDout_(pinDout),
+      pinMclk_(pinMclk),
+      pinAmpEnable_(pinAmpEnable) {
   lock_ = xSemaphoreCreateMutex();
+  // Driven low until the first stream installs the driver: floating clock lines make the
+  // amplifier crackle, a still BCLK sends it to sleep.
+  for (int pin : {pinBclk_, pinLrclk_, pinDout_, pinMclk_}) {
+    if (pin < 0) continue;
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, LOW);
+  }
+  // Held high for good: the amplifier's own mute click is worse than its idle noise, and a
+  // notification sound must not wait for it to come up.
+  if (pinAmpEnable_ >= 0) {
+    pinMode(pinAmpEnable_, OUTPUT);
+    digitalWrite(pinAmpEnable_, HIGH);
+  }
 }
 
 AudioOutEsp32::~AudioOutEsp32() {
@@ -244,12 +275,18 @@ bool AudioOutEsp32::writeDecodedFrame(const mp3::DecodeResult& result, int16_t* 
     pins.ws_io_num = pinLrclk_;
     pins.data_out_num = pinDout_;
     pins.data_in_num = I2S_PIN_NO_CHANGE;
-    pins.mck_io_num = I2S_PIN_NO_CHANGE;
+    pins.mck_io_num = pinMclk_ >= 0 ? pinMclk_ : I2S_PIN_NO_CHANGE;
     i2s_set_pin(I2S_NUM_0, &pins);
     sampleRateHz_ = result.sampleRateHz;
     channels_ = result.channels;
     i2sStarted_ = true;
   }
+
+  // Analysed before the gain, so the volume setting does not change the picture.
+  audio::FrameStats stats;
+  const bool analyzed =
+      stats_.wanted(monotonicMs()) &&
+      analyzer_.analyze(pcm, result.samples, result.channels, result.sampleRateHz, stats);
 
   const int gain = mp3Playing_.load() ? soundVolume_.load() : streamVolume_.load();
   if (gain < 100) {
@@ -262,7 +299,14 @@ bool AudioOutEsp32::writeDecodedFrame(const mp3::DecodeResult& result, int16_t* 
   i2s_write(I2S_NUM_0, pcm,
             static_cast<std::size_t>(result.samples) * result.channels * sizeof(int16_t),
             &written, portMAX_DELAY);
+  if (analyzed)
+    stats_.publish(stats, monotonicMs() + audibleLeadMs(result.samples, result.sampleRateHz));
   return true;
+}
+
+bool AudioOutEsp32::analysis(int64_t nowMs, audio::FrameStats& out) {
+  stats_.markInterest(nowMs);
+  return stats_.latestAudibleAt(nowMs, out);
 }
 
 namespace {

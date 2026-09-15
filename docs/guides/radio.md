@@ -27,6 +27,14 @@ frame - a UDA1334A or a PCM5102A work the same way.
 Plus power and ground. The MAX98357A drives a speaker directly; it needs no
 amplifier of its own.
 
+Some boards have two more inputs. Both settings are off by default and need
+the three pins above:
+
+| Setting | Wire it to |
+|---|---|
+| `pinI2sMclk` | the DAC's **MCLK**, if it has one. |
+| `pinAmpEnable` | the amplifier's enable input - **CTRL** on an NS4168, **SD** on a MAX98357A. AWTRIX pulls it high at startup so the amplifier plays. |
+
 Any free output pin works, but keep clear of GPIO 13–18, 21, 38–42 and 47: the
 matrix panel is wired to one of those. The rest of the
 [GPIO rules](../reference/gpio.md) apply as usual.
@@ -117,6 +125,9 @@ Field-by-field: [HTTP API - GET /api/v1/audio](../reference/http.md#get-apiv1aud
 With `radioMeta` on - the default - each new track title appears as it arrives,
 for about seven seconds, then the normal rotation continues. Turn it off to have
 the radio play without ever taking over the display.
+
+A script can draw the music itself - a spectrum, a level meter, a pulse on the
+beat - with the [`music` module](scripting.md#music).
 
 The title comes from the station itself. Stations repeat it every few seconds;
 AWTRIX shows it only when it actually changes.

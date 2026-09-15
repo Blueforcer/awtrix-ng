@@ -156,9 +156,9 @@ static void test_pure_black_and_white_are_representable() {
 
 static void test_panel_keys_do_not_live_on_settings() {
   const std::string o = reply(Settings{});
-  for (const char* key : {"panelWidth", "panels", "panelStart", "panelWiring", "panelSerpentine",
-                          "panelChainReverse", "panelChainSerpentine", "matrixWidth",
-                          "matrixLayout"})
+  for (const char* key : {"panelWidth", "panels", "panelStart", "panelWiring",
+                          "panelColorOrder", "panelSerpentine", "panelChainReverse",
+                          "panelChainSerpentine", "matrixWidth", "matrixLayout"})
     TEST_ASSERT_FALSE_MESSAGE(hasKey(o, key), key);
 
   Body d;
@@ -174,6 +174,24 @@ static void test_transitionEffect_by_name() {
   d.set("transitionEffect", "Fade");
   d.applyTo(s);
   TEST_ASSERT_EQUAL_INT(10, s.transitionEffect);
+}
+
+static void test_transition_direction_travels_as_a_named_enum() {
+  Settings s;
+  TEST_ASSERT_EQUAL_STRING("normal", strAt(reply(s), "transitionDirection").c_str());
+
+  Body reverse;
+  reverse.set("transitionDirection", "reverse");
+  SettingsError e;
+  TEST_ASSERT_TRUE_MESSAGE(reverse.validate(e), e.message.c_str());
+  reverse.applyTo(s);
+  TEST_ASSERT_EQUAL_INT(kTransitionReverse, s.transitionDirection);
+
+  Body invalid;
+  invalid.set("transitionDirection", "sideways");
+  TEST_ASSERT_FALSE(invalid.validate(e));
+  TEST_ASSERT_EQUAL_STRING("transitionDirection", e.field.c_str());
+  TEST_ASSERT_EQUAL_STRING("must be one of: normal reverse", e.message.c_str());
 }
 
 static void test_clock_enums_names_on_the_wire() {
@@ -343,6 +361,7 @@ static void test_json_roundtrip_covers_every_field() {
   a.autoTransition = false;
   a.textColor = 0x123456u;
   a.transitionEffect = 7;
+  a.transitionDirection = kTransitionReverse;
   a.transitionDurationMs = 900;
   a.appDurationMs = 12000;
   a.timeMode = 3;
@@ -474,6 +493,7 @@ int main(int, char**) {
   RUN_TEST(test_pure_black_and_white_are_representable);
   RUN_TEST(test_panel_keys_do_not_live_on_settings);
   RUN_TEST(test_transitionEffect_by_name);
+  RUN_TEST(test_transition_direction_travels_as_a_named_enum);
   RUN_TEST(test_clock_enums_names_on_the_wire);
   RUN_TEST(test_validate_bad_enum_value);
   RUN_TEST(test_validate_accepts_valid_payload);
@@ -494,6 +514,5 @@ int main(int, char**) {
   RUN_TEST(test_read_answers_every_field_kind);
   RUN_TEST(test_read_has_no_value_for_unset_or_unknown);
   RUN_TEST(test_read_follows_an_applied_patch);
-  RUN_TEST(test_json_roundtrip_covers_every_field);
   return UNITY_END();
 }

@@ -19,12 +19,6 @@ const char* const kHookNames[ScriptApp::kHookCount] = {
 ScriptApp::ScriptApp(BerryVM& vm, std::string name, const std::string& source,
                      const ScriptMeta& meta, const std::string& storeJson, const RenderCtx* ctx)
     : vm_(vm), name_(std::move(name)) {
-  if (source.size() > maxSourceBytes()) {
-    broken_ = true;
-    error_.message = "source too large (max " + std::to_string(maxSourceBytes()) + " bytes)";
-    return;
-  }
-
   // Before the body runs, so both top-level code and setup() already see restored values.
   if (!storeJson.empty()) {
     BindingScope scope(nullptr, ctx, name_);
@@ -124,10 +118,12 @@ void ScriptApp::refreshDuration(const RenderCtx* ctx) {
   if (!broken_ && ms > 0) dwellMs_ = ms;
 }
 
-void ScriptApp::handleButton(const std::string& btn, const RenderCtx* ctx) {
-  if (broken_ || !visible_ || !has(kOnButton)) return;
+bool ScriptApp::handleButton(const std::string& btn, const RenderCtx* ctx) {
+  if (broken_ || !visible_ || !has(kOnButton)) return false;
+  bool consumed = false;
   BindingScope scope(nullptr, ctx, name_);
-  enter("on_button", vm_.method1(name_, "on_button", btn));
+  enter("on_button", vm_.method1Bool(name_, "on_button", btn, consumed));
+  return consumed;
 }
 
 // Goes through the prelude's dispatcher rather than the app instance, because the callback

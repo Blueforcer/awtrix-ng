@@ -5,7 +5,6 @@
 
 #include "core/api/ApiRouter.h"
 #include "core/api/JsonReader.h"
-#include "core/script/ScriptServices.h"
 #include "core/sound/AudioRouter.h"
 
 using namespace awtrix;
@@ -450,6 +449,27 @@ static void test_http_script_put_routes_with_source() {
   TEST_ASSERT_EQUAL_INT((int)Source::Http, (int)c.source);
 }
 
+static void test_http_guarded_update_routes_and_reports_conflicts() {
+  Command c;
+  api::HttpResult imm;
+  const std::string body = "{\"expected_source\":null,\"source\":\"code\"}";
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Routed),
+      ro(api::routeHttp("PUT", "/api/v1/apps/script-update/Demo", std::string(body), c, imm)));
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::ScriptUpdate), ct(c.type));
+  TEST_ASSERT_EQUAL_STRING("Demo", c.name.c_str());
+  TEST_ASSERT_EQUAL_STRING(body.c_str(), c.payload.c_str());
+  TEST_ASSERT_TRUE(api::isRawBodyWrite("PUT", "/api/v1/apps/script-update/Demo"));
+  const auto conflict = api::httpResponse(c, DispatchResult::Conflict, {});
+  TEST_ASSERT_EQUAL_INT(409, conflict.status);
+  TEST_ASSERT_TRUE(conflict.body.find("scriptChanged") != std::string::npos);
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
+      ro(api::routeHttp("PUT", "/api/v1/apps/script-update/../x", "{}", c, imm)));
+  TEST_ASSERT_EQUAL_INT(400, imm.status);
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
+      ro(api::routeHttp("POST", "/api/v1/apps/script-update/Demo", "{}", c, imm)));
+  TEST_ASSERT_EQUAL_INT(405, imm.status);
+}
+
 static void test_http_script_traversal_name_rejected() {
   Command c;
   api::HttpResult imm;
@@ -515,23 +535,6 @@ static void test_http_reserved_app_paths_are_not_names() {
                                   ro(api::routeHttp("DELETE", p, "", c, imm)), p);
     TEST_ASSERT_EQUAL_INT_MESSAGE(405, imm.status, p);
   }
-}
-
-static void test_http_script_oversize_source_rejected() {
-  Command c;
-  api::HttpResult imm;
-  TEST_ASSERT_EQUAL_INT(
-      ro(api::RouteOutcome::Respond),
-      ro(api::routeHttp("PUT", "/api/v1/apps/script/Big",
-                        std::string(script::maxSourceBytes() + 1, 'x'), c, imm)));
-  TEST_ASSERT_EQUAL_INT(413, imm.status);
-  TEST_ASSERT_TRUE(imm.body.find("payloadTooLarge") != std::string::npos);
-
-  TEST_ASSERT_EQUAL_INT(
-      ro(api::RouteOutcome::Routed),
-      ro(api::routeHttp("PUT", "/api/v1/apps/script/Big",
-                        std::string(script::maxSourceBytes(), 'x'), c, imm)));
-  TEST_ASSERT_EQUAL_INT(script::maxSourceBytes(), c.payload.size());
 }
 
 static void test_http_script_empty_source_rejected() {
@@ -920,10 +923,10 @@ int main(int, char**) {
   RUN_TEST(test_http_shared_state_is_read_only);
   RUN_TEST(test_app_name_validation);
   RUN_TEST(test_http_script_put_routes_with_source);
+  RUN_TEST(test_http_guarded_update_routes_and_reports_conflicts);
   RUN_TEST(test_http_script_traversal_name_rejected);
   RUN_TEST(test_http_delete_app_is_kind_agnostic);
   RUN_TEST(test_http_reserved_app_paths_are_not_names);
-  RUN_TEST(test_http_script_oversize_source_rejected);
   RUN_TEST(test_http_script_empty_source_rejected);
   RUN_TEST(test_http_script_get_is_read_and_others_405);
   RUN_TEST(test_http_script_config_routes);

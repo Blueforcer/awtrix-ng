@@ -4,41 +4,47 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AWTRIX NG</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 19 19'%3E%3Crect width='19' height='19' rx='4' fill='%230d1117'/%3E%3Cpath fill='%23262c36' d='M2 2h3v3H2zM14 2h3v3h-3zM6 6h3v3H6zM10 6h3v3h-3zM6 14h3v3H6zM10 14h3v3h-3z'/%3E%3Cpath fill='%23fff' d='M6 2h3v3H6zM10 2h3v3h-3zM2 6h3v3H2zM14 6h3v3h-3zM2 10h3v3H2zM6 10h3v3H6zM10 10h3v3h-3zM14 10h3v3h-3zM2 14h3v3H2zM14 14h3v3h-3z'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 19 19'%3E%3Crect width='19' height='19' rx='4' fill='%23171717'/%3E%3Cpath fill='%23f5a568' opacity='.16' d='M2 2h3v3H2zM14 2h3v3h-3zM6 6h3v3H6zM10 6h3v3h-3zM6 14h3v3H6zM10 14h3v3h-3z'/%3E%3Cpath fill='%23f5a568' d='M6 2h3v3H6zM10 2h3v3h-3zM2 6h3v3H2zM14 6h3v3h-3zM2 10h3v3H2zM6 10h3v3H6zM10 10h3v3h-3zM14 10h3v3h-3zM2 14h3v3H2zM14 14h3v3h-3z'/%3E%3C/svg%3E">
 <style>
 :root{
   color-scheme:dark;
-  --bg:#0d1117;--card:#161b22;--card2:#1c2129;--border:#2d333b;--brd2:#21262d;--fg:#e6edf3;
-  --dim:#8b949e;--acc:#58a6ff;--pri:#1f6feb;--ok:#3fb950;--err:#f85149;--warn:#d29922;
-  --errbrd:#6e2a28;--bnw:#3b2e12;--bna:#122a44;--badbg:#42191a;--badfg:#ffdad6;
-  --con:#010409;--sh:#0009;--trk:var(--border);
+  --bg:#171717;--card:#222221;--card2:#292927;--border:#373632;--brd2:#302f2b;--fg:#f3f1ec;
+  --dim:#a6a198;--acc:#f5a568;--pri:#f5a568;--ok:#8fbf72;--err:#ff9d90;--warn:#ffb65c;
+  --errbrd:#74443d;--bnw:#3b2d20;--bna:#34261d;--badbg:#412421;--badfg:#ffd6d1;
+  --con:#10100f;--confg:#f3f1ec;--sh:#0008;--trk:#514e47;
   --tkw:#ff7b72;--tapi:#ffa657;--tcore:#d2a8ff;--tstr:#a5d6ff;--tnum:#79c0ff;
   --tcom:#8b949e;--top:#b1bac4;--tsel:#2d4f76;--tselo:rgba(45,79,118,.45);--tcur:#1f242c;
-  --r:10px;font-size:16px;
+  --r:12px;font-size:16px;
   --f1:11px;
   --f2:19px;
-  --mono:ui-monospace,Consolas,monospace;
+  --mono:"Cascadia Mono","IBM Plex Mono",ui-monospace,Consolas,monospace;
 }
 :root[data-theme=light]{
   color-scheme:light;
-  --bg:#fff;--card:#f6f8fa;--card2:#eaeef2;--border:#d0d7de;--brd2:#d8dee4;--fg:#1f2328;
-  --dim:#59636e;--acc:#0969da;--pri:#0969da;--ok:#1a7f37;--err:#cf222e;--warn:#9a6700;
-  --errbrd:#ffcecb;--bnw:#fff8c5;--bna:#ddf4ff;--badbg:#ffebe9;--badfg:#82071e;
-  --con:#f6f8fa;--sh:#0002;--trk:#8c959f;
+  --bg:#f5f4f1;--card:#fff;--card2:#f0eee9;--border:#e2dfd8;--brd2:#ebe8e2;--fg:#242321;
+  --dim:#706c65;--acc:#ac470f;--pri:#ac470f;--ok:#3d762e;--err:#b3261e;--warn:#945813;
+  --errbrd:#e2afa8;--bnw:#fff0d8;--bna:#fbe9dc;--badbg:#fde9e5;--badfg:#751b15;
+  --con:#181817;--confg:#f7f3ec;--sh:#342a201f;--trk:#c8c3b9;
   --tkw:#cf222e;--tapi:#953800;--tcore:#8250df;--tstr:#0a3069;--tnum:#0550ae;
   --tcom:#59636e;--top:#24292f;--tsel:#b6d9ff;--tselo:rgba(137,198,255,.4);--tcur:#f0f3f6;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{background:var(--bg);color:var(--fg)}
-body{font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh;padding-bottom:70px}
+body{font:14px/1.5 "Segoe UI Variable","Aptos",system-ui,sans-serif;min-height:100vh;padding-bottom:70px;
+  background-image:radial-gradient(circle,#f5a56812 1px,transparent 1.2px);background-size:16px 16px}
 a{color:var(--acc);text-decoration:none}
-h1{font-size:17px;font-weight:600}
-h2{font-size:15px;font-weight:600;margin-bottom:2px}
+h1{font-size:18px;font-weight:700;letter-spacing:-.02em}
+h2{font-size:16px;font-weight:650;letter-spacing:-.01em;margin-bottom:2px}
 button{font:inherit;color:var(--fg);background:var(--card2);border:1px solid var(--border);
-  border-radius:7px;padding:7px 14px;cursor:pointer;white-space:nowrap}
-button:hover{border-color:var(--acc)}
+  border-radius:9px;padding:8px 14px;min-height:38px;cursor:pointer;white-space:nowrap;
+  transition:border-color .14s,background .14s,transform .14s}
+button:hover{border-color:var(--acc);background:var(--border)}
+button:active:not(:disabled){transform:translateY(1px)}
 button:disabled{opacity:.45;cursor:default;border-color:var(--border)}
-button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+button.pri,a.pri{background:var(--pri);border-color:var(--pri);color:#23170e;font-weight:650}
+a.pri{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 14px;border:1px solid var(--pri);border-radius:9px}
+a.pri:hover{filter:brightness(1.06)}
+:root[data-theme=light] :is(button,a).pri{color:#fff}
 button.danger{color:var(--err);border-color:var(--errbrd)}
 button.danger.armed{background:var(--err);color:#fff;border-color:var(--err)}
 button.icon{padding:7px 10px}
@@ -46,8 +52,9 @@ button.icon.kofi{background:#00b9fe;border-color:#00b9fe;height:36px;display:inl
 button.icon.kofi:hover{border-color:#00b9fe;filter:brightness(1.08)}
 .kofilogo{width:18px;height:18px;flex:none}
 input,select,textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--border);
-  border-radius:7px;padding:7px 10px;width:100%;min-width:0}
-input:focus,select:focus{outline:none;border-color:var(--acc)}
+  border-radius:9px;padding:8px 11px;min-height:40px;width:100%;min-width:0}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px #f5a5681a}
+:where(a,button,input,select,textarea,summary,[tabindex]):focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 input[type=range]:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .switch input:focus-visible+i{outline:2px solid var(--acc);outline-offset:2px}
 input[type=checkbox]{width:auto}
@@ -63,30 +70,36 @@ input[type=color]{height:34px;flex:none;cursor:pointer}
 .cpick:focus-within .chex{box-shadow:inset 0 0 0 2px var(--acc)}
 input[type=range]{padding:0;accent-color:var(--acc);border:none;background:none}
 input[type=file]{display:none}
-.topbar{position:sticky;top:0;z-index:20;background:var(--bg)}
-.topbar>header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);
-  background:var(--bg)}
-.topbar>header .lg{width:21px;height:21px;flex:none}
+.topbar{position:sticky;top:0;z-index:20;background:#171717f2;backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);box-shadow:0 8px 30px #0003}
+:root[data-theme=light] .topbar{background:#f5f4f1f2}
+.topbar>header{display:flex;align-items:center;gap:11px;max-width:1180px;margin:auto;padding:12px 22px 9px;background:transparent}
+.topbar>header .lg{width:24px;height:24px;flex:none;color:var(--acc);filter:drop-shadow(0 0 8px #f5a56845)}
+.topbar>header h1{font-stretch:expanded;white-space:nowrap}
 .topbar>header h1.off{color:var(--err)}
-nav{display:flex;gap:2px;padding:8px 12px 0;border-bottom:1px solid var(--border);overflow-x:auto;background:var(--bg)}
-nav a{padding:8px 13px;border-radius:8px 8px 0 0;color:var(--dim);white-space:nowrap}
-nav a.on{color:var(--fg);background:var(--card);border:1px solid var(--border);border-bottom-color:var(--card)}
-main{max-width:1060px;margin:0 auto;padding:16px;display:grid;gap:14px;
+nav{display:flex;gap:6px;max-width:1180px;margin:auto;padding:0 18px 10px;overflow-x:auto;background:transparent;scrollbar-width:thin}
+nav a{position:relative;padding:8px 12px;border-radius:8px;color:var(--dim);font-size:13px;font-weight:550;white-space:nowrap}
+nav a:hover{color:var(--fg);background:var(--card)}
+nav a.on{color:var(--fg);background:var(--card);box-shadow:inset 0 0 0 1px var(--border)}
+nav a.on::before{content:"";position:absolute;left:10px;right:10px;bottom:-3px;height:2px;background:var(--acc)}
+main{max-width:1180px;margin:0 auto;padding:24px 22px;display:grid;gap:18px;
   grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:start}
 main>.wide{grid-column:1/-1}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;display:grid;gap:10px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;display:grid;gap:12px;
+  box-shadow:0 10px 28px #00000016}
 .card .ghelp{color:var(--dim);font-size:12.5px;margin-top:-6px}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .grow{flex:1}
-.settings{grid-column:1/-1;display:grid;grid-template-columns:180px minmax(0,760px);gap:22px;justify-content:center}
+.settings{grid-column:1/-1;display:grid;grid-template-columns:190px minmax(0,820px);gap:26px;justify-content:center}
 .subnav{position:sticky;top:var(--chrome-h,104px);align-self:start;display:grid;gap:1px;padding-top:4px}
-.subnav a{padding:7px 12px;border-radius:7px;color:var(--dim);font-size:13px;cursor:pointer;border-left:2px solid transparent}
-.subnav a:hover{color:var(--fg)}
-.subnav a.on{color:var(--fg);background:var(--card2);border-left-color:var(--acc);border-radius:0 7px 7px 0}
+.subnav a{padding:9px 12px;border-radius:8px;color:var(--dim);font-size:13px;cursor:pointer;border-left:2px solid transparent}
+.subnav a:hover{color:var(--fg);background:var(--card)}
+.subnav a.on{color:var(--fg);background:var(--card);border-left-color:var(--acc);border-radius:0 8px 8px 0}
 .panel{display:grid;gap:14px;min-width:0;padding-bottom:76px}
-.section{background:var(--card);border:1px solid var(--border);border-radius:var(--r);scroll-margin-top:calc(var(--chrome-h,104px) + 6px)}
+.section{background:var(--card);border:1px solid var(--border);border-radius:var(--r);scroll-margin-top:calc(var(--chrome-h,104px) + 6px);
+  box-shadow:0 10px 28px #00000016;overflow:clip}
 .section>header{padding:13px 18px 11px;border-bottom:1px solid var(--border);
-  background:var(--card2);border-radius:calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0}
+  background:var(--card);border-radius:calc(var(--r) - 1px) calc(var(--r) - 1px) 0 0;box-shadow:inset 3px 0 0 var(--acc)}
 .section>header .ghelp{color:var(--dim);font-size:12.5px;margin-top:2px}
 .section .rows{padding:2px 18px}
 .section .rows.pad{padding:12px 18px}
@@ -95,7 +108,7 @@ main>.wide{grid-column:1/-1}
 .frow .lab{display:grid;gap:2px;min-width:0}
 .frow .lab .l1{display:flex;align-items:baseline;gap:8px}
 .frow .lab b{font-weight:500;font-size:13.5px}
-.frow .key{font:10.5px ui-monospace,Consolas,monospace;color:var(--dim);opacity:.7}
+.frow .key{display:none}
 .frow .help{color:var(--dim);font-size:12px;max-width:52ch}
 .frow .ctl{display:flex;align-items:center;gap:8px;justify-content:flex-end}
 .unitwrap{position:relative;display:inline-flex;align-items:center}
@@ -136,41 +149,48 @@ main>.wide{grid-column:1/-1}
 .wifiopt:hover{background:var(--pri);color:#fff}
 .wifiopt .g{color:var(--dim);font-size:12px;white-space:nowrap}
 .wifiopt:hover .g{color:#fff9}
-#savebar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;align-items:center;gap:12px;
-  padding:10px 16px;background:var(--card2);border-top:1px solid var(--acc);box-shadow:0 -6px 18px var(--sh)}
+#savebar{position:fixed;left:50%;right:auto;bottom:18px;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:12px;
+  width:min(94vw,680px);padding:10px 12px 10px 16px;background:var(--card2);border:1px solid var(--border);border-left:3px solid var(--acc);
+  border-radius:12px;box-shadow:0 16px 40px var(--sh)}
 #savebar .n{color:var(--acc);font-weight:600}
 .switch{position:relative;width:40px;height:22px;flex:none;cursor:pointer}
 .switch input{position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;margin:0}
-.switch i{position:absolute;inset:0;border-radius:11px;background:var(--trk);transition:background .15s}
+.switch i{position:absolute;inset:0;border-radius:11px;background:var(--trk);transition:background .15s,box-shadow .15s}
 .switch i:before{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:3px;left:3px;transition:left .15s}
 .switch input:checked+i{background:var(--pri)}
+.switch input:checked+i{box-shadow:0 0 0 3px #f5a56816}
 .switch input:checked+i:before{left:21px}
 .banner{grid-column:1/-1;display:flex;align-items:center;gap:12px;background:var(--bnw);border:1px solid var(--warn);
-  border-radius:var(--r);padding:10px 14px}
+  border-radius:var(--r);padding:12px 15px;box-shadow:inset 3px 0 0 var(--warn)}
 .banner.blue{background:var(--bna);border-color:var(--acc)}
 .banner.rbstick{position:sticky;top:var(--chrome-h,104px);z-index:19;box-shadow:0 4px 14px var(--sh)}
 .banner .bx{flex:none;background:none;border:none;color:var(--dim);cursor:pointer;font-size:15px;line-height:1;padding:3px 7px;border-radius:6px}
 .banner .bx:hover{background:var(--card2);color:var(--fg)}
 .captive-hint{display:none;gap:4px 8px;flex-wrap:wrap;font-size:12.5px}
 .captive-hint a{color:var(--acc);font-weight:600;white-space:nowrap}
-#toasts{position:fixed;bottom:76px;left:50%;transform:translateX(-50%);display:grid;gap:8px;z-index:99;width:min(92vw,420px)}
-.toast{padding:10px 14px;border-radius:8px;background:var(--card2);border:1px solid var(--ok);box-shadow:0 4px 16px var(--sh);
-  font-size:13px;word-break:break-word;animation:tin .18s}
-.toast.err{border-color:var(--err)}
+#toasts{position:fixed;bottom:86px;left:50%;transform:translateX(-50%);display:grid;gap:8px;z-index:99;width:min(92vw,440px)}
+.toast{padding:12px 14px;border-radius:10px;background:var(--card2);border:1px solid var(--border);border-left:4px solid var(--ok);
+  box-shadow:0 16px 44px var(--sh);font-size:13px;word-break:break-word;animation:tin .18s}
+.toast.err{border-left-color:var(--err)}
 .toast .tacts{display:flex;gap:8px;justify-content:flex-end;margin-top:9px}
 .toast .tacts button{padding:5px 12px;font-size:12.5px}
 @keyframes tin{from{opacity:0;transform:translateY(8px)}}
 .ic{width:13px;height:13px;flex:none;stroke:currentColor;fill:none;stroke-width:2;
   stroke-linecap:round;stroke-linejoin:round}
-.hero{grid-column:1/-1;background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
-canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelated;background:#000}
-.hctl{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--border);flex-wrap:wrap}
+.hero{grid-column:1/-1;background:var(--card);border:1px solid var(--border);border-bottom:5px solid #10100f;border-radius:16px;overflow:hidden;
+  padding:12px 12px 0;box-shadow:0 18px 36px #0003}
+canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelated;background:#050505;border:1px solid #000;border-radius:6px;
+  box-shadow:inset 0 4px 18px #000,0 0 0 1px #ffffff0b}
+.hctl{display:flex;align-items:center;gap:10px;padding:12px 2px;border-top:0;flex-wrap:wrap}
 .hctl .lab{font-size:var(--f1);color:var(--dim)}
+html.fs,html.fs body{margin:0;height:100%;background:#000;overflow:hidden}
+html.fs body{display:flex;align-items:center;justify-content:center}
+html.fs #screen{width:auto;height:auto;max-width:100vw;max-height:100vh;aspect-ratio:auto}
 .hctl input[type=range]{flex:1;min-width:110px;width:auto}
 .hctl .val{font:var(--f1)/1 var(--mono);color:var(--dim);min-width:26px;text-align:right}
 .vitals{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
-.vit{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 10px;
-  display:grid;gap:5px;align-content:start}
+.vit{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 12px;
+  display:grid;gap:6px;align-content:start;box-shadow:inset 0 2px 0 #f5a56824}
 .vit .k{font-size:var(--f1);color:var(--dim);display:flex;align-items:center;gap:5px;min-width:0}
 .vit .k span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vit .v{font:500 var(--f2)/1.1 var(--mono);display:flex;align-items:baseline;gap:2px}
@@ -178,11 +198,11 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .vit .b{height:3px;border-radius:2px;background:var(--border);overflow:hidden}
 .vit .b i{display:block;height:100%;border-radius:2px}
 .vit .s{font:var(--f1)/1.2 var(--mono);color:var(--dim)}
-.meta{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px 16px;padding:8px 11px;
-  border:1px solid var(--border);border-radius:8px;font:var(--f1)/1.4 var(--mono);color:var(--dim)}
+.meta{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 18px;padding:10px 12px;
+  border:1px solid var(--border);border-radius:9px;background:var(--card);font:var(--f1)/1.4 var(--mono);color:var(--dim)}
 .meta b{color:var(--fg);font-weight:400}
 .grid-icons{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:12px}
-.tile{position:relative;background:var(--card2);border:1px solid var(--border);border-radius:10px;
+.tile{position:relative;background:var(--card2);border:1px solid var(--border);border-radius:11px;
   overflow:hidden;transition:border-color .15s,transform .15s,box-shadow .15s}
 .tile:hover{border-color:var(--acc);transform:translateY(-1px);box-shadow:0 4px 14px var(--sh)}
 .tile .pw{position:relative;aspect-ratio:1;background:#000;box-shadow:inset 0 0 0 1px #ffffff10}
@@ -190,6 +210,8 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .tile .ft{display:flex;align-items:baseline;gap:6px;padding:7px 9px;min-width:0}
 .tile .ft .nm{flex:1;min-width:0;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile .ft .sz{flex:none;font-size:10.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+.tile .ft .nm.cp{cursor:pointer}
+.tile .ft .nm.cp:hover{color:var(--acc)}
 .tile .acts{position:absolute;inset:0 0 auto 0;display:flex;justify-content:flex-end;gap:5px;padding:6px;
   background:linear-gradient(#000b,#0000);opacity:0;pointer-events:none;transition:opacity .15s}
 .tile:hover .acts,.tile:focus-within .acts{opacity:1;pointer-events:auto}
@@ -203,19 +225,40 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .orsep{display:flex;align-items:center;gap:10px;color:var(--dim);font-size:11px;
   text-transform:uppercase;letter-spacing:.07em}
 .orsep::before,.orsep::after{content:"";flex:1;height:1px;background:var(--border)}
-.lam{display:grid;gap:10px}
-.lam .prev{width:52px;height:52px;flex:none;image-rendering:pixelated;background:#000;border-radius:6px}
+.ihdr{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ihdr .st{flex:1;min-width:140px;display:flex;align-items:center;justify-content:flex-end;gap:8px;
+  color:var(--dim);font-size:11.5px;font-variant-numeric:tabular-nums}
+.ihdr .st .bar{flex:0 1 104px;height:6px}
+.segbar{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+.segbar button{padding:8px 13px;background:none;border:0;border-bottom:2px solid transparent;border-radius:0;
+  color:var(--dim);font-size:13px}
+.segbar button:hover{color:var(--fg)}
+.segbar button.on{color:var(--fg);border-bottom-color:var(--acc)}
+.tmenu{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;justify-content:center;gap:2px;
+  padding:6px;background:#0d1117f2}
+.tmenu button{width:100%;padding:5px 8px;border:0;border-radius:6px;background:none;color:#e6edf3;
+  font-size:11.5px;text-align:left}
+.tmenu button:hover{background:#ffffff1a}
+.tmenu button.danger{color:#f85149}
+.tile .ft input{flex:1;min-width:0;padding:2px 5px;font-size:11.5px}
+.tile .ft button{flex:none;padding:2px 7px;font-size:11px}
+.tile .ft.share{flex-wrap:wrap}
+.tile .ft.share input{flex:1 1 100%}
+.tile .ft.share button.pri{flex:1}
+.tile .ft.share .hint{flex:1 1 100%;font-size:10px;line-height:1.3;color:var(--dim)}
+.tile .ft.share a.hint{text-decoration:underline}
+.tile .ft.share a.hint:hover{color:var(--acc)}
 .empty{grid-column:1/-1;padding:24px 12px;text-align:center;color:var(--dim);font-size:13px;
   border:1px dashed var(--border);border-radius:10px}
 .drop{border:2px dashed var(--border);border-radius:var(--r);padding:22px;text-align:center;color:var(--dim);
   cursor:pointer;transition:border-color .15s,color .15s,background .15s}
 .drop:hover{border-color:var(--acc);color:var(--fg)}
-.drop.over{border-color:var(--acc);color:var(--acc);background:#58a6ff11}
+.drop.over{border-color:var(--acc);color:var(--acc);background:#f5a56812}
 .bar{height:8px;background:var(--border);border-radius:4px;overflow:hidden}
-.bar>i{display:block;height:100%;background:var(--acc);border-radius:4px;transition:width .2s}
+.bar>i{display:block;height:100%;min-width:3px;background:var(--acc);border-radius:4px;transition:width .2s}
 .bar>i.hot{background:var(--err)}
 .storage .lbl{display:flex;justify-content:space-between;color:var(--dim);font-size:12px}
-.console{background:var(--con);border:1px solid var(--border);border-radius:8px;padding:10px;height:60vh;overflow:auto;
+.console{background:var(--con);color:var(--confg);border:1px solid var(--border);border-radius:8px;padding:10px;height:60vh;overflow:auto;
   font:12px ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all}
 .mono{font:12px ui-monospace,Consolas,monospace;color:var(--dim)}
 .palwrap{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,304px) minmax(0,1fr);
@@ -291,11 +334,11 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .melorow.bad .meta{color:var(--err)}
 .melorow.dirty{border-left:3px solid var(--acc);padding-left:7px}
 .melorow.on{border-left:3px solid var(--ok);padding-left:7px}
+.melorow button.playing{background:var(--pri);border-color:var(--pri);color:#23170e}
 .melorow.mp3{grid-template-columns:1fr auto auto}
 .melorow.mp3 .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .melorow.mp3 .sz{color:var(--dim);font-variant-numeric:tabular-nums}
 .melorow .meta:empty{display:none}
-.audbar{justify-content:flex-end;margin:0 0 8px}
 .applist{display:grid;gap:6px}
 .approw{display:flex;align-items:center;gap:8px;background:var(--card2);border-radius:8px;
   padding:7px 10px;border:1px solid transparent;flex-wrap:wrap}
@@ -306,7 +349,7 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .approw .rowmain{flex:1 1 0;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .approw .nm{flex:1 1 110px;min-width:0;font-size:13.5px;word-break:break-all}
 .approw .nm .sub{display:block;color:var(--dim);font-size:11.5px}
-.approw .chip{font-size:10.5px;color:var(--acc);border:1px solid #58a6ff55;border-radius:99px;padding:1px 8px;flex:none}
+.approw .chip{font-size:10.5px;color:var(--acc);border:1px solid #f5a56855;border-radius:99px;padding:1px 8px;flex:none}
 .approw .chip.s{color:var(--ok);border-color:#2ea04355}
 .approw .chip.skip{color:var(--dim);border-color:var(--border)}
 .rowmenu{position:relative;flex:none;margin-left:auto}
@@ -347,7 +390,9 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .ftgrp{display:flex;align-items:center;gap:7px;flex:none;
   padding:6px 13px;background:var(--card2);border-bottom:1px solid var(--brd2);
   font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
-.ftgrp button{margin-left:auto;padding:2px 8px}
+.ftgrp button{position:relative;display:inline-flex;align-items:center;justify-content:center;
+  margin-left:auto;padding:0;width:28px;height:28px;min-height:28px;flex:none;border-radius:6px;line-height:1}
+.ftgrp button::before{content:"";position:absolute;inset:-6px}
 .ftitem{display:flex;align-items:center;gap:8px;padding:3px 8px;border-radius:6px;cursor:pointer;
   font-size:13px;color:var(--fg);min-width:0;border:1px solid transparent}
 .ftitem:hover{background:var(--card2)}
@@ -397,7 +442,9 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .edtop .sec button{background:transparent;border-color:transparent;color:var(--dim);
   padding:5px 9px;font-size:12.5px}
 .edtop .sec button:hover{color:var(--fg);border-color:var(--border)}
-.edtop button.ico{display:inline-flex;align-items:center;justify-content:center;padding:6px;width:34px;height:34px;flex:none}
+.edtop button.ico{position:relative;display:inline-flex;align-items:center;justify-content:center;padding:6px;width:34px;height:34px;flex:none}
+.edtop button.ico .cnt{position:absolute;top:0;right:0;min-width:14px;height:14px;padding:0 3px;
+  border-radius:7px;background:var(--acc);color:var(--bg);font:600 9px/14px var(--mono);text-align:center}
 .edtop button.ico .ic{width:18px;height:18px}
 .ed{display:flex;background:var(--bg);height:calc(100vh - 250px);min-height:240px}
 .ed .gut,.ed .hl,.ed .ta{font:12.5px/1.5 var(--mono);tab-size:2;padding:8px 10px}
@@ -431,9 +478,7 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .edbar .end{margin-left:auto;border-right:none;border-left:1px solid var(--brd2);
   overflow:hidden;text-overflow:ellipsis}
 .edbar .end:empty{display:none}
-.edbar .warn{color:var(--warn)}
 .meta .warn{color:var(--warn);font-weight:400}
-.edbar .over{color:var(--err);font-weight:700}
 .edbar .good{color:var(--ok)}
 .edbar .bad{color:var(--err)}
 .ederr{display:flex;gap:9px;background:var(--badbg);color:var(--badfg);
@@ -450,6 +495,9 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 .ac div .g{color:var(--dim)}
 .ac div.on .g{color:#fffc}
 .badge{border-radius:6px;padding:4px 9px;font:11.5px/1.4 var(--mono);word-break:break-word}
+#sec-hub .badge{flex:none;white-space:nowrap;word-break:normal}
+#sec-hub .ctl{flex-wrap:wrap}
+#sec-hub .ctl input[type=password]{flex:1 1 180px}
 .badge.bad{color:var(--badfg);background:var(--badbg);border:1px solid var(--err);flex-basis:100%}
 .badge.good{color:var(--ok);border:1px solid #2ea04355}
 @media(min-width:721px){
@@ -466,11 +514,14 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
   .subnav{position:sticky;top:var(--chrome-h,57px);z-index:15;display:flex;overflow-x:auto;gap:4px;
     padding:8px 0;background:var(--bg);box-shadow:0 6px 12px -6px var(--sh)}
   .subnav a{white-space:nowrap;border-left:none;background:var(--card2)}
-  .subnav a.on{background:var(--pri);color:#fff;border-radius:7px}
+  .subnav a.on{background:var(--pri);color:#23170e;border-radius:7px}
+  :root[data-theme=light] .subnav a.on{color:#fff}
   .section{scroll-margin-top:calc(var(--chrome-h,57px) + var(--subnav-h,48px) + 6px)}
   .frow .ctl{justify-content:flex-start;min-width:0}
   .frow .ctl input,.frow .ctl select,.frow .ctl .tzctl,.frow .ctl .tzrow,.frow .ctl .days{min-width:0;max-width:100%}
   .frow .ctl input[type=text],.frow .ctl input[type=password],.frow .ctl select{width:100%}
+  #sec-hub .ctl{width:100%}
+  #sec-hub .badge{white-space:normal}
   .tzrow select{flex:1 1 auto}
   .wifiwrap{width:100%}
 }
@@ -483,8 +534,9 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
   .filetree .fthead h2{flex:0 1 auto}
   .filetree .chev{display:inline-flex;margin-left:auto;transition:transform .2s}
   .filetree.open .chev{transform:rotate(180deg)}
-  .filetree>.ftpane,.filetree>.shpanel{max-height:0;opacity:0;overflow:hidden;
+  .filetree>.ftpane,.filetree>.shpanel{max-height:0;opacity:0;overflow:hidden;visibility:hidden;
     transition:max-height .24s ease,opacity .18s ease}
+  .filetree.open>.ftpane,.filetree.open>.shpanel{visibility:visible}
   .ftpane{flex:0 0 auto;max-height:none}
   .filetree.open>.ftpane{max-height:40vh;opacity:1}
   .filetree.open>.ftpane.mods{max-height:30vh}
@@ -545,11 +597,138 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
   .appcfg .frow{grid-template-columns:1fr}
   .appcfg .frow .ctl{justify-content:flex-start}
 }
+
+.script-hub-panel{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap}.script-hub-panel[hidden]{display:none}.script-hub-panel p{width:100%;margin:0}.script-hub-panel a{font-size:12px}.filetree>button{margin:8px;max-width:calc(100% - 16px)}
+/* Gallery layout uses the same theme colours as the rest of the device. */
+.icons-page.card{padding:24px;gap:22px;background:none;border:0}
+.icons-page [hidden]{display:none!important}
+.icons-page h2{font-size:30px;letter-spacing:-1px;line-height:1.2}
+.icons-page .ghelp{margin-top:5px;line-height:1.6;font-size:13px}
+.icons-page :is(button,a,input,select,summary,[tabindex]):focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+.icons-page .ihdr{align-items:start;justify-content:space-between}
+.icons-page .ihdr .st{flex:0 1 auto;flex-wrap:wrap;margin-top:8px;font-size:11px}
+.icons-page .segbar{gap:10px}
+.icons-page .segbar button{min-height:44px;padding:10px 13px;font-weight:600}
+.icons-toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.icons-toolbar input{flex:1 1 190px;max-width:440px;min-height:42px;background:var(--card)}
+.icons-toolbar .help{margin-right:auto}
+.icons-page .grid-icons{grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:16px}
+.icons-page .tile{background:var(--card);border-radius:12px;min-width:0;display:flex;flex-direction:column}
+.icons-page .tile:hover{border-color:var(--border);box-shadow:0 5px 16px #00000018}
+.icons-page .tile .pw{height:auto;aspect-ratio:1;margin:7px 7px 0;border-radius:6px;box-shadow:none;flex:none}
+.icons-page .tile .pw img{position:absolute;inset:14px;width:calc(100% - 28px);height:calc(100% - 28px);padding:0;object-fit:contain}
+.icon-hub-badge{position:absolute;z-index:1;top:8px;right:8px;padding:4px 7px;border:1px solid #f5a56866;border-radius:999px;background:#171717e8;color:var(--acc);box-shadow:0 2px 8px #0008;font:700 9px/1 var(--mono);letter-spacing:.04em;pointer-events:none}
+.icons-page .tile .ft{padding:12px 12px 4px;align-items:start;flex-wrap:wrap;gap:4px}
+.icons-page .tile .ft .nm{flex:1 1 100%;font-size:13px;white-space:normal;overflow-wrap:anywhere;line-height:1.45;color:var(--fg)}
+.icons-page .tile .ft .sz{font:10px/1.5 var(--mono);color:var(--dim)}
+.icon-origin{flex:1 1 100%;font-size:11px;line-height:1.5;color:var(--dim)}
+.icon-origin[data-state=hub]{color:var(--acc)}
+.icon-origin[data-state=modified]{color:var(--warn)}
+.icons-page .tile .acts{position:static;opacity:1;pointer-events:auto;background:none;padding:10px 12px;gap:8px;margin-top:auto}
+.icons-page .tile .acts button{background:var(--card2);color:var(--fg);border-color:var(--border);height:auto;min-height:38px;width:100%;font-size:12px}
+.icons-page .tile .acts button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.icons-page .tile .acts button:disabled{opacity:1;background:transparent;border-color:var(--border);color:var(--dim)}
+.icon-tile-actions{display:flex;gap:7px;padding:10px 12px;margin-top:auto}
+.icon-tile-actions>.icon-show{flex:1;min-width:0;padding:7px 5px;min-height:38px;font-size:12px;white-space:normal;line-height:1.3}
+.icons-page .icon-tile-actions .acts{padding:0;flex:0 0 34px;margin:0}
+.icons-page .icon-tile-actions .acts button{font-size:20px;padding:0;line-height:1}
+.icons-page .tmenu{inset:0 0 auto;min-height:100%;max-height:280px;border:1px solid var(--border);border-radius:6px;overflow:auto;justify-content:start;padding:7px;background:var(--card);box-shadow:0 10px 28px var(--sh)}
+.icons-page .tmenu :is(button,a){display:block;min-height:34px;padding:8px;border:0;border-radius:6px;background:transparent;color:var(--fg);font-size:12px;text-align:left;text-decoration:none}
+.icons-page .tmenu :is(button,a):is(:hover,:focus-visible){background:var(--card2);color:var(--acc)}
+.icons-page .tmenu button.danger{color:var(--err)}
+.icons-page .tmenu button.danger:is(:hover,:focus-visible){background:#ff9d9014;color:var(--err)}
+.icons-add{display:grid;grid-template-columns:1.1fr 1fr;gap:20px;align-items:start}
+.icons-add>section{padding:20px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:grid;gap:15px;min-width:0}
+.icons-add h3{font-size:16px;font-weight:600}
+.icons-add .drop{padding:30px 16px;line-height:1.7;background:var(--bg);border-radius:9px;cursor:pointer;font-size:13px}
+.icons-add .hub-source{align-content:start}
+.icons-add .hub-source a{justify-self:start}
+.icons-page .empty{grid-column:1/-1;padding:36px 20px;border:1px dashed var(--border);border-radius:12px;text-align:center;color:var(--dim)}
+.icons-page .empty button{display:block;margin:16px auto 0}
+@media(max-width:640px){
+  .icons-page.card{padding:8px 0;gap:20px}
+  .icons-page h2{font-size:26px}
+  .icons-page .ihdr .st{justify-content:start;flex-basis:100%;margin:0}
+  .icons-page .segbar{gap:0;display:grid;grid-template-columns:1fr 1fr}
+  .icons-page .segbar button{font-size:12px;padding:10px 4px}
+  .icons-page .grid-icons{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .icons-page .tile .pw img{inset:11px;width:calc(100% - 22px);height:calc(100% - 22px)}
+  .icons-page .tile .ft{padding:10px 10px 4px}
+  .icons-page .tile .ft .nm{font-size:12px}
+  .icons-page .tile .acts,.icon-tile-actions{padding:8px 10px}
+  .icons-toolbar{gap:10px}
+  .icons-toolbar input{flex-basis:100%;max-width:none}
+  .icons-add{grid-template-columns:1fr}
+  .icons-add>section{padding:16px}
+}
+
+/* Device console skin: warm graphite around the content, with colour reserved
+   for actions, status LEDs and the pixels themselves. */
+*{scrollbar-color:var(--trk) transparent;scrollbar-width:thin}
+::selection{background:var(--acc);color:#23170e}
+.skip-link{position:fixed;left:12px;top:8px;z-index:200;transform:translateY(-150%);padding:9px 13px;
+  color:#23170e;background:var(--acc);border-radius:8px;font-weight:700;transition:transform .14s}
+.skip-link:focus{transform:none}
+summary{border-radius:7px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+th,td{padding:11px 12px;text-align:left;border-bottom:1px solid var(--brd2)}
+th{color:var(--dim);font:600 11px/1.4 var(--mono);letter-spacing:.04em;text-transform:uppercase;background:var(--card2)}
+tbody tr:hover{background:var(--card2)}
+.wifimenu,.rowmenu>.mlist,.ac{background:var(--card);border-color:var(--border);box-shadow:0 18px 48px var(--sh)}
+.wifimenu,.rowmenu>.mlist{padding:5px}
+.wifiopt,.rowmenu>.mlist>button{border-radius:7px}
+.wifiopt:hover,.rowmenu>.mlist>button:hover{background:var(--card2);color:var(--fg)}
+.empty{position:relative;background:var(--card);padding:32px 18px}
+.empty::before{content:"";display:block;width:26px;height:10px;margin:0 auto 13px;
+  background:linear-gradient(90deg,var(--acc) 0 6px,transparent 6px 10px,var(--dim) 10px 16px,transparent 16px 20px,var(--border) 20px)}
+.piskelload{background:#10100f}
+.piskelload .spin{border-radius:4px;border-color:#514e47;border-top-color:var(--acc)}
+.console,.ed{box-shadow:inset 0 3px 16px #0006}
+.edwrap,.filetree,.piskelwrap{border-radius:10px}
+.palrow.on,.ftitem.on{background:var(--bna)}
+.ftitem.on{border-color:#f5a56855}
+.edtop button.ico .cnt{color:#23170e}
+.icons-page h2{font-size:clamp(25px,4vw,34px);font-weight:750;letter-spacing:-.035em}
+.icons-page .tile{border-radius:12px;box-shadow:0 10px 24px #0002}
+.icons-page .tile:hover{border-color:var(--acc);transform:translateY(-2px);box-shadow:0 16px 34px #0004}
+.icons-page .tile .pw{margin:8px 8px 0;background:#10100f;
+  background-image:radial-gradient(circle,#ffffff10 1px,transparent 1.2px);background-size:10px 10px}
+.icons-page .tile .pw img{inset:8px;width:calc(100% - 16px);height:calc(100% - 16px)}
+.icons-page .tile .acts button.pri{color:#23170e}
+:root[data-theme=light] .icons-page .tile .acts button.pri{color:#fff}
+.icons-add>section{box-shadow:0 10px 26px #00000016}
+.bar>i{background:var(--acc)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+  scroll-behavior:auto!important;transition-duration:.01ms!important}}
+@media(max-width:640px){
+  body{background-size:12px 12px}
+  .topbar{background:var(--bg);backdrop-filter:none}
+  .topbar>header{padding:10px 12px}
+  nav{gap:2px;padding:5px 6px calc(5px + env(safe-area-inset-bottom));justify-content:flex-start;background:var(--card);
+    box-shadow:0 -10px 30px #0005;scroll-snap-type:x proximity}
+  nav a{flex:0 0 auto;min-width:72px;min-height:44px;display:grid;place-items:center;padding:8px 9px;scroll-snap-align:start}
+  nav a.on{background:var(--card2);box-shadow:inset 0 0 0 1px var(--border)}
+  nav a.on::before{left:18px;right:18px;top:-5px;bottom:auto}
+  main{padding:16px 12px 22px;gap:14px}
+  .card{padding:16px}
+  #savebar{bottom:62px;width:calc(100vw - 20px)}
+  #toasts{bottom:126px}
+  .icons-page .tile .pw img{inset:6px;width:calc(100% - 12px);height:calc(100% - 12px)}
+}
+@media(max-width:380px){
+  .topbar>header h1{font-size:16px}
+  .topbar>header{gap:7px}
+  .topbar>header button.icon{padding:6px;min-width:36px}
+  .icons-page .grid-icons{grid-template-columns:1fr 1fr;gap:8px}
+  .frow{gap:8px}
+}
+
 </style>
 <script>try{document.documentElement.dataset.theme=localStorage.awtrixTheme||
   (matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');}catch(e){}</script>
 </head>
 <body>
+<a class="skip-link" id="skip" href="#view"></a>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
 <symbol id="i-bat" viewBox="0 0 24 24"><rect x="3" y="8" width="15" height="9" rx="2"/><path d="M21 11.5v2"/></symbol>
 <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M5 10.5a10 10 0 0 1 14 0M8.5 14a6 6 0 0 1 7 0"/><path d="M12 17.5h.01"/></symbol>
@@ -569,9 +748,11 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
 <symbol id="i-save" viewBox="0 0 24 24"><path d="M6 4h10l4 4v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M8 4v4h6"/><path d="M8 20v-6h8v6"/></symbol>
 <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><path d="M5 17v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.4"/><path d="M20 16l-4.5-4.5L9 18"/></symbol>
 <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V5"/><path d="M8 9l4-4 4 4"/><path d="M5 17v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2"/></symbol>
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
 <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4H5.5A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></symbol>
 <symbol id="i-logo" viewBox="0 0 15 15"><path fill="currentColor" opacity=".16" d="M0 0h3v3H0zM12 0h3v3h-3zM4 4h3v3H4zM8 4h3v3H8zM4 12h3v3H4zM8 12h3v3h-3z"/><path fill="currentColor" d="M4 0h3v3H4zM8 0h3v3H8zM0 4h3v3H0zM12 4h3v3h-3zM0 8h3v3H0zM4 8h3v3H4zM8 8h3v3H8zM12 8h3v3h-3zM0 12h3v3H0zM12 12h3v3h-3z"/></symbol>
 <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6.5C10.5 5 8.5 4.5 6 4.5H4v13h2c2.5 0 4.5.5 6 2 1.5-1.5 3.5-2 6-2h2v-13h-2c-2.5 0-4.5.5-6 2z"/><path d="M12 6.5v13"/></symbol>
 <symbol id="i-grip" viewBox="0 0 24 24"><path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/></symbol>
@@ -590,7 +771,7 @@ canvas#screen{display:block;width:100%;aspect-ratio:4/1;image-rendering:pixelate
 <nav id="nav"></nav>
 </div>
 <main id="view"></main>
-<div id="toasts"></div>
+<div id="toasts" aria-live="polite" aria-atomic="false"></div>
 <script>
 'use strict';
 const $=s=>document.querySelector(s);
@@ -608,7 +789,7 @@ function el(tag,attrs,...kids){
   return n;
 }
 function toast(msg,ok=true,actions){
-  const d=el('div',{class:'toast'+(ok?'':' err')},msg);
+  const d=el('div',{class:'toast'+(ok?'':' err'),role:ok?'status':'alert'},msg);
   if(actions&&actions.length){
     d.append(el('div',{class:'tacts'},...actions.map(a=>{
       const b=el('button',{class:a.pri?'pri':''},a.label);
@@ -715,7 +896,7 @@ function armable(btn,fn){
   return btn;
 }
 const I18N={en:{
-  dash:'Dashboard',display:'Display',system:'System',icons:'Icons',palettes:'Palettes',log:'Log',
+  skip:'Skip to content',mainnav:'Main navigation',dash:'Dashboard',display:'Display',system:'System',icons:'Icons',palettes:'Palettes',log:'Log',
   audioTab:'Audio',
   mp3s:'MP3s',
   mp3shelp:'Your own MP3 files, for notifications and scripts.',
@@ -740,6 +921,8 @@ const I18N={en:{
   chipSkip:'skipped',chipSkipH:'The script skipped this round. It stays in the rotation.',
   chipGone:'no data',chipGoneH:'This app is switched on and keeps its slot, but nothing has sent it any data yet. It draws again on the next push.',
   orderSaved:'App order saved',
+  suCheck:'Check for updates',suChecking:'Checking for updates…',suReady:'Update available',suCurrent:'Up to date',suLocal:'Changed on AWTRIX',suMissing:'No longer available on the Hub',suOffline:'Hub check unavailable',suUpdate:'Update script',suCopy:'Install as a new script',suConfirm:'Install this Hub version? Your compatible script settings are kept.',suModified:'Your code has local changes. Install the Hub version as a separate script to keep your work.',suBusy:'Updating script…',suDone:'Script updated',suFirmware:'Update your AWTRIX firmware to use script updates.',suChanged:'The script changed. Check for updates again.',suIntegrity:'The Hub version changed during download. Try again.',suUnknown:'No update information yet',
+  suRevision:'Hub publication',
   cfgTitle:'Settings',cfgHide:'Close settings',cfgLoading:'Loading settings…',cfgNone:'This script offers no settings.',
   cfgSaved:'Settings saved - the app restarted',cfgDefaults:'Use defaults',
   cfgWarnH:'The script’s settings header has a problem. Fix it in the editor.',
@@ -761,35 +944,72 @@ const I18N={en:{
   maint:'Maintenance',mainthelp:'Firmware updates and resets.',
   apmaintH:'Restart AWTRIX to apply the WiFi settings you saved.',
   fwfile:'Upload firmware (.bin)',
+  update:'Firmware update',updchk:'Check for updates',updchecking:'Checking GitHub…',
+  updcur:'{v} is the latest release.',updnew:'{v} is available',updfail:'GitHub could not be reached. Check your internet connection and try again.',
+  upddl:'Download',updnotes:'Release notes',updavail:'update available',
+  updhelp:'Download the file, then choose it under "Upload firmware".',
   resetset:'Reset settings',resetsetH:'Resets display settings to defaults (network stays).',
   factory:'Factory reset',factoryH:'Erases EVERYTHING (WiFi, files, settings). Type the hostname to confirm.',
   erase:'Erase everything',eraseNo:'Hostname does not match',
   bkSection:'Backup & restore',bkSectionH:'Download a ZIP of what you choose, or restore one.',
   bkSectionAp:'Restore',bkSectionApH:'Upload a previously created backup .zip.',
   bkTitle:'Create backup',bkDownload:'Download backup',bkDownloadH:'Pick what to include, then save a .zip.',
-  bkWorking:'Collecting…',bkDone:'Backup downloaded',bkNone:'Select at least one category',
+  bkWorking:'Collecting…',bkDone:'Backup downloaded',bkNone:'Select at least one category',bkAll:'All',
   bkWifi:'WiFi',bkSettings:'Settings',bkIcons:'Icons',bkMelodies:'Melodies',bkPalettes:'Palettes',bkMp3:'MP3s',bkScripts:'Scripts',bkApporder:'App order',
   bkRestoreT:'Restore backup',bkRestore:'Choose backup…',
   bkRestoreH:'Upload a backup .zip.',
   bkCaptiveHint:'The Wi‑Fi sign‑in popup can’t upload files. To restore, open this page in a browser:',
   bkRestored:'Backup restored',bkWarnings:'warning(s)',bkRebootQ:'Restore applied. Reboot now to use it?',
   storage:'Storage',of:'of',free:'free',
-  iconshelp:'8×8 to 32×8 PNG, JPG or animated GIF. Drag & drop files here or click to choose.',
   editorTab:'Icon Editor',
   edLoading:'Loading the editor…',
   edUnreachable:'The editor did not load.',
+  edIconOpenError:'The icon could not be opened.',
   melodies:'Melodies',melodieshelp:'Short ringtones, for notifications and scripts.',
   newmelo:'New melody',meloname:'Name',melortttl:'d=4,o=5,b=120:c,e,g',
-  melopre:'Preview here',meloplay:'Play on AWTRIX',melostop:'Stop',
+  melopre:'Preview here',meloprestop:'Stop preview',meloplay:'Play on AWTRIX',melostop:'Stop on AWTRIX',
   melomuted:'Sound is off - playing on AWTRIX stays silent. Turn it on under System › Audio.',
   audnone:'No sound output. Set a buzzer or speaker pin under System › GPIO.',
   melonone:'No melodies yet',
   melonotes:'notes',melobroken:'Does not parse - fix it and save',
   meloexists:'A melody with this name already exists',
   melobadname:'Name: letters, digits, _ and -, up to 24 characters',
-  lametric:'LaMetric icon download',lamhelp:'Fetches an icon from the LaMetric gallery.',
-  lamid:'Icon ID, e.g. 2867',fetch:'Fetch',lamneed:'Your browser needs internet access for this - unavailable in provisioning mode.',
-  lamsave:'Save to AWTRIX',
+  idbnone:"No matching icons",idbfail:"Could not reach the Hub. Check your internet connection and try again.",
+  idbterms:"By publishing, you agree to the terms of service.",
+  hubConnect:'Connect to Hub',hubStorageFail:"The key could not be saved. Allow this browser to store website data and try again.",
+  hubIconUnavailable:"This icon is no longer available on the Hub.",hubDownloadFailed:"The icon could not be downloaded. Please try again.",hubPublishFailed:"The icon could not be published. Please try again.",hubPublishing:"Publishing…",
+  hubSection:'AWTRIX Hub',hubSectionH:"Connect your Hub account to download icons and script updates, and to share icons.",
+  hubAuthRequired:"Connect your Hub account to download from the Hub.",hubAuthRejected:"The Hub did not accept this key. Check it or add a new one.",hubWrongHost:"This icon comes from a different Hub. Open its Hub page to download it.",hubTokenLbl:"Hub connection key",hubTokenH:"Saved only in this browser. Connect your account again when using another browser.",
+  hubOn:'Key saved',hubOff:"No key saved",hubClear:"Remove key",hubCleared:"Hub key removed from this browser.",hubStored:"Hub key saved in this browser.",
+  hubGetLbl:"Get a connection key",hubGetH:"Copy your key from your Hub account settings.",hubGet:"Open Hub account",
+  icfromhub:'From the Hub',icmodified:"Changed on AWTRIX",iclocal:"Only on AWTRIX",icchecking:"Checking Hub status…",icunknown:"Hub status unavailable",
+  icreload:'Reload from Hub',icreloaded:"Icon reloaded from the Hub.",icviewhub:'View on Hub',icvariant:"Share as a new icon",icexists:"This icon is already on the Hub.",
+  icoriginfail:"The icon is saved on AWTRIX, but its Hub link could not be saved. Try installing it again.",
+  icconflict:"A different icon on AWTRIX has the same name:",icreplace:"Use Hub version",ickeep:"Keep my icon",
+  icpublishfirst:"Share this icon on the Hub first so others can install it with your script.",icreference:"Use this icon name in your script:",
+  icpubname:"Icon name",icpubexample:'e.g. Sunny sky',
+  icpubnamehelp:"Choose a descriptive name, such as “Sunny sky”. Numbers alone are not allowed.",
+  scricons:'Install icons',scriconsok:"Icons ready",
+  scriconsfail:"Not available on the Hub:",scriconserr:"These icons could not be installed:",idbsend:'Publish',
+  icintro:"Choose icons for your display or create your own.",icsearch:'Search installed icons',icclear:'Clear search',icstorage:'Device storage',icdownload:"Download icon",icanimated:'Animated',
+  icupload:"Add icon",icuploadhelp:"Choose an image from your computer. Animated GIFs stay animated.",icdrop:'Choose files or drop them here · GIF, PNG or JPG',ichub:"Find icons in the Hub",ichubhelp:"Discover community icons in the AWTRIX Hub and send them to this display.",ichubopen:"Open icon gallery",iccreate:"Create an icon",iccreatehelp:"Draw an icon or animation and save it to your AWTRIX.",
+  icown:'On AWTRIX',icadd:'Add',icnone:'No icons on AWTRIX yet',icsend:'Publish to Hub',icshow:'Show on display',
+  idbdone:"Your icon is now published on the Hub.",idbopen:"View icon",
+  idbdup:"This icon is already on the Hub as",
+  idbauth:"Connect your Hub account to publish this icon.",
+  idbauthbad:"The Hub did not accept this key. Check it or add a new one.",
+  idbtosys:'Go to System',close:'Close',
+  idbsignin:"Open Hub account",
+  // One entry per error code the submit endpoint can answer with. tooManyFrames
+  // is never sent - frames are not a limit. Unknown codes use a readable fallback.
+  idbe_badFormat:"This image could not be read. Try another file.",
+  idbe_tooLarge:"The image must be no larger than 64 KB.",
+  idbe_badName:"This name cannot be used. Choose a different name.",
+  idbe_descriptiveNameRequired:"Give your icon a name with letters, such as “Sunny sky”. Numbers alone are not allowed.",
+  idbe_tooBig:"Use an image up to 32 × 8 pixels.",
+  idbe_rateLimited:"Too many attempts. Wait a moment and try again.",
+  idbe_duplicate:"This icon is already on the Hub.",
+  idbe_notLoggedIn:"Connect your Hub account to publish this icon.",
   scriptsTab:'Scripts',
   scrnone:'Nothing open',
   scrkeys:'Ctrl-. API · Ctrl-S save · Ctrl-/ comment',
@@ -811,7 +1031,6 @@ const I18N={en:{
   scrpreview:'Show on AWTRIX',scrpreviewed:'Switched the panel to it',
   scrline:'Ln',scrreload:'Reloaded',
   scrinhook:'runtime error in',
-  scrtoobig:'Over what AWTRIX accepts - shorten the script to save it.',
   palhelp:'Colour ramps for effects, text, charts and the progress bar.',
   paledit:'Palette editor',name:'Name',tryit:'Try on AWTRIX',newpal:'New palette',
   palsaved:'Palette saved',palname:'Letters/digits only',
@@ -877,7 +1096,7 @@ const I18N={en:{
   radiodupe:'Name schon vergeben',radiobadurl:'muss mit http:// oder https:// beginnen',
   radiolong:'Name zu lang (24 Zeichen)',
 
-  dash:'Übersicht',display:'Anzeige',system:'System',icons:'Icons',palettes:'Paletten',log:'Log',
+  skip:'Zum Inhalt springen',mainnav:'Hauptnavigation',dash:'Übersicht',display:'Anzeige',system:'System',icons:'Icons',palettes:'Paletten',log:'Log',
   appsTab:'Apps',apploop:'App-Rotation',apploopH:'Diese Apps zeigt AWTRIX nacheinander auf dem Display. Zum Umsortieren ⠿ ziehen.',
   background:'Hintergrund',backgroundH:'Laufen dauerhaft mit, erscheinen aber nie auf dem Display.',
   disabledapps:'Deaktiviert',disabledH:'Nicht in Benutzung. „Aktivieren“ nimmt eine App wieder in die Rotation oder in den Hintergrund auf.',
@@ -890,6 +1109,8 @@ const I18N={en:{
   chipSkip:'übersprungen',chipSkipH:'Das Skript hat diese Runde ausgelassen. Es bleibt in der Rotation.',
   chipGone:'keine Daten',chipGoneH:'Diese App ist eingeschaltet und behält ihren Platz, aber es hat noch niemand Daten geschickt. Beim nächsten Push zeichnet sie wieder.',
   orderSaved:'App-Reihenfolge gespeichert',
+  suCheck:'Nach Updates suchen',suChecking:'Updates werden geprüft…',suReady:'Update verfügbar',suCurrent:'Aktuell',suLocal:'Auf AWTRIX geändert',suMissing:'Im Hub nicht mehr verfügbar',suOffline:'Hub-Prüfung nicht verfügbar',suUpdate:'Script aktualisieren',suCopy:'Als neues Script installieren',suConfirm:'Diese Hub-Version installieren? Kompatible Script-Einstellungen bleiben erhalten.',suModified:'Dein Code wurde lokal geändert. Installiere die Hub-Version als zusätzliches Script, um deine Arbeit zu behalten.',suBusy:'Script wird aktualisiert…',suDone:'Script aktualisiert',suFirmware:'Aktualisiere die AWTRIX-Firmware, um Script-Updates zu nutzen.',suChanged:'Das Script wurde geändert. Suche erneut nach Updates.',suIntegrity:'Die Hub-Version hat sich beim Herunterladen geändert. Versuche es erneut.',suUnknown:'Noch keine Update-Informationen',
+  suRevision:'Hub-Veröffentlichung',
   cfgTitle:'Einstellungen',cfgHide:'Einstellungen schließen',cfgLoading:'Einstellungen werden geladen…',
   cfgNone:'Dieses Skript bietet keine Einstellungen.',
   cfgSaved:'Einstellungen gespeichert - die App wurde neu gestartet',cfgDefaults:'Standardwerte',
@@ -912,35 +1133,70 @@ const I18N={en:{
   maint:'Wartung',mainthelp:'Firmware-Updates und Zurücksetzen.',
   apmaintH:'Neustart, damit die gespeicherten WLAN-Einstellungen wirken.',
   fwfile:'Firmware hochladen (.bin)',
+  update:'Firmware-Update',updchk:'Nach Update suchen',updchecking:'Frage GitHub…',
+  updcur:'{v} ist die neueste Version.',updnew:'{v} ist verfügbar',updfail:'GitHub ist nicht erreichbar. Prüfe deine Internetverbindung und versuche es erneut.',
+  upddl:'Herunterladen',updnotes:'Release Notes',updavail:'Update verfügbar',
+  updhelp:'Datei herunterladen und dann unter „Firmware hochladen“ auswählen.',
   resetset:'Einstellungen zurücksetzen',resetsetH:'Setzt Anzeige-Einstellungen auf Standard zurück (Netzwerk bleibt).',
   factory:'Werkseinstellungen',factoryH:'Löscht ALLES (WLAN, Dateien, Einstellungen). Zur Bestätigung Hostname eintippen.',
   erase:'Alles löschen',eraseNo:'Hostname stimmt nicht überein',
   bkSection:'Sicherung & Wiederherstellung',bkSectionH:'Ausgewählte Inhalte als ZIP herunterladen oder eine Sicherung einspielen.',
   bkSectionAp:'Wiederherstellen',bkSectionApH:'Ein zuvor erstelltes Backup-.zip einspielen.',
   bkTitle:'Sicherung erstellen',bkDownload:'Backup herunterladen',bkDownloadH:'Auswählen, was rein soll, dann .zip speichern.',
-  bkWorking:'Sammle…',bkDone:'Backup heruntergeladen',bkNone:'Mindestens eine Kategorie wählen',
+  bkWorking:'Sammle…',bkDone:'Backup heruntergeladen',bkNone:'Mindestens eine Kategorie wählen',bkAll:'Alle',
   bkWifi:'WLAN',bkSettings:'Einstellungen',bkIcons:'Icons',bkMelodies:'Melodien',bkPalettes:'Paletten',bkMp3:'MP3s',bkScripts:'Skripte',bkApporder:'App-Reihenfolge',
   bkRestoreT:'Sicherung wiederherstellen',bkRestore:'Sicherung wählen…',
   bkRestoreH:'Backup-.zip hochladen.',
   bkCaptiveHint:'Der WLAN-Anmelde-Dialog kann keine Dateien hochladen. Zum Wiederherstellen diese Seite im Browser öffnen:',
   bkRestored:'Sicherung wiederhergestellt',bkWarnings:'Warnung(en)',bkRebootQ:'Wiederhergestellt. Jetzt neu starten?',
   storage:'Speicher',of:'von',free:'frei',
-  iconshelp:'8×8 bis 32×8 PNG, JPG oder animiertes GIF. Dateien hierher ziehen oder klicken zum Auswählen.',
   editorTab:'Icon-Editor',
   edLoading:'Editor wird geladen…',
   edUnreachable:'Der Editor wurde nicht geladen.',
+  edIconOpenError:'Das Icon konnte nicht geöffnet werden.',
   melodies:'Melodien',melodieshelp:'Kurze Klingeltöne für Meldungen und Skripte.',
   newmelo:'Neue Melodie',meloname:'Name',melortttl:'d=4,o=5,b=120:c,e,g',
-  melopre:'Hier anhören',meloplay:'Auf AWTRIX abspielen',melostop:'Stopp',
+  melopre:'Hier anhören',meloprestop:'Vorschau stoppen',meloplay:'Auf AWTRIX abspielen',melostop:'Auf AWTRIX stoppen',
   melomuted:'Ton ist aus - Abspielen auf AWTRIX bleibt stumm. Einschalten unter System › Audio.',
   audnone:'Keine Tonausgabe. Buzzer- oder Lautsprecher-Pin unter System › GPIO setzen.',
   melonone:'Noch keine Melodien',
   melonotes:'Noten',melobroken:'Nicht lesbar - korrigieren und speichern',
   meloexists:'Eine Melodie mit diesem Namen gibt es schon',
   melobadname:'Name: Buchstaben, Ziffern, _ und -, maximal 24 Zeichen',
-  lametric:'LaMetric-Icon laden',lamhelp:'Holt ein Icon aus der LaMetric-Galerie.',
-  lamid:'Icon-ID, z. B. 2867',fetch:'Laden',lamneed:'Dafür braucht der Browser Internetzugang - im Einrichtungsmodus nicht verfügbar.',
-  lamsave:'Auf AWTRIX speichern',
+  idbnone:"Keine passenden Icons gefunden",idbfail:"Der Hub ist nicht erreichbar. Prüfe deine Internetverbindung und versuche es erneut.",
+  idbterms:"Mit dem Veröffentlichen akzeptierst du die Nutzungsbedingungen.",
+  hubConnect:'Mit dem Hub verbinden',hubStorageFail:"Der Schlüssel konnte nicht gespeichert werden. Erlaube diesem Browser, Website-Daten zu speichern, und versuche es erneut.",
+  hubIconUnavailable:"Dieses Icon ist im Hub nicht mehr verfügbar.",hubDownloadFailed:"Das Icon konnte nicht heruntergeladen werden. Versuche es erneut.",hubPublishFailed:"Das Icon konnte nicht veröffentlicht werden. Versuche es erneut.",hubPublishing:"Wird veröffentlicht…",
+  hubSection:'AWTRIX Hub',hubSectionH:"Verbinde dein Hub-Konto, um Icons und Script-Updates herunterzuladen und Icons zu veröffentlichen.",
+  hubAuthRequired:"Verbinde dein Hub-Konto, um Inhalte aus dem Hub herunterzuladen.",hubAuthRejected:"Der Hub akzeptiert diesen Schlüssel nicht. Prüfe ihn oder füge einen neuen ein.",hubWrongHost:"Dieses Icon stammt aus einem anderen Hub. Öffne seine Hub-Seite, um es herunterzuladen.",hubTokenLbl:"Hub-Verbindungsschlüssel",hubTokenH:"Nur in diesem Browser gespeichert. Verbinde dein Konto in anderen Browsern erneut.",
+  hubOn:'Gespeichert',hubOff:"Kein Schlüssel gespeichert",hubClear:"Schlüssel entfernen",hubCleared:"Hub-Schlüssel aus diesem Browser entfernt.",hubStored:"Hub-Schlüssel in diesem Browser gespeichert.",
+  hubGetLbl:"Verbindungsschlüssel abrufen",hubGetH:"Kopiere deinen Schlüssel aus den Kontoeinstellungen im Hub.",hubGet:"Hub-Konto öffnen",
+  icfromhub:'Aus dem Hub',icmodified:"Auf AWTRIX geändert",iclocal:"Nur auf AWTRIX",icchecking:"Hub-Status wird geprüft…",icunknown:"Hub-Status nicht verfügbar",
+  icreload:'Vom Hub neu laden',icreloaded:"Icon vom Hub neu geladen.",icviewhub:'Im Hub ansehen',icvariant:"Als neues Icon veröffentlichen",icexists:"Dieses Icon gibt es bereits im Hub.",
+  icoriginfail:"Das Icon ist auf AWTRIX gespeichert. Die Zuordnung zum Hub fehlt noch. Versuche die Installation erneut.",
+  icconflict:"Auf AWTRIX gibt es ein anderes Icon mit diesem Namen:",icreplace:"Hub-Version verwenden",ickeep:"Mein Icon behalten",
+  icpublishfirst:"Veröffentliche das Icon zuerst im Hub, damit andere es mit deinem Script installieren können.",icreference:"Verwende diesen Icon-Namen in deinem Script:",
+  icpubname:"Icon-Name",icpubexample:'z. B. Sonnenschein',
+  icpubnamehelp:"Wähle einen aussagekräftigen Namen, etwa „Sonnenschein“. Reine Zahlen sind nicht erlaubt.",
+  scricons:'Icons installieren',scriconsok:"Icons bereit",
+  scriconsfail:"Im Hub nicht verfügbar:",scriconserr:"Diese Icons konnten nicht installiert werden:",idbsend:'Veröffentlichen',
+  icintro:"Wähle Icons für dein Display aus oder gestalte eigene.",icsearch:'Installierte Icons suchen',icclear:'Suche zurücksetzen',icstorage:'Gerätespeicher',icdownload:"Icon herunterladen",icanimated:'Animiert',
+  icupload:"Icon hinzufügen",icuploadhelp:"Wähle ein Bild von deinem Computer. GIF-Animationen bleiben erhalten.",icdrop:'Dateien auswählen oder hier ablegen · GIF, PNG oder JPG',ichub:"Icons im Hub finden",ichubhelp:"Entdecke Community-Icons im AWTRIX Hub und sende sie an dieses Display.",ichubopen:"Icon-Galerie öffnen",iccreate:"Icon gestalten",iccreatehelp:"Gestalte ein Icon oder eine Animation und speichere es auf deiner AWTRIX.",
+  icown:'Auf AWTRIX',icadd:'Hinzufügen',icnone:'Noch keine Icons auf AWTRIX',icsend:'Im Hub veröffentlichen',icshow:'Anzeigen',
+  idbdone:"Dein Icon ist jetzt im Hub veröffentlicht.",idbopen:"Icon ansehen",
+  idbdup:"Dieses Icon gibt es bereits im Hub als",
+  idbauth:"Verbinde dein Hub-Konto, um dieses Icon zu veröffentlichen.",
+  idbauthbad:"Der Hub akzeptiert diesen Schlüssel nicht. Prüfe ihn oder füge einen neuen ein.",
+  idbtosys:'Zu System',close:'Schließen',
+  idbsignin:"Hub-Konto öffnen",
+  idbe_badFormat:"Dieses Bild konnte nicht gelesen werden. Versuche eine andere Datei.",
+  idbe_tooLarge:"Das Bild darf höchstens 64 KB groß sein.",
+  idbe_badName:"Dieser Name ist nicht möglich. Wähle einen anderen Namen.",
+  idbe_descriptiveNameRequired:"Gib deinem Icon einen Namen mit Buchstaben, etwa „Sonnenschein“. Reine Zahlen sind nicht erlaubt.",
+  idbe_tooBig:"Verwende ein Bild mit höchstens 32 × 8 Pixeln.",
+  idbe_rateLimited:"Zu viele Versuche. Warte einen Moment und versuche es erneut.",
+  idbe_duplicate:"Dieses Icon gibt es bereits im Hub.",
+  idbe_notLoggedIn:"Verbinde dein Hub-Konto, um dieses Icon zu veröffentlichen.",
   scriptsTab:'Skripte',
   scrnone:'Nichts geöffnet',
   scrkeys:'Strg-. API · Strg-S speichern · Strg-# kommentieren',
@@ -962,7 +1218,6 @@ const I18N={en:{
   scrpreview:'Auf AWTRIX zeigen',scrpreviewed:'Panel darauf umgeschaltet',
   scrline:'Zl',scrreload:'Neu geladen',
   scrinhook:'Laufzeitfehler in',
-  scrtoobig:'Über dem, was AWTRIX annimmt - zum Speichern kürzen.',
   palhelp:'Farbverläufe für Effekte, Text, Diagramme und den Fortschrittsbalken.',
   paledit:'Paletten-Editor',name:'Name',tryit:'Auf AWTRIX testen',newpal:'Neue Palette',
   palsaved:'Palette gespeichert',palname:'Nur Buchstaben/Ziffern',
@@ -1033,6 +1288,8 @@ const FIELDS={
  autoTransition:F('apps','toggle','Auto rotation|Automatischer Wechsel','Moves to the next app on its own.|Wechselt von selbst zur nächsten App.'),
  transitionDurationMs:F('apps','number','Transition duration|Übergangsdauer','Length of the switch. 0 = instant.|Dauer des Wechsels. 0 = sofort.',{min:0,max:5000,unit:'ms'}),
  transitionEffect:F('apps','select','Transition effect|Übergangseffekt','Animation between two apps.|Animation zwischen zwei Apps.',{opt:'transitions'}),
+ transitionDirection:F('apps','select','Transition direction|Übergangsrichtung','Flips movement for directional effects.|Kehrt die Bewegung gerichteter Effekte um.',{opt:[
+   ['normal','Normal|Normal'],['reverse','Reverse|Umgekehrt']]}),
  blockNavigation:F('apps','toggle','Block buttons|Tasten sperren','Ignore buttons and API for app switching.|App-Wechsel per Taste und API ignorieren.'),
  timeMode:F('clock','select','Clock layout|Uhr-Layout','What the clock app draws.|Was die Uhr-App zeichnet.',{opt:[
    [0,'Time only|Nur Uhrzeit'],[1,'Calendar, weekday bar below|Kalenderblatt, Wochentage unten'],
@@ -1203,11 +1460,18 @@ TZ_TABLE.forEach(([rule,zones])=>{
   TZFIRST.set(rule,list[0]);
   list.forEach(n=>TZRULE.set(n,rule));
 });
-const TZNAMES=[...TZRULE.keys()].sort();
 const TZFMT=new Map();
+function tzFmtFor(zone){
+  if(TZFMT.has(zone))return TZFMT.get(zone);
+  let f=null;
+  try{f=new Intl.DateTimeFormat('en',{timeZone:zone,timeZoneName:'longOffset'});}catch(e){}
+  TZFMT.set(zone,f);
+  return f;
+}
+const TZNAMES=[...TZRULE.keys()].filter(n=>tzFmtFor(n)).sort();
 function tzOffset(zone,at){
-  let f=TZFMT.get(zone);
-  if(!f)TZFMT.set(zone,f=new Intl.DateTimeFormat('en',{timeZone:zone,timeZoneName:'longOffset'}));
+  const f=tzFmtFor(zone);
+  if(!f)return 0;
   const s=f.formatToParts(at).find(p=>p.type==='timeZoneName').value;
   const m=/GMT([+-])(\d+)(?::(\d+))?/.exec(s);
   return m?(m[1]==='-'?-1:1)*(Number(m[2])*60+Number(m[3]||0)):0;
@@ -1266,6 +1530,8 @@ const SYSF={
    ['bottomLeft','Bottom left|Unten links'],['bottomRight','Bottom right|Unten rechts']]}),
  panelWiring:F('panel','select','Wiring direction|Verdrahtungsrichtung','How the strip runs in a panel.|Wie der Strang im Panel läuft.',{opt:[
    ['rows','Along the rows|Entlang der Zeilen'],['columns','Along the columns|Entlang der Spalten']]}),
+ panelColorOrder:F('panel','select','LED color order|LED-Farbreihenfolge','Byte order expected by the panel.|Vom Panel erwartete Byte-Reihenfolge.',{opt:[
+   ['grb','GRB'],['rgb','RGB'],['rbg','RBG'],['gbr','GBR'],['brg','BRG'],['bgr','BGR']]}),
  panelSerpentine:F('panel','toggle','Serpentine|Serpentine','Every second run goes backwards (zigzag).|Jede zweite Reihe läuft rückwärts (Zickzack).'),
  panelChainReverse:F('panel','toggle','Reverse chain|Kette umkehren','The cable enters the panels at the other end.|Das Kabel betritt die Panels am anderen Ende.'),
  panelChainSerpentine:F('panel','toggle','Alternating panels|Wechselnde Panels','Every second panel is mounted rotated 180°.|Jedes zweite Panel ist um 180° gedreht montiert.'),
@@ -1298,6 +1564,8 @@ const SYSF={
  pinI2sBclk:F('gpio','number','I2S BCLK|I2S BCLK','External DAC for internet radio and MP3s.|Externer DAC für Internetradio und MP3s.',{min:-1,max:39}),
  pinI2sLrclk:F('gpio','number','I2S LRCLK|I2S LRCLK','Same DAC, word select.|Selber DAC, Wortauswahl.',{min:-1,max:39}),
  pinI2sDout:F('gpio','number','I2S DOUT|I2S DOUT','Same DAC, data.|Selber DAC, Daten.',{min:-1,max:39}),
+ pinI2sMclk:F('gpio','number','I2S MCLK|I2S MCLK','Only some DACs need it.|Brauchen nur manche DACs.',{min:-1,max:39}),
+ pinAmpEnable:F('gpio','number','Amplifier enable|Verstärker-Enable','Switches the amplifier on.|Schaltet den Verstärker ein.',{min:-1,max:39}),
  soundEnabled:F('sndhw','toggle','Sound|Ton','Master switch for one-shot sounds. Radio keeps playing.|Hauptschalter für Einzelklänge. Radio läuft weiter.',{api:'settings'}),
  buzzerVolume:F('sndhw','slider','Buzzer volume|Buzzer-Lautstärke','RTTTL melodies.|RTTTL-Melodien.',{min:0,max:100,api:'settings'}),
  dfplayerVolume:F('sndhw','slider','DFPlayer volume|DFPlayer-Lautstärke','Tracks.|Titel.',{min:0,max:100,api:'settings'}),
@@ -1309,8 +1577,6 @@ const SYSF={
  artnet:F('misc','toggle','Art-Net|Art-Net','Receive Art-Net DMX on UDP 6454.|Art-Net DMX auf UDP 6454 empfangen.'),
  debugMode:F('misc','toggle','Debug mode|Debug-Modus','Verbose serial logging.|Ausführliches serielles Logging.'),
  scriptingEnabled:F('script','toggle','Run scripts|Skripte ausführen','Off frees about 40 KB of RAM and stops every script. Installed scripts are kept. Applies after a reboot.|Aus spart ca. 40 KB RAM und stoppt alle Skripte. Installierte Skripte bleiben erhalten. Wirkt nach einem Neustart.'),
- scriptLimit:F('script','number','Script limit|Skript-Limit','How many scripts may run at the same time.|Wie viele Skripte gleichzeitig laufen dürfen.',{min:0,max:32}),
- scriptMaxBytes:F('script','number','Max script size|Max. Skriptgröße','Largest script AWTRIX accepts.|Größtes Skript, das AWTRIX annimmt.',{min:1024,max:32768,unit:'B'}),
 };
 const SYS_GROUPS=[['wifi','grpWifi','grpWifiH'],['web','grpWeb','grpWebH'],['mqtt','grpMqtt','grpMqttH'],
  ['time','grpTime','grpTimeH'],['panel','grpPanel','grpPanelH'],['hw','grpHw','grpHwH'],
@@ -1318,7 +1584,7 @@ const SYS_GROUPS=[['wifi','grpWifi','grpWifiH'],['web','grpWeb','grpWebH'],['mqt
  ['sndhw','grpSndHw','grpSndHwH'],['script','grpScript','grpScriptH'],['misc','grpMisc','grpMiscH']];
 const SOUND_KEYS=Object.keys(SYSF).filter(k=>SYSF[k].api==='settings');
 const S={transitions:[],stats:null,ap:false,sysHost:'',sysUid:'',gpio:null,aud:null,
-  scriptMax:0,scriptsOff:null};
+  scriptsOff:null};
 function readAudioCaps(caps){
   const a=caps.audio||{};
   S.aud={buzzer:a.buzzer===true,track:a.track===true,mp3:a.mp3===true,radio:a.radio===true};
@@ -1350,13 +1616,14 @@ function applyGpioCaps(c){
   opts('pinMatrix',c.matrix||[],false);
   ['pinBattery','pinLdr'].forEach(k=>opts(k,adc,true));
   ['pinBtnLeft','pinBtnSelect','pinBtnRight','pinBuzzer','pinI2cSda','pinI2cScl','pinDfTx',
-   'pinI2sBclk','pinI2sLrclk','pinI2sDout'].forEach(k=>opts(k,drive,true));
+   'pinI2sBclk','pinI2sLrclk','pinI2sDout','pinI2sMclk','pinAmpEnable'].forEach(k=>opts(k,drive,true));
   opts('pinDfRx',usable,true);
   const i2s=dflt.pinI2sBclk>=0?'gpio':'hidden';
-  ['pinI2sBclk','pinI2sLrclk','pinI2sDout'].forEach(k=>{SYSF[k].g=i2s;});
+  ['pinI2sBclk','pinI2sLrclk','pinI2sDout','pinI2sMclk','pinAmpEnable'].forEach(k=>{SYSF[k].g=i2s;});
 }
 const PINKEYS=['pinMatrix','pinBtnLeft','pinBtnSelect','pinBtnRight','pinBattery','pinLdr',
-  'pinBuzzer','pinI2cSda','pinI2cScl','pinDfRx','pinDfTx','pinI2sBclk','pinI2sLrclk','pinI2sDout'];
+  'pinBuzzer','pinI2cSda','pinI2cScl','pinDfRx','pinDfTx','pinI2sBclk','pinI2sLrclk','pinI2sDout',
+  'pinI2sMclk','pinAmpEnable'];
 const REBOOT_KEYS=new Set(['wifiSsid','wifiPass','netStatic','ip','gateway','subnet','dns1','dns2',
   'wifiConnectTimeout','hostname','webPort','mqttEnabled','mqttHost','mqttPort','mqttUser',
   'mqttPass','mqttPrefix','statsInterval','dfplayer','scriptingEnabled'].concat(PINKEYS));
@@ -1407,14 +1674,8 @@ function poller(fn,ms){
 function setStats(d){
   S.stats=d;
   S.scriptsOff=d.scriptingRunning===false;
-  if(d.hostname)S.sysHost=d.hostname;
+  if(d.hostname){S.sysHost=d.hostname;document.title=d.hostname+' – AWTRIX NG';}
   if(d.uid)S.sysUid=d.uid;
-}
-async function loadSystemInfo(){
-  try{
-    const d=(await api('/api/v1/system')).data;
-    if(d.scriptMaxBytes)S.scriptMax=d.scriptMaxBytes;
-  }catch(e){}
 }
 const TABS=[['','dash',viewDash],['apps','appsTab',viewApps],['scripts','scriptsTab',viewScripts],
   ['icons','icons',viewIcons],['editor','editorTab',viewEditor],['audio','audioTab',viewAudio],
@@ -1429,11 +1690,13 @@ function nav(){
   const cur=currentRoute();
   const tabs=S.ap?TABS.filter(([r])=>r==='system')
     :TABS.filter(([r])=>r!=='audio'||anyAudioCap());
-  $('#nav').replaceChildren(...tabs.map(([r,k])=>el('a',{href:'#/'+r,class:cur===r?'on':''},t(k))));
+  $('#nav').setAttribute('aria-label',t('mainnav'));
+  $('#nav').replaceChildren(...tabs.map(([r,k])=>el('a',{href:'#/'+r,class:cur===r?'on':'','aria-current':cur===r?'page':null},t(k))));
 }
 function render(){
   gen++;
   const r=currentRoute();
+  $('#skip').textContent=t('skip');
   nav();
   const view=el('main',{id:'view'});
   $('#view').replaceWith(view);
@@ -1568,7 +1831,7 @@ const WIDGETS={
     const sel=el('select',null);
     const prev=el('div',{class:'tzprev'});
     const detect=el('button',{type:'button',title:t('tzDetectH')},t('tzDetect'));
-    let cur=TZRULE.has(value)?value:'UTC';
+    let cur=(TZRULE.has(value)&&tzFmtFor(value))?value:'UTC';
     const now=new Date();
     const label=n=>(n.includes('/')?n.split('/').slice(1).join('/'):n).replace(/_/g,' ')
       +' · '+tzOffsetStr(tzOffset(n,now));
@@ -1884,6 +2147,15 @@ function viewDash(view){
   const briVal=el('span',{class:'val'},String(S.stats?S.stats.brightness:120));
   bri.addEventListener('input',()=>briVal.replaceChildren(bri.value));
   bri.addEventListener('input',debounce(()=>req('PATCH','/api/v1/settings',{brightness:Number(bri.value)}).catch(e=>toast(e.message,false)),300));
+  const autoLabel=tt(FIELDS.autoBrightness.l);
+  const autoSw=mkSwitch(false,async()=>{
+    setAuto(autoSw.input.checked);
+    try{await req('PATCH','/api/v1/settings',{autoBrightness:autoSw.input.checked});}
+    catch(e){toast(e.message,false);}
+  });
+  autoSw.input.setAttribute('aria-label',autoLabel);
+  const setAuto=on=>{autoSw.input.checked=on;bri.disabled=on;};
+  api('/api/v1/settings').then(({data})=>setAuto(!!data.autoBrightness)).catch(()=>{});
   const powerSw=mkSwitch(S.stats?!!S.stats.matrixPower:true,async()=>{
     try{await req('PATCH','/api/v1/display',{power:powerSw.input.checked});}catch(e){toast(e.message,false);}
   });
@@ -1916,6 +2188,7 @@ function viewDash(view){
     el('div',{class:'hctl'},
       powerSw.node,el('span',{class:'lab'},t('power')),
       el('span',{class:'lab'},t('brightness')),bri,briVal,
+      autoSw.node,el('span',{class:'lab'},autoLabel),
       appBtn('prev','/api/v1/apps/previous',t('prevapp')),
       appBtn('next','/api/v1/apps/next',t('nextapp')),
       iconBtn('bell',t('dismiss'),async()=>{
@@ -1940,8 +2213,10 @@ function viewDash(view){
   view.append(vg,meta);
   function renderVitals(st){
     vg.replaceChildren(...vitalDefs(st).map(vitalTile));
+    const upd=updAvailable(updCached());
     meta.replaceChildren(
-      metaItem(t('version'),st.version),metaItem(t('host'),st.hostname||S.sysHost),metaItem(t('ip'),st.ipAddress),
+      upd?metaItem(t('version'),st.version+' → '+upd.version+' '+t('updavail'),'warn'):metaItem(t('version'),st.version),
+      metaItem(t('host'),st.hostname||S.sysHost),metaItem(t('ip'),st.ipAddress),
       metaItem(t('uptime'),uptimeStr(st.uptimeSeconds)),
       metaItem(t('ram'),fmtBytes(st.freeHeapBytes)),
       ...(st.psramTotalBytes?[metaItem(t('psram'),fmtBytes(st.psramFreeBytes)+' / '+fmtBytes(st.psramTotalBytes))]
@@ -2044,9 +2319,12 @@ async function viewApps(view){
   const offBanner=el('div',{class:'banner',style:'display:none'},'⏸ ',
     el('span',{class:'grow'},t('appsscroff')));
 
-  function closeCfgBtn(box){
-    const b=el('button',{class:'mbtn icon pri',title:t('cfgHide')},'✕');
-    b.addEventListener('click',()=>{box.hidden=true;render();});
+  function cfgBtn(toggle,box){
+    if(!toggle)return null;
+    const label=t(box.hidden?'cfgTitle':'cfgHide');
+    const b=el('button',{class:'mbtn icon cfgbtn'+(box.hidden?'':' pri'),title:label,
+      'aria-label':label,'aria-expanded':String(!box.hidden)},'⚙');
+    b.addEventListener('click',toggle);
     return b;
   }
 
@@ -2131,13 +2409,11 @@ async function viewApps(view){
       }catch(e){toast(e.message,false);}
     };
     const[toggleCfg,cfgBox]=scr?cfgPanel(a):[null,null];
-    const menu=cfgBox&&!cfgBox.hidden
-      ?el('div',{class:'rowmenu'},closeCfgBtn(cfgBox))
-      :rowMenu([
+    const menu=rowMenu([
         inLoop?[t('switchto'),showNow]:null,
         inLoop?[t('dupapp'),duplicate]:null,
-        toggleCfg?[t('cfgTitle'),toggleCfg]:null,
         scr?[t('edit'),()=>{scrPending={name:a.name,error:a.error||null};location.hash='#/scripts';}]:null,
+        (a.meta&&(a.meta.icons||[]).length)?[t('scricons'),()=>grabIcons(a)]:null,
         mode==='off'?[t('activate'),activate]:[t('deactivate'),deactivate],
         (pushed||a.present===false)?[t('del'),remove,true]:null,
       ]);
@@ -2152,10 +2428,18 @@ async function viewApps(view){
        inLoop&&a.skipped?el('span',{class:'chip skip',title:t('chipSkipH')},t('chipSkip')):null,
        a.present===false?el('span',{class:'chip skip',title:t('chipGoneH')},t('chipGone')):null,
        a.error?errBadge(a.name,a.error):null),
+     cfgBtn(toggleCfg,cfgBox),
      menu,
      cfgBox,
     ].forEach(n=>{if(n)row.append(n);});
     return row;
+  }
+
+  async function grabIcons(a){
+    const ids=(a.meta&&a.meta.icons)||[];
+    if(!ids.length)return;
+    try{await installScriptIcons(ids,await installedIconIds());}
+    catch(e){toast(e.message,false);}
   }
 
   function modRow(a){
@@ -2167,8 +2451,9 @@ async function viewApps(view){
        el('span',{class:'nm'},m.name||a.name,el('span',{class:'sub'},bits.join(' · '))),
        el('span',{class:'chip s'},t('chipModule')),
        a.error?errBadge(a.name,a.error):null),
+     cfgBtn(toggleCfg,cfgBox),
      rowMenu([
-       toggleCfg?[t('cfgTitle'),toggleCfg]:null,
+       (a.meta&&(a.meta.icons||[]).length)?[t('scricons'),()=>grabIcons(a)]:null,
        [t('edit'),()=>{scrPending={name:a.name,error:a.error||null};location.hash='#/scripts';}],
      ]),
      cfgBox,
@@ -2262,6 +2547,22 @@ function scriptMeta(src,key){
   const m=new RegExp('^#[ \\t]*@'+key+'[ \\t]+(.+)$','m').exec(src);
   return m?m[1].trim():'';
 }
+const ICONS_MAX=32;
+function scriptIcons(src){
+  const out=[];
+  for(const raw of String(src||'').split(/\r?\n/)){
+    const line=raw.trim();
+    if(!line)continue;
+    if(line[0]!=='#')break;
+    const m=/^#[ \t]*@icons\b[ \t]*(.*)$/i.exec(line);
+    if(!m)continue;
+    for(const id of m[1].split(/[,\s]+/)){
+      if(!/^[A-Za-z0-9_-]{1,32}$/.test(id))continue;
+      if(out.indexOf(id)<0&&out.length<ICONS_MAX)out.push(id);
+    }
+  }
+  return out;
+}
 const scriptName=s=>s.replace(/[^A-Za-z0-9_-]/g,'').slice(0,32);
 function download(filename,data,type){
   const blob=data instanceof Blob?data:new Blob([data],{type:type||'text/plain'});
@@ -2276,13 +2577,16 @@ const crc32=(()=>{const t=new Uint32Array(256);
 function zipStore(entries){
   const enc=new TextEncoder(),parts=[],central=[];let off=0;
   const u16=v=>[v&0xFF,(v>>8)&0xFF],u32=v=>[v&0xFF,(v>>8)&0xFF,(v>>16)&0xFF,(v>>>24)&0xFF];
+  const now=new Date(),year=Math.max(1980,Math.min(2107,now.getFullYear()));
+  const dosTime=(now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1);
+  const dosDate=((year-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate();
   for(const e of entries){
     const name=enc.encode(e.name);
     const data=e.data instanceof Uint8Array?e.data:enc.encode(String(e.data));
     const crc=crc32(data),sz=data.length;
-    parts.push(new Uint8Array([...u32(0x04034b50),...u16(20),...u16(0),...u16(0),...u16(0),...u16(0),
+    parts.push(new Uint8Array([...u32(0x04034b50),...u16(20),...u16(0),...u16(0),...u16(dosTime),...u16(dosDate),
       ...u32(crc),...u32(sz),...u32(sz),...u16(name.length),...u16(0)]),name,data);
-    central.push(new Uint8Array([...u32(0x02014b50),...u16(20),...u16(20),...u16(0),...u16(0),...u16(0),...u16(0),
+    central.push(new Uint8Array([...u32(0x02014b50),...u16(20),...u16(20),...u16(0),...u16(0),...u16(dosTime),...u16(dosDate),
       ...u32(crc),...u32(sz),...u32(sz),...u16(name.length),...u16(0),...u16(0),...u16(0),...u16(0),
       ...u32(0),...u32(off)]),name);
     off+=30+name.length+sz;
@@ -2309,7 +2613,10 @@ async function collectBackup(cats){
     entries.push({name:'config/system.json',data:JSON.stringify(s)});
     entries.push({name:'config/settings.json',data:JSON.stringify((await api('/api/v1/settings')).data)});
     included.push('settings');}
-  if(cats.icons){await grab('/ICONS');included.push('icons');}
+  if(cats.icons){await grab('/ICONS');
+    try{const{data}=await api('/api/v1/icons/origins');if(!Array.isArray(data.icons))throw new Error(t('icoriginfail'));
+      entries.push({name:'config/icon-origins.json',data:JSON.stringify(data)});}catch(e){if(e.status!==404)throw e;}
+    included.push('icons');}
   if(cats.melodies){for(const m of((await api('/api/v1/audio/melodies')).data.melodies||[]))
     entries.push({name:'MELODIES/'+m.name+'.txt',data:m.rtttl});included.push('melodies');}
   if(cats.palettes){await grab('/PALETTES');included.push('palettes');}
@@ -2347,12 +2654,10 @@ window.addEventListener('beforeunload',e=>{if(scrDraft&&scrDraft.dirty)e.prevent
    Device API from ScriptBindings.cpp + Prelude.h; language builtins from
    Berry's be_baselib.c and the modules berry_conf.h enables. Regenerated on
    every build, so adding a binding is all it takes to teach the editor. */
-const BERRY_API=["bar_chart(list, paint?, autoscale?)","circle(cx, cy, r, color)","circle_fill(cx, cy, r, color)","clear(color?)","day()","effect(name, settings?)","epoch_ms()","font(name)","height()","hour()","hsv(h, s, v)","icon(name, x, y)","line(x0, y0, x1, y1, color)","line_chart(list, paint?, autoscale?)","log(value)","minute()","month()","now_ms()","overlay(name, settings?)","pixel(x, y, color)","progress(pct, paint?, bg?)","ramp_text(x, y, str, palette, span?, speed?)","rect(x, y, w, h, color)","rect_fill(x, y, w, h, color)","rgb(r, g, b)","scroll_text(txt, color?, opts?)","second()","text(x, y, txt, color?)","text_ink_width(txt)","text_width(txt)","version()","weekday()","width()","year()","clamp(v, lo, hi)","http.delete(url, cb, opts?)","http.get(url, cb, opts?)","http.patch(url, body, cb, opts?)","http.post(url, body, cb, opts?)","http.put(url, body, cb, opts?)","http.request(method, url, cb, opts?)","max(a, b)","min(a, b)","mqtt.publish(topic, payload)","mqtt.subscribe(topic, cb)","notify(spec)","num(v, dflt?)","re.match(pattern, text)","re.matchall(pattern, text)","re.search(pattern, text)","rotation.next()","rotation.pause()","rotation.previous()","rotation.resume()","rotation.show()","round(v, digits?)","sensor.battery()","sensor.battery_volts()","sensor.humidity()","sensor.light()","sensor.pressure()","sensor.temperature()","settings.apply_case(str)","settings.get(key)","settings.set(key, value)","shared.age(key)","shared.get(key, dflt?)","shared.keys(owner?)","shared.set(key, value)","sound.melody(name)","sound.mp3(name)","sound.play(name)","sound.playing()","sound.rtttl(melody)","sound.sinks()","sound.stop()","sound.track(number)","store.get(k, dflt?)","store.set(k, v)"];
-const BERRY_MODS=["http","mqtt","re","rotation","sensor","settings","shared","sound","store"];
+const BERRY_API=["bar_chart(list, paint?, autoscale?, x0?)","circle(cx, cy, r, color)","circle_fill(cx, cy, r, color)","clear(color?)","day()","effect(name, settings?)","epoch_ms()","font(name)","height()","hour()","hsv(h, s, v)","icon(name, x, y)","line(x0, y0, x1, y1, color)","line_chart(list, paint?, autoscale?, x0?)","log(value)","minute()","month()","now_ms()","overlay(name, settings?)","pixel(x, y, color)","progress(pct, paint?, bg?, x0?)","ramp_text(x, y, str, palette, span?, speed?)","rect(x, y, w, h, color)","rect_fill(x, y, w, h, color)","rgb(r, g, b)","scroll_text(txt, color?, opts?)","second()","text(x, y, txt, color?)","text_ink_width(txt)","text_width(txt)","version()","weekday()","width()","year()","clamp(v, lo, hi)","display.is_on()","display.power(on)","http.delete(url, cb, opts?)","http.get(url, cb, opts?)","http.patch(url, body, cb, opts?)","http.post(url, body, cb, opts?)","http.put(url, body, cb, opts?)","http.request(method, url, cb, opts?)","max(a, b)","min(a, b)","mqtt.publish(topic, payload)","mqtt.subscribe(topic, cb)","music.bands(n?, max?)","music.beat()","music.level()","music.playing()","notify(spec)","num(v, dflt?)","re.match(pattern, text)","re.matchall(pattern, text)","re.search(pattern, text)","rotation.next()","rotation.pause()","rotation.previous()","rotation.resume()","rotation.show()","round(v, digits?)","sensor.battery()","sensor.battery_volts()","sensor.humidity()","sensor.light()","sensor.pressure()","sensor.temperature()","settings.apply_case(str)","settings.get(key)","settings.set(key, value)","shared.age(key)","shared.get(key, dflt?)","shared.keys(owner?)","shared.set(key, value)","sound.melody(name)","sound.mp3(name)","sound.play(name)","sound.playing()","sound.rtttl(melody)","sound.sinks()","sound.stop()","sound.track(number)","store.get(k, dflt?)","store.set(k, v)"];
+const BERRY_MODS=["display","http","mqtt","music","re","rotation","sensor","settings","shared","sound","store"];
 const BERRY_CORE=["assert","bool","call","classname","classof","compile","format","gc","global","input","int","isinstance","issubclass","json","math","module","number","print","real","size","str","strict","string","super","type"];
-const BERRY_MAXBYTES=8192;
 /* BERRY-API-END */
-S.scriptMax=BERRY_MAXBYTES;
 
 const BERRY_KW=new Set(['if','elif','else','while','for','def','end','class','break',
   'continue','return','true','false','nil','var','do','import','as','try','except',
@@ -2499,6 +2804,44 @@ function mkCodeEditor(){
     repaint(){lines=0;schedule();},
   };
 }
+// HUB SCRIPT UPDATES BEGIN — no credentials or device addresses are sent to the Hub.
+function hubScriptOrigin(source){
+  const match=/^# @hub ([A-Za-z0-9]{12}) ([a-f0-9]{64})\r?\n/.exec(source);
+  return match?{id:match[1],sha256:match[2],code:source.slice(match[0].length)}:null;
+}
+function hubScriptHash(source){return iconSha256(new TextEncoder().encode(source));}
+function hubScriptLink(id,code){
+  if(!/^[A-Za-z0-9]{12}$/.test(id))throw new Error(t('suIntegrity'));
+  return '# @hub '+id+' '+hubScriptHash(code)+'\n'+code;
+}
+async function hubScriptRelease(id,part='release'){
+  if(!/^[A-Za-z0-9]{12}$/.test(id)||!['release','source'].includes(part))throw new Error(t('suIntegrity'));
+  const headers={Accept:part==='release'?'application/json':'text/plain'};
+  if(part==='source'){
+    const token=hubToken();
+    if(!token)throw hubDownloadError('hubAuthRequired');
+    headers.Authorization='Bearer '+token;
+  }
+  let r;
+  try{r=await fetch('https://awtrix.de/api/v1/scripts/'+id+'/'+part,
+    {credentials:'omit',redirect:'error',cache:'no-store',headers,signal:AbortSignal.timeout(15000)});}
+  catch(e){throw new Error(t('suOffline'));}
+  if(r.status===401||r.status===403)throw hubDownloadError('hubAuthRejected');
+  if(!r.ok){const e=new Error(t(r.status===404?'suMissing':'suOffline'));e.status=r.status;throw e;}
+  if(part==='source')return r.text();
+  const m=await r.json();
+  if(m.id!==id||!Number.isSafeInteger(m.revision)||m.revision<1||!/^[a-f0-9]{64}$/.test(m.sha256)||typeof m.notes!=='string')throw new Error(t('suIntegrity'));
+  return m;
+}
+async function prepareHubScriptUpdate(previous,release,readSource=hubScriptRelease){
+  const origin=hubScriptOrigin(previous);
+  if(!origin||origin.id!==release.id)throw new Error(t('suChanged'));
+  const code=await readSource(origin.id,'source');
+  if(hubScriptHash(code)!==release.sha256)throw new Error(t('suIntegrity'));
+  return {source:hubScriptLink(origin.id,code),modified:hubScriptHash(origin.code)!==origin.sha256};
+}
+// HUB SCRIPT UPDATES END
+
 function viewScripts(view){
   const ed=mkCodeEditor();
   const nameIn=el('input',{type:'text',placeholder:t('name'),maxlength:'32',spellcheck:'false',
@@ -2510,6 +2853,11 @@ function viewScripts(view){
   const top=el('div',{class:'edtop'});
   const enc=new TextEncoder();
   let onDevice=null;
+  let updateBusy=false,checkGeneration=0;
+  const hubUpdates=new Map();
+  const hubPanel=el('div',{class:'script-hub-panel',hidden:true});
+  let iconsHave=new Set();
+  const editorSource=src=>String(src??'').replace(/\r\n?/g,'\n');
 
   function setStatus(err,name){
     ed.markError(err&&err.line?err.line:0);
@@ -2533,19 +2881,33 @@ function viewScripts(view){
     const c=ed.caret();
     posOut.replaceChildren(t('scrline')+' '+c.line+':'+c.col);
   }
+  function paintIcons(){
+    const want=scriptIcons(ed.value);
+    icoBtn.style.display=want.length?'':'none';
+    if(!want.length)return;
+    const miss=want.filter(id=>!iconsHave.has(id));
+    icoBtn.disabled=!miss.length;
+    const label=miss.length?t('scricons')+' ('+miss.length+')':t('scriconsok');
+    icoBtn.title=label;icoBtn.setAttribute('aria-label',label);
+    icoBtn.replaceChildren(...[icon('image'),
+      miss.length?el('span',{class:'cnt'},String(miss.length)):null].filter(Boolean));
+  }
   function refresh(){
     const n=enc.encode(ed.value).length;
     showPos();
-    byteOut.replaceChildren(n+' / '+S.scriptMax+' B');
-    byteOut.className=n>S.scriptMax?'over':n>S.scriptMax*0.9?'warn':'';
-    saveBtn.disabled=n>S.scriptMax;
+    // The count is for the author to read; whether a save fits is the device's answer to give.
+    byteOut.replaceChildren(n+' B');
+    saveBtn.disabled=updateBusy;
     prevBtn.disabled=!onDevice||ed.value!==onDevice.src||!!onDevice.err;
     const dirty=!onDevice||ed.value!==onDevice.src||nameIn.value!==onDevice.name;
     top.classList.toggle('mod',dirty&&!!ed.value);
+    paintIcons();
+    paintHubUpdate();
     empty.style.display=ed.value?'none':'';
     scrDraft={name:nameIn.value,src:ed.value,dirty,onDevice};
   }
   function load(name,src,err){
+    src=editorSource(src);
     nameIn.value=name;ed.value=src;
     onDevice=err===undefined?null:{name,src,err};
     setStatus(err||null,err===undefined?undefined:name);
@@ -2571,19 +2933,20 @@ function viewScripts(view){
   impBtn.addEventListener('click',()=>fileIn.click());
   fileIn.addEventListener('change',async()=>{
     const f=fileIn.files[0];fileIn.value='';
-    if(!f)return;
+    if(!f||updateBusy)return;
     try{
       const src=await f.text();
+      if(updateBusy)return;
       load(scriptName(scriptMeta(src,'name'))||scriptName(f.name.replace(/\.ax$/i,''))||'Imported',src);
       toast(f.name+' '+t('scrimported'));
     }catch(e){toast(e.message,false);}
   });
   const saveBtn=el('button',{class:'pri ico',title:t('save'),'aria-label':t('save')},icon('save'));
   async function save(){
+    if(updateBusy)return false;
     const name=nameIn.value.trim();
     if(!/^[A-Za-z0-9_-]{1,32}$/.test(name)){toast(t('scrbadname'),false);return false;}
     if(!ed.value.trim()){toast(t('scrempty'),false);return false;}
-    if(enc.encode(ed.value).length>S.scriptMax){toast(t('scrtoobig'),false);return false;}
     const replacing=!!onDevice&&onDevice.name===name;
     const oldName=onDevice&&onDevice.name!==name?onDevice.name:null;
     saveBtn.disabled=true;
@@ -2622,6 +2985,14 @@ function viewScripts(view){
       await req('PUT','/api/v1/apps/active',{name:onDevice.name});
       toast(t('scrpreviewed'));
     }catch(e){toast(e.message,false);}
+  });
+  const icoBtn=el('button',{class:'ico',style:'display:none'},icon('image'));
+  icoBtn.addEventListener('click',async()=>{
+    icoBtn.disabled=true;
+    try{await installScriptIcons(scriptIcons(ed.value),iconsHave);}
+    catch(e){toast(e.message,false);}
+    try{iconsHave=await installedIconIds();}catch(e){}
+    paintIcons();
   });
   const expBtn=el('button',{class:'ico',title:t('export'),'aria-label':t('export')},icon('export'));
   expBtn.addEventListener('click',()=>{
@@ -2752,6 +3123,84 @@ function viewScripts(view){
   let scripts=[],modules=[],selName=null,renaming=false;
   const allFiles=()=>scripts.concat(modules);
   const isDirty=()=>top.classList.contains('mod');
+  async function checkHubUpdates(){
+    if(updateBusy)return;
+    const generation=++checkGeneration;
+    checkHubBtn.disabled=true;checkHubBtn.textContent=t('suChecking');
+    const files=allFiles().slice(),releases=new Map();
+    async function worker(){
+      while(files.length&&generation===checkGeneration&&view.isConnected){
+        const file=files.shift();
+        try{
+          const {text}=await api('/api/v1/apps/script/'+encodeURIComponent(file.name));
+          const origin=hubScriptOrigin(text);
+          if(!origin){hubUpdates.delete(file.name);continue;}
+          if(!releases.has(origin.id))releases.set(origin.id,hubScriptRelease(origin.id));
+          const release=await releases.get(origin.id);
+          if(generation!==checkGeneration)return;
+          hubUpdates.set(file.name,{previous:text,release,modified:hubScriptHash(origin.code)!==origin.sha256,
+            state:release.sha256!==origin.sha256?'suReady':'suCurrent'});
+        }catch(e){if(generation===checkGeneration)hubUpdates.set(file.name,{state:e.status===404?'suMissing':'suOffline'});}
+      }
+    }
+    await Promise.all([worker(),worker()]);
+    if(generation!==checkGeneration||!view.isConnected)return;
+    checkHubBtn.disabled=false;checkHubBtn.textContent=t('suCheck');paintTree();paintHubUpdate();
+  }
+  function paintHubUpdate(){
+    hubPanel.hidden=!onDevice;
+    if(!onDevice)return;
+    const item=hubUpdates.get(onDevice.name);
+    const origin=hubScriptOrigin(onDevice.src);
+    hubPanel.hidden=!origin;
+    if(!origin)return;
+    hubPanel.replaceChildren(el('span',{class:'help'},t(item?.state==='suCurrent'&&item.modified?'suLocal':item?.state||'suUnknown')));
+    if(!item?.release)return;
+    const local=item.modified||ed.value!==onDevice.src;
+    hubPanel.append(el('a',{href:'https://awtrix.de/flow/'+item.release.id,target:'_blank',rel:'noopener'},t('suRevision')+' '+item.release.revision));
+    if(item.state!=='suReady')return;
+    if(item.release.notes)hubPanel.append(el('p',{class:'help',style:'white-space:pre-wrap'},item.release.notes));
+    if(local)hubPanel.append(el('p',{class:'help'},t('suModified')));
+    const name=onDevice.name;
+    const btn=el('button',{class:'pri',disabled:updateBusy,onclick:()=>{
+      if(updateBusy)return;
+      toast(t(local?'suModified':'suConfirm'),false,[
+        {label:t(local?'suCopy':'suUpdate'),pri:true,fn:()=>applyHubUpdate(name,item,local)},
+        {label:t('cancel'),fn:()=>{}}]);
+    }},t(updateBusy?'suBusy':local?'suCopy':'suUpdate'));
+    hubPanel.append(btn);
+  }
+  async function applyHubUpdate(name,item,asCopy){
+    if(updateBusy)return;
+    if(onDevice?.name!==name)return;
+    if(!asCopy&&isDirty()){toast(t('scrunsaved'),false);return;}
+    const editorSource=ed.value,editorName=nameIn.value;
+    updateBusy=true;refresh();
+    try{
+      const {data:caps}=await api('/api/v1/capabilities');
+      if(!caps?.scriptUpdates)throw new Error(t('suFirmware'));
+      const {text:current}=await api('/api/v1/apps/script/'+encodeURIComponent(name));
+      if(current!==item.previous)throw new Error(t('suChanged'));
+      const next=await prepareHubScriptUpdate(current,item.release);
+      if(next.modified&&!asCopy)throw new Error(t('suChanged'));
+      const target=asCopy?freshScriptName(name.slice(0,23)+'-hub'):name;
+      // Existing icons are collision-checked by idbInstall; changed shared icons require
+      // the explicit Icons workflow. A dependency failure never replaces the script.
+      for(const id of scriptIcons(next.source))await idbInstall(id);
+      const {data}=await api('/api/v1/apps/script-update/'+encodeURIComponent(target),
+        {method:'PUT',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({expected_source:asCopy?null:current,source:next.source})});
+      if(data?.error)throw new Error(data.error.message||t('scrbroken'));
+      toast(t('suDone'));
+      if(!asCopy&&onDevice?.name===name){
+        if(ed.value===editorSource&&nameIn.value===editorName){load(name,next.source,null);selName=name;}
+        else{onDevice={name,src:next.source,err:null};refresh();}
+      }
+      // A copy never replaces an unsaved editor draft.
+    }catch(e){toast(e.message,false,e.code==='hubAuthentication'?[connectHubAction()]:undefined);}
+    finally{updateBusy=false;await refreshTree();refresh();}
+  }
+  const checkHubBtn=el('button',{onclick:checkHubUpdates},t('suCheck'));
   async function refreshTree(){
     try{
       const{data}=await api('/api/v1/apps');
@@ -2763,6 +3212,7 @@ function viewScripts(view){
       modules=rows.filter(a=>a.module).sort(byName);
     }catch(e){scripts=[];modules=[];}
     paintTree();
+    checkHubUpdates().catch(()=>{});
   }
   function paintTree(){
     renaming=false;
@@ -2782,6 +3232,7 @@ function viewScripts(view){
   }
   let pendingConfirm=null;
   function guardedSwitch(run){
+    if(updateBusy)return;
     if(!isDirty())return run();
     if(pendingConfirm)pendingConfirm.remove();
     const from=nameIn.value.trim()||t('scrnone');
@@ -2794,6 +3245,7 @@ function viewScripts(view){
   async function reallyOpen(name){
     try{
       const{text}=await api('/api/v1/apps/script/'+encodeURIComponent(name));
+      if(updateBusy)return;
       const s=allFiles().find(x=>x.name===name);
       load(name,text,(s&&s.error)||null);
       selName=name;paintTree();closeTree();
@@ -2824,6 +3276,7 @@ function viewScripts(view){
     const ren=el('button',{title:t('rename'),'aria-label':t('rename')},icon('pen'));
     ren.addEventListener('click',()=>beginRename(s,item));
     const del=armable(el('button',{class:'danger',title:t('del'),'aria-label':t('del')},icon('trash')),async()=>{
+      if(updateBusy)return;
       try{
         await req('DELETE','/api/v1/apps/'+encodeURIComponent(s.name));
         toast(t('deleted'));
@@ -2833,11 +3286,13 @@ function viewScripts(view){
     });
     const fx=el('span',{class:'fx'},ren,del);
     fx.addEventListener('click',e=>e.stopPropagation());
+    const hubState=hubUpdates.get(s.name);
+    if(hubState?.state==='suReady')item.append(el('span',{class:'badge',title:t('suReady')},'↑'));
     item.append(fx);
     return item;
   }
   function beginRename(s,item){
-    if(renaming)return; renaming=true;
+    if(renaming||updateBusy)return; renaming=true;
     let done=false;
     const inp=el('input',{class:'ftren',type:'text',value:s.name,maxlength:'32',spellcheck:'false'});
     item.replaceChildren(icon('file'),inp);
@@ -2915,16 +3370,23 @@ function viewScripts(view){
     el('div',{class:'ftgrp'},t('scriptsTab'),scrCount,newFileBtn),ftlist);
   const modPane=el('div',{class:'ftpane mods',role:'group','aria-label':t('modules')},
     el('div',{class:'ftgrp',title:t('modulesH')},t('modules'),modCount,newModBtn),modlist);
-  const filetree=el('div',{class:'filetree'},treeHead,scrPane,modPane,shpanel);
-  const toggleTree=()=>filetree.classList.toggle('open');
-  const closeTree=()=>filetree.classList.remove('open');
+  const filetree=el('div',{class:'filetree'},treeHead,checkHubBtn,scrPane,modPane,shpanel);
+  function setTreeOpen(open){
+    if(!open&&matchMedia('(max-width:720px)').matches&&
+      [scrPane,modPane,shpanel].some(p=>p.contains(document.activeElement)))treeHead.focus();
+    filetree.classList.toggle('open',open);
+    treeHead.setAttribute('aria-expanded',String(open));
+  }
+  treeHead.setAttribute('aria-expanded','false');
+  const toggleTree=()=>setTreeOpen(!filetree.classList.contains('open'));
+  const closeTree=()=>setTreeOpen(false);
   treeHead.addEventListener('click',toggleTree);
   treeHead.addEventListener('keydown',e=>{
     if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleTree();}});
 
   top.append(nameIn,dirtyDot,el('span',{class:'grow'}),
-    el('div',{class:'sec'},impBtn,expBtn,prevBtn),saveBtn);
-  const edwrap=el('div',{class:'edwrap'},top,ed.node,
+    el('div',{class:'sec'},impBtn,expBtn,icoBtn,prevBtn),saveBtn);
+  const edwrap=el('div',{class:'edwrap'},top,hubPanel,ed.node,
     el('div',{class:'edbar'},posOut,byteOut,el('span',{class:'keys'},t('scrkeys')),stateOut),
     errBox);
   const goBtn=el('button',null,t('scroffGo'));
@@ -2941,6 +3403,7 @@ function viewScripts(view){
   ed.repaint();
   const draft=scrDraft;
   refresh();
+  installedIconIds().then(have=>{iconsHave=have;paintIcons();}).catch(()=>{});
 
   if(scrPending){
     const p=scrPending;scrPending=null;
@@ -3046,7 +3509,6 @@ function systemSettingsPage(view,data){
     if(w)width=w;
     if('panelWidth'in payload)data.panelWidth=payload.panelWidth;
     if('panels'in payload)data.panels=payload.panels;
-    await loadSystemInfo();
   });
 }
 function provisioningPage(view,data){
@@ -3074,6 +3536,7 @@ function systemPage(view,data){
     page.onUpdate.push(()=>paintPanelSize(sysFields,size));
     page.update();
   }
+  hubTokenSection(page);
   const mqSec=page.panel.querySelector('#sec-mqtt');
   if(mqSec){
     const mq=el('div',{class:'badge'});
@@ -3134,6 +3597,41 @@ function paintMqtt(node,m){
   node.className='badge'+(m.state==='connected'?' good':m.state==='offline'?' bad':'');
   node.replaceChildren(parts.join(' · '));
 }
+function hubTokenSection(page){
+  const inp=el('input',{type:'password',autocomplete:'off',spellcheck:'false',value:hubToken(),'aria-label':t('hubTokenLbl')});
+  const clear=el('button',null,t('hubClear'));
+  const open=el('a',{href:hubAccountUrl(),target:'_blank',rel:'noopener'},t('hubGet'));
+  const state=el('div',{class:'badge'});
+  function paint(){
+    const has=!!hubToken();
+    state.className='badge'+(has?' good':'');
+    state.replaceChildren(has?t('hubOn'):t('hubOff'));
+    clear.disabled=!has;
+  }
+  function store(v){
+    try{if(v)localStorage.awtrixHubToken=v;else delete localStorage.awtrixHubToken;}
+    catch(e){inp.value=hubToken();toast(t('hubStorageFail'),false);return false;}
+    paint();return true;
+  }
+  inp.addEventListener('change',()=>{
+    const v=inp.value.trim();
+    inp.value=v;if(store(v))toast(v?t('hubStored'):t('hubCleared'));
+  });
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();});
+  clear.addEventListener('click',()=>{inp.value='';if(store(''))toast(t('hubCleared'));});
+  paint();
+  const section=page.section('hub',t('hubSection'),t('hubSectionH'),[
+    actionRow(t('hubTokenLbl'),t('hubTokenH'),[state,inp,clear]),
+    actionRow(t('hubGetLbl'),t('hubGetH'),[open]),
+  ]);
+  if(focusHubSettings){
+    focusHubSettings=false;
+    requestAnimationFrame(()=>{
+      section.scrollIntoView?.({behavior:'smooth',block:'start'});
+      inp.focus();
+    });
+  }
+}
 function actionRow(label,help,ctls,key){
   return el('div',{class:'frow'},
     el('div',{class:'lab'},
@@ -3148,6 +3646,67 @@ function progressRow(){
     show(){fill.style.width='0%';row.style.display='';},
     hide(){row.style.display='none';},
     set(p){fill.style.width=(p*100).toFixed(1)+'%';}};
+}
+const RELEASES_API='https://api.github.com/repos/Blueforcer/awtrix-ng/releases/latest';
+const UPD_KEY='awtrixUpdate';
+const UPD_TTL_MS=6*3600*1000;
+const verParts=v=>String(v||'').replace(/^v/,'').split('.').map(n=>parseInt(n,10)||0);
+function verNewer(a,b){
+  const x=verParts(a),y=verParts(b);
+  for(let i=0;i<3;i++)if((x[i]||0)!==(y[i]||0))return(x[i]||0)>(y[i]||0);
+  return false;
+}
+function updCached(){
+  try{const c=JSON.parse(localStorage.getItem(UPD_KEY)||'null');if(c&&Date.now()-c.at<UPD_TTL_MS)return c;}catch(e){}
+  return null;
+}
+async function updCheck(force){
+  if(!force){const c=updCached();if(c)return c;}
+  if(navigator.onLine===false)throw new Error(t('updfail'));
+  const r=await fetch(RELEASES_API,{headers:{Accept:'application/vnd.github+json'},cache:'no-store',signal:AbortSignal.timeout(10000)});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const j=await r.json();
+  const assets={};
+  for(const a of j.assets||[])if(a&&a.name)assets[a.name]=a.browser_download_url;
+  const c={at:Date.now(),version:String(j.tag_name||'').replace(/^v/,''),usable:!j.draft&&!j.prerelease,
+    published:String(j.published_at||'').slice(0,10),notes:j.html_url||'',assets};
+  try{localStorage.setItem(UPD_KEY,JSON.stringify(c));}catch(e){}
+  return c;
+}
+function updAvailable(c){
+  const run=S.stats&&S.stats.version;
+  return c&&c.usable&&run&&verNewer(c.version,run)?c:null;
+}
+function updateRow(){
+  const chkBtn=el('button',{'aria-label':t('updchk')},t('updchk'));
+  const dl=el('a',{id:'upd-dl',href:'#',target:'_blank',rel:'noopener'},t('upddl'));
+  const notes=el('a',{id:'upd-notes',href:'#',target:'_blank',rel:'noopener'},t('updnotes'));
+  const status=el('div',{id:'upd-status',class:'help'},'');
+  const help=el('div',{class:'help'},'');
+  dl.hidden=true;notes.hidden=true;
+  async function show(force){
+    chkBtn.disabled=true;status.textContent=t('updchecking');help.textContent='';
+    try{
+      const avail=updAvailable(await updCheck(force));
+      const img=S.stats&&S.stats.updateImage;
+      if(avail){
+        status.textContent=t('updnew').replace('{v}',avail.version)+(avail.published?' ('+avail.published+')':'');
+        dl.hidden=!(img&&avail.assets[img]);
+        if(!dl.hidden){dl.href=avail.assets[img];help.textContent=t('updhelp');}
+        notes.hidden=!avail.notes;
+        if(!notes.hidden)notes.href=avail.notes;
+      }else{
+        status.textContent=t('updcur').replace('{v}',(S.stats&&S.stats.version)||'');
+        dl.hidden=true;notes.hidden=true;
+      }
+    }catch(e){status.textContent=t('updfail');dl.hidden=true;notes.hidden=true;}
+    chkBtn.disabled=false;
+  }
+  chkBtn.addEventListener('click',()=>show(true));
+  show(false);
+  return el('div',{class:'frow'},
+    el('div',{class:'lab'},el('div',{class:'l1'},el('b',null,t('update'))),status,help),
+    el('div',{class:'ctl'},[chkBtn,dl,notes]));
 }
 function maintenanceSection(page){
   const fwIn=el('input',{type:'file',accept:'.bin'});
@@ -3179,6 +3738,7 @@ function maintenanceSection(page){
   });
   const ver=S.stats&&S.stats.version;
   page.section('maint',t('maint'),t('mainthelp'),[
+    updateRow(),
     actionRow(t('fwfile'),ver?t('version')+' '+ver:null,[fwBtn,fwIn]),
     fw.row,
     actionRow(t('reboot'),null,[rebootBtn]),
@@ -3195,10 +3755,14 @@ function backupSection(page,allowBackup){
     const checks={};
     const avail=BK_CATS.filter(([id])=>
       (id!=='melodies'||hasSink('buzzer'))&&(id!=='mp3'||hasSink('mp3')));
-    const boxes=avail.map(([id,lbl])=>{
-      const cb=el('input',{type:'checkbox'});checks[id]=cb;
+    const all=el('input',{type:'checkbox'});
+    const syncAll=()=>{const n=avail.filter(([id])=>checks[id].checked).length;
+      all.checked=n===avail.length;all.indeterminate=n>0&&n<avail.length;};
+    const boxes=[el('label',{style:'display:inline-flex;align-items:center;gap:.3rem;margin-right:1rem'},all,t('bkAll')),...avail.map(([id,lbl])=>{
+      const cb=el('input',{type:'checkbox'});checks[id]=cb;cb.addEventListener('change',syncAll);
       return el('label',{style:'display:inline-flex;align-items:center;gap:.3rem;margin-right:1rem'},cb,t(lbl));
-    });
+    })];
+    all.addEventListener('change',()=>{avail.forEach(([id])=>{checks[id].checked=all.checked;});all.indeterminate=false;});
     const dl=el('button',{class:'pri'},t('bkDownload'));
     dl.addEventListener('click',async()=>{
       const cats={};let any=false;
@@ -3288,86 +3852,401 @@ async function delFile(path){
 }
 function viewIcons(view){
   const iconsGrid=el('div',{class:'grid-icons'});
-  const storSlot=el('div',{class:'wide'});
+  const meter=el('div',{class:'st'});
+  const ownTab=el('button',null,t('icown'));
+  const ownSearch=el('input',{type:'search',placeholder:t('icsearch'),'aria-label':t('icsearch')});
+  const ownInfo=el('span',{class:'help',role:'status'});
+  let ownFiles=[],reloadVersion=0;
+  const add=el('button',{type:'button',onclick:()=>selectPane(1,true)},t('icadd'));
+  const upload=uploadZone('/ICONS','.png,.jpg,.jpeg,.gif',t('icdrop'),reload,true);
+  const drop=upload.querySelector('.drop');
+  drop.setAttribute('role','button');drop.tabIndex=0;
+  drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();drop.click();}});
+  const panes=[[ownTab,el('div',null,
+    el('div',{class:'icons-toolbar'},ownSearch,ownInfo,add),iconsGrid)],
+    [el('button',null,t('icadd')),el('div',{hidden:'hidden'},el('div',{class:'icons-add'},
+      el('section',null,el('h3',null,t('icupload')),el('p',{class:'ghelp'},t('icuploadhelp')),upload),
+      el('section',{class:'hub-source'},el('h3',null,t('ichub')),el('p',{class:'ghelp'},t('ichubhelp')),
+        el('a',{class:'pri',href:iconDbUrl(),target:'_blank',rel:'noopener'},t('ichubopen')+' →')),
+      el('section',null,el('h3',null,t('iccreate')),el('p',{class:'ghelp'},t('iccreatehelp')),
+        el('a',{href:'#/editor'},t('editorTab')+' →'))))]];
+  function selectPane(index,focus=false){
+    panes.forEach(([tab,pane],i)=>{
+      tab.classList.toggle('on',i===index);tab.setAttribute('aria-selected',String(i===index));
+      tab.tabIndex=i===index?0:-1;pane.hidden=i!==index;
+    });
+    if(focus)panes[index][0].focus();
+  }
+  panes.forEach(([tab,pane],i)=>{
+    tab.id='icons-tab-'+i;tab.setAttribute('role','tab');tab.setAttribute('aria-controls','icons-pane-'+i);
+    pane.id='icons-pane-'+i;pane.setAttribute('role','tabpanel');pane.setAttribute('aria-labelledby',tab.id);
+    tab.addEventListener('click',()=>selectPane(i));
+    tab.addEventListener('keydown',e=>{
+      const next=e.key==='ArrowRight'?(i+1)%panes.length:e.key==='ArrowLeft'?(i+panes.length-1)%panes.length:e.key==='Home'?0:e.key==='End'?panes.length-1:null;
+      if(next!==null){e.preventDefault();selectPane(next,true);}
+    });
+  });
+  selectPane(0);
+  function paintOwn(){
+    const needle=ownSearch.value.trim().toLowerCase();
+    const files=ownFiles.filter(f=>f.name.toLowerCase().includes(needle));
+    ownInfo.textContent=needle?files.length+' '+t('of')+' '+ownFiles.length:'';
+    iconsGrid.replaceChildren(...(files.length?files.map(iconTile):[
+      el('div',{class:'empty'},t(ownFiles.length?'idbnone':'icnone'),
+        el('button',{type:'button',onclick:()=>{if(ownFiles.length){ownSearch.value='';paintOwn();ownSearch.focus();}else selectPane(1,true);}},
+          t(ownFiles.length?'icclear':'icadd')))]));
+  }
+  ownSearch.addEventListener('input',()=>paintOwn());
   async function reload(){
+    const version=++reloadVersion;
     try{
       const{data}=await api('/api/v1/files?dir='+encodeURIComponent('/ICONS'),{cache:'no-store'});
       const files=(data.files||[]).sort((a,b)=>a.name.localeCompare(b.name));
-      storSlot.replaceChildren(storageCard(data));
-      iconsGrid.replaceChildren(...files.map(f=>iconTile(f)));
-      if(!files.length)iconsGrid.replaceChildren(el('div',{class:'empty'},t('nofiles')));
+      if(version!==reloadVersion)return;
+      ownFiles=files.map(f=>({...f,state:'checking'}));
+      const used=data.usedBytes||0,total=data.totalBytes||1;
+      meter.replaceChildren(el('div',{class:'bar'},el('i',{class:used/total>0.9?'hot':'',
+        style:'width:'+(used/total*100).toFixed(1)+'%'})),
+        el('span',null,t('icstorage')+': '+fmtBytes(used)+' '+t('of')+' '+fmtBytes(total)));
+      ownTab.replaceChildren(t('icown')+' ('+files.length+')');
+      paintOwn();
+      const checked=await iconInventory(files);
+      if(version!==reloadVersion)return;
+      ownFiles=checked;paintOwn();
     }catch(e){toast(e.message,false);}
   }
   function iconTile(f){
     const base=f.name.replace(/\.[^.]+$/,'');
-    const img=el('img',{src:'/ICONS/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev,alt:f.name,loading:'lazy'});
-    const pv=el('button',{title:t('preview'),'aria-label':t('preview')},icon('eye'));
-    pv.addEventListener('click',async()=>{
-      try{await post('/api/v1/notifications',{icon:base,text:' '+base,durationMs:3000});toast(t('shown'));}
-      catch(e){toast(e.message,false);}
+    const originKey=({modified:'icmodified',checking:'icchecking',unknown:'icunknown'})[f.state]||null;
+    const ft=el('div',{class:'ft'},el('span',{class:'nm',title:f.name},base),
+      el('span',{class:'sz'},fmtBytes(f.size)),originKey?el('span',{class:'icon-origin','data-state':f.state},t(originKey)):null);
+    const pw=el('div',{class:'pw'},
+      el('img',{src:'/ICONS/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev,alt:f.name,loading:'lazy'}),
+      f.state==='hub'?el('span',{class:'icon-hub-badge','data-state':'hub',title:t('icfromhub')},'Hub'):null);
+    const open=el('button',{title:t('more'),'aria-label':t('more')+': '+base,'aria-haspopup':'menu','aria-expanded':'false'},'⋯');
+    const shut=()=>{const m=pw.querySelector('.tmenu');if(m)m.remove();open.setAttribute('aria-expanded','false');};
+    const show=el('button',{type:'button',class:'icon-show','aria-label':t('icshow')+': '+base},t('icshow'));
+    show.addEventListener('click',async()=>{
+      show.disabled=true;
+      try{await post('/api/v1/notifications',{icon:base,text:' '+base,durationMs:3000,stack:false});toast(t('shown'));}
+      catch(e){toast(e.message,false);}finally{show.disabled=false;}
     });
-    const ed=el('button',{title:t('edit'),'aria-label':t('edit')},icon('pen'));
-    ed.addEventListener('click',()=>{pendingEditIcon=f.name;location.hash='#/editor';});
-    const del=armable(el('button',{class:'danger',title:t('del'),'aria-label':t('del')},icon('trash')),async()=>{
-      try{await delFile('/ICONS/'+f.name);toast(t('deleted'));reload();}catch(e){toast(e.message,false);}
+    // A floating menu cannot leave a tile - .tile clips its overflow - so the
+    // icon actions stay in one menu that covers the artwork.
+    open.addEventListener('click',()=>{
+      if(pw.querySelector('.tmenu'))return shut();
+      document.querySelectorAll('.icons-page .tmenu').forEach(m=>{const b=m.closest('.tile').querySelector('[aria-expanded]');if(b)b.setAttribute('aria-expanded','false');m.remove();});
+      open.setAttribute('aria-expanded','true');
+      const item=(label,fn,danger)=>{
+        const b=el('button',danger?{class:'danger',role:'menuitem'}:{role:'menuitem'},label);
+        if(danger)armable(b,()=>{shut();fn();});
+        else b.addEventListener('click',()=>{shut();fn();});
+        return b;
+      };
+      const menu=el('div',{class:'tmenu',role:'menu'},
+        item(t('edit'),()=>{pendingEditIcon=f.name;location.hash='#/editor';}),
+        f.state==='hub'?el('a',{href:iconOriginHub(f.origin.hub)+encodeURIComponent(f.origin.slug),target:'_blank',rel:'noopener',role:'menuitem'},t('icviewhub')):
+          item(t(f.state==='modified'?'icvariant':'icsend'),()=>shareRow(f,base,ft,reload)),
+        ...(f.origin?[item(t('icreload'),()=>{
+          const run=async(replace=false)=>{try{await reloadHubIcon(f,{replace});toast(t('icreloaded'));reload();}
+            catch(e){toast(e.message,false,e.code==='iconConflict'?[{label:t('ickeep'),fn:()=>{}},{label:t('icreplace'),fn:()=>run(true)}]:e.code==='hubAuthentication'?[connectHubAction()]:undefined);}};
+          run();
+        })]:[]),
+        el('a',{href:'/ICONS/'+encodeURIComponent(f.name),download:f.name,role:'menuitem'},t('icdownload')),
+        item(t('del'),async()=>{
+          try{await delFile('/ICONS/'+f.name);toast(t('deleted'));reload();}catch(e){toast(e.message,false);}
+        },true));
+      pw.append(menu);
+      menu.querySelector('[role="menuitem"]')?.focus();
     });
-    return el('div',{class:'tile'},
-      el('div',{class:'pw'},img,el('div',{class:'acts'},pv,ed,del)),
-      el('div',{class:'ft'},el('span',{class:'nm',title:f.name},base),
-        el('span',{class:'sz'},fmtBytes(f.size))));
+    const tile=el('div',{class:'tile'},pw,ft,el('div',{class:'icon-tile-actions'},show,el('div',{class:'acts'},open)));
+    tile.addEventListener('keydown',e=>{if(e.key==='Escape'&&pw.querySelector('.tmenu')){shut();open.focus();}});
+    return tile;
   }
-  view.append(storSlot);
-  view.append(el('div',{class:'card wide'},
-    el('h2',null,t('icons')),el('div',{class:'ghelp'},t('iconshelp')),
-    uploadZone('/ICONS','.png,.jpg,.jpeg,.gif','⬆ '+t('upload')+' (.png / .jpg / .gif, 8×8)',reload,true),
-    lametricCard(reload),
-    iconsGrid));
+  view.append(el('div',{class:'card wide icons-page'},
+    el('div',{class:'ihdr'},el('div',null,el('h2',null,t('icons')),el('p',{class:'ghelp'},t('icintro'))),meter),
+    el('div',{class:'segbar',role:'tablist','aria-label':t('icons')},...panes.map(p=>p[0])),
+    ...panes.map(p=>p[1])));
   reload();
 }
-function lametricCard(onDone){
-  const idIn=el('input',{type:'text',placeholder:t('lamid'),inputmode:'numeric'});
-  const getBtn=el('button',null,t('fetch'));
-  const saveBtn=el('button',{class:'pri',disabled:true},t('lamsave'));
-  const prev=el('img',{class:'prev',style:'display:none'});
-  const note=el('div',{class:'help'},navigator.onLine===false?t('lamneed'):'');
-  let blob=null,ext='jpg';
-  getBtn.addEventListener('click',async()=>{
-    const id=idIn.value.trim().replace(/\D/g,'');
-    if(!id)return;
-    getBtn.disabled=true;saveBtn.disabled=true;
+// Swaps a tile's footer into a name field, so submitting needs no dialog.
+function descriptiveIconName(name){return /\p{L}/u.test(String(name||'').trim());}
+function shareRow(f,base,ft,onDone){
+  const saved=[...ft.childNodes];
+  const nameIn=el('input',{type:'text',value:descriptiveIconName(base)?base:'',placeholder:t('icpubexample'),'aria-label':t('icpubname'),required:true});
+  const send=el('button',{class:'pri'},t('idbsend'));
+  const back=el('button',{title:t('cancel'),'aria-label':t('cancel')},'✕');
+  const restore=()=>{ft.classList.remove('share');ft.replaceChildren(...saved);};
+  back.addEventListener('click',restore);
+  nameIn.addEventListener('keydown',e=>{if(e.key==='Enter')send.click();else if(e.key==='Escape')restore();});
+  send.addEventListener('click',async()=>{
+    if(!descriptiveIconName(nameIn.value)){nameIn.setAttribute('aria-invalid','true');nameIn.focus();toast(t('idbe_descriptiveNameRequired'),false);return;}
+    send.disabled=true;
     try{
-      const r=await fetch('https://developer.lametric.com/content/apps/icon_thumbs/'+encodeURIComponent(id));
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      const raw=await r.blob();
-      ext='gif';
-      if(raw.type==='image/gif')blob=raw;
-      else{
-        const bmp=await createImageBitmap(raw);
-        const big=bmp.width>ICON_MAX||bmp.height>ICON_MAX;
-        blob=await imgToGif(bmp,big?8:0,big?8:0);
-      }
-      prev.src=URL.createObjectURL(blob);prev.style.display='';
-      saveBtn.disabled=false;
-    }catch(e){toast(e.message,false);}
-    getBtn.disabled=false;
+      const original=await readIconBlob(f.name);
+      const submission=/\.gif$/i.test(f.name)?original:await imgToGif(original);
+      const d=await idbSubmit(submission,nameIn.value.trim(),f.origin&&f.origin.hub===iconApiUrl()?f.origin.slug:null);
+      try{await saveIconOrigin(f.name,d.slug,await iconBlobHash(original),iconApiUrl());}catch(e){toast(t('icoriginfail'),false);}
+      restore();
+      toast(t(d.status==='existing'?'icexists':'idbdone'),true,[{label:t('idbopen'),pri:true,fn:()=>window.open(d.pr,'_blank','noopener')},
+        {label:t('close'),fn:()=>{}}]);
+      onDone&&onDone();
+    }catch(e){
+      send.disabled=false;
+      // This branch is the normal outcome here, not an edge case: the page is
+      // served from the clock, so the Hub session cookie is cross-site and never
+      // travels with the POST. Publishing happens in the Hub editor, and saying
+      // only 'error' would send people looking for a fault that is not there.
+      if(e.code==='notLoggedIn'){
+        const has=!!hubToken();
+        toast(t(has?'idbauthbad':'idbauth'),false,[
+          e.pr?{label:t('idbsignin'),pri:!has,fn:()=>window.open(e.pr,'_blank','noopener')}:null,
+          {label:t('hubConnect'),pri:has,fn:goToHubSettings},
+          {label:t('close'),fn:()=>{}},
+        ].filter(Boolean));
+      }else toast(e.slug?t('idbdup')+' '+e.slug:e.message,false);
+    }
   });
-  saveBtn.addEventListener('click',async()=>{
-    const id=idIn.value.trim().replace(/\D/g,'');
-    saveBtn.disabled=true;
-    try{
-      await uploadFile(blob,'/ICONS',id+'.'+ext,null);
-      await dropStale('/ICONS',id+'.jpg',id+'.'+ext);
-      toast(id+'.'+ext+' '+t('uploaded'));onDone();
-    }catch(e){toast(e.message,false);saveBtn.disabled=false;}
-  });
-  if(navigator.onLine===false){idIn.disabled=true;getBtn.disabled=true;}
-  idIn.classList.add('grow');
-  return el('div',{class:'lam'},
-    el('div',{class:'orsep'},el('span',null,t('lametric'))),
-    el('div',{class:'ghelp'},t('lamhelp')),
-    el('div',{class:'row'},idIn,getBtn,prev,saveBtn),note);
+  const terms=el('a',{class:'hint',href:hubTermsUrl(),target:'_blank',rel:'noopener'},t('idbterms'));
+  ft.classList.add('share');
+  nameIn.addEventListener('input',()=>nameIn.removeAttribute('aria-invalid'));
+  ft.replaceChildren(nameIn,send,back,el('span',{class:'hint'},t('icpubnamehelp')),terms);
+  nameIn.focus();nameIn.select();
 }
-const PISKEL_URL_DEFAULT='https://blueforcer.github.io/awtrix-piskel/';
+async function iconAsSubmission(name){
+  const r=await fetch('/ICONS/'+encodeURIComponent(name));
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const blob=await r.blob();
+  return /\.gif$/i.test(name)?blob:imgToGif(blob);
+}
+// Catalogue and submission live under one prefix on the AWTRIX Hub; the two
+// constants stay separate so a test hub can take submissions while the icons
+// still come from production. The localStorage keys below override both and are
+// the only lever if the Hub ever moves hostname.
+const ICONDB_URL_DEFAULT='https://awtrix.de/icons/';
+const ICONAPI_URL_DEFAULT='https://awtrix.de/icons/';
+function cfgUrl(key,def){
+  let u=def;
+  try{u=localStorage[key]||def;}catch(e){}
+  return u.endsWith('/')?u:u+'/';
+}
+const iconDbUrl=()=>cfgUrl('awtrixIconDbUrl',ICONDB_URL_DEFAULT);
+const iconApiUrl=()=>cfgUrl('awtrixIconApiUrl',ICONAPI_URL_DEFAULT);
+const iconOriginHub=hub=>hub==='https://hub.flows.blueforcer.de/icons/'&&iconDbUrl()===ICONDB_URL_DEFAULT?ICONDB_URL_DEFAULT:hub;
+let idbCache=null;
+async function idbLoad(){
+  if(!idbCache){
+    const r=await fetch(iconDbUrl()+'index.json',{cache:'no-cache',signal:AbortSignal.timeout(10000)});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    idbCache=(d.icons||[]).map(row=>({slug:row[0],name:row[1]||row[0],w:row[2],h:row[3],
+      frames:row[4],bytes:row[5],key:(row[0]+' '+(row[1]||'')).toLowerCase()}));
+  }
+  return idbCache;
+}
+// No 'icons/' segment: that came from the GitHub Pages directory layout and
+// would ask the Hub for /icons/icons/<slug>.gif, which is a 404 - the Hub
+// serves the bytes straight under the catalogue prefix.
+const idbBytesUrl=(slug,ext)=>iconDbUrl()+encodeURIComponent(slug)+'.'+ext;
+function hubDownloadError(key){const error=new Error(t(key));error.code='hubAuthentication';return error;}
+async function hubDownloadFile(value){
+  const url=new URL(value),configured=new URL(iconApiUrl());
+  // Provenance files may contain arbitrary hosts. Never forward our token there.
+  if(url.protocol!=='https:'||url.origin!==configured.origin||url.username||url.password)
+    throw new Error(t('hubWrongHost'));
+  const token=hubToken();
+  if(!token)throw hubDownloadError('hubAuthRequired');
+  let response;
+  try{response=await fetch(url.href,{headers:{Authorization:'Bearer '+token},credentials:'omit',
+    redirect:'error',cache:'no-store',signal:AbortSignal.timeout(15000)});}
+  catch(e){throw new Error(t('idbfail'));}
+  if(response.status===401||response.status===403)throw hubDownloadError('hubAuthRejected');
+  return response;
+}
+let focusHubSettings=false;
+function goToHubSettings(){
+  focusHubSettings=true;
+  const section=$('#sec-hub');
+  if(currentRoute()==='system'&&section){
+    focusHubSettings=false;
+    section.scrollIntoView?.({behavior:'smooth',block:'start'});
+    section.querySelector('input')?.focus();
+    return;
+  }
+  location.hash='#/system';
+}
+function connectHubAction(){return{label:t('hubConnect'),fn:goToHubSettings};}
+async function idbFetch(slug){
+  let last=404;
+  for(const ext of ['gif','jpg']){
+    const r=await hubDownloadFile(idbBytesUrl(slug,ext));
+    if(r.ok)return{blob:await r.blob(),ext};
+    last=r.status;
+    if(r.status!==404)break;
+  }
+  throw new Error(t(last===404?'hubIconUnavailable':'hubDownloadFailed'));
+}
+// WebCrypto is not available on an HTTP device origin. This small SHA-256
+// fallback uses the same bytes on HTTP and HTTPS; it never hashes GIF metadata
+// as a substitute for the Hub's decoded-content fingerprint.
+function iconSha256(bytes){
+  const k=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  const h=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const padded=new Uint8Array(Math.ceil((bytes.length+9)/64)*64);padded.set(bytes);padded[bytes.length]=128;
+  const v=new DataView(padded.buffer);v.setUint32(padded.length-8,Math.floor(bytes.length/0x20000000));v.setUint32(padded.length-4,bytes.length*8);
+  const w=new Uint32Array(64),rr=(x,n)=>(x>>>n)|(x<<(32-n));
+  for(let offset=0;offset<padded.length;offset+=64){
+    for(let i=0;i<16;i++)w[i]=v.getUint32(offset+i*4);
+    for(let i=16;i<64;i++){const x=w[i-15],y=w[i-2];w[i]=w[i-16]+(rr(x,7)^rr(x,18)^(x>>>3))+w[i-7]+(rr(y,17)^rr(y,19)^(y>>>10));}
+    let[a,b,c,d,e,f,g,j]=h;
+    for(let i=0;i<64;i++){const t1=(j+(rr(e,6)^rr(e,11)^rr(e,25))+((e&f)^(~e&g))+k[i]+w[i])>>>0;
+      const t2=((rr(a,2)^rr(a,13)^rr(a,22))+((a&b)^(a&c)^(b&c)))>>>0;
+      j=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}
+    [a,b,c,d,e,f,g,j].forEach((n,i)=>h[i]=(h[i]+n)>>>0);
+  }
+  return h.map(n=>n.toString(16).padStart(8,'0')).join('');
+}
+async function iconBlobHash(blob){
+  const bytes=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(new Uint8Array(r.result));r.onerror=reject;r.readAsArrayBuffer(blob);});
+  return iconSha256(bytes);
+}
+function validIconOrigin(o){
+  if(!o||!/^[-A-Za-z0-9_]{1,32}\.(gif|jpg)$/.test(o.name)||!/^[-a-z0-9_]{1,32}$/.test(o.slug)||!/^[a-f0-9]{64}$/.test(o.sha256))return false;
+  try{const u=new URL(o.hub);return u.protocol==='https:'&&!u.username&&!u.password&&!u.search&&!u.hash&&u.pathname.endsWith('/');}catch(e){return false;}
+}
+async function saveIconOrigin(name,slug,sha256,hub=iconDbUrl()){
+  const origin={name,hub:new URL(hub,location.href).href,slug,sha256};
+  if(!validIconOrigin(origin))throw new Error(t('icoriginfail'));
+  await req('PUT','/api/v1/icons/origins',origin);return origin;
+}
+async function readIconBlob(name){
+  const r=await fetch('/ICONS/'+encodeURIComponent(name),{cache:'no-store'});
+  if(!r.ok)throw new Error('HTTP '+r.status);return r.blob();
+}
+async function hubIconMetadata(slug,hub=iconDbUrl()){
+  let r;
+  try{r=await fetch(hub+encodeURIComponent(slug)+'/metadata.json',{cache:'no-cache',signal:AbortSignal.timeout(10000)});}
+  catch(e){throw new Error(t('idbfail'));}
+  if(!r.ok)throw new Error(t(r.status===404?'hubIconUnavailable':'idbfail'));
+  const m=await r.json();if(m.slug!==slug||!/^[a-f0-9]{64}$/.test(m.sha256))throw new Error(t('idbfail'));return m;
+}
+async function iconInventory(files){
+  if(!files){const{data}=await api('/api/v1/files?dir=%2FICONS',{cache:'no-store'});files=data.files||[];}
+  let origins=[],originsReadable=true;
+  try{const{data}=await api('/api/v1/icons/origins',{cache:'no-store'});
+    if(!Array.isArray(data.icons))throw new Error(t('icoriginfail'));origins=data.icons.filter(validIconOrigin);
+  }catch(e){originsReadable=e.status===404;}
+  const records=new Map(origins.map(o=>[o.name,o]));
+  let catalogue=[];
+  if(files.some(f=>!records.has(f.name))&&navigator.onLine!==false)try{catalogue=await idbLoad();}catch(e){}
+  const published=new Set(catalogue.map(r=>r.slug));
+  const out=[];
+  // Sequential reads keep the small device's single HTTP connection responsive.
+  for(const f of files){
+    const item={...f,state:originsReadable?'local':'unknown',origin:records.get(f.name)||null,sha256:null};
+    try{
+      item.sha256=await iconBlobHash(await readIconBlob(f.name));
+      if(item.origin)item.state=item.sha256===item.origin.sha256?'hub':'modified';
+      else{const slug=f.name.replace(/\.[^.]+$/,'');
+        if(published.has(slug))try{
+          const m=await hubIconMetadata(slug);
+          if(m.sha256===item.sha256){item.origin=await saveIconOrigin(f.name,slug,item.sha256);item.state='hub';}
+        }catch(e){}
+      }
+    }catch(e){item.state='unknown';}
+    out.push(item);
+  }
+  return out;
+}
+async function idbInstall(slug,{replace=false}={}){
+  const{blob,ext}=await idbFetch(slug),hash=await iconBlobHash(blob);
+  const{data}=await api('/api/v1/files?dir=%2FICONS',{cache:'no-store'});
+  const existing=(data.files||[]).filter(f=>f.name.replace(/\.[^.]+$/,'')===slug);
+  let same=false;
+  for(const f of existing){const localHash=await iconBlobHash(await readIconBlob(f.name));
+    if(localHash!==hash&&!replace){const e=new Error(t('icconflict')+' '+slug);e.code='iconConflict';throw e;}
+    if(f.name===slug+'.'+ext&&localHash===hash)same=true;
+  }
+  if(!same)await uploadFile(blob,'/ICONS',slug+'.'+ext,null);
+  await dropStale('/ICONS',slug+'.'+(ext==='gif'?'jpg':'gif'),slug+'.'+ext);
+  try{await saveIconOrigin(slug+'.'+ext,slug,hash);}catch(e){toast(t('icoriginfail'),false);}
+  return ext;
+}
+async function reloadHubIcon(file,{replace=false}={}){
+  const origin=file.origin;
+  if(!validIconOrigin(origin))throw new Error(t('idbfail'));
+  const sourceHub=iconOriginHub(origin.hub);
+  const metadata=await hubIconMetadata(origin.slug,sourceHub);
+  if(!new RegExp('^'+origin.slug+'\\.(gif|jpg)$').test(metadata.filename||''))throw new Error(t('idbfail'));
+  const r=await hubDownloadFile(sourceHub+encodeURIComponent(metadata.filename));
+  if(!r.ok)throw new Error(t(r.status===404?'hubIconUnavailable':'hubDownloadFailed'));
+  const blob=await r.blob(),hash=await iconBlobHash(blob);
+  if(hash!==metadata.sha256)throw new Error(t('idbfail'));
+  // Re-read immediately before replacing: another editor may have changed it.
+  const current=await iconBlobHash(await readIconBlob(file.name));
+  if(current!==origin.sha256&&current!==hash&&!replace){const e=new Error(t('icconflict')+' '+file.name);e.code='iconConflict';throw e;}
+  const ext=metadata.filename.split('.').pop(),name=file.name.replace(/\.[^.]+$/,'')+'.'+ext;
+  if(current!==hash||name!==file.name)await uploadFile(blob,'/ICONS',name,null);
+  await dropStale('/ICONS',name.replace(/\.[^.]+$/,ext==='gif'?'.jpg':'.gif'),name);
+  await saveIconOrigin(name,origin.slug,hash,sourceHub);
+  return name;
+}
+async function installedIconIds(){
+  const files=await iconInventory();
+  return new Set(files.filter(f=>f.state==='hub'&&iconOriginHub(f.origin.hub)===iconDbUrl()&&f.origin.slug===f.name.replace(/\.[^.]+$/,'')).map(f=>f.origin.slug));
+}
+async function installScriptIcons(ids,have){
+  // Always recheck the actual bytes: an editor or another browser may have
+  // changed a same-named file since the script page was opened.
+  if(!hubToken()){toast(t('hubAuthRequired'),false,[connectHubAction()]);return 0;}
+  const done=[],broke=[];
+  for(const id of ids){try{await idbInstall(id);done.push(id);}catch(e){broke.push(id+': '+e.message);}}
+  if(done.length)toast(t('scriconsok')+': '+done.join(', '));
+  if(broke.length)toast(t('scriconserr')+' '+broke.join(', '),false,[connectHubAction()]);
+  return done.length;
+}
+async function idbSubmit(blob,name,basedOn,update=null){
+  name=String(name||'').trim();
+  if(!descriptiveIconName(name)){const err=new Error(t('idbe_descriptiveNameRequired'));err.code='descriptiveNameRequired';throw err;}
+  const fd=new FormData();
+  fd.append('file',blob,'icon.gif');
+  fd.append('name',name);
+  fd.append('source','webui');
+  fd.append('agree','1');
+  fd.append('response','resolve');
+  if(basedOn)fd.append('based_on',basedOn);
+  if(update){fd.append('update_slug',update.slug);fd.append('expected_sha256',update.sha256);}
+  const tok=hubToken();
+  let r;
+  try{r=await fetch(iconApiUrl()+'submit',
+    tok?{method:'POST',body:fd,headers:{Authorization:'Bearer '+tok}}:{method:'POST',body:fd});}
+  catch(e){throw new Error(t('idbfail'));}
+  let d={};
+  try{d=await r.json();}catch(e){}
+  if(r.ok&&d.ok){idbCache=null;return d;}
+  // Prefer translated messages, then the Hub's explanation. Never expose a raw
+  // error code when the user needs a next step.
+  const known=I18N.en['idbe_'+d.error];
+  const err=new Error((known?t('idbe_'+d.error):'')||d.message||t('hubPublishFailed'));
+  err.code=d.error||'';
+  err.slug=d.slug&&d.error==='duplicate'?d.slug:null;
+  err.pr=d.pr||'';
+  throw err;
+}
+// index.html is spelled out on purpose: whether the Hub's web server resolves a
+// bare /piskel/ to the directory index is not something this repo can promise,
+// and a miss would frame a 404 instead of the editor.
+const PISKEL_URL_DEFAULT='https://awtrix.de/piskel/index.html';
+function hubToken(){try{return localStorage.awtrixHubToken||'';}catch(e){return'';}}
+function hubAccountUrl(){try{return new URL('/account/settings',iconApiUrl()).href;}catch(e){return iconApiUrl();}}
+function hubTermsUrl(){try{return new URL('/terms-of-service',iconApiUrl()).href;}catch(e){return iconApiUrl();}}
 function getPiskelUrl(){try{return localStorage.awtrixPiskelUrl||PISKEL_URL_DEFAULT;}catch(e){return PISKEL_URL_DEFAULT;}}
 function piskelOrigin(){try{return new URL(getPiskelUrl()).origin;}catch(e){return'';}}
 function postToPiskel(msg){
@@ -3377,6 +4256,12 @@ function postToPiskel(msg){
 function notifyPiskelTheme(){postToPiskel({type:'theme',theme:document.documentElement.dataset.theme==='light'?'light':'dark'});}
 let pendingEditIcon=null;
 let piskelReady=false;
+let piskelIconLoad=null;
+function resetPiskelIconLoad(){
+  if(piskelIconLoad)clearTimeout(piskelIconLoad.timer);
+  piskelIconLoad=null;
+}
+
 function b64ToBlob(b64,mime){
   const bin=atob(b64),len=bin.length,arr=new Uint8Array(len);
   for(let i=0;i<len;i++)arr[i]=bin.charCodeAt(i);
@@ -3395,48 +4280,105 @@ async function piskelSendList(){
   }catch(e){postToPiskel({type:'list-result',files:[],error:e.message});}
 }
 async function piskelSendIcon(name){
-  try{const r=await fetch('/ICONS/'+encodeURIComponent(name),{cache:'no-store'});
+  if(piskelIconLoad)return;
+  const target=$('#piskelFrame')?.contentWindow;
+  if(!target)return;
+  piskelIconLoad={target};
+  try{
+    const r=await fetch('/ICONS/'+encodeURIComponent(name),{cache:'no-store'});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const blob=await r.blob();
-    postToPiskel({type:'load-result',name,mime:blob.type||'image/gif',dataBase64:await blobToB64(blob)});
-  }catch(e){toast(e.message,false);}
+    let origin=null;
+    try{const{data}=await api('/api/v1/icons/origins');origin=(data.icons||[]).find(o=>o.name===name&&validIconOrigin(o))||null;}catch(e){}
+    if(target!==$('#piskelFrame')?.contentWindow)return;
+    const requestId='icon-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+    const timer=setTimeout(()=>{
+      if(piskelIconLoad?.requestId!==requestId)return;
+      resetPiskelIconLoad();
+      if(target===$('#piskelFrame')?.contentWindow)toast(t('edIconOpenError'),false);
+    },15000);
+    piskelIconLoad={requestId,timer,target};
+    postToPiskel({type:'load-result',requestId,name,mime:blob.type||'image/gif',dataBase64:await blobToB64(blob),origin,
+      based_on:origin&&origin.hub===iconApiUrl()?origin.slug:null});
+  }catch(e){resetPiskelIconLoad();toast(e.message,false);}
 }
 async function piskelSave(m){
+  const target=$('#piskelFrame')?.contentWindow,origin=piskelOrigin();
+  const reply=message=>target?.postMessage({ns:'awtrix',...message},origin);
   const id=iconIdFrom(m.name),fn=id+'.gif';
   let blob=b64ToBlob(m.dataBase64,m.mime||'image/gif');
   try{
     if(m.mime==='image/jpeg')blob=await imgToGif(blob);
     await uploadFile(blob,'/ICONS',fn,null);
     await dropStale('/ICONS',id+'.jpg',fn);
-    postToPiskel({type:'save-result',ok:true,name:fn});
+    if(m.origin&&validIconOrigin({...m.origin,name:fn})){
+      try{await saveIconOrigin(fn,m.origin.slug,m.origin.sha256,m.origin.hub);}catch(e){toast(t('icoriginfail'),false);}
+    }
+    reply({type:'save-result',ok:true,name:fn});
     toast(fn+' '+t('uploaded'));
-  }catch(e){postToPiskel({type:'save-result',ok:false,name:fn,error:e.message});toast(e.message,false);}
+  }catch(e){reply({type:'save-result',ok:false,name:fn,error:e.message});toast(e.message,false);}
 }
 const LIVE_NAME='draw-preview';
-let piskelLiveOn=false,lastLiveErr='';
+let piskelPublishing=false;
+async function piskelPublish(m){
+  const target=$('#piskelFrame')?.contentWindow,frameOrigin=piskelOrigin();
+  const reply=message=>target?.postMessage({ns:'awtrix',...message},frameOrigin);
+  if(piskelPublishing){reply({type:'publish-result',requestId:m.requestId,ok:false,error:'busy',message:t('hubPublishing')});return;}
+  piskelPublishing=true;
+  try{
+    if(!['image/gif','image/jpeg'].includes(m.mime)||typeof m.dataBase64!=='string'||m.dataBase64.length>90000)throw new Error(t('idbfail'));
+    const blob=b64ToBlob(m.dataBase64,m.mime);
+    let update=null;
+    if(m.action==='update'){
+      if(!/^[-a-z0-9_]{1,32}$/.test(m.slug||'')||!/^[a-f0-9]{64}$/.test(m.expected_sha256||''))throw new Error(t('idbfail'));
+      update={slug:m.slug,sha256:m.expected_sha256};
+    }
+    const d=await idbSubmit(blob,String(m.name||''),/^[-a-z0-9_]{1,32}$/.test(m.based_on||'')?m.based_on:null,update);
+    const origin={hub:iconApiUrl(),slug:d.slug,sha256:await iconBlobHash(blob)};
+    const name=iconIdFrom(m.name)+'.gif';
+    try{if(await iconBlobHash(await readIconBlob(name))===origin.sha256)await saveIconOrigin(name,origin.slug,origin.sha256,origin.hub);}catch(e){}
+    reply({type:'publish-result',requestId:m.requestId,ok:true,...d,origin});
+  }catch(e){reply({type:'publish-result',requestId:m.requestId,ok:false,error:e.code||'failed',message:e.message,pr:e.pr||'',slug:e.slug||''});}
+  finally{piskelPublishing=false;}
+}
+let piskelLiveOn=false,lastLiveErr='',piskelLiveGeneration=0,piskelLiveQueue=Promise.resolve();
 async function piskelLive(m){
   piskelLiveOn=true;
+  const generation=piskelLiveGeneration;
   const body=m.mode==='bitmap'
     ?{hold:true,stack:false,name:LIVE_NAME,text:'',draw:[['bitmap',0,0,m.w,m.h,m.dataBase64]]}
     :{hold:true,stack:false,name:LIVE_NAME,text:'',icon:m.dataBase64};
-  try{await post('/api/v1/notifications',body);lastLiveErr='';}
-  catch(e){if(e.message!==lastLiveErr){lastLiveErr=e.message;toast(e.message,false);}}
+  piskelLiveQueue=piskelLiveQueue.catch(()=>{}).then(async()=>{
+    if(!piskelLiveOn||generation!==piskelLiveGeneration)return;
+    try{await post('/api/v1/notifications',body);lastLiveErr='';}
+    catch(e){if(e.message!==lastLiveErr){lastLiveErr=e.message;toast(e.message,false);}}
+  });
+  return piskelLiveQueue;
 }
 async function piskelLiveOff(){
   piskelLiveOn=false;
+  const generation=++piskelLiveGeneration;
+  await piskelLiveQueue;
+  if(piskelLiveOn||generation!==piskelLiveGeneration)return;
   try{await api('/api/v1/notifications/'+LIVE_NAME,{method:'DELETE'});}catch(e){}
 }
 window.addEventListener('message',e=>{
-  if(!$('#piskelFrame'))return;
-  if(e.origin!==piskelOrigin())return;
+  const frame=$('#piskelFrame');
+  if(!frame||e.source!==frame.contentWindow||e.origin!==piskelOrigin())return;
   const m=e.data;if(!m||m.ns!=='awtrix')return;
+  if(m.type==='icon-load-result'&&piskelIconLoad?.requestId===m.requestId){
+    resetPiskelIconLoad();
+    if(m.ok===false)toast(m.message||m.error||t('edIconOpenError'),false);
+    return;
+  }
   if(m.type==='ready'){
     piskelReady=true;
     const l=$('#piskelFrame')&&document.querySelector('.piskelload');if(l)l.remove();
     notifyPiskelTheme();
-    postToPiskel({type:'config',sizes:['8x8','32x8']});
+    postToPiskel({type:'config',host:'awtrix',sizes:['8x8','32x8'],publishViaParent:true});
     if(pendingEditIcon){const n=pendingEditIcon;pendingEditIcon=null;piskelSendIcon(n);}
   }else if(m.type==='save')piskelSave(m);
+  else if(m.type==='publish')piskelPublish(m);
   else if(m.type==='list')piskelSendList();
   else if(m.type==='load'&&m.name)piskelSendIcon(m.name);
   else if(m.type==='live')piskelLive(m);
@@ -3447,9 +4389,14 @@ window.addEventListener('pagehide',()=>{if(piskelLiveOn){try{fetch('/api/v1/noti
 function viewEditor(view){
   if(piskelLiveOn)piskelLiveOff();
   piskelReady=false;
+  resetPiskelIconLoad();
   const url=getPiskelUrl();
   const theme=document.documentElement.dataset.theme==='light'?'light':'dark';
-  const src=url+(url.includes('?')?'&':'?')+'theme='+encodeURIComponent(theme)+'&sizes=8x8,32x8&host=awtrix';
+  // The editor is handed the same Hub the gallery uses. Without it a framed
+  // editor falls back to whatever host it was built against, and an override in
+  // localStorage would reach the gallery but not the editor inside it.
+  const src=url+(url.includes('?')?'&':'?')+'theme='+encodeURIComponent(theme)+
+    '&sizes=8x8,32x8&host=awtrix&iconapi='+encodeURIComponent(iconApiUrl())+'&v='+Date.now();
   const loading=el('div',{class:'piskelload'},el('span',{class:'spin'}),el('span',null,t('edLoading')));
   const frame=el('iframe',{id:'piskelFrame',src,title:t('editorTab'),allow:'clipboard-read; clipboard-write'});
   view.append(el('div',{class:'piskelwrap wide'},loading,frame));
@@ -3517,9 +4464,23 @@ function rtttlParse(s){
   const ms=notes.reduce((a,n)=>a+noteMs(n.d,timeUnit),0);
   return{ok:true,title,timeUnit,notes,durationMs:ms};
 }
-let audioCtx=null,audioStop=null;
-function previewStop(){if(audioStop){audioStop();audioStop=null;}}
-function previewPlay(p){
+let audioCtx=null,audioStop=null,audioPreviewBtn=null,devicePlayBtn=null,devicePlayTimer=null;
+function playState(btn,on,local=false){
+  const lbl=t(on?(local?'meloprestop':'melostop'):(local?'melopre':'meloplay'));
+  const name=btn._audioName&&btn._audioName();
+  btn.classList.toggle('playing',on);btn.replaceChildren(on?'■':local?'🎧':'▶');
+  btn.title=lbl;btn.setAttribute('aria-label',lbl+(name?': '+name:''));
+  btn.setAttribute('aria-pressed',on?'true':'false');
+}
+function audioPlayButton(name,local=false){
+  const b=el('button',{class:'icon '+(local?'preview-play':'device-play')});b._audioName=typeof name==='function'?name:()=>name;
+  playState(b,false,local);return b;
+}
+function previewStop(){
+  if(audioStop){audioStop();audioStop=null;}
+  if(audioPreviewBtn){playState(audioPreviewBtn,false,true);audioPreviewBtn=null;}
+}
+function previewPlay(p,btn){
   previewStop();
   try{
     audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();
@@ -3544,7 +4505,22 @@ function previewPlay(p){
   osc.start(t0);osc.stop(at+0.05);
   audioStop=()=>{try{gain.gain.cancelScheduledValues(audioCtx.currentTime);
     gain.gain.setValueAtTime(0,audioCtx.currentTime);osc.stop();}catch(e){}};
-  osc.onended=()=>{audioStop=null;};
+  audioPreviewBtn=btn;playState(btn,true,true);
+  osc.onended=()=>{audioStop=null;if(audioPreviewBtn===btn){playState(btn,false,true);audioPreviewBtn=null;}};
+}
+async function devicePlayToggle(btn,body,durationMs=0){
+  const stop=devicePlayBtn===btn;
+  try{
+    await post(stop?'/api/v1/audio/stop':'/api/v1/audio/play',stop?{}:body);
+    if(devicePlayBtn)playState(devicePlayBtn,false);
+    clearTimeout(devicePlayTimer);devicePlayTimer=null;devicePlayBtn=stop?null:btn;
+    if(!stop){
+      playState(btn,true);toast(t('playing'));
+      if(durationMs)devicePlayTimer=setTimeout(()=>{
+        if(devicePlayBtn===btn){playState(btn,false);devicePlayBtn=null;}
+      },durationMs+250);
+    }
+  }catch(e){toast(e.message,false);}
 }
 function melodiesSection(){
   const list=el('div',{class:'melolist'});
@@ -3571,8 +4547,9 @@ function melodiesSection(){
     const meta=el('div',{class:'meta'});
     const row=el('div',{class:'melorow'+(isNew?' dirty':'')});
 
-    const pre=el('button',{class:'icon',title:t('melopre'),'aria-label':t('melopre')},'🎧');
-    const play=el('button',{class:'icon',title:t('meloplay'),'aria-label':t('meloplay')},'▶');
+    const audioName=()=>nameIn.value.trim();
+    const pre=audioPlayButton(audioName,true);
+    const play=audioPlayButton(audioName);
     const save=el('button',{class:'icon pri',title:t('save'),'aria-label':t('save'),disabled:true},'💾');
     const del=armable(el('button',{class:'danger icon',title:t('del'),'aria-label':t('del')},icon('trash')),
       async()=>{
@@ -3612,11 +4589,11 @@ function melodiesSection(){
     nameIn.addEventListener('input',recheck);
     rtIn.addEventListener('input',recheck);
 
-    pre.addEventListener('click',()=>{const p=check();if(p.ok)previewPlay(p);});
-    play.addEventListener('click',async()=>{
-      try{await post('/api/v1/audio/play',{rtttl:full()});toast(t('playing'));}
-      catch(e){toast(e.message,false);}
+    pre.addEventListener('click',()=>{
+      if(audioPreviewBtn===pre)return previewStop();
+      const p=check();if(p.ok)previewPlay(p,pre);
     });
+    play.addEventListener('click',()=>{const p=check();if(p.ok)devicePlayToggle(play,{rtttl:full()},p.durationMs);});
     save.addEventListener('click',async()=>{
       const name=nameIn.value.trim();
       save.disabled=true;
@@ -3670,7 +4647,7 @@ function radioSection(onState){
     const url=el('input',{class:'ru',value:orig.url,placeholder:t('radiourl'),
       'aria-label':t('radiourl')});
     const msg=el('div',{class:'rm meta'});
-    const play=el('button',{class:'icon',title:t('meloplay'),'aria-label':t('meloplay')},'▶');
+    const play=audioPlayButton(()=>name.value.trim());
     const save=el('button',{class:'icon pri',title:t('save'),'aria-label':t('save'),disabled:true},'💾');
     const del=armable(el('button',{class:'danger icon',title:t('del'),'aria-label':t('del')},icon('trash')),
       async()=>{
@@ -3699,8 +4676,7 @@ function radioSection(onState){
     // An edited row plays by URL so a station can be tried before it is saved.
     play.addEventListener('click',async()=>{
       const n=name.value.trim();
-      try{await post('/api/v1/audio/play',dirty()?{url:url.value.trim()}:{station:n});refresh();}
-      catch(e){toast(e.message,false);}
+      await devicePlayToggle(play,dirty()?{url:url.value.trim()}:{station:n});refresh();
     });
     save.addEventListener('click',async()=>{
       save.disabled=true;
@@ -3740,6 +4716,9 @@ function radioSection(onState){
       status.replaceChildren(data.radio.playing
         ?t('radioplaying')+': '+data.radio.station+(data.radio.title?' - '+data.radio.title:'')
         :(data.radio.error||t('radiostopped')));
+      if(!data.radio.playing&&devicePlayBtn&&list.contains(devicePlayBtn)){
+        playState(devicePlayBtn,false);devicePlayBtn=null;clearTimeout(devicePlayTimer);devicePlayTimer=null;
+      }
       if(!list.childElementCount){stations=data.stations||[];paint();}
       if(onState)onState(data);
     }catch(e){}
@@ -3756,30 +4735,36 @@ function mp3Section(){
 
   function mark(name){
     playing=name||'';
+    let active=null;
     list.querySelectorAll('.melorow').forEach(r=>{
       const on=r.dataset.mp3===playing&&playing!=='';
       r.classList.toggle('on',on);
       // Cleared with no argument, not with '': .meta:empty is what keeps idle rows compact.
       const m=r.querySelector('.meta');
       if(on)m.replaceChildren('▶ '+t('radioplaying'));else m.replaceChildren();
+      if(on)active=r.querySelector('.device-play');
     });
+    if(active&&devicePlayBtn!==active){
+      if(devicePlayBtn)playState(devicePlayBtn,false);
+      devicePlayBtn=active;playState(active,true);
+    }else if(!active&&devicePlayBtn&&list.contains(devicePlayBtn)){
+      playState(devicePlayBtn,false);devicePlayBtn=null;clearTimeout(devicePlayTimer);devicePlayTimer=null;
+    }
   }
 
   function mp3Row(f){
     const base=f.name.replace(/\.mp3$/i,'');
-    const pre=el('button',{class:'icon',title:t('melopre'),'aria-label':t('melopre')},'🎧');
-    // Through the shared preview handle, so Stopp reaches it and a second click cannot stack.
+    const pre=audioPlayButton(base,true);
     pre.addEventListener('click',()=>{
+      if(audioPreviewBtn===pre)return previewStop();
       previewStop();
       const a=new Audio('/MP3/'+encodeURIComponent(f.name)+'?v='+f.size+'.'+assetRev);
-      audioStop=()=>a.pause();
-      a.play().catch(()=>{});
+      audioPreviewBtn=pre;playState(pre,true,true);audioStop=()=>a.pause();
+      a.onended=()=>{if(audioPreviewBtn===pre)previewStop();};
+      a.play().catch(()=>{if(audioPreviewBtn===pre)previewStop();});
     });
-    const play=el('button',{class:'icon',title:t('meloplay'),'aria-label':t('meloplay')},'▶');
-    play.addEventListener('click',async()=>{
-      try{await post('/api/v1/audio/play',{mp3:base});toast(t('playing'));}
-      catch(e){toast(e.message,false);}
-    });
+    const play=audioPlayButton(base);
+    play.addEventListener('click',()=>devicePlayToggle(play,{mp3:base}));
     const del=armable(el('button',{class:'danger icon',title:t('del'),'aria-label':t('del')},icon('trash')),
       async()=>{
         try{await api('/api/v1/audio/mp3/'+encodeURIComponent(base),{method:'DELETE'});toast(t('deleted'));reload();}
@@ -3821,13 +4806,6 @@ async function viewAudio(view){
   if(!anyAudioCap()){view.append(el('div',{class:'card wide'},t('audnone')));return;}
   const{section,panel}=sectionShell(view);
   const muted=el('div',{class:'ghelp',style:'display:none;color:var(--warn)'},t('melomuted'));
-  // One transport control for the page: the browser preview, the device sound and the stream.
-  const stopAll=el('button',null,'■ '+t('melostop'));
-  stopAll.addEventListener('click',async()=>{
-    previewStop();
-    try{await post('/api/v1/audio/stop',{});}catch(e){toast(e.message,false);}
-  });
-  panel.prepend(el('div',{class:'row audbar'},stopAll));
   panel.prepend(muted);
 
   // Each section carries the volume of the output it belongs to, so a level is set where the
@@ -4389,6 +5367,29 @@ function viewLog(view){
     }
   },1000);
 }
+function viewFullscreen(){
+  document.documentElement.classList.add('fs');
+  const cv=el('canvas',{id:'screen',width:320,height:80,role:'img','aria-label':t('livepre')});
+  document.body.replaceChildren(cv);
+  const ctx=cv.getContext('2d');
+  let pw=32,ph=8;
+  const fit=()=>{
+    const sc=Math.max(1,Math.floor(Math.min(innerWidth/pw,innerHeight/ph)));
+    if(cv.width!==pw*sc||cv.height!==ph*sc){cv.width=pw*sc;cv.height=ph*sc;}
+    return sc;
+  };
+  addEventListener('resize',()=>fit());
+  poller(async()=>{
+    const{data}=await api('/api/v1/display/screen',{timeout:4000});
+    const px=data&&data.pixels;
+    if(!Array.isArray(px))return;
+    pw=data.width||32;ph=data.height||8;
+    paint(ctx,px,pw,ph,fit());
+  },250);
+}
+if(/\/fullscreen\/?$/.test(location.pathname)){
+  viewFullscreen();
+}else{
 $('#langbtn').replaceChildren(LANG.toUpperCase());
 paintTheme();
 render();
@@ -4409,8 +5410,8 @@ new ResizeObserver(setChromeH).observe(topbar);
     readAudioCaps(caps);
     if(!anyAudioCap())nav();
   }catch(e){}
-  await loadSystemInfo();
 })();
+}
 </script>
 </body>
 </html>

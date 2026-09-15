@@ -71,6 +71,8 @@ a generic DIY layout with analog inputs on ADC1 and the Arduino-S3 default I²C 
 | `pinI2sBclk` | int | `-1` | `5` | yes | I²S bit clock to an external DAC such as the MAX98357A. |
 | `pinI2sLrclk` | int | `-1` | `6` | yes | I²S word-select (left/right) clock. |
 | `pinI2sDout` | int | `-1` | `4` | yes | I²S serial data out. |
+| `pinI2sMclk` | int | `-1` | `-1` | yes | Master clock, for DACs that need one. |
+| `pinAmpEnable` | int | `-1` | `-1` | yes | Switches the amplifier on. Goes high at startup and stays high. |
 
 The three `pinI2s*` lines are a single bus and are checked as a set: all three assigned, or all
 three `-1`. A partial set is rejected with `422 validationFailed`, naming the one you left out:
@@ -79,8 +81,11 @@ three `-1`. A partial set is rejected with `422 validationFailed`, naming the on
 {"error":{"code":"validationFailed","message":"the I2S pins work as a set: give all three, or -1 for all three","field":"pinI2sDout"}}
 ```
 
-The ESP32 has no I²S audio output, so on an ESP32 the three fields are `-1` and stay there, and
-the web UI's GPIO form shows eleven pins and no I²S row at all.
+`pinI2sMclk` and `pinAmpEnable` are optional extras, each set on its own. Both require the three
+lines above; assigning either while they are `-1` is rejected with the same `422`.
+
+The ESP32 has no I²S audio output. There these fields stay `-1`, and the web UI's GPIO form shows
+eleven pins without the I²S rows.
 
 The related non-pin field:
 
@@ -102,6 +107,8 @@ Each disabled peripheral has a defined consequence.
 | `pinI2cSda` / `pinI2cScl` | No sensor bus; temperature and humidity are never populated. |
 | `pinDfRx` / `pinDfTx` | The DFPlayer backend is not selected; AWTRIX falls back to the buzzer. |
 | `pinI2sBclk` / `pinI2sLrclk` / `pinI2sDout` | No I²S output. Internet radio is unavailable and its API answers `503 unavailable`. |
+| `pinI2sMclk` | No master clock. |
+| `pinAmpEnable` | The amplifier is never switched on. Boards with an enable input stay silent. |
 
 !!! warning "Switch off `autoBrightness` when `pinLdr` is `-1`"
     With no light sensor the raw reading is `0`, which is indistinguishable from pitch darkness.
@@ -191,7 +198,8 @@ Then the structural rules run against that same merged map, and the **first** fa
 Rule 1 is checked first, for the whole map. Rules 2-4 (range, reserved, input-only) are then
 checked **one pin at a time**, in field order - `pinMatrix`, `pinBtnLeft`, `pinBtnSelect`,
 `pinBtnRight`, `pinBattery`, `pinLdr`, `pinBuzzer`, `pinI2cSda`, `pinI2cScl`, `pinDfRx`,
-`pinDfTx`, `pinI2sBclk`, `pinI2sLrclk`, `pinI2sDout` - each pin fully checked before the next
+`pinDfTx`, `pinI2sBclk`, `pinI2sLrclk`, `pinI2sDout`, `pinI2sMclk`, `pinAmpEnable` - each pin
+fully checked before the next
 one is looked at. An earlier field's reserved-pin error therefore comes back before a later
 field's out-of-range one. Rules 5 and 6 run last, across the whole map.
 
@@ -250,6 +258,8 @@ drive a line - or need `INPUT_PULLUP` - are rejected on them.
 | `pinI2cSda`, `pinI2cScl` | yes | I²C needs bidirectional drive. |
 | `pinDfTx` | yes | AWTRIX transmits on it. |
 | `pinI2sBclk` / `pinI2sLrclk` / `pinI2sDout` | yes | All three drive the DAC. |
+| `pinI2sMclk` | yes | Clocks the DAC. |
+| `pinAmpEnable` | yes | Holds the amplifier's enable input high. |
 | `pinBattery` | no | Read-only ADC. |
 | `pinLdr` | no | Read-only ADC. |
 | `pinDfRx` | no | AWTRIX receives on it. |

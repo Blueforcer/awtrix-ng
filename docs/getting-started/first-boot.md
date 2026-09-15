@@ -102,7 +102,7 @@ sleep are all refused until it is on a network, along with the features that nee
 | Finding AWTRIX by name (`.local`) or by network discovery |
 | The IP address scroll on the panel |
 | Art-Net |
-| The LaMetric icon downloader, and exporting a settings backup |
+| Opening the Hub icon gallery, and exporting a settings backup |
 
 If you had already turned on a **username and password**, they are enforced on the access
 point too. Authentication is off until you enable it - see

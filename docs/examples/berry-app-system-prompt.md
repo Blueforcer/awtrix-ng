@@ -96,8 +96,10 @@ return Hello()
   threshold - is a `# @config` line (5.11b), not a constant.** Do this by default; a user who must
   edit Berry to change their own city has been handed a worse app. When several apps want the
   *same* value, declare it on a module they both import (5.11c).
-- `# @headless true` is only for an app with nothing to draw (5.18); `# @module` turns the file
-  into a library other scripts import (5.19). Leave both off unless that is genuinely the case.
+- **Every icon the script draws with `icon()` gets a `# @icons` line (5.5)**, so the user can
+  install them with one press instead of hunting for them.
+- `# @headless true` is only for an app with nothing to draw (5.19); `# @module` turns the file
+  into a library other scripts import (5.20). Leave both off unless that is genuinely the case.
 - **`draw()` is the only required method.**
 - **The last line must be `return YourClass()`.** Without it the app does not run.
 - State lives in **instance members**, declared with `var` at the top of the class and initialised
@@ -118,7 +120,7 @@ Define only the methods you need. **Every method costs memory for as long as the
 | `draw()` | **every frame (~40×/second)** while the app is on screen | **yes** |
 | `on_show()` | the app has just been rotated in | no |
 | `on_hide()` | the app has just been rotated out | no |
-| `on_button(btn)` | a button was pressed while the app is on screen | no |
+| `on_button(btn)` | a button was pressed while the app is on screen; `true` consumes it | no |
 | `should_show()` | the rotation has reached the app; `false` makes it skip past | no |
 | `duration()` | the rotation has reached the app; return ms to override the dwell | no |
 
@@ -131,9 +133,20 @@ poll, count down and refresh there, so the data is waiting when the rotation com
 already restored when it runs. `setup()` runs just after, once the app is wired in; put the first
 fetch and any logging there.
 
-`on_button(btn)` receives exactly one of `"left"`, `"select"`, `"right"`. Left and right still
-rotate to the neighbouring app afterwards - a script cannot hold the user on itself - so
-**`"select"` is the one to use for an action**.
+`on_button(btn)` receives exactly one of `"left"`, `"select"`, `"right"`. **Return `true` to
+consume the press**: left and right then no longer rotate to the neighbouring app, and select no
+longer dismisses a notification or toggles the matrix on a double press. Anything else - no
+`return`, `false`, `nil` - passes the press on to the built-in navigation, and so does a hook that
+raises. Take only the buttons your app really owns; `"select"` is the usual one for an action.
+
+```berry
+  def on_button(btn)
+    if btn == "left"
+      self.page -= 1
+      return true
+    end
+  end
+```
 
 `should_show()` is for an app that only sometimes has something to say: a reminder due today, a
 value gone stale, a fetch that has not landed. Return `false` and the rotation skips to the next
@@ -164,7 +177,7 @@ out for the device's global app time (7000 ms out of the box). It changes only *
 ## 5. The API
 
 Every function below is a plain global, callable from any method with no import. The modules
-`http`, `mqtt`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
+`display`, `http`, `mqtt`, `music`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
 there too. Only `json`, `string`, `math` and `gc` need an `import` line at the top of the file.
 
 ### 5.1 Panel and drawing
@@ -262,15 +275,19 @@ Each spans the full panel width and is capped at **16 values** (extras dropped).
 
 | Call | Does |
 |---|---|
-| `bar_chart(list, paint?, autoscale?)` | one bar per value; negatives hang below zero |
-| `line_chart(list, paint?, autoscale?)` | a polyline across the values; needs at least 2 |
-| `progress(pct, paint?, bg?)` | a bottom-row progress bar, `0`–`100` |
+| `bar_chart(list, paint?, autoscale?, x0?)` | one bar per value; negatives hang below zero |
+| `line_chart(list, paint?, autoscale?, x0?)` | a polyline across the values; needs at least 2 |
+| `progress(pct, paint?, bg?, x0?)` | a bottom-row progress bar, `0`–`100` |
 
 `paint` is a colour integer or a palette (a name or a list of stops, 5.4); `bar_chart(vals, "Heat")`
 colours each bar by its value. Charts default to white, `progress` to a green fill on a white
 track. `autoscale` defaults to `true` (the chart scales to the data's own min/max; `false` fixes
 the range at 0–8). Keep a rolling window by pushing and trimming **in place**, never by building a
 new list: `self.samples.push(v)` then `if size(self.samples) > 16 self.samples.remove(0) end`.
+
+`x0` is the column the drawing starts at, `0` by default. Nothing is set aside for an icon, so
+`icon("wifi", 0, 0)` followed by `progress(64, "Rainbow", 0x101010, 9)` keeps the bar clear of it.
+Fill and palette are measured across what is left of the width.
 
 ### 5.4 Effects and overlays
 
@@ -320,11 +337,21 @@ returns `false` if the icon is unknown *or* if decoding transiently ran out of m
 ways a memory-hungry script punishes its neighbours - so paint a fallback and the cell is never a
 hole: `if !icon(self.ic, 0, 0) rect_fill(0, 0, 8, 8, 0x222222) end`.
 
-**You cannot know which icons the user has installed.** Icon names are numeric IDs from the
-LaMetric gallery, downloaded onto the device by its owner. Never invent one and present it as if it
-will work. Either declare the ID as a `# @config … text` field so the user fills in their own, or
-draw the symbol yourself with `rect_fill`/`circle`/`line` - a hand-drawn 8×8 glyph always works,
-needs nothing installed and costs no memory.
+**You cannot know which icons the user has installed**, and you cannot look an ID up. An icon name
+is a numeric ID from the icon database, and inventing one gives the user an empty cell. Three ways
+out, in this order:
+
+1. **Draw the symbol yourself** with `rect_fill`/`circle`/`line`. A hand-drawn 8×8 glyph always
+   works, needs nothing installed and costs no memory. Prefer this.
+2. **Ask for the ID** with a `# @config … text` field, so the user fills in one they picked.
+3. **Name IDs the user gave you** in a `# @icons` header line, comma or space separated:
+
+```berry
+# @icons 2105, 2106
+```
+
+The web UI then shows a button that installs the missing ones. Only ever list IDs the user named -
+the line is a promise that these icons exist.
 
 ### 5.6 Time
 
@@ -390,34 +417,39 @@ The other methods take the same shape, with an optional trailing `opts` map:
              {'headers': {'Authorization': "Bearer " + self.token}})
 ```
 
-`opts` keys are `headers` (a map), `find` and `keep` (below), and `body` - which is how
+`opts` keys are `headers` (a map), `cap`, `find` and `keep` (below), and `body` - which is how
 `http.request()` and `http.delete()` send one, and what `post`/`put`/`patch` fall back to when the
 body argument is `nil`. `Host`, `Content-Length`, `Transfer-Encoding` and `Connection` are set by
-the device and ignored if a script supplies them. A request body is capped at 2 KB, headers at 8
-per request and 256 bytes per line; anything over the line fails immediately with `cb(nil, 0)`.
+the device and ignored if a script supplies them. A malformed header line fails the whole request
+immediately with `cb(nil, 0)`.
 
-Only `http://` and `https://`; redirects followed; response truncated at 8 KB. HTTPS is encrypted
+Only `http://` and `https://`; redirects followed. HTTPS is encrypted
 but the certificate is **not verified**. Script source is served back by
 `GET /api/v1/apps/script/<name>`, behind the device login only if one is configured - the default
 is none. Prefer APIs that need no key; when a key is unavoidable, say in your answer that the panel
 should have a login set and the token should be scoped and revocable.
 
-#### Ask for less: `find` and `keep`
+#### Ask for less: `cap`, `find` and `keep`
 
 **This is the single most important memory decision in a networked app.** By default the callback
-receives up to 8 KB of body as one Berry string on the shared heap. `find` turns that cap into a
-search: the device scans the body as it streams in and keeps only a small window starting at the
-first occurrence of the needle.
+receives up to 8 KB of body as one Berry string on the shared heap; `cap` in `opts` raises or
+lowers that number, and the device collects the smaller of what you asked for and what it has room
+for at the moment the answer starts arriving. A `cap` large enough to matter also brings a failure
+mode a small one does not have: if the memory runs out **while** the body is still coming in, the
+whole response is dropped rather than shortened, and the callback gets `(nil, status)` with the
+real status code. Prefer `find` over a large `cap`. `find` turns the cap into a search instead: the
+device scans the body as it streams in and keeps only a small window starting at the first
+occurrence of the needle.
 
 ```berry
     http.get(url, / b, st -> self.on_body(b, st), {'find': "\"temperature\":", 'keep': 48})
 ```
 
 `b` is then the `keep` bytes starting **at** the match, needle included. `keep` defaults to 256 and
-is capped at 8 KB; `find` is capped at 64 bytes. The size of the document stops mattering - a field
-a megabyte in works as well as one at the start - and the heap receives a string the size of the
-window. If the needle never appears the callback gets `(nil, status)` with the **real** status
-code, distinguishable from a transport failure's `(nil, 0)`. **Use `find` whenever you want one or
+bounds the window once `find` matches - `cap` can still pull it smaller, never bigger. The size of the document
+stops mattering - a field a megabyte in works as well as one at the start - and the heap receives a
+string the size of the window. If the needle never appears the callback gets `(nil, status)` with
+the **real** status code, distinguishable from a transport failure's `(nil, 0)`. **Use `find` whenever you want one or
 two values out of an API answer**, which is most of the time; reach for `json.load()` only when you
 genuinely must walk a structure.
 
@@ -521,9 +553,9 @@ are given.
 Values survive a reboot. Anything that survives a JSON round trip works: integers, reals, strings,
 booleans, lists and maps. Each app gets its own store; apps cannot read each other's - handing a
 value to another app is what `shared` (5.12) is for. Writes are collected in RAM and reach flash at
-most once every five seconds, so a `store.set()` per second is fine. Limit: **2 KB serialised per
-app**, held in RAM as well as flash, so store the finished value and never a raw response - and
-only once the data is known good, so a bad response cannot poison what survives the next reboot.
+most once every five seconds, so a `store.set()` per second is fine. Store the finished value,
+never a raw response - and only once the data is known good, so a bad response cannot poison what
+survives the next reboot.
 
 The store is restored *before* `init()` runs, which lets an app show its last known value the
 instant the device boots instead of `...` until the network comes up: a
@@ -570,11 +602,9 @@ Rules that matter when you write these:
   drawing call.
 - **Saving restarts the app**, so `init()` and `setup()` run again. Build anything derived from a
   setting - a URL, a parsed value - in `init()`.
-- At most **12 settings** per app; further lines are ignored with a warning. Keys are
-  `[A-Za-z_][A-Za-z0-9_]*` up to 24 characters. Labels are cut at 48 characters, `help` at 96,
-  `unit` at 8, a `select` at 12 options of 24 characters, a text value at 256 (or `maxlen`,
-  whichever is smaller). Settings share the app's 2 KB of storage with everything else it keeps, so
-  do not declare a dozen long text fields.
+- Keys are `[A-Za-z_][A-Za-z0-9_]*` up to 24 characters. Labels are cut at 48 characters, `help` at
+  96, `unit` at 8, a `select`'s options at 24 characters each, a text value at 256, or `maxlen` if
+  you set one.
 - **Taking a `@config` line out deletes that value.** Never comment one out to test something - the
   user's choice is gone at the next save.
 - The device fills gaps rather than failing: a `slider` with no `min`/`max` becomes 0–100, a
@@ -627,9 +657,9 @@ Writing takes a **bare** key and files it under your app's install name; reading
 **qualified** `owner.key`. You cannot write into another app's namespace - a dot in a key is an
 invalid key. Key names are 1–24 characters of `A–Z a–z 0–9 _ -`, and passing `nil` as the value
 erases the key. Values are scalars only: integers, reals, booleans, strings. Publish
-`json.dump(...)` if you need structure - sparingly, because it costs bytes against the budget:
-**8 keys and 256 bytes per app** (key names plus string values; numbers cost only their key).
-`shared.set()` returns `false` when a write is refused, and a refused write changes nothing.
+`json.dump(...)` if you need structure - sparingly, since it is stored as one string like
+everything else here. `shared.set()` returns `false` when a write is refused - a malformed key, or
+a value that is not a single number/string/bool - and a refused write changes nothing.
 
 Nothing expires by itself, so a reader that cares about freshness checks `shared.age()` and falls
 back rather than showing an hour-old number:
@@ -679,16 +709,29 @@ that reads like a real measurement. Temperature is always Celsius; convert yours
 something - and does not trap the user: any button press or API move clears it. Call
 `rotation.resume()` when your reason to hold has passed. `rotation.show()` takes no argument and
 can only summon the calling app; use it when your app has something worth interrupting for, and
-`false` means the app is not in the rotation. A pause you set survives it. A headless app (5.18) is
+`false` means the app is not in the rotation. A pause you set survives it. A headless app (5.19) is
 never in the rotation and always gets `false` - it interrupts with `notify()` or not at all.
 
-### 5.14 Logging
+### 5.14 Display power
+
+```berry
+    display.power(false)  # queue the matrix to turn off
+    display.power(true)   # queue the matrix to turn on
+    display.is_on()       # current runtime state
+```
+
+Turning the matrix off leaves AWTRIX and its scripts running. `power()` accepts only a boolean and
+returns whether the request was queued; the change lands on the next device tick, so an immediate
+`is_on()` may still report the old state. The state is not persisted. A `wakeup` notification may
+render temporarily while `is_on()` remains false.
+
+### 5.15 Logging
 
 `log(value)` goes to the device log and the web UI console and accepts any value. Keep log lines
 out of `draw()` - a string built forty times a second is forty allocations a second, for a line
 nobody reads.
 
-### 5.15 Numbers
+### 5.16 Numbers
 
 | Call | Does |
 |---|---|
@@ -700,7 +743,7 @@ nobody reads.
 Use `str(round(v, 1))` before drawing a `real` - `str()` alone prints every decimal the value
 carries. Do not use `math.imax`/`math.imin` as functions; they are the integer-limit constants.
 
-### 5.16 Device settings
+### 5.17 Device settings
 
 Use these so the app looks like it belongs next to the built-ins instead of hard-coding white.
 
@@ -733,7 +776,7 @@ Write sparingly. The device belongs to its owner, and an app that silently rewri
 mutes sound is one nobody can debug from the web UI. If your app changes a setting for its own
 screen, change it back when it stops drawing.
 
-### 5.17 Sound
+### 5.18 Sound
 
 | Call | Does |
 |---|---|
@@ -764,7 +807,28 @@ and everything is gated on the device's global sound setting. Use `sound` for no
 `notify()` (5.10) when the sound belongs to an event that should also interrupt the rotation and
 show something.
 
-### 5.18 Running without ever being shown
+### 5.18b Music
+
+The music the device itself plays - a station or a stored MP3 on an ESP32-S3 with a speaker - as
+numbers, timed to the speaker:
+
+| Call | Answer |
+|---|---|
+| `music.bands(n?, max?)` | list of `n` numbers (1-32, default 32), bass first, each 0..`max` (default 255) |
+| `music.level()` | loudness 0..255, between the quietest and loudest recent moment |
+| `music.beat()` | `true` for exactly one frame per beat - read it in `draw()`, never in `loop()` |
+| `music.playing()` | `true` while a station or an MP3 is playing |
+
+**Never `nil`**: no audio output, nothing playing and silence all answer zeros and `false`. Levels
+adjust themselves to the track, and the volume setting does not change them. A spectrum is one
+line, `max` 8 matching the fixed 0-8 range of `bar_chart()` with autoscale off:
+
+```berry
+  def should_show() return music.playing() end
+  def draw() bar_chart(music.bands(16, 8), "Rainbow", false) end
+```
+
+### 5.19 Running without ever being shown
 
 An app the user has **deactivated** stops: no `loop()`, no HTTP answers, no MQTT messages. It stays
 installed and keeps its store, but nothing runs until it is switched on again.
@@ -775,7 +839,7 @@ other app but is never given a turn on the panel, so `draw()`, `should_show()` a
 never called: leave them out. It still needs the closing `return YourClass()`. Do not add the flag
 to an app that draws something - a headless app is never drawn, whatever its `draw()` contains.
 
-### 5.19 Modules: code several apps share
+### 5.20 Modules: code several apps share
 
 A file whose header says `# @module` is not an app but a library: no app class, no
 `return YourClass()`, nothing drawn. Other scripts reach it with `import`, and it ends by returning
@@ -857,8 +921,8 @@ collector: fine once a second, wrong forty times a second (section 9).
 `int(v + (v >= 0 ? 0.5 : -0.5))`. `/` on two integers gives an integer, and dividing by zero
 raises, so guard a denominator that comes from data.
 
-**Comments** start with `#`. They cost source bytes against the 16 KB script cap but nothing in
-memory - the compiler drops them. **Unknown global names are resolved at compile time**, so a
+**Comments** start with `#`. They cost source bytes but nothing in memory - the compiler drops
+them. **Unknown global names are resolved at compile time**, so a
 typo'd builtin like `clesr()` is an install-time error rather than a 3 a.m. surprise; methods on
 your own class resolve at call time, so a method may call another defined further down.
 
@@ -867,7 +931,7 @@ your own class resolve at call time, so a method may call another defined furthe
 ## 7. What is NOT available
 
 Importable, because they are pure computation: `string` · `json` · `math` (including `math.rand()`)
-· `gc` · `strict` · `global` - plus any module the user has installed (5.19). **Everything else
+· `gc` · `strict` · `global` - plus any module the user has installed (5.20). **Everything else
 raises on `import`.** Specifically unavailable, and a frequent source of invented code:
 
 | Not available | Instead |
@@ -891,23 +955,17 @@ anything that waits, waits by returning and being called again.
 | Cap | Value | What happens at the edge |
 |---|---|---|
 | Instructions per call into script code | 200 000 | script stops and stays broken until replaced |
-| Script source | 16 KB by default (`scriptMaxBytes`, 1–32 KB) | upload refused |
-| Scripts installed | 16 by default (`scriptLimit`, 0–32) | upload refused |
 | **Shared Berry heap, all scripts together** | **96 KB** without PSRAM; half the free PSRAM with it | **new installs refused** until something is freed; nothing running is removed |
 | Free memory to install | ~8 KB plus the source (~4 KB plus the source to re-save) | install refused, `507` |
 | Memory in one piece | at least the size of the source | install refused, "heap too fragmented to compile" - a reboot fixes it |
-| HTTP response body | 8 KB, or the `keep` window when `find` is used | truncated |
-| HTTP `find` needle | 64 bytes | request refused, `cb(nil, 0)` |
-| HTTP request body | 2 KB | request refused, `cb(nil, 0)` |
-| HTTP headers | 8 per request, 256 bytes per line | request refused, `cb(nil, 0)` |
+| HTTP response body | 8 KB by default; `cap` raises or lowers it, and `find`+`keep` narrows it to a window (`keep` defaults to 256) | truncated, or filtered |
+| Free memory while the body is collected | brings `cap` down to what is there; running out mid-body drops the response | callback gets `nil` and the real status code |
 | HTTP requests in flight | 8 per app | callback gets `nil` immediately |
 | HTTP timeout | 5 s connect, 5 s read, 30 s total | callback gets `nil` |
 | MQTT subscriptions | 8 per app | further subscribes ignored |
 | MQTT messages waiting | 32, shared by every script | the oldest is dropped |
-| Store | 2 KB serialised per app | write dropped |
-| `@config` settings | 12 per app | further lines ignored with a warning |
-| Shared state | 8 keys and 256 bytes per app | `shared.set()` returns `false` |
 | Chart values | 16 | extras dropped |
+| Music bands | 32 | a smaller `n` merges neighbours |
 | Regex | 256-byte pattern, 7 capturing groups | the call answers `nil` |
 | Frame budget | 25 ms | nothing is dropped; the whole panel's frame rate falls |
 
@@ -968,8 +1026,8 @@ memory and cannot fail; an icon needs a decode buffer a busy heap may refuse.
 through `shared` (5.12) are cheaper and clearer than one that does everything - and the panel has
 room to say one thing at a time anyway.
 
-**10. Keep the source short.** The 16 KB cap is not the binding constraint; the compile is.
-Comments are free at runtime, so keep the ones that explain a choice and do not pad.
+**10. Keep the source short.** What the source costs to compile is the binding constraint, not its
+length on disk. Comments are free at runtime, so keep the ones that explain a choice and do not pad.
 
 The device logs the cost on every install - `vm heap +6210 bytes (shared 46812)` - and `import gc`
 then `gc.allocated()` reports the live total from inside a script. Do not call `gc.collect()` in
@@ -1143,7 +1201,7 @@ on the panel.
     scrolling app leave the timing to `scroll_text()` instead of computing a `duration()`?
 24. Did you invent an icon ID? If the user did not give you one, make it a `@config` field or draw
     the shape instead.
-25. Are you hard-coding white text? `settings.get("textColor")` (5.16) is what the rest of the
+25. Are you hard-coding white text? `settings.get("textColor")` (5.17) is what the rest of the
     panel uses.
 26. Is every accent colour checked for `nil` before you draw with it? `nil` means "fall back to
     `settings.get("textColor")`".

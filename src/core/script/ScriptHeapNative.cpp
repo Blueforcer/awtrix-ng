@@ -18,6 +18,10 @@ constexpr std::size_t kInternalBudgetBytes = 96 * 1024;
 std::size_t g_budget = kInternalBudgetBytes;
 std::size_t g_installReserve = 0;
 
+constexpr std::size_t kUnbounded = static_cast<std::size_t>(-1);
+std::size_t g_growthBudget = kUnbounded;
+bool g_reallocFailure = false;
+
 }
 
 Info info() {
@@ -32,11 +36,19 @@ void clearInstallReserve() { g_installReserve = 0; }
 
 std::size_t installLowWater() { return 0; }
 
+// No real ceiling on the host: growthBudget() only tracks whatever the test hook sets, so tests
+// can exercise the same refusals a device build hits without simulating its heap.
+std::size_t growthBudget() { return g_growthBudget; }
+
 namespace testing {
 
 void setBudgetBytes(std::size_t bytes) { g_budget = bytes; }
 void resetBudgetBytes() { g_budget = kInternalBudgetBytes; }
 std::size_t defaultBudgetBytes() { return kInternalBudgetBytes; }
+
+void setGrowthBudget(std::size_t bytes) { g_growthBudget = bytes; }
+void resetGrowthBudget() { g_growthBudget = kUnbounded; }
+void setReallocFailure(bool fail) { g_reallocFailure = fail; }
 
 }
 
@@ -47,7 +59,10 @@ std::size_t defaultBudgetBytes() { return kInternalBudgetBytes; }
 extern "C" {
 
 void* awtrix_script_heap_alloc(size_t size) { return std::malloc(size); }
-void* awtrix_script_heap_realloc(void* ptr, size_t size) { return std::realloc(ptr, size); }
+void* awtrix_script_heap_realloc(void* ptr, size_t size) {
+  if (awtrix::script::heap::g_reallocFailure && size != 0) return nullptr;
+  return std::realloc(ptr, size);
+}
 void awtrix_script_heap_free(void* ptr) { std::free(ptr); }
 
 }

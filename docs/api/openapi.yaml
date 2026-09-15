@@ -14,7 +14,7 @@ info:
       (`#FFFFFF`) is a settable value distinct from `null`.
     - Durations are integer **milliseconds** with an `...Ms` key suffix.
     - Names are matched **case-insensitively**: `effect`, `overlay`, `palette`,
-      `transitionEffect` and the string enums (`timeSeparatorMode`,
+      `transitionEffect` and the string enums (`transitionDirection`, `timeSeparatorMode`,
       `dateOrder`, `dateSeparator`, `dateYearMode`) accept any casing, so
       `"matrix"`, `"Matrix"` and `"MATRIX"` are the same name.
       `GET /api/v1/capabilities` lists the spelling the API returns.
@@ -414,9 +414,8 @@ paths:
                         outside and held in RAM only; `script` is Berry source
                         stored on the device. `module` is a stored Berry file
                         that other scripts import: it is listed here because it
-                        shares the file collection and the script limit, but it
-                        never draws, so it carries no `enabled`, `inLoop` or
-                        `slot`.
+                        shares the file collection, but it never draws, so it
+                        carries no `enabled`, `inLoop` or `slot`.
                     import:
                       type: string
                       description: >
@@ -959,6 +958,50 @@ paths:
         "400": { $ref: "#/components/responses/BadJson" }
         "422": { $ref: "#/components/responses/Invalid" }
 
+  /api/v1/apps/script-update/{name}:
+    put:
+      tags: [scripts]
+      summary: Update a script only if its source has not changed
+      description: |
+        Requires `scriptUpdates` in capabilities. The source comparison and
+        installation run together on the command loop. Use `expected_source: null`
+        to create a separate copy only if the name does not exist. An existing
+        script keeps compatible settings. Compile/setup failures restore the old
+        script; errors in later callbacks cannot be detected here. The combined
+        JSON body must fit the device's current source memory budget.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[A-Za-z0-9_-]{1,32}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_source, source]
+              properties:
+                expected_source:
+                  type: [string, "null"]
+                  description: Exact current source, or null to create only.
+                source: { type: string, minLength: 1 }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadJson" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Source changed or the copy name exists (`scriptChanged`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Invalid" }
+        "503":
+          description: Scripting unavailable or temporarily busy.
+        "507":
+          description: Insufficient script capacity.
+
   /api/v1/apps/script/{name}:
     get:
       tags: [scripts]
@@ -969,12 +1012,11 @@ paths:
 
         There is no separate script inventory: `GET /api/v1/apps` lists every
         app with an `origin`, and a script entry carries its `error` state and
-        its `@name`/`@desc`/`@author`/`@version` header in `meta`. `error` is
+        its `@name`/`@desc`/`@author`/`@version`/`@icons` header in `meta`. `error` is
         `""` while the script is healthy; anything else is the message the
         matrix is showing as `ERR:<name>`, and it STICKS - a script that
         raised once stays broken until it is replaced. The source is
-        deliberately not part of that listing: it can be as large as
-        `scriptMaxBytes` allows (16384 bytes by default, up to 32768).
+        deliberately not part of that listing.
       parameters:
         - name: name
           in: path
@@ -1022,10 +1064,9 @@ paths:
         dropped, the persisted store is not. The script keeps its position in
         the rotation.
 
-        The device holds `scriptLimit` scripts (default 16, see
-        `PUT /api/v1/system`). A NEW name beyond that -- or past the shared-heap
-        soft limit -- is rejected with `507` and nothing is stored; replacing an
-        existing one always works. Modules count against the same limit.
+        A NEW name past the shared-heap soft limit is rejected with `507` and
+        nothing is stored; replacing an existing one always works. Modules
+        share the same limit.
 
         A source whose header carries `@module` installs as a module instead of
         an app: it is stored and listed the same way, but it never draws and is
@@ -1047,10 +1088,7 @@ paths:
           text/plain:
             schema:
               type: string
-              maxLength: 32768
-              description: >
-                Berry source. The accepted size is `scriptMaxBytes` (16384 by
-                default); 32768 is the highest that setting can be raised to.
+              description: Berry source.
       responses:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200":
@@ -1071,11 +1109,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "403": { $ref: "#/components/responses/Forbidden" }
-        "413":
-          description: Source exceeds `scriptMaxBytes` (refused, never truncated)
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
         "415": { $ref: "#/components/responses/WrongContentType" }
         "422": { $ref: "#/components/responses/Invalid" }
         "500":
@@ -1104,8 +1137,7 @@ paths:
         The values themselves are ordinary entries in the script's persisted
         store, which is why `value` can differ from `default` without anyone
         having used this API: the script may have written it. Installing a
-        source that no longer declares a setting drops its stored value, so
-        nothing invisible accumulates against the store's 2 KB.
+        source that no longer declares a setting drops its stored value.
       parameters:
         - name: name
           in: path
@@ -1129,6 +1161,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "507": { $ref: "#/components/responses/InsufficientStorage" }
     patch:
       tags: [scripts]
       summary: Change a script's settings
@@ -1216,7 +1249,7 @@ paths:
 
         Nothing here survives a reboot, and nothing survives its author:
         removing a script - or re-saving it, which restarts it - drops
-        everything it had published. Each app may publish 8 keys / 256 bytes.
+        everything it had published.
 
         Read-only on purpose: the space belongs to the scripts, and a value with
         no app behind it would have nobody left to keep it true. The path sits
@@ -1426,8 +1459,6 @@ paths:
         | `minBrightness`, `maxBrightness` | 0..255 |
         | `panelWidth` | 1..128 |
         | `panels` | 1..128 |
-        | `scriptLimit` | 0..32 |
-        | `scriptMaxBytes` | 1024..32768 |
         | `tempOffset` | -20..20 |
         | `humOffset` | -50..50 |
         | `batteryDividerRatio` | 0.1..10 |
@@ -1506,6 +1537,64 @@ paths:
                 properties:
                   next: { type: integer }
                   lines: { type: array, items: { type: string } }
+
+  /api/v1/icons/origins:
+    description: |
+      Durable local provenance, available offline. Normal icon overwrite retains the recorded
+      SHA256 so callers can detect local edits; deleting an icon removes its link. These are
+      user-supplied associations, not signatures or proof of authorship. GET is allowed in AP mode;
+      PUT and DELETE are blocked by the existing read-only provisioning policy.
+      Storage is bounded to 64 records and 16 KiB; writes replace the store atomically.
+    get:
+      tags: [files]
+      summary: List installed icon origins
+      responses:
+        "200":
+          description: Existing icon files with saved origins, no pagination within the hard limit
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [icons]
+                properties:
+                  icons:
+                    type: array
+                    maxItems: 64
+                    items: { $ref: "#/components/schemas/IconOrigin" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { description: "storageError: unreadable or corrupt origin metadata" }
+    put:
+      tags: [files]
+      summary: Associate an existing local icon with a published original
+      description: Idempotent complete record upsert keyed by filename. Maximum body 1024 bytes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IconOrigin" }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { description: invalidOrigin }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { description: payloadTooLarge }
+        "507": { description: "insufficientStorage: record or byte limit reached" }
+        "500": { description: "storageError: read or atomic write failed" }
+    delete:
+      tags: [files]
+      summary: Remove a local origin association without deleting the image
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,32}\.(gif|jpg)$' }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { description: invalidName }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { description: "storageError: read or atomic write failed" }
 
   /api/v1/files:
     get:
@@ -1623,13 +1712,33 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    IconOrigin:
+      type: object
+      required: [name, hub, slug, sha256]
+      properties:
+        name:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{1,32}\.(gif|jpg)$'
+          description: Existing local filename including extension
+        hub:
+          type: string
+          maxLength: 240
+          pattern: '^https://[^@?#%\\ ]+/icons/$'
+          description: HTTPS icon base; no credentials, query, fragment, escapes or dot-segments
+        slug:
+          type: string
+          pattern: '^[a-z0-9_-]{1,32}$'
+        sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: SHA256 of local bytes when linked; not updated by normal file overwrite
     ScriptMeta:
       type: object
       description: >
         Script apps only, in `GET /api/v1/apps`. The
-        `@name`/`@desc`/`@author`/`@version` header comments the source
-        declared; each is `""` when absent. Omitted for other origins and on a
-        build with no scripting platform.
+        `@name`/`@desc`/`@author`/`@version`/`@icons` header comments the source
+        declared; each string is `""` when absent. Omitted for other origins and
+        on a build with no scripting platform.
       properties:
         name:
           type: string
@@ -1637,6 +1746,14 @@ components:
         desc: { type: string }
         author: { type: string }
         version: { type: string }
+        icons:
+          type: array
+          items: { type: string, pattern: "^[A-Za-z0-9_-]{1,32}$" }
+          maxItems: 32
+          description: >
+            The icon database IDs from the `@icons` header lines - what the
+            script draws with `icon()` and what a client offers to install
+            into `/ICONS`. `[]` when the header is absent.
     ScriptConfig:
       type: object
       description: >
@@ -1716,6 +1833,8 @@ components:
               type: string
               enum:
                 - badRequest            # 400, POST /api/v1/system/restore only - no backup file received
+                - invalidOrigin         # 400, malformed icon origin record
+                - storageError          # 500, icon provenance persistence failed
                 - invalidJson           # 400
                 - invalidPath           # 400, file routes only - outside the asset folders or contains ".."
                 - invalidPinConfig      # 400, PUT /api/v1/system only
@@ -1730,6 +1849,7 @@ components:
                 - payloadTooLarge      # 413, body over 8192 bytes, or a valid
                                        #      body whose parse tree does not fit
                 - validationFailed      # 422
+                - scriptChanged         # 409, source changed or copy name exists
                 - internalError         # 500
                 - serviceBusy           # 503, a request arrived while the same subsystem was still handling one
                 - unavailable           # 503, GET /api/v1/apps/script/{name} or /api/v1/scripts/shared on a build with no scripting platform
@@ -1938,6 +2058,13 @@ components:
         transitionEffect:
           type: string
           description: One of capabilities.transitions (e.g. "Slide", "Random")
+        transitionDirection:
+          type: string
+          enum: [normal, reverse]
+          default: normal
+          description: >
+            Reverses the movement of direction-aware transitions without
+            changing app order. Symmetric transitions are unaffected.
         transitionDurationMs: { type: integer, minimum: 0 }
         appDurationMs: { type: integer, minimum: 0 }
         timeMode:
@@ -2154,6 +2281,14 @@ components:
           description: >
             Whether the strip runs along the rows or down the columns inside a
             panel. Applies on the next frame.
+        panelColorOrder:
+          type: string
+          default: grb
+          enum: [rgb, rbg, grb, gbr, brg, bgr]
+          description: >
+            Physical colour-byte order expected by the LED panel. Matched
+            case-insensitively; any other value is rejected with 422. Applies
+            on the next frame.
         panelSerpentine:
           type: boolean
           default: true
@@ -2210,26 +2345,6 @@ components:
             interpreter and its HTTP worker at boot (frees ~40 KB internal RAM);
             script endpoints then answer 503. Stored scripts survive on flash.
             Applies after a reboot.
-        scriptLimit:
-          type: integer
-          default: 16
-          minimum: 0
-          maximum: 32
-          description: >
-            How many Berry scripts may be resident at once. All scripts share
-            one VM, so this is a memory budget on their combined data rather than
-            a policy: 0 refuses every install. Applied immediately, no reboot.
-            Installing past it -- or past the 96 KB shared-heap soft limit --
-            answers `507` from `PUT /api/v1/apps/script/{name}`. Lowering it
-            below the number already installed removes nothing: those scripts
-            keep running and stay replaceable, and only a new name is refused.
-        scriptMaxBytes:
-          type: integer
-          default: 16384
-          minimum: 1024
-          maximum: 32768
-          description: >
-            Largest script source the device accepts, in bytes. Bigger scripts cost more memory to compile, and how much more depends on how many functions they define rather than on their length. Lowering it refuses new installs at the new size but never removes or stops loading a script already stored -- those load up to the 32768-byte ceiling regardless.
         # --- GPIO map (-1 = disabled; validated as a whole, see PUT description) ---
         pinMatrix:
           type: integer
@@ -2255,6 +2370,8 @@ components:
         pinI2sBclk: { type: integer, default: -1, description: "I2S bit clock to an external DAC. ESP32-S3 only; set all three pinI2s* together or all to -1" }
         pinI2sLrclk: { type: integer, default: -1, description: "I2S word-select clock. ESP32-S3 only" }
         pinI2sDout: { type: integer, default: -1, description: "I2S serial data out. ESP32-S3 only" }
+        pinI2sMclk: { type: integer, default: -1, description: "I2S master clock, only for DACs that need one. ESP32-S3 only; needs the three pinI2s* lines set" }
+        pinAmpEnable: { type: integer, default: -1, description: "Amplifier enable, held HIGH from boot (NS4168 CTRL, MAX98357A SD). ESP32-S3 only; needs the three pinI2s* lines set" }
     SystemConfigRead:
       description: >
         The configuration as returned by GET/PUT - identical to SystemConfig
@@ -2332,6 +2449,13 @@ components:
             exist and which of them can do what - the full rules are under
             `gpio` in `/api/v1/capabilities`.
           enum: [esp32, esp32s3]
+        updateImage:
+          type: string
+          enum: [firmware-awtrix-ng.bin, firmware-awtrix-ng-s3-octal.bin, firmware-awtrix-ng-s3-quad.bin, ""]
+          description: >
+            The release file this device updates from - the one `POST /update`
+            accepts. The web UI uses it to offer the right download. Empty in
+            the simulator.
         ipAddress: { type: string }
         hostname:
           type: string

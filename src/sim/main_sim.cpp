@@ -317,9 +317,6 @@ int main(int argc, char** argv) {
     // mean rebuilding the canvas, the power animator and the pipeline, so that waits for a restart.
     const MatrixLayout layout = g_cfg.matrixLayout();
     if (layout.width() == g_board.matrixWidth()) g_board.setMatrixLayout(layout);
-    if (g_scripts)
-      g_scripts->setLimit(g_cfg.scriptLimit < 0 ? 0 : static_cast<std::size_t>(g_cfg.scriptLimit));
-    script::setMaxSourceBytes(static_cast<std::size_t>(g_cfg.scriptMaxBytes));
     logbuf::setVerbose(g_cfg.debugMode);
   });
   {
@@ -343,7 +340,7 @@ int main(int argc, char** argv) {
   g_periphery.setButtonHook([](int btn) {
     static const char* kBtnNames[3] = {"left", "select", "right"};
     if (g_scripts && btn >= 0 && btn < 3)
-      g_scripts->handleButton(g_engine->currentAppId(), kBtnNames[btn]);
+      return g_scripts->handleButton(g_engine->currentAppId(), kBtnNames[btn]);
     return false;
   });
 
@@ -369,6 +366,12 @@ int main(int argc, char** argv) {
     c.source = Source::Internal;
     return g_engine->submit(c);
   };
+  g_scriptSvc.setDisplayPower = [](bool on) {
+    Command c(CommandType::SetDisplay);
+    c.payload = on ? "{\"power\":true}" : "{\"power\":false}";
+    c.source = Source::Internal;
+    return g_engine->submit(c);
+  };
   g_scriptSvc.sound = [](script::SoundAction a, const std::string& payload) {
     Command c = scriptSoundCommand(a, payload);
     return g_engine->submit(c);
@@ -378,6 +381,9 @@ int main(int argc, char** argv) {
     const sound::Caps c = g_audio.caps();
     return (c.buzzer ? 1 : 0) | (c.track ? 2 : 0) | (c.mp3 ? 4 : 0) |
            (c.radio ? 8 : 0);
+  };
+  g_scriptSvc.audioStats = [](int64_t now, audio::FrameStats& out) {
+    return g_pcm->analysis(now, out);
   };
   g_scriptSvc.rotateNext = [] { g_engine->scriptNextApp(); };
   g_scriptSvc.rotatePrevious = [] { g_engine->scriptPreviousApp(); };
@@ -399,8 +405,6 @@ int main(int argc, char** argv) {
         [](const std::string& id) { g_engine->syncScriptApp(id); },
         [](const std::string& id) { g_engine->removeScriptApp(id); });
     g_scripts = &scripts;
-    scripts.setLimit(cfg.scriptLimit < 0 ? 0 : static_cast<std::size_t>(cfg.scriptLimit));
-  script::setMaxSourceBytes(static_cast<std::size_t>(cfg.scriptMaxBytes));
     g_scriptHttp.begin([](script::HttpResult r) { g_scripts->pushHttpResult(std::move(r)); });
     g_scriptMqtt.begin([](const std::string& t, const std::string& p) { g_mqtt.publishRaw(t, p); },
                        [](const std::string& t) { g_mqtt.subscribeRaw(t); },
@@ -421,7 +425,7 @@ int main(int argc, char** argv) {
           [modulePass](const std::string& n, const std::string& src, const std::string& st) {
             if (script::parseMeta(src).module != modulePass) return;
             if (!g_scripts->set(n, src, st))
-              logf("scripts: %s not restored (limit %d reached)", n.c_str(), g_cfg.scriptLimit);
+              logf("scripts: %s not restored (%s)", n.c_str(), g_scripts->lastRefusal().c_str());
           });
     }
     if (g_scripts->count()) logf("scripts: %u restored", static_cast<unsigned>(g_scripts->count()));

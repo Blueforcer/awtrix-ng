@@ -169,16 +169,27 @@ void test_auth_gate_requires_user_and_pass() {
 
 void test_i2s_pins_are_all_or_none() {
   cfgrules::ConfigError e;
-  TEST_ASSERT_TRUE(cfgrules::validateAudioPins(5, 6, 4, e));
-  TEST_ASSERT_TRUE(cfgrules::validateAudioPins(-1, -1, -1, e));
+  TEST_ASSERT_TRUE(cfgrules::validateAudioPins(5, 6, 4, -1, -1, e));
+  TEST_ASSERT_TRUE(cfgrules::validateAudioPins(-1, -1, -1, -1, -1, e));
 
-  TEST_ASSERT_FALSE(cfgrules::validateAudioPins(-1, 6, 4, e));
+  TEST_ASSERT_FALSE(cfgrules::validateAudioPins(-1, 6, 4, -1, -1, e));
   TEST_ASSERT_EQUAL_STRING("pinI2sBclk", e.field.c_str());
-  TEST_ASSERT_FALSE(cfgrules::validateAudioPins(5, -1, 4, e));
+  TEST_ASSERT_FALSE(cfgrules::validateAudioPins(5, -1, 4, -1, -1, e));
   TEST_ASSERT_EQUAL_STRING("pinI2sLrclk", e.field.c_str());
-  TEST_ASSERT_FALSE(cfgrules::validateAudioPins(5, 6, -1, e));
+  TEST_ASSERT_FALSE(cfgrules::validateAudioPins(5, 6, -1, -1, -1, e));
   TEST_ASSERT_EQUAL_STRING("pinI2sDout", e.field.c_str());
-  TEST_ASSERT_FALSE(cfgrules::validateAudioPins(5, -1, -1, e));
+  TEST_ASSERT_FALSE(cfgrules::validateAudioPins(5, -1, -1, -1, -1, e));
+}
+
+void test_mclk_and_amp_enable_need_the_i2s_bus() {
+  cfgrules::ConfigError e;
+  TEST_ASSERT_TRUE(cfgrules::validateAudioPins(5, 6, 4, 46, 45, e));
+  TEST_ASSERT_TRUE(cfgrules::validateAudioPins(5, 6, 4, -1, 45, e));
+
+  TEST_ASSERT_FALSE(cfgrules::validateAudioPins(-1, -1, -1, 46, -1, e));
+  TEST_ASSERT_EQUAL_STRING("pinI2sMclk", e.field.c_str());
+  TEST_ASSERT_FALSE(cfgrules::validateAudioPins(-1, -1, -1, -1, 45, e));
+  TEST_ASSERT_EQUAL_STRING("pinAmpEnable", e.field.c_str());
 }
 
 void test_non_empty_and_absent_load_bearing_fields_accepted() {
@@ -397,6 +408,19 @@ void test_wiring_enums_are_named_not_numbered() {
   TEST_ASSERT_EQUAL_STRING("must be one of: rows columns", e.message.c_str());
 }
 
+void test_panel_color_order_is_a_named_enum() {
+  cfgrules::ConfigError e;
+  Body valid;
+  valid.set("panelColorOrder", "rgb");
+  TEST_ASSERT_TRUE_MESSAGE(ok(valid, e), e.message.c_str());
+
+  Body invalid;
+  invalid.set("panelColorOrder", "rrg");
+  TEST_ASSERT_FALSE(ok(invalid, e));
+  TEST_ASSERT_EQUAL_STRING("panelColorOrder", e.field.c_str());
+  TEST_ASSERT_EQUAL_STRING("must be one of: rgb rbg grb gbr brg bgr", e.message.c_str());
+}
+
 void test_wiring_booleans_must_be_booleans() {
   cfgrules::ConfigError e;
   Body a;
@@ -440,32 +464,6 @@ void test_wiring_booleans_must_be_booleans() {
   TEST_ASSERT_TRUE_MESSAGE(ok(d, e), e.field.c_str());
 }
 
-void test_script_limit_range_checked() {
-  cfgrules::ConfigError e;
-  Body a;
-  a.set("scriptLimit", 0);
-  TEST_ASSERT_TRUE_MESSAGE(ok(a, e), e.field.c_str());
-
-  Body b;
-  b.set("scriptLimit", 6);
-  TEST_ASSERT_TRUE_MESSAGE(ok(b, e), e.field.c_str());
-
-  Body c;
-  c.set("scriptLimit", 33);
-  TEST_ASSERT_FALSE(ok(c, e));
-  TEST_ASSERT_EQUAL_STRING("scriptLimit", e.field.c_str());
-
-  Body d;
-  d.set("scriptLimit", -1);
-  TEST_ASSERT_FALSE(ok(d, e));
-  TEST_ASSERT_EQUAL_STRING("scriptLimit", e.field.c_str());
-
-  Body f;
-  f.set("scriptLimit", 2.5);
-  TEST_ASSERT_FALSE(ok(f, e));
-  TEST_ASSERT_EQUAL_STRING("scriptLimit", e.field.c_str());
-}
-
 }
 
 void setUp() {}
@@ -499,9 +497,10 @@ int main(int, char**) {
   RUN_TEST(test_panel_width_product_must_fit_the_envelope);
   RUN_TEST(test_panel_fields_are_range_checked);
   RUN_TEST(test_wiring_enums_are_named_not_numbered);
+  RUN_TEST(test_panel_color_order_is_a_named_enum);
   RUN_TEST(test_wiring_booleans_must_be_booleans);
-  RUN_TEST(test_script_limit_range_checked);
   RUN_TEST(test_i2s_pins_are_all_or_none);
+  RUN_TEST(test_mclk_and_amp_enable_need_the_i2s_bus);
   UNITY_END();
   return 0;
 }

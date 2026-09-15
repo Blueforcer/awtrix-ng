@@ -1,5 +1,6 @@
 #include "core/script/Regex.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace awtrix::script {
@@ -19,7 +20,7 @@ const Range kSpace[] = {{'\t', '\r'}, {' ', ' '}};
 
 class RegexParser {
  public:
-  RegexParser(Regex& re, const std::string& pat) : re_(re), pat_(pat) {}
+  RegexParser(Regex& re, std::string_view pat) : re_(re), pat_(pat) {}
 
   bool parse() {
     // A lazy `.*` loop, kPrefixBytes long, so an unanchored search can start anywhere. Lazy so
@@ -272,47 +273,63 @@ class RegexParser {
   }
 
   Regex& re_;
-  const std::string& pat_;
+  std::string_view pat_;
   std::size_t pos_ = 0;
   int nGroups_ = 0;
   bool failed_ = false;
 };
 
 
-bool Regex::compile(const std::string& pattern) {
-  prog_.clear();
+bool Regex::compile(std::string_view pattern) {
+  // A changed pattern must not retain the largest previous pattern's scratch buffers.
+  // Free them before compiling, so old and new reserves never overlap on a small heap.
+  *this = Regex{};
   if (pattern.size() > kMaxPattern) return false;
 
   RegexParser p(*this, pattern);
   if (!p.parse()) {
-    prog_.clear();
+    *this = Regex{};
     return false;
   }
   nGroups_ = p.groups();
 
-  const std::size_t n = prog_.size();
-  list_[0].clear();
-  list_[1].clear();
-  list_[0].reserve(n);
-  list_[1].reserve(n);
-  stack_.clear();
-  stack_.reserve(n);
-  seen_.assign(n, 0);
+  std::size_t consuming = 0;
+  std::size_t splits = 0;
+  for (std::size_t pc = 0; pc < prog_.size();) {
+    switch (prog_[pc]) {
+      case kChar: ++consuming; pc += 2; break;
+      case kAny:
+      case kMatch: ++consuming; ++pc; break;
+      case kClass: ++consuming; pc += 3 + prog_[pc + 2] * 2; break;
+      case kSplit:
+      case kRSplit: ++splits; pc += 3; break;
+      case kJmp: pc += 3; break;
+      case kSave: pc += 2; break;
+      default: ++pc; break;  // kBol and kEol
+    }
+  }
+  // seen_ admits each PC only once per generation: a search list can hold at most one
+  // thread per consuming/match opcode. The DFS stack starts with one thread and only
+  // an unvisited split increases its size, by one. Operand bytes need no thread slots.
+  list_[0].reserve(consuming);
+  list_[1].reserve(consuming);
+  stack_.reserve(splits + 1);
+  seen_.assign(prog_.size(), 0);
   gen_ = 0;
   return true;
 }
 
-bool Regex::search(const std::string& text, Span* groups, int ngroups) {
+bool Regex::search(std::string_view text, Span* groups, int ngroups) {
   return run(text, 0, false, groups, ngroups);
 }
 
-bool Regex::searchFrom(const std::string& text, std::size_t from, Span* groups,
+bool Regex::searchFrom(std::string_view text, std::size_t from, Span* groups,
                        int ngroups) {
   if (from > text.size()) return false;
   return run(text, from, false, groups, ngroups);
 }
 
-bool Regex::match(const std::string& text, Span* groups, int ngroups) {
+bool Regex::match(std::string_view text, Span* groups, int ngroups) {
   return run(text, 0, true, groups, ngroups);
 }
 
@@ -398,7 +415,7 @@ bool classMatch(const uint8_t* p, uint8_t b) {
 
 // One pass with all live threads in lockstep. addThread built the list in preference order,
 // so the first thread to reach kMatch is the one a backtracking engine would have found.
-bool Regex::run(const std::string& text, std::size_t from, bool anchored, Span* groups,
+bool Regex::run(std::string_view text, std::size_t from, bool anchored, Span* groups,
                 int ngroups) {
   if (prog_.empty()) return false;
   if (text.size() > kMaxInput) return false;

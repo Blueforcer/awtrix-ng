@@ -16,6 +16,9 @@ namespace heap {
 struct Info {
   const char* name = "internal";
   std::size_t budgetBytes = 0;
+  // Whether the VM lives in PSRAM. The larger buffers a script's work needs come from the same
+  // pool, so the guards on those buffers weigh it too.
+  bool psram = false;
 };
 
 Info info();
@@ -24,6 +27,11 @@ void setInstallReserve(std::size_t bytes);
 void clearInstallReserve();
 
 std::size_t installLowWater();
+
+// Bytes a buffer may grow to without taking the floor out from under the rest of the firmware.
+// Derived from free heap and the largest contiguous block -- asking costs nothing, it reserves
+// nothing.
+std::size_t growthBudget();
 
 // Whether an allocation may proceed without eating into the reserve. Written to survive
 // unsigned wrap: subtracting first would let a request larger than the free heap pass.

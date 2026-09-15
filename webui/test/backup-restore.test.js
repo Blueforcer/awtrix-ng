@@ -6,7 +6,7 @@
      the real /api/v1/restore, and confirm the state came back. The ZIP the
      browser writes is read by the actual firmware ZipReader, so this is the
      writer<->reader interop check the offline test can't be. */
-const { boot, bootSim, flush } = require('./harness');
+const { boot, bootSim, goto, flush } = require('./harness');
 
 const SIM = process.argv.includes('--sim');
 const BASE = 'http://localhost:8080';
@@ -29,10 +29,37 @@ function parseZip(buf) {
     const name = buf.slice(p + 30, p + 30 + nameLen).toString('utf8');
     const dataStart = p + 30 + nameLen + extraLen;
     const data = buf.slice(dataStart, dataStart + size);
-    entries.push({ name, crc, data });
+    entries.push({
+      name, crc, data,
+      dosTime: buf.readUInt16LE(p + 10),
+      dosDate: buf.readUInt16LE(p + 12),
+    });
     p = dataStart + size;
   }
   return entries;
+}
+function parseCentralDirectory(buf) {
+  const entries = [];
+  let p = 0;
+  while (p + 4 <= buf.length && buf.readUInt32LE(p) === 0x04034b50) {
+    p += 30 + buf.readUInt16LE(p + 26) + buf.readUInt16LE(p + 28) + buf.readUInt32LE(p + 18);
+  }
+  while (p + 46 <= buf.length && buf.readUInt32LE(p) === 0x02014b50) {
+    const nameLen = buf.readUInt16LE(p + 28);
+    const extraLen = buf.readUInt16LE(p + 30);
+    const commentLen = buf.readUInt16LE(p + 32);
+    entries.push({
+      name: buf.slice(p + 46, p + 46 + nameLen).toString('utf8'),
+      dosTime: buf.readUInt16LE(p + 12),
+      dosDate: buf.readUInt16LE(p + 14),
+    });
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+function fromDosDateTime(date, time) {
+  return new Date(1980 + (date >>> 9), ((date >>> 5) & 15) - 1, date & 31,
+    time >>> 11, (time >>> 5) & 63, (time & 31) * 2);
 }
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -62,9 +89,12 @@ async function testZipStructure() {
     { name: 'manifest.json', data: '{"app":"awtrix-ng","backupFormat":1}' },
     { name: 'PALETTES/fire.txt', data: 'FF0000\nFFAA00\n' },
   ];
+  const before = Date.now();
   const blob = window.zipStore(entries);
+  const after = Date.now();
   const bytes = await blobBytes(window, blob);
   const got = parseZip(bytes);
+  const central = parseCentralDirectory(bytes);
 
   assert(got.length === 2, 'writer emits both entries (got ' + got.length + ')');
   assert(got[0].name === 'manifest.json', 'manifest.json is written first');
@@ -73,8 +103,34 @@ async function testZipStructure() {
   // The firmware verifies this CRC; an independent recompute must match.
   assert(got[0].crc === crc32(got[0].data), 'manifest CRC is correct');
   assert(got[1].crc === crc32(got[1].data), 'palette CRC is correct');
+  const timestamps = [...got, ...central].map(e => +fromDosDateTime(e.dosDate, e.dosTime));
+  assert(timestamps.length === 4 && timestamps.every(ts => ts >= before - 2000 && ts <= after),
+    'local and central entries carry the backup creation time');
   // End-of-central-directory record present.
   assert(bytes.readUInt32LE(bytes.length - 22) === 0x06054b50, 'EOCD signature present');
+  window.close();
+}
+
+async function testSelectAllCategories() {
+  const { window } = await boot();
+  await goto(window, '#/system');
+  const section = window.document.querySelector('#sec-backup');
+  const labels = [...section.querySelectorAll('label')]
+    .filter(label => label.querySelector('input[type=checkbox]'));
+  const all = labels.find(label => label.textContent.trim() === 'All');
+  assert(!!all, 'backup offers an All checkbox');
+  if (all) {
+    const master = all.querySelector('input');
+    master.checked = true;
+    master.dispatchEvent(new window.Event('change', { bubbles: true }));
+    const categories = labels.filter(label => label !== all).map(label => label.querySelector('input'));
+    assert(categories.length > 0 && categories.every(box => box.checked),
+      'All selects every available backup category');
+    categories[0].checked = false;
+    categories[0].dispatchEvent(new window.Event('change', { bubbles: true }));
+    assert(!master.checked && master.indeterminate,
+      'All becomes indeterminate when only some categories are selected');
+  }
   window.close();
 }
 
@@ -141,6 +197,21 @@ async function testRoundTripAgainstSim() {
 
 async function main() {
   await testZipStructure();
+  await testSelectAllCategories();
+  if(!SIM){
+    const{window,store}=await boot();
+    store.files['/ICONS'].set('mail.gif',12);
+    const origin={name:'mail.gif',hub:'https://awtrix.de/icons/',slug:'mail',sha256:'a'.repeat(64)};
+    store.iconOrigins.set('mail.gif',origin);
+    const entries=await window.collectBackup({icons:true});
+    const metadata=entries.find(e=>e.name==='config/icon-origins.json');
+    assert(entries.some(e=>e.name==='ICONS/mail.gif'),'icon backup includes actual file');
+    assert(JSON.parse(metadata.data).icons[0].sha256===origin.sha256,'icon backup retains original content reference');
+    store.originFailure=true;let failed=false;
+    try{await window.collectBackup({icons:true});}catch(e){failed=true;}
+    assert(failed,'metadata storage failure cannot silently produce incomplete backup');
+    window.close();
+  }
   if (SIM) {
     await testRoundTripAgainstSim();
   } else {

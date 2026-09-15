@@ -11,7 +11,9 @@
 #include <vector>
 
 #include "core/CoreEngine.h"
+#include "core/audio/AudioStatsRing.h"
 #include "core/audio/Mp3Decoder.h"
+#include "core/audio/SpectrumAnalyzer.h"
 #include "core/sound/AudioSinks.h"
 #include "core/radio/IcyMetadata.h"
 #include "core/radio/IcyStream.h"
@@ -26,7 +28,9 @@ class AudioOutEsp32 : public sound::IPcmSink {
   static void* operator new(std::size_t bytes);
   static void operator delete(void* p);
 
-  AudioOutEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int pinDout);
+  // pinMclk and pinAmpEnable are -1 on boards that need neither.
+  AudioOutEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int pinDout, int pinMclk,
+                int pinAmpEnable);
   ~AudioOutEsp32() override;
 
   // Two gains, one DAC. A stream turned down for the background must not take the doorbell
@@ -43,6 +47,7 @@ class AudioOutEsp32 : public sound::IPcmSink {
   void stopStream() override;
 
   void tick(int64_t nowMs) override;
+  bool analysis(int64_t nowMs, audio::FrameStats& out) override;
 
   uint32_t underruns() const override { return underruns_.load(); }
   uint32_t decodeUs() const override { return decodeUs_.load(); }
@@ -67,6 +72,8 @@ class AudioOutEsp32 : public sound::IPcmSink {
   const int pinBclk_;
   const int pinLrclk_;
   const int pinDout_;
+  const int pinMclk_;
+  const int pinAmpEnable_;
 
   TaskHandle_t task_ = nullptr;
   SemaphoreHandle_t lock_ = nullptr;
@@ -101,6 +108,8 @@ class AudioOutEsp32 : public sound::IPcmSink {
   radio::TitleTracker tracker_;
   radio::MetadataSplitter splitter_;
   mp3::Decoder decoder_;
+  audio::SpectrumAnalyzer analyzer_;
+  audio::StatsRing stats_;
   int sampleRateHz_ = 0;
   int channels_ = 0;
   bool i2sStarted_ = false;

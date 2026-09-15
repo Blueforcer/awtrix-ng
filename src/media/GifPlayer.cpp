@@ -50,6 +50,7 @@ GifPlayer::OpenResult GifPlayer::open(const std::string& iconId, bool firstFrame
 
   const PreDecode pd = preDecode(firstFrameOnly, maxResidentFrames);
   if (pd == PreDecode::kDone) {
+    gif_ = media::MicroGif{};
     data_.clear();
     if (frameCount_ == 0) {
       close();
@@ -104,6 +105,7 @@ GifPlayer::PreDecode GifPlayer::preDecode(bool firstFrameOnly, int maxResidentFr
 
 void GifPlayer::close() {
   streaming_ = false;
+  gif_ = media::MicroGif{};
   data_.clear();
   frames_.clear();
   delays_.clear();

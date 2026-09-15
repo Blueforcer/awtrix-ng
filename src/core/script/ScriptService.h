@@ -6,7 +6,9 @@
 
 #include "core/Command.h"
 #include "core/Services.h"
+#include "core/api/JsonReader.h"
 #include "core/script/ScriptConfig.h"
+#include "core/script/ScriptHeap.h"
 #include "core/script/ScriptHost.h"
 
 namespace awtrix::script {
@@ -30,6 +32,67 @@ class ScriptService : public IScriptService {
     return r;
   }
 
+  // Runs on the command loop: checking the previous source and installing are serialized
+  // with other edits. Keep the old source on disk until the replacement has loaded.
+  DispatchResult updateScript(const std::string& name, const std::string& json,
+                              DispatchDetail& detail) override {
+    api::JsonReader expectedValue, sourceValue;
+    if (!api::readMembers(json, {{"expected_source", &expectedValue}, {"source", &sourceValue}}))
+      return DispatchResult::ParseError;
+    std::string expected, source;
+    const bool createOnly = expectedValue.isNull();
+    if ((!createOnly && (!expectedValue.isString() || !expectedValue.appendString(expected))) ||
+        !sourceValue.isString() || !sourceValue.appendString(source) || source.empty()) {
+      detail.message = "expected_source must be a string or null; source must be a non-empty string";
+      return DispatchResult::ValidationError;
+    }
+    std::string previous;
+    const bool exists = readSource(name, previous);
+    if (createOnly) {
+      if (exists) return DispatchResult::Conflict;
+      if (!save_ || !remove_) return DispatchResult::Unavailable;
+      const DispatchResult result = install(name, source, "{}", "install refused", detail);
+      if (result != DispatchResult::Ok) return result;
+      if (detail.message.empty()) {
+        save_(name, source);
+        std::string saved;
+        if (readSource(name, saved) && saved == source) return DispatchResult::Ok;
+        detail.message = "the new source could not be saved";
+      }
+      removeScript(name);
+      return DispatchResult::ValidationError;
+    }
+    if (!exists) return DispatchResult::NotFound;
+    if (previous != expected) return DispatchResult::Conflict;
+    if (previous == source) return DispatchResult::Ok;
+    if (!save_) return DispatchResult::Unavailable;
+    std::string oldStore, nextStore, pruned;
+    readStore(name, oldStore);
+    nextStore = oldStore;
+    if (dropUndeclaredValues(parseConfig(previous), parseConfig(source), oldStore, pruned))
+      nextStore = std::move(pruned);
+    const DispatchResult result = install(name, source, nextStore, "update refused", detail);
+    if (result != DispatchResult::Ok) return result;
+    if (detail.message.empty()) {
+      save_(name, source);
+      std::string saved;
+      if (readSource(name, saved) && saved == source) {
+        std::string stored, cleaned;
+        if (readStore(name, stored) &&
+            dropUndeclaredValues(parseConfig(previous), parseConfig(source), stored, cleaned))
+          saveStore(name, cleaned);
+        return DispatchResult::Ok;
+      }
+      detail.message = "the new source could not be saved";
+    }
+    const std::string failure = detail.message;
+    const bool restored = host_.set(name, previous, oldStore) && host_.errorOf(name).message.empty();
+    saveStore(name, oldStore.empty() ? "{}" : oldStore);
+    detail.message = failure + (restored ? "; previous version restored" :
+                                           "; previous source retained, restart the device");
+    return DispatchResult::ValidationError;
+  }
+
   DispatchResult setScriptConfig(const std::string& name, const std::string& json,
                                  DispatchDetail& detail) override {
     std::string source;
@@ -47,9 +110,9 @@ class ScriptService : public IScriptService {
       detail.message = patch.message;
       return DispatchResult::ValidationError;
     }
-    if (patch.storeJson.size() > kMaxStoreBytes) {
+    if (patch.storeJson.size() > heap::growthBudget()) {
       detail.field = "name";
-      detail.message = "this script has no room left to store the change; shorten a text setting";
+      detail.message = "not enough free memory to store the change; shorten a text setting";
       return DispatchResult::Capacity;
     }
 

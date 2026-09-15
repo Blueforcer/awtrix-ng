@@ -35,6 +35,7 @@ std::string buildDeviceJson(CoreEngine& engine, const std::string& uid, const De
   w.member("uid", uid);
   w.member("boardType", facts.boardType);
   w.member("soc", facts.soc);
+  w.member("updateImage", facts.updateImage);
   w.member("ipAddress", facts.ipAddress);
   w.member("hostname", facts.hostname);
   w.member("wifiRssi", facts.wifiRssi);
@@ -233,8 +234,20 @@ void appendSharedStateJson(std::string& out, const std::vector<script::SharedEnt
   out += ']';
 }
 
+static void appendIconsJson(std::string& out, const std::string& raw) {
+  out += ",\"icons\":[";
+  bool first = true;
+  for (const std::string& id : script::splitIcons(raw)) {
+    if (!first) out += ',';
+    first = false;
+    appendJsonString(out, id);
+  }
+  out += ']';
+}
+
 // Three passes: apps in the rotation report their slot index, apps that exist but sit outside it
 // report slot null, and script modules are listed last since they never occupy a slot.
+
 void appendAppsJson(std::string& out, CoreEngine& engine, const script::ScriptHost* scripts,
                     const std::vector<script::StoredScript>* stored) {
   const std::map<std::string, script::ScriptHost::Info> info =
@@ -298,6 +311,7 @@ void appendAppsJson(std::string& out, CoreEngine& engine, const script::ScriptHo
         appendJsonString(out, it->second.author);
         out += ",\"version\":";
         appendJsonString(out, it->second.version);
+        appendIconsJson(out, it->second.icons);
         out += '}';
       }
     } else if (present) {
@@ -332,6 +346,7 @@ void appendAppsJson(std::string& out, CoreEngine& engine, const script::ScriptHo
     appendJsonString(out, mod.author);
     out += ",\"version\":";
     appendJsonString(out, mod.version);
+    appendIconsJson(out, mod.icons);
     out += "}}";
   };
 
@@ -375,6 +390,7 @@ void appendAppsJson(std::string& out, CoreEngine& engine, const script::ScriptHo
       appendJsonString(out, s.meta.author);
       out += ",\"version\":";
       appendJsonString(out, s.meta.version);
+      appendIconsJson(out, s.meta.icons);
       out += "}}";
     }
   }

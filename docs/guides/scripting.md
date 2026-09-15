@@ -77,8 +77,8 @@ Wrapping each app in a class keeps its methods and state to itself, and the `ret
 by completion (**Ctrl-Space**, or just keep typing), so a misspelled `pixel` stays plain
 and is visible before you save, and the list always matches whichever AWTRIX you are
 talking to. **Ctrl-S** saves, **Ctrl-/** toggles comments, **Tab** / **Shift-Tab** indent a
-selection, and the status line counts the bytes you have left of what AWTRIX accepts
-(16 KB by default).
+selection, and the status line shows where the cursor is and how many bytes the script
+has grown to.
 
 If the panel shows **`ERR:`** in red, your script hit an error - a typo, a bad index,
 anything. Nothing is harmed: open the **Scripts** tab and the message is right there
@@ -111,6 +111,7 @@ row that sounds like the app you have in mind, and follow it.
 | [Working with numbers](#numbers) | `num()` `round()` `clamp()` `min()` `max()` |
 | [Remembering across a reboot](#storage) | `store.get()` `store.set()` |
 | [Letting the user change something](#settings-the-user-can-change) | a `# @config` line, then `store.get()` |
+| [Shipping the icons you draw](#the-icons-your-script-needs) | a `# @icons` line, then `icon()` |
 | [Fetching from the internet](#http) | `http.get()` `http.post()` `http.put()` `http.patch()` `http.delete()` |
 | [Picking a value out of a reply](#regular-expressions) | `re.search()` `re.match()` `re.matchall()`, or `json.load()` |
 | [Home automation](#mqtt) | `mqtt.publish()` `mqtt.subscribe()` |
@@ -118,8 +119,10 @@ row that sounds like the app you have in mind, and follow it.
 | [Sharing code between apps](#sharing-code-between-scripts) | a `# @module` file, then `import` |
 | [Interrupting with an alert](#notifications) | `notify()` |
 | [Making a noise](#sound) | `sound.play()` `sound.mp3()` `sound.melody()` `sound.track()` `sound.rtttl()` `sound.stop()` `sound.playing()` `sound.sinks()` |
+| [Reacting to the music](#music) | `music.bands()` `music.level()` `music.beat()` `music.playing()` |
 | [What the device measures](#reading-the-sensors) | `sensor.temperature()` `sensor.humidity()` `sensor.pressure()` `sensor.light()` `sensor.battery()` |
 | [What the owner configured](#device-settings) | `settings.get()` `settings.set()` `settings.apply_case()` |
+| [Turning the matrix on and off](#display-power) | `display.power()` `display.is_on()` |
 | [Moving the rotation along](#driving-the-rotation) | `rotation.show()` `rotation.next()` `rotation.previous()` `rotation.pause()` `rotation.resume()` |
 | [Working out what went wrong](#logging) | `log()` |
 | [Which firmware is running](#which-firmware-is-running) | `version()` |
@@ -234,7 +237,7 @@ The hooks are **methods on your class**. Only `draw()` is required; define the o
 | `draw()` | every frame (~40/s) while your app is on screen | **yes** |
 | `on_show()` | your app has just been rotated in | no |
 | `on_hide()` | your app has just been rotated out | no |
-| `on_button(btn)` | a button was pressed while your app is on screen; `btn` is `"left"`, `"select"` or `"right"` | no |
+| `on_button(btn)` | a button was pressed while your app is on screen; `btn` is `"left"`, `"select"` or `"right"`, and `true` consumes the press | no |
 | `should_show()` | the rotation has reached you - return `false` to let it pass you by | no |
 | `duration()` | the rotation has reached you - return ms to override how long you stay | no |
 
@@ -272,9 +275,27 @@ A typo in a builtin (`clesr()`) fails at install time with a `syntax_error`, rat
 than when that line finally runs. Methods on your own class are looked up when they are
 called, so `self.helper()` may refer to a method defined further down the class.
 
-`on_button` is a notification, not a capture: your hook fires, and then left/right still
-rotate to the next app as usual. `select` has no other job in the rotation, so it is the
-one to use for an action.
+`on_button` decides what happens next. Return `true` and the press stops with you: left
+and right no longer rotate to the neighbouring app, and select no longer dismisses a
+notification or toggles the matrix on a double press. Return nothing, `false` or `nil` and
+the press carries on to the built-in navigation as usual, which is what you want unless
+your app really owns that button.
+
+```berry
+  def on_button(btn)
+    if btn == "left"
+      self.page -= 1
+      return true                     # the panel stays on this app
+    elif btn == "right"
+      self.page += 1
+      return true
+    end
+  end
+```
+
+Only the app that is on screen is asked, and only while it is drawing, so the rest of the
+rotation is unaffected. A hook that raises lets the press through: a broken app cannot lock
+the buttons.
 
 ### Sitting a round out
 
@@ -417,7 +438,7 @@ and keeps you there.
 
 ## The API
 
-Everything below is callable from any of your class's methods, with nothing to import: the drawing, time and number calls are plain global functions, and `http`, `mqtt`, `store`, `shared`, `settings`, `sound`, `rotation` and `re` are ready-made objects. Only the general-purpose modules - `json`, `string`, `math` - want one `import` line at the top of the file, and the [HTTP example](#http) shows it in place.
+Everything below is callable from any of your class's methods, with nothing to import: the drawing, time and number calls are plain global functions, and `http`, `mqtt`, `store`, `shared`, `settings`, `display`, `sound`, `music`, `rotation` and `re` are ready-made objects. Only the general-purpose modules - `json`, `string`, `math` - want one `import` line at the top of the file, and the [HTTP example](#http) shows it in place.
 
 The short examples in this section show a single method for brevity - read them as living inside your class, alongside `draw()` and a `return YourClass()` at the end of the file.
 
@@ -509,6 +530,28 @@ end
 the frame, so centring and fitting stay correct across a switch. The choice resets every frame, so
 set it in `draw()` rather than once in `setup()`. `large` is seven rows tall and reaches the
 top row - see [Text & colors](text.md#the-fonts).
+
+#### The icons your script needs
+
+`icon()` only draws what is already on the clock, so a script you pass on arrives without its
+pictures. Name them in the header instead:
+
+```berry
+# @name  Weather
+# @icons 2105, 2106, 2107
+```
+
+Each value is an icon name from the [AWTRIX Hub](icons.md#install-from-the-awtrix-hub). Separate
+them with commas or spaces, and use as many `# @icons` lines as you like. Up to 32 icons.
+
+Then one press gets them. In the script editor a button appears in the toolbar showing how many
+are still missing; in the **Apps** tab the row menu offers **Install icons**. Icons already on the
+clock are left as they are, and an ID the database does not have is named in a message while the
+rest still arrive.
+
+Downloads require your Hub connection key under **System → AWTRIX Hub**. Get it from
+[your Hub account](https://awtrix.de/account/settings). Already installed icons continue to
+work when you remove the key; new downloads and deliberate reloads need a valid key.
 
 ### Styled and scrolling text
 
@@ -712,14 +755,13 @@ state rather than as a value that looks plausible and is not.
 ### Charts and progress
 
 The pushed-app decorations, drawn imperatively. Each spans the full panel width
-(a script owns its canvas - there is no reserved icon column) and takes the same
-values a pushed app's `bar` / `line` / `progress` keys do.
+and takes the same values a pushed app's `bar` / `line` / `progress` keys do.
 
 | Call | Does | Example |
 |---|---|---|
-| `bar_chart(list, color?, autoscale?)` | a bar per value; negatives hang below zero | `bar_chart([3,5,2,8,6], 0x00FF00)` |
-| `line_chart(list, color?, autoscale?)` | a polyline across the values | `line_chart(self.history, 0x00AAFF)` |
-| `progress(pct, color?, bg?)` | a bottom-row progress bar, 0–100 | `progress(64)` |
+| `bar_chart(list, color?, autoscale?, x0?)` | a bar per value; negatives hang below zero | `bar_chart([3,5,2,8,6], 0x00FF00)` |
+| `line_chart(list, color?, autoscale?, x0?)` | a polyline across the values | `line_chart(self.history, 0x00AAFF)` |
+| `progress(pct, color?, bg?, x0?)` | a bottom-row progress bar, 0–100 | `progress(64)` |
 
 `color` defaults to white for the charts; `progress` defaults to a green fill on
 a white track, the pushed-app defaults. All three take a
@@ -727,6 +769,17 @@ a white track, the pushed-app defaults. All three take a
 its value: `bar_chart(vals, "Heat")`. `autoscale` (default `true`) scales the
 chart to the data's own min/max; `false` fixes the range at 0–8. Both charts are
 capped at 16 values, extras dropped - the same cap the pushed-app payload has.
+
+`x0` is the column the drawing starts at, `0` by default. A script owns its
+canvas, so nothing is set aside for an icon: draw one at `0, 0` and pass `9` to
+keep the bar clear of it. Everything is measured across what is left, so the
+fill still ends halfway at `50` and a palette still runs its full range over the
+shortened bar.
+
+```berry
+    icon("wifi", 0, 0)
+    progress(64, "Rainbow", 0x101010, 9)
+```
 
 ```berry
 class Cpu
@@ -812,9 +865,9 @@ Values may be integers, reals, strings, booleans, lists and maps - anything that
 
 Reads are cheap. Writes are collected in RAM and reach flash at most once every five seconds - several writes in that window become one - so a `store.set()` per second is fine and will not wear the part out. The trade is that a power cut can cost up to five seconds of writes.
 
-**Everything one app keeps has to fit in 2 KB together.** That is roughly two thousand characters of text, or a few dozen numbers - plenty for what an app needs to remember, and not enough for a whole API response. Store the finished value, never the raw body you got it out of.
+**Store the finished value, never the raw body you got it out of** - a store is for what an app needs to remember, not for a whole API response.
 
-Going over does not raise an error, and that is the part worth knowing: the write is dropped, the app carries on with the value it has in memory, and the panel looks entirely correct **until the next reboot** - when the value comes back as whatever fitted last. The log says `store not saved` with the size it refused, so the Scripts tab console is where this shows up rather than on the panel.
+A write that does not fit does not raise an error, and that is the part worth knowing: it is dropped, the app carries on with the value it has in memory, and the panel looks entirely correct **until the next reboot** - when the value comes back as whatever fitted last. The log says `store not saved` with the size it refused, so the Scripts tab console is where this shows up rather than on the panel.
 
 Editing and re-saving a script keeps its store: the reloaded instance starts with exactly the keys the old one had, so `init()` and `setup()` see them straight away.
 
@@ -860,7 +913,7 @@ required; without a label the key is the label.
 | Type | Shows as | Extras |
 |---|---|---|
 | `bool` | a switch | |
-| `text` | a text box | `maxlen=` (up to 256) |
+| `text` | a text box | `maxlen=` (256 if you leave it out) |
 | `number` | a number box | `min=` `max=` `step=` `unit=` |
 | `slider` | a slider | `min=` `max=` `step=` `unit=` (0–100 if you leave them out) |
 | `select` | a dropdown | `options=a,b,c` - required |
@@ -883,14 +936,13 @@ A few things worth knowing:
 - **A colour is a number**, the same kind `text()` and `pixel()` want. Write the default the way you
   would write it in HTML - `default=#FF8800` - and `store.get("tint")` hands you `0xFF8800` ready to
   draw with.
-- **Twelve settings per script.** Anything past the twelfth is ignored.
 - **A typo does not break the app.** A `@config` line AWTRIX cannot make sense of is skipped, and
   says so at the top of the settings panel - so you find out where to look instead of wondering
   why a field never turned up.
 - **Saving restarts the app**, so `init()` and `setup()` run again with the new values. A running
   animation starts over; everything you stored survives.
 - **Removing a setting removes its value.** Take a `@config` line out and save, and the value goes
-  with it - no invisible leftovers eating the 2 KB every script has for storage. Only settings are
+  with it - no invisible leftovers eating into what a script has stored. Only settings are
   cleaned up this way; anything your code put there with `store.set()` is never touched. The flip
   side: comment a `@config` line out while you are debugging, and whatever the user had chosen is
   gone at the next save.
@@ -944,7 +996,7 @@ for k : shared.keys("weather") # only one app's
 
 A dashboard app can discover its inputs at runtime this way instead of hard-coding names read out of someone else's source.
 
-Each app may publish **8 keys** and **256 bytes** - key names plus string values; numbers cost only their key. Keys are 1–24 characters of `A–Z a–z 0–9 _ -`. `shared.set()` returns `false` when a write is refused - a malformed key, a value that is not a single number/string/bool, or no room left - and a refused write changes nothing, so the previous value survives.
+Keys are 1–24 characters of `A–Z a–z 0–9 _ -`. `shared.set()` returns `false` when a write is refused - a malformed key, a value that is not a single number/string/bool, or too little free memory left to take it - and a refused write changes nothing, so the previous value survives.
 
 ### Sharing code between scripts
 
@@ -1006,7 +1058,7 @@ A module is not an app. It never draws, never takes a turn in the rotation, and 
 `setup()` or `loop()` - the web UI keeps modules in their own **Modules** section on the Scripts tab.
 The Apps tab lists only the modules there is something to do about there: the ones with settings, and
 any that are broken. It does share everything else with the apps: the same file list, the same
-editor, the same memory, and one slot each in the [script limit](#the-caps).
+editor, the same memory.
 
 ### Settings several apps share
 
@@ -1059,8 +1111,8 @@ Two things make this work, and both are worth knowing:
   updates your apps when you edit a module's code.
 
 Everything else is exactly as it is for an app: the same
-[types and attributes](#settings-the-user-can-change), the same twelve settings, the same 2 KB
-store, and deleting the module takes its settings with it.
+[types and attributes](#settings-the-user-can-change) and the same storage, and deleting the
+module takes its settings with it.
 
 ### HTTP
 
@@ -1075,7 +1127,9 @@ end)
 
 `status` is `0` and `body` is `nil` when no response arrived - no Wi-Fi, DNS miss, refused connection, too many requests already in flight, or no answer within 30 seconds. Any real response reaches your callback, **including 4xx and 5xx**: that is where an API explains what it did not like, so `body` carries it.
 
-Only `http://` and `https://` URLs are accepted. Response bodies are kept up to 8 KB.
+Only `http://` and `https://` URLs are accepted. A response is kept up to 8 KB, or up to
+[`cap`](#picking-one-field-out-of-a-big-answer) if the request sets one - and up to whatever
+memory the panel has free when the answer starts arriving, whichever of the three is smallest.
 
 A `GET` follows redirects by itself, so a shortened link or a moved endpoint reaches the right place. A `POST` or `PUT` does not, quite: depending on how the server phrases the redirect, your callback either gets the redirect response itself, or the request arrives at the new address as a `GET` with the body dropped. Neither is what you meant, so **send anything with a body straight to its final URL.**
 
@@ -1108,26 +1162,37 @@ http.post("https://hooks.example.com/panel", json.dump({'state': "up"}),
 
 Four headers are set by AWTRIX itself and are ignored when a script supplies them: `Host`, `Content-Length`, `Transfer-Encoding` and `Connection`. Everything else is yours.
 
-A request that breaks a rule - an unknown method, a body over 2 KB, a malformed or oversized header - never goes out. It fails the same way a network error does, immediately: `cb(nil, 0)`.
+A request that breaks a rule - an unknown method, a malformed header - never goes out. It fails the same way a network error does, immediately: `cb(nil, 0)`.
 
 #### Picking one field out of a big answer
 
-Some APIs answer with far more than the 8 KB AWTRIX keeps - a status
-endpoint that embeds a base64 icon, a document with your one number at byte
-50 000. `find` turns that cap into a search: it scans the
-body as it arrives and keeps a small window starting at the first
-occurrence, instead of blindly keeping the first 8 KB.
+`opts` also carries `cap`, `find` and `keep` - together they decide how much of the response
+reaches your callback. `cap` raises or lowers how much is kept overall; left unset it is 8 KB.
+A large `cap` is what you would like rather than something set aside for you: the panel keeps the
+smaller of your figure and the memory it has free when the answer starts arriving.
+
+That is worth one more sentence, because a big `cap` can fail in a way a small one cannot. If the
+memory runs out **while** the body is still coming in, the response is dropped rather than
+shortened: your callback gets `(nil, status)` with the real status code, the same shape as a
+needle that never matched. So a `cap` you set high enough to matter is a `cap` that can turn a
+perfectly good answer into a miss on a busy panel - which is why `find` below, not a large `cap`,
+is the dependable way to get at one field in a big document.
+
+Some APIs answer with far more than that - a status endpoint that embeds a base64 icon, a
+document with your one number at byte 50 000. `find` turns the cap into a search instead: it
+scans the body as it arrives and keeps a window starting at the first occurrence, instead of
+blindly keeping the response from the start.
 
 ```berry
 http.get(url, / b, st -> self.on_body(b, st),
          {'find': "\"followerCount\":", 'keep': 64})
 ```
 
-`b` is then the `keep` bytes starting **at** the match - the needle included,
-so the usual slice-after-key parsing works on it unchanged. `keep` defaults
-to 256 and is capped at 8 KB; `find` is capped at 64 bytes. Because only the
-window is ever stored, the document's size stops mattering: a field a
-megabyte in works as well as one at the start.
+`b` is then the `keep` bytes starting **at** the match - the needle included, so the usual
+slice-after-key parsing works on it unchanged. `keep` defaults to 256 bytes and bounds the
+window once `find` matches - `cap` can still pull it smaller, never bigger. Because only the
+window is ever stored, the document's size stops mattering: a field a megabyte in works as well
+as one at the start.
 
 If the needle never appears, the callback gets `(nil, status)` with the
 **real** status code - distinguishable from transport failure's `(nil, 0)`:
@@ -1295,6 +1360,22 @@ end
 a malformed payload or a full queue. This is the one script call
 that reaches past your own app - use it for events, not for your regular frame.
 
+### Display power
+
+The `display` module controls the matrix without stopping AWTRIX or its scripts:
+
+```berry
+display.power(false)  # queue the matrix to turn off
+display.power(true)   # queue the matrix to turn on
+display.is_on()       # current runtime state
+```
+
+`display.power()` accepts only a boolean and returns `true` when the request was queued. The
+change lands on the next device tick, so `display.is_on()` called immediately afterwards may still
+show the old state. Nothing is persisted: after a reboot the normal display state applies again.
+A notification with `wakeup: true` may render while the configured state remains off, so
+`display.is_on()` still returns `false` during that temporary wake-up.
+
 ### Sound
 
 `sound` plays a file or a melody without dressing it up as a notification:
@@ -1359,6 +1440,103 @@ must keep painting while the queue drains:
 Use `notify()` instead when the sound belongs to an *event* that should also
 interrupt the rotation and show something. Use `sound` when you only want the
 noise.
+
+### Music
+
+On an ESP32-S3 with a speaker, `music` describes the music the device itself is
+playing - an internet station or a stored MP3 - as numbers you can draw. AWTRIX
+decodes a good tenth of a second ahead of what you hear, and every reading is
+timed to when it comes out of the speaker, so the picture and the sound match.
+
+| Call | Answer |
+|---|---|
+| `music.bands(n?, max?)` | a list of `n` numbers, bass on the left, treble on the right - `n` from 1 to 32 (default 32), each scaled from 0 to `max` (default 255) |
+| `music.level()` | how loud it is right now, 0 to 255 - between the quietest and the loudest moment of the last few seconds, so a compressed station still moves the needle |
+| `music.beat()` | `true` for exactly one frame each time a beat lands |
+| `music.playing()` | `true` while a station or an MP3 is playing |
+
+**None of them ever answers `nil`.** A board without an audio output, a paused
+radio and plain silence all answer zeros and `false`, so the same script runs
+on every AWTRIX and simply shows nothing where there is nothing to show.
+
+A spectrum display is one line. `bar_chart()` with `autoscale` off draws a fixed
+0-to-8 range, which is why the bands are asked for with `max` 8:
+
+```berry
+def draw()
+  bar_chart(music.bands(16, 8), "Rainbow", false)
+end
+```
+
+The classic look adds a peak dot per bar that hangs for a moment and then
+falls, and sits the rotation out while nothing plays:
+
+```berry
+class Spectrum
+  var peaks
+  var hold
+
+  def init()
+    self.peaks = []
+    self.hold = []
+    for i: 0..15
+      self.peaks.push(0)
+      self.hold.push(0)
+    end
+  end
+
+  def should_show()
+    return music.playing()
+  end
+
+  def draw()
+    var bands = music.bands(16, 8)
+    var bar_w = (width() - 15) / 16
+    bar_chart(bands, "Rainbow", false)
+    for i: 0..15
+      if bands[i] >= self.peaks[i]
+        self.peaks[i] = bands[i]
+        self.hold[i] = 12
+      elif self.hold[i] > 0
+        self.hold[i] -= 1
+      elif self.peaks[i] > 0
+        self.peaks[i] -= 1
+      end
+      if self.peaks[i] > 0
+        pixel(i * (bar_w + 1), height() - 1 - self.peaks[i], 0xFFFFFF)
+      end
+    end
+  end
+end
+
+return Spectrum()
+```
+
+`music.beat()` is for a pulse rather than a spectrum - a circle that flares on
+every beat and shrinks again:
+
+```berry
+  var glow
+
+  def draw()
+    if music.beat() self.glow = 4 end
+    if self.glow > 0
+      circle_fill(width() / 2, height() / 2, self.glow, hsv(300, 100, 100))
+      self.glow -= 1
+    end
+  end
+```
+
+Worth knowing:
+
+- The levels adjust themselves: a quiet track fills the panel just as a loud
+  one does, and the volume setting does not change the picture.
+- Read `music.beat()` in `draw()`, never in `loop()` - `loop()` runs once a
+  second and would miss nearly every beat.
+- The music is only analysed while a script is asking, so an AWTRIX without
+  such a script pays nothing for the feature.
+- `music.playing()` turns `true` the moment playback starts; the first numbers
+  follow a fraction of a second later.
 
 ### Device settings
 
@@ -1605,7 +1783,7 @@ Four habits worth copying. **One `nil` check covers every failure** - offline, r
   end
 ```
 
-The symbol is drawn rather than loaded, in the leftmost eight columns. That is deliberate: [`icon()`](#panel-and-drawing) can only draw what its owner has installed, so a shared script that names an icon arrives broken on most devices. Rectangles and circles always work, cost no memory, and the cloud is reused by three of the five states with a couple of pixels changed underneath it.
+The symbol is drawn rather than loaded, in the leftmost eight columns. That is deliberate: rectangles and circles always work, cost no memory, and need nothing installed - where an icon would have to be fetched first, even with an [`# @icons`](#the-icons-your-script-needs) line to fetch it by. The cloud is reused by three of the five states with a couple of pixels changed underneath it.
 
 ```berry
   def draw()
@@ -1732,18 +1910,13 @@ A script that does not even compile still **installs**. The source is stored, th
 
 ### The caps
 
-Every cap a script runs under - source size, installed count, memory, HTTP, MQTT, store and
-shared state, with what happens when you reach each one - is tabulated under **Scripting** in
-[Limits](../reference/limits.md#scripting). Two of them shape how you write scripts: the
-instruction limit above, and how much memory the scripts on your AWTRIX share.
+Every cap a script runs under - memory, HTTP and MQTT, with what happens when you reach each one -
+is tabulated under **Scripting** in [Limits](../reference/limits.md#scripting). Two of them shape
+how you write scripts: the instruction limit above, and how much memory the scripts on your
+AWTRIX share.
 
-**How many scripts fit.** `scriptLimit` sets the number of installed scripts - [modules](#sharing-code-between-scripts) included, since they take the same memory - 16 out of the box
-and adjustable from 0 to 32 under **System → Advanced** in the web UI (or over the API - see
-[System configuration](../reference/system.md)). It takes effect at once, no reboot. Lowering it
-below the number of scripts you already have **removes nothing**: those keep running and stay
-editable, and only a *new* name is refused until deleting scripts brings the count back under.
-
-**How much memory they share.** On a board without PSRAM - any 4 MB ESP32 - every
+**How many scripts fit** comes down to memory - [modules](#sharing-code-between-scripts)
+included, since they take the same memory. On a board without PSRAM - any 4 MB ESP32 - every
 script shares about 96 KB with the icon decoder, the pushed apps holding their content, and the
 room an HTTPS handshake needs. A handful of scripts is comfortable; a handful of scripts *and* a
 long list of pushed apps is where installs start being refused. An **ESP32-S3 with PSRAM** raises
@@ -1753,8 +1926,7 @@ boot. If you want to push scripting hard, that is the board to be on.
 ### "Not enough free memory to compile"
 
 A `507` with this message means the install was refused because compiling it
-right then would have been unsafe - not that the script is too big and not that
-you are out of slots. Compiling is the expensive moment, not running: an install
+right then would have been unsafe. Compiling is the expensive moment, not running: an install
 briefly needs roughly the source size again in free memory, and AWTRIX still
 has to have enough left afterwards to run what it installed.
 

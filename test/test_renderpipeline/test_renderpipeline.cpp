@@ -73,15 +73,19 @@ struct SlowCaptureEffect : CaptureEffect {
 // The pipeline no longer owns any sound policy, so the counter sits where the sound really lands.
 struct FakeTone : sound::IToneSink {
   int plays = 0;
+  int rtttlPlays = 0;
+  int melodyPlays = 0;
   bool playing = false;
   void begin() override {}
   void setVolume(uint8_t) override {}
   bool playRtttl(const std::string&) override {
     ++plays;
+    ++rtttlPlays;
     return true;
   }
   bool playMelodyFile(const std::string&) override {
     ++plays;
+    ++melodyPlays;
     return true;
   }
   void stop() override {}
@@ -503,6 +507,18 @@ static void test_notification_sound_plays_once_on_appear() {
   TEST_ASSERT_EQUAL_INT(1, r.tone.plays);
 }
 
+static void test_notification_rtttl_takes_priority_over_a_named_sound() {
+  Rig r;
+  r.engine.execute(cmd(
+      CommandType::Notify, "",
+      "{\"text\":\"A\",\"sound\":\"ding\",\"soundRtttl\":\"x:d=8,o=5,b=120:c\"}"));
+  r.engine.tick(0);
+
+  r.pipe->renderFrame(r.canvas, 0);
+  TEST_ASSERT_EQUAL_INT(1, r.tone.rtttlPlays);
+  TEST_ASSERT_EQUAL_INT(0, r.tone.melodyPlays);
+}
+
 static void test_loopsound_retriggers_only_when_finished() {
   Rig r;
   r.engine.execute(
@@ -588,6 +604,36 @@ static void test_finished_repeats_end_a_pushed_app_before_its_dwell() {
   const int64_t left = runFrames(r, 6000, [](Rig& g) { return g.engine.appHost().inTransition(); });
   TEST_ASSERT_TRUE_MESSAGE(left > 2500, "the pass must not be cut short");
   TEST_ASSERT_TRUE_MESSAGE(left > 0 && left < 5000, "nor must the dwell be waited out");
+}
+
+static void test_reverse_setting_mirrors_a_directional_transition() {
+  auto renderMidSlide = [](Rig& r, int direction) {
+    Settings& s = r.engine.state().settings();
+    s.autoTransition = false;
+    s.transitionEffect = static_cast<int>(Transition::Slide);
+    s.transitionDirection = direction;
+    s.transitionDurationMs = 1000;
+    r.engine.execute(cmd(CommandType::SetPushedApp, "one",
+                         "{\"text\":\"\",\"backgroundColor\":\"#FF0000\"}"));
+    r.engine.execute(cmd(CommandType::SetPushedApp, "two",
+                         "{\"text\":\"\",\"backgroundColor\":\"#0000FF\"}"));
+    r.engine.tick(0);
+    r.engine.execute(switchFast("one"));
+    r.pipe->renderFrame(r.canvas, 0);
+    r.engine.execute(cmd(CommandType::SwitchApp, "two"));
+    r.engine.tick(500);
+    r.pipe->renderFrame(r.canvas, 500);
+  };
+
+  Rig normal;
+  renderMidSlide(normal, kTransitionNormal);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, normal.canvas.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x0000FFu, normal.canvas.getPixel(31, 0));
+
+  Rig reverse;
+  renderMidSlide(reverse, kTransitionReverse);
+  TEST_ASSERT_EQUAL_HEX32(0x0000FFu, reverse.canvas.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, reverse.canvas.getPixel(31, 0));
 }
 
 static void test_incoming_icon_decoded_during_transition() {
@@ -687,6 +733,20 @@ static void test_builtin_app_renders_via_clock() {
 
   r.pipe->renderFrame(r.canvas, 0);
   TEST_ASSERT_EQUAL_HEX32(0xFF0000u, r.canvas.getPixel(6, 6));
+}
+
+static void test_a_pushed_app_shadows_the_builtin_of_the_same_name() {
+  Rig r;
+  TimeApp timeApp;
+  r.apps.add(&timeApp);
+  CaptureEffect fx;
+  r.effects.add(&fx);
+  r.engine.execute(cmd(CommandType::SetPushedApp, "Time",
+                       "{\"text\":\"x\",\"effect\":\"capture\",\"effectSpeed\":3}"));
+  r.engine.execute(switchFast("Time"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+  TEST_ASSERT_TRUE(fx.lastSettings.hasSpeed);
 }
 
 static void test_effect_settings_reset_between_apps() {
@@ -844,6 +904,7 @@ int main(int, char**) {
   RUN_TEST(test_repeat_one_opts_into_the_wait);
   RUN_TEST(test_static_scroll_is_not_held_by_repeat);
   RUN_TEST(test_notification_sound_plays_once_on_appear);
+  RUN_TEST(test_notification_rtttl_takes_priority_over_a_named_sound);
   RUN_TEST(test_loopsound_retriggers_only_when_finished);
   RUN_TEST(test_repeat_holds_rotation_until_cycles_done);
   RUN_TEST(test_finished_repeats_end_a_notification_before_its_dwell);
@@ -851,11 +912,13 @@ int main(int, char**) {
   RUN_TEST(test_static_text_still_obeys_the_dwell);
   RUN_TEST(test_a_finished_pass_does_not_carry_over_to_the_next_notification);
   RUN_TEST(test_finished_repeats_end_a_pushed_app_before_its_dwell);
+  RUN_TEST(test_reverse_setting_mirrors_a_directional_transition);
   RUN_TEST(test_incoming_icon_decoded_during_transition);
   RUN_TEST(test_incoming_page_is_drawn_with_its_own_scroll);
   RUN_TEST(test_incoming_scroll_survives_the_page_change);
   RUN_TEST(test_incoming_icon_keeps_its_place_during_a_transition);
   RUN_TEST(test_builtin_app_renders_via_clock);
+  RUN_TEST(test_a_pushed_app_shadows_the_builtin_of_the_same_name);
   RUN_TEST(test_effect_settings_reset_between_apps);
   RUN_TEST(test_indicators_render_and_blink);
   RUN_TEST(test_indicators_have_the_upstream_corner_shapes);

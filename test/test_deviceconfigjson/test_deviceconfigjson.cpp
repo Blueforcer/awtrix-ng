@@ -73,8 +73,8 @@ static int members(const std::string& json) {
 }
 
 static void test_the_reply_carries_every_field() {
-  TEST_ASSERT_EQUAL_INT(66, members(written(seeded(), false)));
-  TEST_ASSERT_EQUAL_INT(69, members(written(seeded(), true)));
+  TEST_ASSERT_EQUAL_INT(67, members(written(seeded(), false)));
+  TEST_ASSERT_EQUAL_INT(70, members(written(seeded(), true)));
 }
 
 static void test_secrets_are_omitted_unless_asked_for() {
@@ -95,10 +95,7 @@ static void test_every_type_reads_its_value() {
   TEST_ASSERT_EQUAL_UINT8(1, after(R"({"tempDecimals":1})").tempDecimals);
   TEST_ASSERT_EQUAL_INT(-1, after(R"({"pinMatrix":-1})").pinMatrix);
 
-  const DeviceConfig s = after(R"({"scriptingEnabled":false,"scriptLimit":4,"scriptMaxBytes":2048})");
-  TEST_ASSERT_FALSE(s.scriptingEnabled);
-  TEST_ASSERT_EQUAL_INT(4, s.scriptLimit);
-  TEST_ASSERT_EQUAL_INT(2048, s.scriptMaxBytes);
+  TEST_ASSERT_FALSE(after(R"({"scriptingEnabled":false})").scriptingEnabled);
   changesNothing("{}");
 }
 
@@ -135,6 +132,14 @@ static void test_unknown_keys_are_ignored() {
                            after(R"({"hostname":"kept","nonesuch":[{"a":1}]})").hostname.c_str());
 }
 
+// A backup carries whatever settings the firmware that wrote it had. Restoring one onto a
+// firmware with no field of that name must keep every setting it does recognise.
+static void test_a_restored_backup_ignores_settings_this_firmware_has_no_field_for() {
+  TEST_ASSERT_EQUAL_STRING(
+      "kept",
+      after(R"({"scriptLimit":8,"scriptMaxBytes":4096,"hostname":"kept"})").hostname.c_str());
+}
+
 static void test_enum_fields_travel_by_name() {
   TEST_ASSERT_TRUE(written(DeviceConfig{}, false).find("\"panelStart\":\"topLeft\"") !=
                    std::string::npos);
@@ -149,6 +154,14 @@ static void test_enum_fields_travel_by_name() {
   changesNothing(R"({"panelStart":"sideways"})");
   changesNothing(R"({"panelStart":2})");
   changesNothing(R"({"panelWiring":true})");
+}
+
+static void test_panel_color_order_travels_by_name() {
+  TEST_ASSERT_TRUE(written(DeviceConfig{}, false).find("\"panelColorOrder\":\"grb\"") !=
+                   std::string::npos);
+  TEST_ASSERT_EQUAL_INT(
+      static_cast<int>(PanelColorOrder::Rgb),
+      static_cast<int>(after(R"({"panelColorOrder":"rgb"})").panelColorOrder));
 }
 
 static void test_the_whole_table_round_trips() {
@@ -166,7 +179,9 @@ int main(int, char**) {
   RUN_TEST(test_a_wrong_type_coerces_the_way_it_always_has);
   RUN_TEST(test_an_empty_secret_is_not_a_clear);
   RUN_TEST(test_unknown_keys_are_ignored);
+  RUN_TEST(test_a_restored_backup_ignores_settings_this_firmware_has_no_field_for);
   RUN_TEST(test_enum_fields_travel_by_name);
+  RUN_TEST(test_panel_color_order_travels_by_name);
   RUN_TEST(test_the_whole_table_round_trips);
   return UNITY_END();
 }

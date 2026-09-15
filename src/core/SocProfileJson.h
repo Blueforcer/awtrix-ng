@@ -50,7 +50,8 @@ inline std::string toJson(const SocProfile& soc) {
          std::to_string(d.i2cScl) + ",\"pinDfRx\":" + std::to_string(d.dfRx) + ",\"pinDfTx\":" +
          std::to_string(d.dfTx) + ",\"pinI2sBclk\":" + std::to_string(d.i2sBclk) +
          ",\"pinI2sLrclk\":" + std::to_string(d.i2sLrclk) + ",\"pinI2sDout\":" +
-         std::to_string(d.i2sDout) + "}}";
+         std::to_string(d.i2sDout) + ",\"pinI2sMclk\":" + std::to_string(d.i2sMclk) +
+         ",\"pinAmpEnable\":" + std::to_string(d.ampEnable) + "}}";
 }
 
 }

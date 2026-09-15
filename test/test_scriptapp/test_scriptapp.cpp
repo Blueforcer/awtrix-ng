@@ -2,13 +2,16 @@
 
 #include <string>
 
+#include "berry.h"
 #include "core/apps/IApp.h"
 #include "core/render/Canvas.h"
 #include "core/render/TextRenderer.h"
 #include "core/script/BerryVM.h"
 #include "core/script/ScriptApp.h"
 #include "core/script/ScriptBindings.h"
+#include "core/script/ScriptHeapTesting.h"
 #include "core/script/ScriptServices.h"
+#include "core/script/SharedState.h"
 
 using namespace awtrix;
 
@@ -25,6 +28,7 @@ void setUp() {
   g_svc.mqtt = nullptr;
   g_svc.icon = nullptr;
   g_svc.storeSink = nullptr;
+  g_svc.shared = nullptr;
   script::setServices(&g_svc);
 }
 
@@ -366,6 +370,30 @@ static void test_http_dispatch_roundtrip() {
   TEST_ASSERT_EQUAL_HEX32(21u, c.getPixel(0, 0));
 }
 
+static void test_http_opts_cap_raises_the_response_limit() {
+  FakeHttp fake;
+  g_svc.http = &fake;
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(loadWithPrelude(
+      vm, "def setup() http.get('http://x/', def(b) end, {'cap': 20000}) end"));
+  RenderCtx ctx;
+  script::BindingScope s(nullptr, &ctx, "T");
+  TEST_ASSERT_TRUE(vm.call("setup"));
+  TEST_ASSERT_EQUAL_UINT(20000u, (unsigned)fake.lastMax);
+}
+
+static void test_http_opts_cap_ignores_a_non_positive_value() {
+  FakeHttp fake;
+  g_svc.http = &fake;
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(loadWithPrelude(
+      vm, "def setup() http.get('http://x/', def(b) end, {'cap': -5}) end"));
+  RenderCtx ctx;
+  script::BindingScope s(nullptr, &ctx, "T");
+  TEST_ASSERT_TRUE(vm.call("setup"));
+  TEST_ASSERT_EQUAL_UINT((unsigned)script::kMaxHttpBody, (unsigned)fake.lastMax);
+}
+
 static void test_http_failure_dispatch_delivers_nil() {
   FakeHttp fake;
   g_svc.http = &fake;
@@ -474,22 +502,13 @@ static void test_http_verbs_reach_the_transport() {
   TEST_ASSERT_EQUAL_STRING("z", fake.lastBody.c_str());
 }
 
-static void test_http_rejects_bad_method_and_oversized_body_before_the_transport() {
+static void test_http_rejects_bad_method_and_malformed_header_before_the_transport() {
   FakeHttp fake;
   g_svc.http = &fake;
   script::BerryVM vm;
   const std::string src =
       "var fails = 0\n"
       "def bad_method() http.request('TRACE', 'http://x/', def(b, st) fails += 1 end) end\n"
-      "def big_body()\n"
-      "  var s = '0123456789'\n"
-      "  while size(s) <= " +
-      std::to_string(script::kMaxHttpRequestBody) +
-      "\n"
-      "    s = s + s\n"
-      "  end\n"
-      "  http.post('http://x/', s, def(b, st) fails += 1 end)\n"
-      "end\n"
       "def bad_header()\n"
       "  http.get('http://x/', def(b, st) fails += 1 end, {'headers': {'X': \"a\\nB: c\"}})\n"
       "end\n"
@@ -498,13 +517,12 @@ static void test_http_rejects_bad_method_and_oversized_body_before_the_transport
   RenderCtx ctx;
   script::BindingScope s(nullptr, &ctx, "T");
   TEST_ASSERT_TRUE(vm.call("bad_method"));
-  TEST_ASSERT_TRUE(vm.call("big_body"));
   TEST_ASSERT_TRUE(vm.call("bad_header"));
 
   TEST_ASSERT_EQUAL_INT(0, fake.calls);
   std::string out;
   TEST_ASSERT_TRUE(vm.callString("check", out));
-  TEST_ASSERT_EQUAL_STRING("3", out.c_str());
+  TEST_ASSERT_EQUAL_STRING("2", out.c_str());
 }
 
 static void test_http_callback_receives_the_status() {
@@ -763,6 +781,22 @@ static void test_store_roundtrip_in_vm() {
   TEST_ASSERT_EQUAL_HEX32(42u, c.getPixel(0, 0));
 }
 
+static void test_a_large_store_is_written() {
+  std::string src = "def setup() store.set('k', '";
+  src.append(6000, 'x');
+  src += "') end";
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(loadWithPrelude(vm, src.c_str()));
+  RenderCtx ctx;
+  {
+    script::BindingScope s(nullptr, &ctx, "T");
+    TEST_ASSERT_TRUE(vm.call("setup"));
+  }
+  TEST_ASSERT_TRUE(script::BindingScope::storeFlushPending());
+  const script::BindingScope::StoreFlush f = script::BindingScope::takeStoreFlush();
+  TEST_ASSERT_TRUE(f.json.size() > 6000u);
+}
+
 static void test_store_get_default_is_optional() {
   script::BerryVM vm;
   TEST_ASSERT_TRUE(loadWithPrelude(vm,
@@ -809,9 +843,10 @@ static void test_store_seed_via_store_load() {
   TEST_ASSERT_EQUAL_HEX32(7u, c.getPixel(0, 0));
 }
 
-static void test_store_over_cap_drop_is_logged() {
+static void test_store_over_budget_drop_is_logged() {
   std::string logged;
   g_svc.log = [&](const std::string& m) { logged = m; };
+  script::heap::testing::setGrowthBudget(64);
   script::BerryVM vm;
   TEST_ASSERT_TRUE(loadWithPrelude(vm,
                                    "def setup()\n"
@@ -824,11 +859,48 @@ static void test_store_over_cap_drop_is_logged() {
     script::BindingScope s(nullptr, nullptr, "Weather");
     TEST_ASSERT_TRUE(vm.call("setup"));
   }
+  script::heap::testing::resetGrowthBudget();
   TEST_ASSERT_FALSE(script::BindingScope::storeFlushPending());
   TEST_ASSERT_TRUE(logged.find("[script:Weather]") != std::string::npos);
-  TEST_ASSERT_TRUE(logged.find("store") != std::string::npos);
-  TEST_ASSERT_TRUE(logged.find(std::to_string(script::kMaxStoreBytes)) != std::string::npos);
+  TEST_ASSERT_TRUE(logged.find("store not saved") != std::string::npos);
+  TEST_ASSERT_TRUE(logged.find(std::to_string(64)) != std::string::npos);
   g_svc.log = nullptr;
+}
+
+// What a script publishes is copied out of the Berry heap into the noticeboard, which nothing
+// collects. Driven through the real binding rather than SharedState directly, because the
+// binding is what a script reaches and false is what it has to see.
+static void test_shared_set_refuses_a_write_that_no_longer_fits() {
+  script::SharedState shared;
+  g_svc.shared = &shared;
+  script::heap::testing::setGrowthBudget(4096);
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(loadWithPrelude(vm,
+                                   "var taken = 0\n"
+                                   "var refused = 0\n"
+                                   "def setup()\n"
+                                   "  var big = ''\n"
+                                   "  for i : 0 .. 99 big = big .. '0123456789' end\n"
+                                   "  for i : 0 .. 9\n"
+                                   "    if shared.set('k' .. str(i), big)\n"
+                                   "      taken = taken + 1\n"
+                                   "    else\n"
+                                   "      refused = refused + 1\n"
+                                   "    end\n"
+                                   "  end\n"
+                                   "end\n"
+                                   "def report() return str(taken) .. '/' .. str(refused) end"));
+  {
+    script::BindingScope s(nullptr, nullptr, "Weather");
+    TEST_ASSERT_TRUE(vm.call("setup"));
+    std::string out;
+    TEST_ASSERT_TRUE(vm.callString("report", out));
+    TEST_ASSERT_EQUAL_STRING("4/6", out.c_str());
+  }
+  script::heap::testing::resetGrowthBudget();
+  TEST_ASSERT_EQUAL_UINT32(4u, static_cast<uint32_t>(shared.entries()));
+  TEST_ASSERT_TRUE(shared.bytes("Weather") <= 4096u);
+  g_svc.shared = nullptr;
 }
 
 static void test_store_load_ignores_non_map_json() {
@@ -860,7 +932,8 @@ static void test_store_load_ignores_scalar_and_garbage_json() {
   }
 }
 
-static void test_store_flush_rejects_oversize() {
+static void test_store_flush_rejects_when_over_budget() {
+  script::heap::testing::setGrowthBudget(64);
   script::BerryVM vm;
   TEST_ASSERT_TRUE(loadWithPrelude(vm,
                                    "def setup()\n"
@@ -871,6 +944,7 @@ static void test_store_flush_rejects_oversize() {
   script::BindingScope::takeStoreFlush();
   script::BindingScope s(nullptr, nullptr, "T");
   TEST_ASSERT_TRUE(vm.call("setup"));
+  script::heap::testing::resetGrowthBudget();
   TEST_ASSERT_FALSE(script::BindingScope::storeFlushPending());
 }
 
@@ -994,6 +1068,51 @@ static void test_button_ignored_while_hidden() {
   app.notifyVisible(false, &ctx);
   app.handleButton("right", &ctx);
   TEST_ASSERT_EQUAL_STRING("left", trace(app).c_str());
+}
+
+static void test_button_return_true_consumes_the_press() {
+  Engine e;
+  script::ScriptApp app(e.vm, "C",
+                        "class C\n"
+                        "  def draw() end\n"
+                        "  def on_button(b) return b == 'left' end\n"
+                        "end\n"
+                        "return C()",
+                        script::ScriptMeta{}, "", nullptr);
+  RenderCtx ctx;
+  TEST_ASSERT_FALSE(app.handleButton("left", &ctx));
+  app.notifyVisible(true, &ctx);
+  TEST_ASSERT_TRUE(app.handleButton("left", &ctx));
+  TEST_ASSERT_FALSE(app.handleButton("right", &ctx));
+}
+
+static void test_button_without_a_return_passes_the_press_on() {
+  Engine e;
+  script::ScriptApp app(e.vm, "P",
+                        "class P\n"
+                        "  def draw() end\n"
+                        "  def on_button(b) end\n"
+                        "end\n"
+                        "return P()",
+                        script::ScriptMeta{}, "", nullptr);
+  RenderCtx ctx;
+  app.notifyVisible(true, &ctx);
+  TEST_ASSERT_FALSE(app.handleButton("select", &ctx));
+}
+
+static void test_button_that_throws_passes_the_press_on() {
+  Engine e;
+  script::ScriptApp app(e.vm, "T",
+                        "class T\n"
+                        "  def draw() end\n"
+                        "  def on_button(b) return nil.x end\n"
+                        "end\n"
+                        "return T()",
+                        script::ScriptMeta{}, "", nullptr);
+  RenderCtx ctx;
+  app.notifyVisible(true, &ctx);
+  TEST_ASSERT_FALSE(app.handleButton("select", &ctx));
+  TEST_ASSERT_FALSE(app.ok());
 }
 
 static void test_should_show_false_declines_the_turn() {
@@ -1227,41 +1346,13 @@ static void test_corrupt_store_seed_does_not_break_script() {
   TEST_ASSERT_EQUAL_HEX32(5u, c.getPixel(0, 0));
 }
 
-static void test_max_source_bytes_is_clamped_to_the_ceiling() {
-  const std::size_t was = script::maxSourceBytes();
-  script::setMaxSourceBytes(1);
-  TEST_ASSERT_EQUAL_UINT32(script::kMinMaxSourceBytes, script::maxSourceBytes());
-  script::setMaxSourceBytes(1 << 20);
-  TEST_ASSERT_EQUAL_UINT32(script::kMaxSourceCeilingBytes, script::maxSourceBytes());
-  script::setMaxSourceBytes(12345);
-  TEST_ASSERT_EQUAL_UINT32(12345u, script::maxSourceBytes());
-  script::setMaxSourceBytes(was);
-}
-
-static void test_the_cap_follows_the_setting() {
+static void test_a_large_source_installs() {
   Engine e;
-  const std::size_t was = script::maxSourceBytes();
-  std::string src = "class B def draw() end end\nreturn B()\n# ";
-  src.append(4096, 'x');
-
-  script::setMaxSourceBytes(2048);
-  script::ScriptApp refused(e.vm, "B", src, script::ScriptMeta{}, "", nullptr);
-  TEST_ASSERT_FALSE(refused.ok());
-  TEST_ASSERT_TRUE(refused.error().message.find("too large") != std::string::npos);
-
-  script::setMaxSourceBytes(16384);
-  script::ScriptApp accepted(e.vm, "B", src, script::ScriptMeta{}, "", nullptr);
-  TEST_ASSERT_TRUE(accepted.ok());
-  script::setMaxSourceBytes(was);
-}
-
-static void test_source_size_cap() {
-  Engine e;
-  std::string big = "class Big def draw() end end\nreturn Big()\n# ";
-  big.append(script::maxSourceBytes(), 'x');
-  script::ScriptApp app(e.vm, "Big", big, script::ScriptMeta{}, "", nullptr);
-  TEST_ASSERT_FALSE(app.ok());
-  TEST_ASSERT_TRUE(app.error().message.find("too large") != std::string::npos);
+  std::string src = "class Big def draw() end end\nreturn Big()\n# ";
+  src.append(40000, 'x');
+  src += "\n";
+  script::ScriptApp app(e.vm, "Big", src, script::ScriptMeta{}, "", nullptr);
+  TEST_ASSERT_TRUE(app.ok());
 }
 
 static void test_app_dispatches_http_to_its_own_callback() {
@@ -1343,6 +1434,42 @@ static void test_re_module_search_match_matchall() {
   TEST_ASSERT_EQUAL_HEX32(6u, c.getPixel(5, 0));
 }
 
+static void test_re_module_keeps_binary_arguments_alive_during_matchall() {
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(loadWithPrelude(vm, R"(
+def draw(needle, pattern, subject)
+  var m = re.search(pattern, subject)
+  if m != nil && size(m[0]) == 3 && m[1] == needle pixel(0, 0, 1) end
+  var all = re.matchall(needle, subject)
+  if size(all) == 128 && all[0] == needle && all[127] == needle pixel(1, 0, 2) end
+  var anchored = re.match(needle, needle)
+  if anchored != nil && anchored[0] == needle pixel(2, 0, 3) end
+  if re.match(needle, 'a') == nil pixel(3, 0, 4) end
+end
+)"));
+  Canvas c(32, 8);
+  RenderCtx ctx;
+  script::BindingScope scope(&c, &ctx, "T");
+  // Berry source literals stop at NUL in the lexer. Supply explicit-length API values,
+  // as a native caller can, so this exercises binary matching rather than literal parsing.
+  const std::string needle("a\0b", 3);
+  const std::string pattern("(a\0b)", 5);
+  std::string subject;
+  for (int i = 0; i < 128; ++i) subject += "x" + needle;
+  be_getglobal(vm.raw(), "draw");
+  be_pushnstring(vm.raw(), needle.data(), needle.size());
+  be_pushnstring(vm.raw(), pattern.data(), pattern.size());
+  be_pushnstring(vm.raw(), subject.data(), subject.size());
+  const int rc = be_pcall(vm.raw(), 3);
+  if (rc != BE_OK) TEST_MESSAGE(be_tostring(vm.raw(), -1));
+  TEST_ASSERT_EQUAL_INT(BE_OK, rc);
+  be_pop(vm.raw(), be_top(vm.raw()));
+  TEST_ASSERT_EQUAL_HEX32(1u, c.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(2u, c.getPixel(1, 0));
+  TEST_ASSERT_EQUAL_HEX32(3u, c.getPixel(2, 0));
+  TEST_ASSERT_EQUAL_HEX32(4u, c.getPixel(3, 0));
+}
+
 int main(int, char**) {
   static long t = 0;
   g_svc.monotonicMs = []() { return t += 10; };
@@ -1364,12 +1491,14 @@ int main(int, char**) {
   RUN_TEST(test_now_ms_uses_injected_clock);
   RUN_TEST(test_http_module_soft_fails_without_transport);
   RUN_TEST(test_http_dispatch_roundtrip);
+  RUN_TEST(test_http_opts_cap_raises_the_response_limit);
+  RUN_TEST(test_http_opts_cap_ignores_a_non_positive_value);
   RUN_TEST(test_http_failure_dispatch_delivers_nil);
   RUN_TEST(test_http_callback_fires_once);
   RUN_TEST(test_http_get_defaults_to_get_without_body_or_headers);
   RUN_TEST(test_http_post_carries_method_body_and_headers);
   RUN_TEST(test_http_verbs_reach_the_transport);
-  RUN_TEST(test_http_rejects_bad_method_and_oversized_body_before_the_transport);
+  RUN_TEST(test_http_rejects_bad_method_and_malformed_header_before_the_transport);
   RUN_TEST(test_http_callback_receives_the_status);
   RUN_TEST(test_mqtt_publish_and_dispatch);
   RUN_TEST(test_mqtt_wildcard_callback_receives_the_concrete_topic);
@@ -1380,12 +1509,14 @@ int main(int, char**) {
   RUN_TEST(test_round_is_half_away_from_zero);
   RUN_TEST(test_clamp_min_max);
   RUN_TEST(test_store_roundtrip_in_vm);
+  RUN_TEST(test_a_large_store_is_written);
   RUN_TEST(test_store_get_default_is_optional);
   RUN_TEST(test_store_seed_via_store_load);
+  RUN_TEST(test_shared_set_refuses_a_write_that_no_longer_fits);
   RUN_TEST(test_store_load_ignores_non_map_json);
   RUN_TEST(test_store_load_ignores_scalar_and_garbage_json);
-  RUN_TEST(test_store_flush_rejects_oversize);
-  RUN_TEST(test_store_over_cap_drop_is_logged);
+  RUN_TEST(test_store_flush_rejects_when_over_budget);
+  RUN_TEST(test_store_over_budget_drop_is_logged);
   RUN_TEST(test_log_is_tagged_with_script_name);
   RUN_TEST(test_log_without_sink_is_silent);
   RUN_TEST(test_unknown_builtin_fails_at_compile_time);
@@ -1393,6 +1524,9 @@ int main(int, char**) {
   RUN_TEST(test_lifecycle_sequence);
   RUN_TEST(test_visibility_hooks_are_edge_triggered);
   RUN_TEST(test_button_ignored_while_hidden);
+  RUN_TEST(test_button_return_true_consumes_the_press);
+  RUN_TEST(test_button_without_a_return_passes_the_press_on);
+  RUN_TEST(test_button_that_throws_passes_the_press_on);
   RUN_TEST(test_should_show_false_declines_the_turn);
   RUN_TEST(test_should_show_without_a_return_still_shows);
   RUN_TEST(test_missing_should_show_shows);
@@ -1408,11 +1542,10 @@ int main(int, char**) {
   RUN_TEST(test_store_seed_loaded);
   RUN_TEST(test_store_seed_visible_in_setup);
   RUN_TEST(test_corrupt_store_seed_does_not_break_script);
-  RUN_TEST(test_source_size_cap);
-  RUN_TEST(test_max_source_bytes_is_clamped_to_the_ceiling);
-  RUN_TEST(test_the_cap_follows_the_setting);
+  RUN_TEST(test_a_large_source_installs);
   RUN_TEST(test_app_dispatches_http_to_its_own_callback);
   RUN_TEST(test_two_apps_are_isolated);
   RUN_TEST(test_re_module_search_match_matchall);
+  RUN_TEST(test_re_module_keeps_binary_arguments_alive_during_matchall);
   return UNITY_END();
 }

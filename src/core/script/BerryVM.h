@@ -32,6 +32,7 @@ class BerryVM {
 
   bool method(const std::string& appKey, const char* name);
   bool method1(const std::string& appKey, const char* name, const std::string& a);
+  bool method1Bool(const std::string& appKey, const char* name, const std::string& a, bool& out);
   bool methodString(const std::string& appKey, const char* name, std::string& out);
   bool methodBool(const std::string& appKey, const char* name, bool& out);
   bool methodInt(const std::string& appKey, const char* name, long& out);
@@ -65,6 +66,7 @@ class BerryVM {
   // Non-empty until the prelude has run. Loading an app or a module refuses while it is
   // set, because both rely on prelude globals such as _app_anchor.
   std::string bootstrapErr_;
+  unsigned callsSinceTrim_ = 0;
 };
 
 }

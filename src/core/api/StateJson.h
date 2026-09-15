@@ -48,6 +48,7 @@ struct DeviceFacts {
   uint32_t psramTotalBytes = 0;
   uint32_t psramFreeBytes = 0;
   std::string resetReason;
+  std::string updateImage;
   bool hasBattery = false;
   bool hasLightSensor = false;
   bool hasTemperature = false;

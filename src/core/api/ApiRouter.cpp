@@ -5,7 +5,6 @@
 
 #include "core/api/JsonReader.h"
 #include "core/api/JsonText.h"
-#include "core/script/ScriptServices.h"
 #include "core/sound/AudioRouter.h"
 
 namespace awtrix {
@@ -180,7 +179,8 @@ std::string configAppName(const std::string& path) {
 
 // Script uploads carry Berry source, not JSON, so the server has to pass the body through raw.
 bool isRawBodyWrite(const std::string& method, const std::string& path) {
-  return method == "PUT" && !tailAfter(path, "/api/v1/apps/script/").empty();
+  return method == "PUT" && (!tailAfter(path, "/api/v1/apps/script/").empty() ||
+                            !tailAfter(path, "/api/v1/apps/script-update/").empty());
 }
 
 MethodResolution resolveHttpMethod(const std::string& method, const std::string& path,
@@ -302,6 +302,15 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
   }
 
   {
+    const std::string updateName = tailAfter(path, "/api/v1/apps/script-update/");
+    if (!updateName.empty()) {
+      if (!put) return methodNotAllowed("PUT");
+      if (!isValidAppName(updateName)) return badName();
+      cmd = make(CommandType::ScriptUpdate, src);
+      cmd.name = updateName;
+      cmd.payload = std::move(body);
+      return RouteOutcome::Routed;
+    }
     const std::string name = tailAfter(path, "/api/v1/apps/script/");
     if (!name.empty()) {
       if (get) return RouteOutcome::NoMatch;
@@ -309,13 +318,6 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
       if (!isValidAppName(name)) return badName();
       if (body.empty()) {
         immediate = errorResult(422, "validationFailed", "request body must be the script source",
-                                "source");
-        return RouteOutcome::Respond;
-      }
-      if (body.size() > script::maxSourceBytes()) {
-        immediate = errorResult(413, "payloadTooLarge",
-                                "script source exceeds " +
-                                    std::to_string(script::maxSourceBytes()) + " bytes",
                                 "source");
         return RouteOutcome::Respond;
       }
@@ -583,6 +585,8 @@ ErrorShape shapeFor(DispatchResult r) {
       return {"validationFailed", 422, "invalid value"};
     case DispatchResult::NotFound:
       return {"notFound", 404, nullptr};
+    case DispatchResult::Conflict:
+      return {"scriptChanged", 409, "script changed; check for updates again"};
     case DispatchResult::Capacity:
       return {"insufficientStorage", 507, "storage capacity reached"};
     case DispatchResult::Unavailable:

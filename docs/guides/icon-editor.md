@@ -13,11 +13,45 @@ uploading a finished `.gif` or `.jpg` (see [Icons & assets](icons.md)).
 The icon is stored on AWTRIX and appears in the [Icons](../getting-started/web-ui.md#icons) tab
 straight away, ready to use in any app or notification as `"icon":"<name>"`.
 
+## Share an icon with everyone
+
+Publishing shares your drawing in the **AWTRIX Hub** gallery. Give it a descriptive name such as
+“Sunny sky”. A LaMetric number such as “12345” is not accepted as a publication name: rename it
+before publishing. Numbers can still be part of a name, for example “Battery 50”.
+
+Publishing needs an AWTRIX Hub account. Create a connection key in your Hub account and save it in
+the device web UI under **System → AWTRIX Hub**. The key stays in this browser; the embedded editor
+does not receive it. You can also use the editor on the Hub, where your sign-in is sufficient.
+
+If the same image or animation is already published, the Hub links to that entry instead of adding
+a duplicate. Editing a Hub icon and publishing different content creates a new variation, preserving
+the original. Saving on AWTRIX only updates your local file and never publishes it.
+
+Authors can also choose **Update my published icon** to keep the same public ID. The Hub
+checks the version you opened before accepting the update. If another window has already
+changed it, your unsaved work stays open and the update is rejected until you open the current
+version.
+
+The Hub studio always shows a browser preview. Its optional **Preview on your AWTRIX NG**
+connection sends a temporary preview directly from your browser; device credentials never go
+to the Hub. Large animations that exceed the device's inline payload limit preview as a still
+frame on the device while the full animation remains visible in the browser.
+
 ## Edit an icon you already have
 
-Press the **pencil** button on any tile in the [Icons](../getting-started/web-ui.md#icons) tab. It
+Choose **Edit** from a tile's actions menu in the [Icons](../getting-started/web-ui.md#icons) tab. It
 opens in the editor with that icon loaded - change it and save under the same name to replace it, or
 a new name to keep both.
+
+The gallery distinguishes **From the Hub**, **Locally changed**, and **Only on this device** by
+checking the file's contents against its saved origin. Installing a Hub icon with the same filename
+does not silently replace a different local drawing. Existing numeric filenames keep working with
+local apps and scripts even when you publish the drawing under a descriptive Hub name.
+
+For linked icons, **Reload from Hub** fetches the latest image even when its ID is unchanged.
+Local edits require explicit replacement. Existing scripts keep using their local file until you
+reload it; the `@icons` line and icon ID stay the same. A removed Hub entry does not delete an
+installed copy or trigger a background notice.
 
 ## Live preview on the matrix
 

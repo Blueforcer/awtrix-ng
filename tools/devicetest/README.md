@@ -57,23 +57,47 @@ done
 ```
 
 `fill.py` generates throwaway files whose content is meaningless on purpose - one `draw()` with a
-digit per script, one number per module. It raises `scriptLimit` to 32 first (the firmware maximum)
-and stops on the first refusal:
+digit per script, one number per module. It stops on the first refusal:
 
 ```bash
 python tools/devicetest/fill.py --host awtrix-ng.local --scripts 10 --modules 6
 python tools/devicetest/fill.py --host awtrix-ng.local --clean
 ```
 
-`--clean` removes every `fill*` file and leaves the test and demo scripts alone. A full device (32
-files) leaves about 35 KB of heap and a largest block near 23 KB - below what a TLS handshake needs,
-and low enough that an OTA upload can fail, so clear the fillers before flashing.
+`--clean` removes every `fill*` file and leaves the test and demo scripts alone. A device filled
+until installs are refused can leave about 35 KB of heap and a largest block near 23 KB - below
+what a TLS handshake needs, and low enough that an OTA upload can fail, so clear the fillers
+before flashing.
 
 ## Notes
 
 - The suite writes only to its own `t*` scripts. It never touches device settings, and the only
   rotation change is the one installing an app makes by itself.
-- `fill.py` is the exception: it raises `scriptLimit`, and does not lower it again.
 - `thttp` is pointed at `--host` by the runner, so the script fetches the device it runs on.
 - Eight scripts cost about 29 KB of the Berry heap on an ESP32 without PSRAM. A device already
   carrying scripts may answer `507` on install; the run stops there and says so.
+
+## RAM regressions
+
+`ram.py` checks captured-data reclamation after a caught exception, deep recursion and later
+stack growth, regex captures and binary inputs, maximum-length regex programs, and repeated
+constants. It uses a temporary headless app named `tramcheck`, refuses to overwrite that name
+if it already exists, and removes its app on exit. The stack check waits about 40 seconds.
+
+```bash
+python tools/devicetest/ram.py --host 192.168.178.39 --output .pio/ram-device/after.json
+```
+
+Use `--baseline` on older firmware to record retained bytes without requiring reclamation.
+Functional checks still apply; an older firmware may run out of memory on the maximum regex.
+`--auth user:pass` works as in the main runner. The output JSON records the measurements and
+device state before and after the run.
+
+`gif.py` checks exact framebuffer pixels for static transparency, streamed global/local
+palettes, full-width animation, and reopening after streaming. It sends the native test
+fixtures as inline GIFs to its own temporary pushed app, then removes it and restores the
+previously displayed app. No icon files or settings are changed.
+
+```bash
+python tools/devicetest/gif.py --host 192.168.178.39
+```

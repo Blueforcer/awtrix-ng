@@ -4,7 +4,6 @@
 #include <FastLED.h>
 
 #include "core/PinRules.h"
-#include "core/render/Color.h"
 #include "system/Log.h"
 
 namespace awtrix {
@@ -57,7 +56,8 @@ void MatrixRenderer::show(const Canvas& canvas) {
       const int idx = xyToIndex(x, y);
       if (idx < 0 || idx >= layout_.ledCount() || idx >= ledsAllocated_) continue;
       const uint32_t c = grade_.applyPixel(canvas.getPixel(x, y));
-      g_leds[idx] = CRGB(color::red(c), color::green(c), color::blue(c));
+      const render::DriverColor driver = render::colorForGrbDriver(c, layout_.panelColorOrder);
+      g_leds[idx] = CRGB(driver.r, driver.g, driver.b);
     }
   }
   FastLED.show();

@@ -24,14 +24,17 @@
 #include "core/payload/PayloadParser.h"
 #include "core/render/Canvas.h"
 #include "core/script/ScriptConfig.h"
+#include "core/script/ScriptHeap.h"
 #include "core/script/ScriptHost.h"
 #include "core/script/ScriptServices.h"
 #include "hal/IBoard.h"
 #include "persistence/DeviceConfig.h"
 #include "persistence/FsRestoreSink.h"
+#include "persistence/IconOriginsStore.h"
 #include "persistence/SystemConfigApply.h"
 #include "system/HeapCaps.h"
 #include "system/HeapProbe.h"
+#include "transport/http/UpdateImage.h"
 #include "system/Log.h"
 #include "transport/DeviceStateJson.h"
 #include "transport/http/WebUiAsset.h"
@@ -52,10 +55,6 @@ constexpr unsigned long kRawBodyIdleTimeoutMs = 500;
 constexpr unsigned long kClientIdleTimeoutMs = 5000;
 
 constexpr unsigned long kSilentClientGraceMs = 50;
-
-std::size_t bodyCapFor(const std::string& method, const std::string& path) {
-  return api::isRawBodyWrite(method, path) ? script::maxSourceBytes() : kMaxBodyBytes;
-}
 
 constexpr std::size_t kBodyCopyMarginBytes = 4 * 1024;
 
@@ -125,14 +124,8 @@ constexpr uint8_t kEspFlashErasedByte = 0xFF;
 constexpr uint32_t kEspAppDescMagic = 0xABCD5432;
 #if defined(AWTRIX_SOC_ESP32S3)
 constexpr uint16_t kExpectedChipId = 0x0009;
-#if defined(CONFIG_SPIRAM_MODE_QUAD)
-constexpr const char* kUpdateImageName = "firmware-awtrix-ng-s3-quad.bin";
-#else
-constexpr const char* kUpdateImageName = "firmware-awtrix-ng-s3-octal.bin";
-#endif
 #else
 constexpr uint16_t kExpectedChipId = 0x0000;
-constexpr const char* kUpdateImageName = "firmware-awtrix-ng.bin";
 #endif
 
 // The S3 ships as two images - octal PSRAM and quad - and the header above cannot tell them apart:
@@ -418,11 +411,15 @@ void HttpApiServer::collectBody(WebServer& server, const String& uri, HTTPRaw& r
   switch (raw.status) {
     case RAW_START:
       static_cast<RawWebServer&>(server).setRawReadTimeout(kRawBodyIdleTimeoutMs);
-      // A small script must not pay for the whole configured scriptMaxBytes: this arena is alive
-      // at the same time as the source copy and the install reserve.
-      if (rawSource)
-        arena.init(arenaCapacityFor(server.clientContentLength(), script::maxSourceBytes()));
-      arena.open(rawSource ? script::maxSourceBytes() : bodyCapFor(method, path));
+      // A small script must not pay for the whole heap ceiling up front: this arena is alive
+      // at the same time as the source copy and the install reserve. Read once, into a member,
+      // so takeBody() can report it later without re-measuring a heap the upload has since spent.
+      if (rawSource) {
+        sourceCeiling_ = script::heap::growthBudget();
+        openSourceArena(arena, server.clientContentLength(), sourceCeiling_);
+      } else {
+        arena.open(kMaxBodyBytes);
+      }
       return;
     case RAW_WRITE:
       arena.append(raw.buf, raw.currentSize);
@@ -660,6 +657,7 @@ void HttpApiServer::dispatch() {
   if (serveSystem(req)) return;
   if (serveSounds(req)) return;
   if (serveMp3(req)) return;
+  if (serveIconOrigins(req)) return;
   if (serveFiles(req)) return;
 
   sendError(404, "notFound", "unknown route");
@@ -683,24 +681,26 @@ bool HttpApiServer::rejectedByPortal() {
 bool HttpApiServer::takeBody(Request& req) {
   const bool rawSource = api::isRawBodyWrite(req.method, req.path);
   BodyArena& arena = rawSource ? sourceArena_ : bodyArena_;
-  const std::size_t bodyCap = bodyCapFor(req.method, req.path);
+  // Which reading is honest depends on how the body arrived. One the arena took charge of had
+  // its ceiling taken at RAW_START, which is what leaves the arena in any state but Idle. Idle
+  // means the arena collected nothing for this body - it declared no length, so there was
+  // nothing to receive - and a stored reading from an earlier request would not be its own.
+  // Both readings are taken before this handler makes its own copy.
+  const std::size_t sourceCeiling =
+      rawSource ? sourceCeilingFor(arena.state() != BodyArena::State::Idle, sourceCeiling_,
+                                   script::heap::growthBudget())
+                : 0;
 
-  if (rawSource && !arena.ready() && arena.state() == BodyArena::State::Overflow) {
-    arena.release();
-    sendJson(507, api::errorJson("insufficientStorage",
-                                 "not enough memory to receive the script source; "
-                                 "delete a script or reboot",
-                                 "source"));
-    return true;
-  }
+  // Overflow is the one state both ways of not fitting end in: a declared length the arena would
+  // not allocate for at all, and a body that overran the buffer it did get.
   if (arena.state() == BodyArena::State::Overflow) {
     arena.reset();
     if (rawSource) {
       arena.release();
-      const std::string msg = "script source exceeds " + std::to_string(bodyCap) + " bytes";
-      sendJson(413, api::errorJson("payloadTooLarge", msg, "source"));
+      sendJson(507, api::errorJson("insufficientStorage", sourceTooLargeMessage(sourceCeiling),
+                                   "source"));
     } else {
-      const std::string msg = "body exceeds " + std::to_string(bodyCap) + " bytes";
+      const std::string msg = "body exceeds " + std::to_string(kMaxBodyBytes) + " bytes";
       sendError(413, "payloadTooLarge", msg.c_str());
     }
     return true;
@@ -711,7 +711,7 @@ bool HttpApiServer::takeBody(Request& req) {
       // Refuse instead of fragmenting: the copy needs one contiguous block, plus margin for
       // whatever parsing and dispatch will allocate on top of it.
       if (received.size() > 15 &&
-          heap_caps_get_largest_free_block(kGuardHeapCaps) <
+          heap_caps_get_largest_free_block(scriptBufferHeapCaps()) <
               received.size() + kBodyCopyMarginBytes) {
         arena.reset();
         if (rawSource) arena.release();
@@ -727,8 +727,14 @@ bool HttpApiServer::takeBody(Request& req) {
   }
   if (server_->hasArg("plain")) {
     req.body = server_->arg("plain").c_str();
-    if (req.body.size() > bodyCap) {
-      const std::string msg = "body exceeds " + std::to_string(bodyCap) + " bytes";
+    if (rawSource) {
+      if (req.body.size() > sourceCeiling) {
+        sendJson(507, api::errorJson("insufficientStorage", sourceTooLargeMessage(sourceCeiling),
+                                     "source"));
+        return true;
+      }
+    } else if (req.body.size() > kMaxBodyBytes) {
+      const std::string msg = "body exceeds " + std::to_string(kMaxBodyBytes) + " bytes";
       sendError(413, "payloadTooLarge", msg.c_str());
       return true;
     }
@@ -755,7 +761,7 @@ bool HttpApiServer::rejectedByPolicy(const Request& req) {
 // The web UI is a gzip blob in flash, sent verbatim without decompressing. The ETag never changes
 // within a build, so a repeat visit costs a 304 instead of the whole transfer.
 bool HttpApiServer::serveWebUi(const Request& req) {
-  if (req.path != "/" && req.path != "/index.html") return false;
+  if (req.path != "/" && req.path != "/index.html" && req.path != "/fullscreen") return false;
   if (server_->header("If-None-Match") == WEBUI_ETAG) {
     server_->send(304, "text/plain", "");
     return true;
@@ -1129,6 +1135,15 @@ void HttpApiServer::listDir(const char* dir) {
   server_->sendContent("");
 }
 
+bool HttpApiServer::serveIconOrigins(const Request& req) {
+  if (req.path != "/api/v1/icons/origins") return false;
+  const std::string name = server_->hasArg("name") ? server_->arg("name").c_str() : "";
+  const auto result = iconorigins::handle(iconorigins::storage(), req.method, req.body, name);
+  server_->sendHeader("Cache-Control", "no-store");
+  sendJson(result.status, result.body);
+  return true;
+}
+
 bool HttpApiServer::serveFiles(const Request& req) {
   if (req.path != "/api/v1/files") return false;
 
@@ -1144,6 +1159,13 @@ bool HttpApiServer::serveFiles(const Request& req) {
       sendError(400, "invalidPath",
                 "path must be under /ICONS, /MELODIES, /PALETTES or /MP3 and contain no '..'");
       return true;
+    }
+    // Remove provenance before deleting bytes: a failed metadata write must not leave
+    // a link that could later be inherited by an unrelated upload with the same name.
+    const std::string path = fn.c_str();
+    if (path.rfind("/ICONS/", 0) == 0 && iconorigins::validName(path.substr(7))) {
+      const auto result = iconorigins::handle(iconorigins::storage(), "DELETE", {}, path.substr(7));
+      if (result.status != 200) { sendJson(result.status, result.body); return true; }
     }
     if (LittleFS.remove(fn)) {
       if (onAssetsChanged_) onAssetsChanged_();

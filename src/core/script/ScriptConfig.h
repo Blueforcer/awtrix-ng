@@ -10,8 +10,6 @@ namespace awtrix::script {
 
 enum class ConfigType : uint8_t { Bool, Text, Number, Slider, Select, Color };
 
-constexpr std::size_t kMaxConfigFields = 12;
-
 struct ConfigField {
   std::string key;
   std::string label;
@@ -43,7 +41,7 @@ bool seedConfigDefaults(const ConfigSchema& schema, const std::string& storeJson
 bool dropUndeclaredValues(const ConfigSchema& before, const ConfigSchema& after,
                           const std::string& storeJson, std::string& out);
 
-void appendConfigJson(std::string& out, const std::string& name, const ConfigSchema& schema,
+bool appendConfigJson(std::string& out, const std::string& name, const ConfigSchema& schema,
                       const std::string& storeJson);
 
 struct ConfigPatch {

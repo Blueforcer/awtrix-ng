@@ -37,7 +37,6 @@ bool isReservedModule(const std::string& s) {
 std::vector<std::string> collectImports(const std::string& source) {
   static const char kKeyword[] = "import";
   constexpr std::size_t kKeywordLen = sizeof(kKeyword) - 1;
-  constexpr std::size_t kMaxImports = 8;
   auto boundary = [](char c) {
     const unsigned char u = static_cast<unsigned char>(c);
     return !std::isalnum(u) && u != '_';
@@ -46,7 +45,6 @@ std::vector<std::string> collectImports(const std::string& source) {
   std::vector<std::string> out;
   for (std::size_t at = source.find(kKeyword); at != std::string::npos;
        at = source.find(kKeyword, at + kKeywordLen)) {
-    if (out.size() >= kMaxImports) break;
     if (at > 0 && !boundary(source[at - 1])) continue;
     std::size_t p = at + kKeywordLen;
     if (p >= source.size() || !boundary(source[p])) continue;
@@ -174,10 +172,6 @@ bool ScriptHost::set(const std::string& name, const std::string& source,
   if (meta.module && refuseModule(name, meta)) return false;
 
   const bool isNew = !has(name);
-  if (isNew && count() >= limit_) {
-    lastRefusal_ = "script limit reached (" + std::to_string(count()) + " installed)";
-    return false;
-  }
 
   if (svc_.freeHeap) {
     const std::size_t need = installNeedsBytes(source.size(), !isNew);
@@ -558,12 +552,13 @@ bool ScriptHost::scrollHolds(const std::string& name) const {
   return it != apps_.end() && it->second->scrollHolds();
 }
 
-void ScriptHost::handleButton(const std::string& currentAppId, const std::string& btn) {
+bool ScriptHost::handleButton(const std::string& currentAppId, const std::string& btn) {
   auto it = apps_.find(currentAppId);
-  if (it == apps_.end()) return;
+  if (it == apps_.end()) return false;
   activate();
-  it->second->handleButton(btn, lastCtx());
+  const bool consumed = it->second->handleButton(btn, lastCtx());
   drainStoreFlush();
+  return consumed;
 }
 
 
@@ -590,6 +585,7 @@ std::map<std::string, ScriptHost::Info> ScriptHost::list() const {
     info.desc = m->second.desc;
     info.author = m->second.author;
     info.version = m->second.version;
+    info.icons = m->second.icons;
   };
   for (const auto& kv : apps_) {
     Info info;

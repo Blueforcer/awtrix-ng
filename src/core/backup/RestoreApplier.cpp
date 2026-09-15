@@ -4,6 +4,7 @@
 #include <string_view>
 
 #include "core/AssetPaths.h"
+#include "core/icons/IconOrigins.h"
 #include "core/api/JsonCoerce.h"
 #include "core/api/JsonWriter.h"
 
@@ -21,6 +22,7 @@ RestoreApplier::Kind RestoreApplier::classify(const std::string& name) {
   if (name == "config/wifi.json") return Kind::Wifi;
   if (name == "config/system.json") return Kind::System;
   if (name == "config/settings.json") return Kind::Settings;
+  if (name == "config/icon-origins.json") return Kind::IconOrigins;
   if (name == "apploop.json") return Kind::AppLoop;
   if (name == "radio.json") return Kind::RadioStations;
   if (startsWith(name, "ICONS/")) return Kind::Icon;
@@ -50,6 +52,7 @@ void RestoreApplier::onEntryStart(const std::string& name, uint32_t) {
   fileOpen_ = false;
   fileRejected_ = false;
   contentChecked_ = false;
+  originsTooLarge_ = false;
 
   // One forward pass over the archive, so the manifest cannot be looked up later: it has to be
   // the first entry, and the exporter always writes it first.
@@ -65,6 +68,7 @@ void RestoreApplier::onEntryStart(const std::string& name, uint32_t) {
     case Kind::Settings:
     case Kind::AppLoop:
     case Kind::RadioStations:
+    case Kind::IconOrigins:
       buffering_ = true;
       return;
     case Kind::Icon:
@@ -99,6 +103,12 @@ void RestoreApplier::onEntryStart(const std::string& name, uint32_t) {
 void RestoreApplier::onEntryData(const uint8_t* data, std::size_t n) {
   if (fatal_) return;
   if (buffering_) {
+    if (kind_ == Kind::IconOrigins &&
+        (originsTooLarge_ || n > iconorigins::kMaxBytes - buf_.size())) {
+      originsTooLarge_ = true;
+      buf_.clear();
+      return;
+    }
     buf_.append(reinterpret_cast<const char*>(data), n);
     return;
   }
@@ -147,6 +157,10 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
       result_.warnings.push_back("skipped " + name_ + ": CRC mismatch");
       return;
     }
+    if (originsTooLarge_) {
+      result_.warnings.push_back("skipped icon origins: exceeds 16 KiB");
+      return;
+    }
     std::string err;
     switch (kind_) {
       case Kind::Manifest: {
@@ -167,6 +181,15 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
           return;
         }
         manifestOk_ = true;
+        return;
+      }
+      case Kind::IconOrigins: {
+        std::vector<iconorigins::Record> records;
+        if (!iconorigins::parseCollection(buf_, records)) {
+          result_.warnings.push_back("skipped icon origins: invalid JSON or origin record");
+          return;
+        }
+        pendingIconOrigins_ = std::move(buf_);
         return;
       }
       case Kind::Wifi: {
@@ -255,6 +278,11 @@ void RestoreApplier::onArchiveEnd() {
     if (result_.error.empty()) result_.error = "backup has no manifest.json";
     return;
   }
+  if (!pendingIconOrigins_.empty()) {
+    std::string err;
+    if (sink_.applyIconOrigins(pendingIconOrigins_, err)) ++result_.iconOrigins;
+    else result_.warnings.push_back("icon origins not applied: " + err);
+  }
   sink_.commit();
   result_.ok = true;
 }
@@ -273,6 +301,7 @@ std::string RestoreResult::toJson() const {
   w.member("appLoop", appLoop);
   w.member("radioStations", radioStations);
   w.member("icons", icons);
+  w.member("iconOrigins", iconOrigins);
   w.member("melodies", melodies);
   w.member("palettes", palettes);
   w.member("mp3", mp3);

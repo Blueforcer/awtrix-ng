@@ -24,7 +24,7 @@ hash, so you can bookmark or link any of them directly:
 | **Dashboard** | `#/` | Live matrix preview, power/brightness, vitals |
 | **Apps** | `#/apps` | Reorder, switch off and delete apps |
 | **Scripts** | `#/scripts` | Write, install and debug Berry apps |
-| **Icons** | `#/icons` | Icon files, storage, LaMetric downloader |
+| **Icons** | `#/icons` | Manage, upload, preview and edit icon files |
 | **Icon Editor** | `#/editor` | Draw 8×8/32×8 icons in an embedded editor and save them to AWTRIX |
 | **Audio** | `#/audio` | MP3s, melodies and internet radio |
 | **Palettes** | `#/palettes` | Build colour ramps for effects, text and charts |
@@ -53,6 +53,9 @@ curl http://<awtrix-ip>/api/v1/display/screen
 
 See [HTTP API → Display](../reference/http.md#display) for the response shape.
 
+`http://<awtrix-ip>/fullscreen` serves the same preview on its own, without the rest of the page -
+embed it in a Home Assistant dashboard or any other iframe.
+
 ### Screenshot and GIF
 
 The two buttons on the right of the docked controls export what the preview shows. **↓** saves the
@@ -74,13 +77,14 @@ Directly under the canvas, acting on what you just saw:
 |---|---|---|
 | **Power** switch | Turns the LED matrix on and off | `PATCH /api/v1/display` `{"power":true}` |
 | **Brightness** slider | 0–255, sent 300 ms after you stop dragging | `PATCH /api/v1/settings` `{"brightness":120}` |
+| **Auto brightness** switch | Lets the ambient light sensor control brightness and disables the manual slider | `PATCH /api/v1/settings` `{"autoBrightness":true}` |
 | **◀ / ▶** | Previous / next app in the rotation | `POST /api/v1/apps/previous` · `/next` |
 | **Bell** | Dismisses the notification currently on screen | `DELETE /api/v1/notifications/active` |
 | **↓** | Saves the preview as a PNG | - |
 | **●** | Records the preview as an animated GIF | - |
 
-If the brightness slider snaps back, check **Display → Brightness → Auto brightness**. While that is
-on, the ambient light sensor owns the brightness value.
+While auto brightness is on, the ambient light sensor owns the brightness value and the manual
+slider is disabled. The same switch also remains under **Display → Brightness**.
 
 ### Vitals
 
@@ -356,16 +360,22 @@ plain form. Keep it where you would keep the passwords themselves.
 
 ## Icons
 
-A storage bar (used / total / free, turning red past 90 % full), a drag-and-drop upload zone, and a
-grid of every icon on AWTRIX.
+Two tabs, and a storage bar in the header (used / total, turning red past 90 % full):
 
-Icons are `.png`, `.jpg`, `.jpeg` or `.gif`, 8×8 for a static icon. PNG and JPG are turned into a
-GIF as they upload - sharper on the panel and smaller on AWTRIX - so `smiley.png` becomes
+| Tab | What it holds |
+|---|---|
+| **On AWTRIX** | every icon on the clock, with the count in the tab label |
+| **Add** | upload an icon, open the Hub gallery or create one in the editor |
+
+**On AWTRIX** opens first. **Show on display** puts an icon on the panel for three seconds. The
+**⋯** menu opens the other actions: edit it, publish it to the Hub, reload a linked Hub icon,
+download the file or delete it after a second click to confirm.
+
+**Add** takes `.png`, `.jpg`, `.jpeg` and `.gif`, 8×8 for a static icon. PNG and JPG are turned into
+a GIF as they upload - sharper on the panel and smaller on AWTRIX - so `smiley.png` becomes
 `smiley.gif`, replacing an older `smiley.jpg` if you had one. Animated GIFs stay animated, and a
 full-width (32×8) animated GIF is also accepted - it renders as a background across the whole panel
-rather than a single icon tile; see [Payload → Icon](../reference/payload.md#icon). Each tile has
-three buttons: an **eye** shows the icon on the panel for three seconds, a **pencil** opens it in
-the [Icon Editor](#icon-editor), and a **bin** deletes it (two-step confirm).
+rather than a single icon tile; see [Payload → Icon](../reference/payload.md#icon).
 
 Files upload one at a time, each with its own progress line.
 
@@ -376,10 +386,14 @@ curl -X POST 'http://<awtrix-ip>/api/v1/files?dir=/ICONS' \
   -F 'file=@smiley.jpg'
 ```
 
-**LaMetric icon download** fetches an icon from the LaMetric gallery *in your browser* - AWTRIX
-never talks to the internet for this - converts it to GIF, then uploads it. Paste a numeric icon
-ID, hit **Fetch**, preview it, then **Save to AWTRIX**. It is disabled when your browser is offline, so it is unavailable
-in provisioning mode.
+**Open icon gallery** takes you to the [AWTRIX Hub](https://awtrix.de/icons). Choose an icon there
+and use **Send to your AWTRIX** on its detail page. Your browser transfers the file directly to the
+display on your local network; AWTRIX itself does not contact the Hub.
+
+**Publish to Hub** in a tile's menu sends an icon to the community collection. Publishing, reloading
+a linked icon and installing a script's declared icons require a Hub connection key. Create one in
+[your Hub account](https://awtrix.de/account/settings) and save it under **System → AWTRIX Hub**.
+The key stays in this browser and is not stored on the display.
 
 More: [HTTP API → Files](../reference/http.md#files) · [Payload → Icon](../reference/payload.md#icon).
 

@@ -47,6 +47,18 @@ upload over HTTP there, or flash it over USB, which needs no network at all.
 
 Status codes for the route: [Firmware upload](../reference/http.md#firmware-upload).
 
+## Checking for a newer release
+
+The System page's Maintenance section compares the running version with the latest release on
+GitHub each time you open it, and **Check for updates** asks again at any time. The check runs
+in your browser - AWTRIX itself never talks to GitHub - so it needs your computer or phone to be
+online, not the clock. The answer is kept for a few hours.
+
+When a newer release exists, the row names it, links its release notes, and offers a
+**Download** of exactly the file this board needs. Save it, then choose it under **Upload
+firmware** as described above. The dashboard's version line shows *update available* until the
+update is done.
+
 ## Which file to download
 
 Every release on the [releases page](https://github.com/Blueforcer/awtrix-ng/releases) carries one

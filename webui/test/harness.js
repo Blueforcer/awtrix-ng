@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
+const { createHash } = require('node:crypto');
 
 const HTML_PATH = path.join(__dirname, '..', 'index.html');
 
@@ -64,10 +65,26 @@ function makeStore() {
     files: { '/ICONS': new Map(), '/MP3': new Map() },
     melodies: [], // [{name, rtttl, valid, notes, durationMs, bytes}]
     played: [],   // bodies POSTed to /api/v1/audio/play
+    audioStops: 0,
     radio: { available: true, mp3: { playing: false, name: '' },
              radio: { playing: false, station: '', title: '', error: '' }, stations: [] },
     radioPlay: null,   // last POST /api/v1/audio/play carrying a station or a url
     stationsPut: null, // last PUT /api/v1/audio/stations body
+    device: { ipAddress: '192.168.1.5', version: '1.1.1', soc: 'esp32',
+              updateImage: 'firmware-awtrix-ng.bin' },
+    githubLatest: null,
+    // The icon database lives outside the device: the browser talks to it
+    // directly, so it is mocked by absolute URL rather than by path.
+    iconDb: { v: 1, icons: [] }, // what index.json answers
+    iconBytes: {},               // slug -> bytes served from icons/<slug>.<ext>
+    localIconBytes: {},          // actual on-device content, independent of names
+    iconOrigins: new Map(),      // durable firmware metadata, survives page navigation
+    originFailure: false,
+    iconExt: {},                 // slug -> 'gif' (default) or 'jpg'; the Hub serves only that one
+    submitted: [],               // FormData bodies POSTed to the submit service
+    submittedHeaders: [],        // the headers each of those carried
+    submitReply: null,           // override what the submit service answers
+    submitCode: 0,               // HTTP status for a rejected submission (default 409)
     list() {
       if (this.apps) return this.apps;
       return [...scripts.keys()].map(name => ({ name, origin: 'script', error: null }));
@@ -75,20 +92,74 @@ function makeStore() {
   };
 }
 
-function mockFetch(store, netlog) {
+// Must track ICONDB_URL_DEFAULT in index.html: the gallery builds absolute URLs
+// against it, so a stale prefix here mocks nothing and every icon 404s.
+const ICON_DB = 'https://awtrix.de/icons/';
+
+function mockFetch(store, netlog, win) {
   const resp = (body, ok = true, status = 200) => ({
     ok, status,
     text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
   });
+  // The gallery reads .json() and .blob(), which the device mock never needs.
+  // The blob has to be the page's own Blob, or FormData.append refuses it.
+  const ext = (body, ok = true, status = 200) => ({
+    ok, status,
+    json: async () => body,
+    blob: async () => new win.Blob([String(body == null ? '' : body)], { type: 'image/gif' }),
+    arrayBuffer: async () => new TextEncoder().encode(String(body == null ? '' : body)).buffer,
+    text: async () => JSON.stringify(body),
+  });
   return async function fetch(input, opts = {}) {
     const url = typeof input === 'string' ? input : input.url;
     const method = (opts.method || 'GET').toUpperCase();
+
+    if (/^https?:\/\//.test(url) && !url.startsWith('http://localhost')) {
+      netlog.push(method + ' ' + url);
+      if (url.startsWith('https://api.github.com/'))
+        return ext(store.githubLatest || { message: 'Not Found' }, !!store.githubLatest, store.githubLatest ? 200 : 404);
+      if (url.endsWith('/submit') && method === 'POST') {
+        store.submitted.push(opts.body);
+        store.submittedHeaders.push(opts.headers || {});
+        const reply = store.submitReply
+          || { ok: true, status: 'published', slug: 'demo', pr: 'https://example.invalid/icons/demo' };
+        // submitCode carries the HTTP status; the body's own `status` field is
+        // the Hub's word for the icon ("published"), not a code.
+        const code = reply.ok === false ? (store.submitCode || 409) : 200;
+        return ext(reply, reply.ok !== false, code);
+      }
+      if (url.startsWith(ICON_DB)) {
+        const rest = url.slice(ICON_DB.length);
+        if (rest === 'index.json') return ext(store.iconDb);
+        const meta = rest.match(/^([^/]+)\/metadata\.json$/);
+        if (meta) {
+          const slug = decodeURIComponent(meta[1]);
+          if (!(slug in store.iconBytes)) return ext({}, false, 404);
+          return ext({slug,filename:slug+'.'+(store.iconExt[slug]||'gif'),sha256:createHash('sha256').update(store.iconBytes[slug]).digest('hex')});
+        }
+        // The Hub serves the bytes directly under the catalogue prefix - no
+        // second 'icons/' segment. This pattern is what pins that.
+        const icon = rest.match(/^([^/]+)\.(gif|jpg)$/);
+        if (icon) {
+          store.iconDownloadRequests ||= [];
+          store.iconDownloadRequests.push({url, options:opts});
+          if (!opts.headers?.Authorization || (store.requiredIconToken && opts.headers.Authorization !== 'Bearer '+store.requiredIconToken)) return ext({error:'authenticationRequired'},false,401);
+          const slug = decodeURIComponent(icon[1]);
+          if (!(slug in store.iconBytes)) return ext({ error: 'notFound' }, false, 404);
+          if ((store.iconExt[slug] || 'gif') !== icon[2])
+            return ext({ error: 'notFound' }, false, 404);
+          return ext(store.iconBytes[slug]);
+        }
+      }
+      return ext({ error: 'notFound' }, false, 404);
+    }
+
     const u = new URL(url, 'http://localhost');
     const p = u.pathname;
     const q = u.searchParams;
     netlog.push(method + ' ' + p + (u.search || ''));
 
-    if (p === '/api/v1/device') return resp({ ipAddress: '192.168.1.5', firmware: 'test' });
+    if (p === '/api/v1/device') return resp(store.device);
     if (p === '/api/v1/capabilities')
       return store.caps ? resp(store.caps) : resp({ error: { message: 'offline' } }, false, 503);
     if (p === '/api/v1/system') return resp({ hostname: 'awtrix-ng' });
@@ -99,6 +170,12 @@ function mockFetch(store, netlog) {
       return resp({ ok: true });
     }
     if (p === '/api/v1/scripts/shared') return resp([]);
+    if (p === '/api/v1/icons/origins') {
+      if (store.originFailure) return resp({error:{message:'storage full'}},false,507);
+      if (method === 'PUT') {const o=JSON.parse(opts.body);store.iconOrigins.set(o.name,o);return resp({ok:true});}
+      if (method === 'DELETE') {store.iconOrigins.delete(q.get('name'));return resp({ok:true});}
+      return resp({icons:[...store.iconOrigins.values()]});
+    }
 
     if (p === '/api/v1/files') {
       if (method === 'GET') {
@@ -112,8 +189,17 @@ function mockFetch(store, netlog) {
         const dir = full.slice(0, slash), name = full.slice(slash + 1);
         if (!store.files[dir] || !store.files[dir].delete(name))
           return resp({ error: { code: 'notFound', message: full } }, false, 404);
+        if (dir === '/ICONS') {store.iconOrigins.delete(name);delete store.localIconBytes[name];}
         return resp({ ok: true });
       }
+    }
+
+    // Static asset served off the device, read back when an icon is submitted.
+    if (p.startsWith('/ICONS/')) {
+      const name = decodeURIComponent(p.slice(7));
+      if (!store.files['/ICONS'].has(name)) return ext({ error: 'notFound' }, false, 404);
+      const slug=name.replace(/\.[^.]+$/,'');
+      return ext(store.localIconBytes[name] ?? store.iconBytes[slug] ?? ('GIF89a-' + name));
     }
 
     if (p === '/api/v1/audio/melodies' && method === 'GET') return resp({ melodies: store.melodies });
@@ -127,12 +213,19 @@ function mockFetch(store, netlog) {
       if (body.station !== undefined || body.url !== undefined || body.index !== undefined) {
         store.radioPlay = body;
         store.radio.radio.playing = true;
+        store.radio.radio.station = body.station || body.url || String(body.index);
       } else {
         store.played.push(body);
+        if (body.mp3 !== undefined) store.radio.mp3 = { playing: true, name: body.mp3 };
       }
       return resp({ ok: true });
     }
-    if (p === '/api/v1/audio/stop') { store.radio.radio.playing = false; return resp({ ok: true }); }
+    if (p === '/api/v1/audio/stop') {
+      store.audioStops++;
+      store.radio.radio.playing = false;
+      store.radio.mp3 = { playing: false, name: '' };
+      return resp({ ok: true });
+    }
     const mp3 = p.match(/^\/api\/v1\/audio\/mp3\/(.+)$/);
     if (mp3 && method === 'DELETE') {
       const name = decodeURIComponent(mp3[1]) + '.mp3';
@@ -213,7 +306,7 @@ async function boot(opts) {
     pretendToBeVisual: true,
     url: 'http://localhost/',
     virtualConsole: makeVirtualConsole(),
-    beforeParse: installGlobals(() => mockFetch(store, netlog)),
+    beforeParse: installGlobals(window => mockFetch(store, netlog, window)),
   });
   await flush(60); // boot render() + device/capabilities/system fetches
   return { dom, window: dom.window, store, netlog };
@@ -249,8 +342,9 @@ async function goto(window, hash) {
 }
 
 // uploadFile() goes through XMLHttpRequest, which mockFetch never sees. This swaps in a fake
-// that records {method, url, files:[{field,name}]} into log and answers 200.
-function stubXhr(window, log) {
+// that records {method, url, files:[{field,name}]} into log and answers 200. Pass the store
+// to have the upload land in its file view too, the way the device would store it.
+function stubXhr(window, log, store) {
   window.XMLHttpRequest = class {
     constructor() { this.upload = {}; this.status = 200; this.responseText = '{"ok":true}'; }
     open(method, url) { this.method = method; this.url = url; }
@@ -259,7 +353,17 @@ function stubXhr(window, log) {
       if (body && typeof body.entries === 'function')
         for (const [field, v] of body.entries()) entry.files.push({ field, name: v && v.name });
       log.push(entry);
-      setTimeout(() => this.onload && this.onload(), 0);
+      const reads=[];
+      if (store) {
+        const dir = new URL(this.url, 'http://localhost').searchParams.get('dir');
+        if (dir && store.files[dir] && body && typeof body.entries === 'function')
+          for (const [,file] of body.entries()) if (file.name) {
+            store.files[dir].set(file.name,file.size);
+            if (dir === '/ICONS') reads.push(new Promise(resolve=>{const reader=new window.FileReader();reader.onload=()=>{
+              store.localIconBytes[file.name]=new TextDecoder().decode(reader.result);resolve();};reader.readAsArrayBuffer(file);}));
+          }
+      }
+      Promise.all(reads).then(()=>setTimeout(() => this.onload && this.onload(), 0));
     }
   };
 }

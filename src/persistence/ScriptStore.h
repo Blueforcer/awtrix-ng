@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "core/script/ScriptServices.h"
+#include "persistence/FsFreeSpace.h"
 
 namespace awtrix {
 
@@ -45,8 +46,16 @@ class ScriptStore : public script::IScriptStoreSink {
   // most this often — each one is an erase cycle out of a finite budget.
   static constexpr long kFlushIntervalMs = 5000;
 
+  bool fitsOnDisk(std::size_t bytes);
+  std::size_t pendingBytesExcept(const std::string& script = std::string()) const;
+
   std::map<std::string, std::string> dirty_;
   int64_t lastFlushMs_ = 0;
+  int64_t lastFreeMs_ = 0;
+  FsFreeSpace free_;
+  // A refused store write repeats for as long as the script keeps writing, so it is reported on
+  // the way in rather than every time.
+  bool storeRefused_ = false;
 };
 
 }

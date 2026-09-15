@@ -328,19 +328,26 @@ the `palette` field.
 A transition animates the change from one app's page to the next. It is a **device-wide setting**,
 not a per-app key: there is no way to give one app its own transition.
 
-On the wire `transitionEffect` is a **name** (a string), sent to `PATCH /api/v1/settings`:
+On the wire `transitionEffect` and `transitionDirection` are **names** (strings), sent to
+`PATCH /api/v1/settings`:
 
 ```bash
 curl -X PATCH http://<awtrix-ip>/api/v1/settings \
   -H 'Content-Type: application/json' \
-  -d '{"transitionEffect":"Pixelate","transitionDurationMs":600}'
+  -d '{"transitionEffect":"Slide","transitionDirection":"reverse","transitionDurationMs":600}'
 ```
 
 | Setting | Type | Range | Default | Units | Meaning |
 |---|---|---|---|---|---|
 | `transitionEffect` | string | one of the 22 names | `"Rain"` | - | How pages change |
+| `transitionDirection` | string | `normal` · `reverse` | `"normal"` | - | Whether direction-aware movement uses its normal or mirrored geometry |
 | `transitionDurationMs` | int | 0 … `INT_MAX` | `1000` | ms | How long one transition takes |
 | `autoTransition` | bool | - | `true` | - | Whether AWTRIX rotates through apps at all |
+
+`reverse` flips horizontal effects left/right and vertical effects up/down, which is why the
+setting is not tied to one axis. It does not reverse the app list: **Next** and automatic rotation
+still select the same next app, while **Previous** remains the opposite motion. Effects marked
+`no` below are symmetric or non-directional and therefore look identical in both modes.
 
 **22 transition names:**
 
@@ -586,8 +593,8 @@ rejected with `422 validationFailed` and `"field":"draw[<index>]"`.
 ## Panel wiring
 
 How the LED strip runs through your panel is system configuration, not a display setting:
-`panelWidth`, `panels`, `panelStart`, `panelWiring` and `panelSerpentine`, documented under
-[Panel and orientation](system.md#panel-and-orientation). Get it wrong and the image comes out
+`panelWidth`, `panels`, `panelStart`, `panelWiring`, `panelColorOrder` and `panelSerpentine`,
+documented under [Panel and orientation](system.md#panel-and-orientation). Get it wrong and the image comes out
 mirrored, scrambled or split into blocks; the web UI's **Panel** section is where you fix it.
 
 ---

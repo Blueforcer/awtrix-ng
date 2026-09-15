@@ -351,6 +351,27 @@ void test_reopen_after_close() {
   TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(0, 0));
 }
 
+void test_reopen_switches_between_streamed_and_cached_palettes() {
+  GifPlayer gif;
+  Canvas c(8, 8);
+  for (int pass = 0; pass < 3; ++pass) {
+    useAsset(kGifOddPalette, kGifOddPalette_len);
+    TEST_ASSERT_TRUE(gif.open("odd", false, 1) == OpenResult::kGood);
+    gif.render(c, 0);
+    TEST_ASSERT_EQUAL_HEX32(kOddGlobal1, c.getPixel(0, 0));
+    gif.render(c, 200);
+    TEST_ASSERT_EQUAL_HEX32(kOddLocal1, c.getPixel(0, 0));
+
+    useAsset(kGif8x8TwoFrames, kGif8x8TwoFrames_len);
+    TEST_ASSERT_TRUE(openOk(gif, "cached"));
+    gif.render(c, 0);
+    TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(0, 0));
+    gif.render(c, 200);
+    TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 0));
+    gif.close();
+  }
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_two_frame_playback_and_loop);
@@ -372,5 +393,6 @@ int main(int, char**) {
   RUN_TEST(test_alloc_failure_sweep_predecoded_path);
   RUN_TEST(test_alloc_failure_sweep_streaming_path);
   RUN_TEST(test_reopen_after_close);
+  RUN_TEST(test_reopen_switches_between_streamed_and_cached_palettes);
   return UNITY_END();
 }

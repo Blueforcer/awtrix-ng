@@ -52,6 +52,14 @@ def _http_keep(opts)
   return k == nil ? 0 : int(k)
 end
 
+# How large the kept response may grow. Absent or non-positive falls back to
+# the 8 KB default -- 0 travels as "not set", the same sentinel `keep` uses.
+def _http_cap(opts)
+  if opts == nil return 0 end
+  var c = opts.find('cap')
+  return c == nil ? 0 : int(c)
+end
+
 def _http_send(method, url, body, cb, opts)
   var id = _http_next
   _http_next += 1
@@ -60,12 +68,12 @@ def _http_send(method, url, body, cb, opts)
   end
   if body == nil body = "" end
   if _native_http_request(id, method, url, str(body), _http_headers(opts),
-                          _http_find(opts), _http_keep(opts))
+                          _http_find(opts), _http_keep(opts), _http_cap(opts))
     _http_cbs[id] = [_native_app(), cb]
   else
-    # No transport, a rejected request (bad method, oversized body, malformed
-    # headers) or a full platform queue. Soft-fail exactly the way a network
-    # error does, but immediately: the script needs no capability check.
+    # No transport, a rejected request (bad method, malformed headers) or a
+    # full platform queue. Soft-fail exactly the way a network error does,
+    # but immediately: the script needs no capability check.
     cb(nil, 0)
   end
 end
@@ -262,6 +270,19 @@ settings.get = _settings_get
 settings.set = _settings_set
 settings.apply_case = _settings_apply_case
 
+# ---- display ---------------------------------------------------------------
+# Runtime display power, separate from saved settings. Turning the matrix off
+# leaves the device and its scripts running.
+display = module('display')
+def _display_power(on) # display.power(on)
+  return _native_display_power(on)
+end
+def _display_is_on() # display.is_on()
+  return _native_display_is_on()
+end
+display.power = _display_power
+display.is_on = _display_is_on
+
 # ---- sound -----------------------------------------------------------------
 # Queued for the device to play, not played inside your draw call: the request
 # takes the same route POST /api/v1/audio/play does, so the "sound is switched
@@ -313,6 +334,28 @@ sound.rtttl = _sound_rtttl
 sound.stop = _sound_stop
 sound.playing = _sound_playing
 sound.sinks = _sound_sinks
+
+# ---- music -----------------------------------------------------------------
+# The music the device itself is playing -- a station or a stored MP3 -- as
+# numbers timed to the speaker. Never nil: a board without an audio output, or
+# silence, answers zeros and false.
+music = module('music')
+def _music_bands(n, hi) # music.bands(n?, max?)
+  return _native_music_bands(n, hi)
+end
+def _music_level() # music.level()
+  return _native_music_level()
+end
+def _music_beat() # music.beat()
+  return _native_music_beat()
+end
+def _music_playing() # music.playing()
+  return _native_music_playing()
+end
+music.bands = _music_bands
+music.level = _music_level
+music.beat = _music_beat
+music.playing = _music_playing
 
 # ---- sensor ----------------------------------------------------------------
 # What the device measures, straight from the reading the built-in apps draw.

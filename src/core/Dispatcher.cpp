@@ -315,6 +315,9 @@ DispatchResult Dispatcher::dispatch(const Command& cmd, CommandContext& ctx) {
         return DispatchResult::Failed;
       }
       return ctx.scripts->setScript(cmd.name, cmd.payload, ctx.detail);
+    case CommandType::ScriptUpdate:
+      if (!ctx.scripts) return DispatchResult::Unavailable;
+      return ctx.scripts->updateScript(cmd.name, cmd.payload, ctx.detail);
     case CommandType::ScriptConfigSet:
       if (!ctx.scripts) {
         ctx.detail = {"", "scripting is disabled (scriptingEnabled is off)"};

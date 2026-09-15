@@ -37,6 +37,9 @@ struct PinSet {
   int i2sBclk = -1;
   int i2sLrclk = -1;
   int i2sDout = -1;
+  int i2sMclk = -1;
+  // Drives the amplifier's enable input (NS4168 CTRL, MAX98357A SD_MODE): high = on.
+  int ampEnable = -1;
 };
 
 struct PinRange {
@@ -146,8 +149,9 @@ inline const SocProfile& esp32Profile() {
       {detail::kEsp32Rtc, detail::countOf(detail::kEsp32Rtc)},
       {detail::kEsp32Matrix, detail::countOf(detail::kEsp32Matrix)},
       // Positional, in PinSet field order: matrix, btnLeft, btnSelect, btnRight, battery, ldr,
-      // buzzer, i2cSda, i2cScl, dfRx, dfTx, dfplayerEnabled, i2sBclk, i2sLrclk, i2sDout.
-      PinSet{32, 26, 27, 14, 34, 35, 15, 21, 22, 23, 18, false, -1, -1, -1},
+      // buzzer, i2cSda, i2cScl, dfRx, dfTx, dfplayerEnabled, i2sBclk, i2sLrclk, i2sDout, i2sMclk,
+      // ampEnable.
+      PinSet{32, 26, 27, 14, 34, 35, 15, 21, 22, 23, 18, false, -1, -1, -1, -1, -1},
   };
   return p;
 }
@@ -164,7 +168,7 @@ inline const SocProfile& esp32s3Profile() {
       {detail::kEsp32s3Strapping, detail::countOf(detail::kEsp32s3Strapping)},
       {detail::kEsp32s3Rtc, detail::countOf(detail::kEsp32s3Rtc)},
       {detail::kEsp32s3Matrix, detail::countOf(detail::kEsp32s3Matrix)},
-      PinSet{21, 11, 12, 13, 1, 2, 7, 8, 9, 17, 18, false, 5, 6, 4},
+      PinSet{21, 11, 12, 13, 1, 2, 7, 8, 9, 17, 18, false, 5, 6, 4, -1, -1},
   };
   return p;
 }

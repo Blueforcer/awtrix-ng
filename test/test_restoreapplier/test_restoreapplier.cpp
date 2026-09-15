@@ -7,6 +7,7 @@
 #include "backup_fixture.h"
 #include "core/backup/RestoreApplier.h"
 #include "core/backup/ZipReader.h"
+#include "core/icons/IconOrigins.h"
 
 using namespace awtrix;
 
@@ -14,7 +15,8 @@ namespace {
 
 struct MockSink : backup::RestoreSink {
   std::string wifiSsid, wifiPass, systemJson, settingsJson, appLoopJson;
-  std::string radioJson;
+  std::string radioJson, originsJson;
+  bool originsAfterFiles = false;
   bool committed = false;
   struct File {
     std::string path;
@@ -44,6 +46,11 @@ struct MockSink : backup::RestoreSink {
   }
   bool applyRadioStations(const std::string& json, std::string&) override {
     radioJson = json;
+    return true;
+  }
+  bool applyIconOrigins(const std::string& json, std::string&) override {
+    originsJson = json;
+    originsAfterFiles = !files.empty() && files.back().ended;
     return true;
   }
   void commit() override { committed = true; }
@@ -165,6 +172,45 @@ void test_mp3_restore_and_content_sniff() {
   TEST_ASSERT_TRUE(r.toJson().find("\"mp3\":1") != std::string::npos);
 }
 
+void entry(backup::RestoreApplier& applier, const std::string& name,
+           const std::string& data, bool crcOk = true) {
+  applier.onEntryStart(name, static_cast<uint32_t>(data.size()));
+  applier.onEntryData(reinterpret_cast<const uint8_t*>(data.data()), data.size());
+  applier.onEntryEnd(crcOk);
+}
+
+void test_origins_restore_runs_after_all_files_regardless_of_zip_order() {
+  MockSink sink;
+  backup::RestoreApplier applier(sink);
+  entry(applier, "manifest.json", R"({"app":"awtrix-ng","backupFormat":1})");
+  const auto json = iconorigins::serialize({{"mail.gif", "https://hub.example/icons/", "mail",
+                                           std::string(64, 'a')}});
+  entry(applier, "config/icon-origins.json", json);
+  TEST_ASSERT_TRUE(sink.originsJson.empty());
+  entry(applier, "ICONS/mail.gif", "GIF89a");
+  applier.onArchiveEnd();
+  TEST_ASSERT_TRUE(applier.result().ok);
+  TEST_ASSERT_TRUE(sink.originsAfterFiles);
+  TEST_ASSERT_EQUAL_STRING(json.c_str(), sink.originsJson.c_str());
+  TEST_ASSERT_EQUAL_INT(1, applier.result().iconOrigins);
+}
+
+void test_invalid_or_corrupt_origins_do_not_replace_existing_metadata() {
+  for (int mode = 0; mode < 3; ++mode) {
+    MockSink sink;
+    backup::RestoreApplier applier(sink);
+    entry(applier, "manifest.json", R"({"app":"awtrix-ng","backupFormat":1})");
+    const std::string json = mode == 0 ? "{broken" : mode == 1 ? "{\"icons\":[]}"
+                                                                  : std::string(iconorigins::kMaxBytes + 1, ' ');
+    entry(applier, "config/icon-origins.json", json, mode != 1);
+    applier.onArchiveEnd();
+    TEST_ASSERT_TRUE(applier.result().ok);
+    TEST_ASSERT_TRUE(sink.originsJson.empty());
+    TEST_ASSERT_EQUAL_INT(0, applier.result().iconOrigins);
+    TEST_ASSERT_FALSE(applier.result().warnings.empty());
+  }
+}
+
 void test_result_json_reports_counts() {
   MockSink sink;
   const backup::RestoreResult r = run(awtrix_test::kBackup, awtrix_test::kBackup_len, sink);
@@ -187,6 +233,8 @@ int main(int, char**) {
   RUN_TEST(test_rejects_path_traversal_entry);
   RUN_TEST(test_mp3_restore_and_content_sniff);
   RUN_TEST(test_result_json_reports_counts);
+  RUN_TEST(test_origins_restore_runs_after_all_files_regardless_of_zip_order);
+  RUN_TEST(test_invalid_or_corrupt_origins_do_not_replace_existing_metadata);
   UNITY_END();
   return 0;
 }

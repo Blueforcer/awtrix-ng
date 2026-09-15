@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "core/render/Canvas.h"
+#include "media/PodBuffer.h"
 
 namespace awtrix {
 namespace media {
@@ -15,6 +16,7 @@ class MicroGif {
   static constexpr int kMaxW = 32;
   static constexpr int kMaxH = 8;
 
+  // The input, including its palettes, must stay alive until the last frame is decoded.
   bool begin(const uint8_t* data, std::size_t len);
 
   int width() const { return w_; }
@@ -48,7 +50,7 @@ class MicroGif {
   int w_ = 0, h_ = 0;
   int bgIndex_ = 0;
   int globalColors_ = 0;
-  uint32_t palette_[256];
+  const uint8_t* palette_ = nullptr;
 
   int transparent_ = -1;
   int disposal_ = 0;
@@ -57,6 +59,9 @@ class MicroGif {
   // frame still on screen has to survive until then.
   int prevDisposal_ = 0;
   int prevX_ = 0, prevY_ = 0, prevW_ = 0, prevH_ = 0;
+  // Disposal 3 restores the pixels that were present before the frame. Allocate only for GIFs
+  // that use it; the panel-sized worst case is 32 * 8 * 4 = 1024 bytes.
+  PodBuffer<uint32_t> restore_;
 };
 
 }

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "core/radio/IcyMetadata.h"
+#include "core/radio/RadioDisplay.h"
 #include "core/radio/IcyStream.h"
 #include "core/radio/PlaylistParser.h"
 #include "core/radio/StationList.h"
@@ -414,6 +415,16 @@ void test_empty_stream_text_stays_empty() {
   TEST_ASSERT_EQUAL_STRING("", text::fromStreamBytes("").c_str());
 }
 
+void test_title_announcement_completes_one_scroll_pass() {
+  AppSpec announcement;
+  TEST_ASSERT_TRUE(radio::buildAnnouncement("Artist - A title longer than the display",
+                                             radio::Announcement::Title, announcement));
+  TEST_ASSERT_EQUAL_STRING("radio", announcement.name.c_str());
+  TEST_ASSERT_TRUE(announcement.stack);
+  TEST_ASSERT_EQUAL_INT(1, announcement.repeat);
+  TEST_ASSERT_EQUAL_INT(0, announcement.durationMs);
+}
+
 }
 
 void setUp() {}
@@ -468,5 +479,6 @@ int main(int, char**) {
   RUN_TEST(test_every_stream_result_is_valid_utf8);
   RUN_TEST(test_control_bytes_are_dropped);
   RUN_TEST(test_empty_stream_text_stays_empty);
+  RUN_TEST(test_title_announcement_completes_one_scroll_pass);
   return UNITY_END();
 }

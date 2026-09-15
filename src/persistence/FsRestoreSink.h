@@ -21,6 +21,7 @@ class FsRestoreSink : public RestoreSink {
   bool applySettings(const std::string& json, std::string& err) override;
   bool applyAppLoop(const std::string& json, std::string& err) override;
   bool applyRadioStations(const std::string& json, std::string& err) override;
+  bool applyIconOrigins(const std::string& json, std::string& err) override;
   void commit() override;
 
 

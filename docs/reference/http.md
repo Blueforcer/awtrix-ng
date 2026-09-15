@@ -358,8 +358,10 @@ Notes:
   [Sounds](#post-apiv1audioplay).
 * `transitionEffect` is matched **case-insensitively** against the names from
   [`GET /api/v1/capabilities`](#get-apiv1capabilities) - `"slide"`, `"Slide"` and `"SLIDE"` are the
-  same transition. The other name strings (`timeSeparatorMode`, `dateOrder`, `dateSeparator`,
-  `dateYearMode`) accept any casing too. Responses always come back in one fixed spelling.
+  same transition. The other name strings (`transitionDirection`, `timeSeparatorMode`, `dateOrder`,
+  `dateSeparator`, `dateYearMode`) accept any casing too. Responses always come back in one fixed
+  spelling. `transitionDirection: "reverse"` flips only directional animation geometry; it never
+  changes the app order.
 * `scroll` is the device-wide text motion - `mode` (`static` · `wrap` · `loop` · `bounce`),
   `direction` (`left` · `right`), `entry` (`inline` · `offscreen`), `whenFits`
   (`static` · `scroll`), `speed` in percent of 21 px/s, `gap` in pixels and `holdMs` in
@@ -572,7 +574,7 @@ switched on and keeps its place with nothing to draw.
 | `headless` | boolean | **script only** - the script carries `@headless true` and so never draws |
 | `config` | boolean | **scripts and modules** - it declares [settings](../guides/scripting.md#settings-the-user-can-change), so [`/config`](#get-apiv1appsnameconfig) has something to show. On a [module](../guides/scripting.md#settings-several-apps-share) these are the settings every app importing it shares |
 | `error` | object \| null | **script only** - `null` while healthy, otherwise the error the script is stuck on (see [below](#the-error-object)) |
-| `meta` | object | **script only** - `{name, desc, author, version}` from the `@` headers; each entry `""` when the header is absent |
+| `meta` | object | **script only** - `{name, desc, author, version, icons}` from the `@` headers; each string entry `""` when the header is absent. `icons` is the list of icon IDs from [`@icons`](../guides/scripting.md#the-icons-your-script-needs), `[]` when the header is absent |
 
 `icon`, `import`, `skipped`, `config`, `error` and `meta` are **omitted**, not emitted empty, where
 they do not apply. `skipped`, `config`, `error` and `meta` are also absent on a build with no
@@ -595,11 +597,11 @@ moment. It reports the last answer the app gave, not one taken for this request.
   {"name":"weather","enabled":true,"inLoop":true,"slot":1,"present":true,"origin":"pushed","icon":"1"},
   {"name":"doorbell","enabled":true,"inLoop":false,"slot":2,"present":true,"origin":"script",
    "skipped":false,"headless":true,"config":false,"error":null,
-   "meta":{"name":"Doorbell","desc":"","author":"me","version":"1.0"}},
+   "meta":{"name":"Doorbell","desc":"","author":"me","version":"1.0","icons":[]}},
   {"name":"co2","enabled":true,"inLoop":false,"slot":3,"present":false,"origin":null},
   {"name":"clock","enabled":false,"inLoop":false,"slot":null,"present":true,"origin":"script",
    "skipped":false,"headless":false,"config":true,"error":null,
-   "meta":{"name":"Wall Clock","desc":"","author":"me","version":"1.2"}}
+   "meta":{"name":"Wall Clock","desc":"","author":"me","version":"1.2","icons":["2105","2106"]}}
 ]
 ```
 
@@ -617,8 +619,8 @@ The same shape wherever a script error is reported - here and in the
 | `hook` | string | **optional** - which method raised it: `setup`, `loop`, `draw`, `on_show`, `on_hide`, `on_button`, `should_show` |
 
 `line` and `hook` are omitted rather than sent as `0`/`""`, and both are absent much of the time:
-`"no draw() method"` and `"source too large"` carry neither. A compile error is the reliable source
-of `line`; a failure that names a `hook` usually has no `line`.
+`"no draw() method"` carries neither. A compile error is the reliable source of `line`; a failure
+that names a `hook` usually has no `line`.
 
 ```json
 {"message":"syntax_error: unexpected token ')'","line":12}
@@ -842,7 +844,7 @@ The `503` above is a build without the scripting platform at all, which is a dif
 
 The inventory - which scripts exist, whether each compiled, and the metadata from its `@` headers -
 is part of [`GET /api/v1/apps`](#get-apiv1apps), under `origin`, `error` and `meta`. The source is
-not in that listing; it can be as large as [`scriptMaxBytes`](system.md#miscellaneous) allows.
+not in that listing.
 
 ```bash
 curl "http://<awtrix-ip>/api/v1/apps/script/clock" -o clock.ax
@@ -859,9 +861,8 @@ that name.
 | 200 | `{"ok":true,"name":"X","error":{...}}` - installed but broken; see [the error object](#the-error-object) |
 | 400 | `invalidName` - the name is malformed, or the tail is empty (`/api/v1/apps/script/`) |
 | 403 | `forbidden` - the write API is closed in AP/provisioning mode |
-| 413 | `payloadTooLarge` - over [`scriptMaxBytes`](system.md#miscellaneous) (`16384` by default); refused, never truncated |
 | 422 | `validationFailed`, `request body must be the script source`, `field: "source"` - empty body |
-| 507 | `insufficientStorage`, `field: "name"` - see the four refusals below |
+| 507 | `insufficientStorage` - see the refusals below |
 
 While [`scriptingEnabled`](system.md#miscellaneous) is off the script is saved and answered with
 `{"ok":true,"name":"X","error":null}`. Nothing runs in that state, so there is no compile result to
@@ -869,19 +870,19 @@ report; the script takes effect on the next start with scripting switched back o
 [the rescue](../troubleshooting/troubleshooting.md#scripts-eat-the-memory-and-awtrix-never-comes-up)
 a way out rather than a dead end.
 
-A `507` carries one of four reasons in `message`, because the remedies differ:
+A `507` carries one of five reasons in `message`, because the remedies differ:
 
 | Reason | Message | What helps |
 |---|---|---|
-| Count | `script limit reached (<n> installed)` | delete a script, or raise [`scriptLimit`](system.md#miscellaneous) |
-| Berry heap | `shared Berry heap <n> bytes is over the … soft limit; remove a script` | delete a script |
-| System heap | `not enough free memory to compile (<n> bytes free, needs <m>); remove a script or reboot` | delete a script, or reboot to defragment |
-| Fragmentation | `heap too fragmented to compile (largest contiguous block <n> bytes, source is <m>)` | reboot |
+| Receiving it | `script source exceeds the <n> bytes free to receive it`, `field: "source"` | delete a script, or reboot |
+| Copying it | `not enough free memory to act on a body this size; delete a script or reboot` | delete a script, or reboot |
+| Berry heap | `shared Berry heap <n> bytes is over the … soft limit; remove a script`, `field: "name"` | delete a script |
+| System heap | `not enough free memory to compile (<n> bytes free, needs <m>); remove a script or reboot`, `field: "name"` | delete a script, or reboot to defragment |
+| Fragmentation | `heap too fragmented to compile (largest contiguous block <n> bytes, source is <m>)`, `field: "name"` | reboot |
 
-The last two apply to **replacements as well as new names**, unlike the first
-two. The memory requirement scales with the source size, so a short script still
-installs on a device that has just refused a long one. Every cap on this route is
-listed in [Limits](limits.md#scripting).
+Every reason but the Berry-heap one applies to **replacements as well as new names**. The memory
+requirement scales with the source size, so a short script still installs on a device that has just
+refused a long one. Every cap on this route is listed in [Limits](limits.md#scripting).
 
 The body is Berry source, not JSON, so the `application/json` guard under
 [Content-Type](#content-type) does not apply here. Any content type is accepted, including none -
@@ -896,9 +897,8 @@ Replacing an installed name starts the script **fresh**: subscriptions, in-fligh
 in-memory state are dropped. The persisted store is carried across, and the script keeps its
 position in the rotation.
 
-[`scriptLimit`](system.md#miscellaneous) caps how many scripts may be resident (default `16`). A
-**new** name past the cap - or past the shared-heap soft limit - is rejected with `507` and nothing
-is stored; replacing a name that is already installed always works, whatever the limit says.
+A **new** name past the shared script memory limit is rejected with `507` and nothing is stored;
+replacing a name that is already installed always works, whatever that leaves.
 
 !!! note "A non-empty `error` is a successful install, not a failure"
     A script that does not compile **still installs**. The source is stored and survives a reboot,
@@ -952,6 +952,7 @@ the JSON type its name suggests.
 | 400 | `invalidName` - the name is not `[A-Za-z0-9_-]{1,32}` |
 | 404 | `notFound`, `no such script` |
 | 503 | `unavailable`, `scripting is not available` |
+| 507 | `insufficientStorage`, `not enough free memory to build the settings list`, `field: "name"` |
 
 ### PATCH /api/v1/apps/{name}/config
 
@@ -979,7 +980,7 @@ automation should not have to know the range to be safe.
 | 422 | `validationFailed`, `a JSON body is required` - empty body |
 | 503 | `unavailable` - [`scriptingEnabled`](system.md#miscellaneous) is off |
 | 503 | `serviceBusy` - a script fetch is in flight; retry, `Retry-After: 2` |
-| 507 | `insufficientStorage` - the change would push the script's storage past 2 KB, or the restart could not be given memory; nothing changed either way |
+| 507 | `insufficientStorage` - not enough free memory for the change, or for the restart; nothing changed either way |
 
 Saving restarts the script, exactly as re-uploading its source would: `init()` and `setup()` run
 again and see the new values, in-memory state and subscriptions are dropped, and the app keeps its
@@ -1524,9 +1525,9 @@ Device configuration: Wi-Fi, MQTT, NTP, auth, hardware and the GPIO map. Prose f
 
 ### GET /api/v1/system
 
-Returns **64** of the 67 configuration fields. The JSON key is the field name for every one.
+Returns **66** of the 69 configuration fields. The JSON key is the field name for every one.
 
-`wifiPass`, `mqttPass` and `authPass` are omitted by default - that is the 64 of 67 above. Pass
+`wifiPass`, `mqttPass` and `authPass` are omitted by default - that is the 66 of 69 above. Pass
 `?secrets=1` to include them, so a backup can round-trip the Wi-Fi, MQTT and auth credentials:
 
 ```bash
@@ -1629,6 +1630,7 @@ Behaviour to know:
 | `panels` | integer | `1` | 1–128; how many panels the strip runs through |
 | `panelStart` | string | `"topLeft"` | `topLeft` · `topRight` · `bottomLeft` · `bottomRight` |
 | `panelWiring` | string | `"rows"` | `rows` · `columns` |
+| `panelColorOrder` | string | `"grb"` | `rgb` · `rbg` · `grb` · `gbr` · `brg` · `bgr` |
 | `panelSerpentine` | boolean | `true` | every second row or column runs backwards |
 | `mirror` | boolean | `false` | mirrors the displayed image, not the wiring |
 | `rotate` | boolean | `false` | rotates the displayed image 180°; also swaps left/right buttons |
@@ -1640,8 +1642,6 @@ Behaviour to know:
 | `tempDecimals` | integer | `0` | 0–2 |
 | `debugMode` | boolean | `false` | gates verbose request/command tracing |
 | `scriptingEnabled` | boolean | `true` | whether the Berry stack exists at all; off frees ~40 KB RAM, script routes answer `503`. Applies after reboot - see [System](system.md#miscellaneous) |
-| `scriptLimit` | integer | `16` | 0–32; how many Berry scripts may be resident. Lowering it below the number installed refuses new names without removing any |
-| `scriptMaxBytes` | integer | `16384` | 1024–32768; largest script source accepted. Lowering it refuses larger new installs but never drops a stored script |
 | `pinMatrix` | integer | `32` | always treated as enabled |
 | `pinBtnLeft` | integer | `26` | `-1` = disabled |
 | `pinBtnSelect` | integer | `27` | `-1` = disabled |
@@ -1656,9 +1656,13 @@ Behaviour to know:
 | `pinI2sBclk` | integer | `-1` | I²S bit clock. ESP32-S3 only; `-1` on the ESP32 |
 | `pinI2sLrclk` | integer | `-1` | I²S word-select clock. ESP32-S3 only; `-1` on the ESP32 |
 | `pinI2sDout` | integer | `-1` | I²S data to the DAC. ESP32-S3 only; `-1` on the ESP32 |
+| `pinI2sMclk` | integer | `-1` | I²S master clock, only for DACs that need one. ESP32-S3 only |
+| `pinAmpEnable` | integer | `-1` | Amplifier enable, driven HIGH at startup. ESP32-S3 only |
 
-The three `pinI2s*` fields are one bus and are validated together: give all three, or `-1` for all
-three. A half-configured set is a `422 validationFailed` naming the missing pin.
+The three bus fields `pinI2sBclk`, `pinI2sLrclk` and `pinI2sDout` are validated together: give all
+three, or `-1` for all three. A half-configured set is a `422 validationFailed` naming the missing
+pin. `pinI2sMclk` and `pinAmpEnable` are optional extras and each stands alone, but neither may be
+assigned while the bus is off - that is a `422` too.
 
 Defaults are the stock ESP32 pin map. `-1` disables a feature. Every `pin*` field must be `-1` or a
 GPIO within the compiled chip's range (`0–39` on the ESP32, `0–48` except `22–25` on the ESP32-S3);
@@ -1668,8 +1672,8 @@ anything else is a `422 validationFailed` before the pin map is even considered.
 
 `pinMatrix` is checked first; then every pin is walked in field order - `pinMatrix`, `pinBtnLeft`,
 `pinBtnSelect`, `pinBtnRight`, `pinBattery`, `pinLdr`, `pinBuzzer`, `pinI2cSda`, `pinI2cScl`,
-`pinDfRx`, `pinDfTx`, `pinI2sBclk`, `pinI2sLrclk`, `pinI2sDout` - each checked against the
-range/reserved/input-only rules before the next
+`pinDfRx`, `pinDfTx`, `pinI2sBclk`, `pinI2sLrclk`, `pinI2sDout`, `pinI2sMclk`, `pinAmpEnable` -
+each checked against the range/reserved/input-only rules before the next
 pin, so it is the pin earlier in this list that gets reported. The ADC1 and duplicate checks run
 after every pin has passed the per-pin rules. The first failure wins and becomes `error.message`
 of a `400 invalidPinConfig`.
@@ -1679,7 +1683,8 @@ vs ESP32-S3 - and its ranges differ) are documented once in
 **[GPIO & boards](gpio.md#validation-rules)** - the one page to read on GPIO.
 
 Output-needing pins are `pinMatrix`, the three button pins (they need `INPUT_PULLUP`),
-`pinBuzzer`, `pinI2cSda`, `pinI2cScl`, `pinDfTx` and the three `pinI2s*` lines. `pinMatrix` is always treated as enabled;
+`pinBuzzer`, `pinI2cSda`, `pinI2cScl`, `pinDfTx`, the three `pinI2s*` lines, `pinI2sMclk` and
+`pinAmpEnable`. `pinMatrix` is always treated as enabled;
 every other pin - including `pinDfRx` and `pinDfTx` - is enabled, and validated, whenever it is
 `>= 0`; `dfplayer` does not gate whether the DF pins are checked, only whether the DFPlayer is
 actually driven.
@@ -1902,11 +1907,66 @@ curl -X POST http://<awtrix-ip>/api/v1/restore -F "file=@backup.zip"
 
 ---
 
+## Icon origins
+
+### GET /api/v1/icons/origins
+
+Lists durable links between installed icons and their published Hub originals:
+
+```json
+{"icons":[{"name":"mail.gif","hub":"https://awtrix.de/icons/","slug":"mail","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}
+```
+
+This local metadata is available offline and across reboots. `sha256` is the lowercase
+SHA256 of the **local file bytes at linkage time**, supplied by the caller. It is not a
+signature, authorship claim, or permission to publish. Compare it with the current file
+before describing that file as an unchanged Hub copy. Ordinary file replacement preserves
+the link; deleting the icon through the files API removes it. Missing files are omitted.
+
+The collection is bounded to 64 records and 16 KiB of serialized metadata; no pagination is
+needed within this device storage limit. Responses use `Cache-Control: no-store`.
+
+### PUT /api/v1/icons/origins
+
+Upserts one record with the four fields above. The full filename must match
+`[A-Za-z0-9_-]{1,32}\.(gif|jpg)` and refer to an existing icon. `slug` matches
+`[a-z0-9_-]{1,32}`. `hub` is an HTTPS base ending in `/icons/`, at most 240 characters,
+without credentials, query, fragment, percent escapes or dot-segments. Alternate configured
+DNS/IPv4 hosts, ports and path prefixes are allowed. The body limit is 1024 bytes.
+
+Returns `200 {"ok":true}`. Repeating the same PUT is safe. A changed record for the same
+filename replaces its link. Errors: `400 invalidOrigin`, `404 notFound` for a missing icon,
+`413 payloadTooLarge`, `507 insufficientStorage` at the metadata limit, or
+`500 storageError` if the old store cannot be read or the atomic write fails.
+
+### DELETE /api/v1/icons/origins?name=mail.gif
+
+Removes only the link, leaving the icon bytes intact. Returns `200 {"ok":true}` even when
+already absent; invalid filenames return `400 invalidName`. A storage failure returns
+`500 storageError`. The file-deletion endpoint also removes the corresponding link and
+refuses to delete bytes if that metadata write fails.
+
+All three operations follow device authentication. During provisioning, GET remains available
+under the existing read-only policy; PUT and DELETE return `403 forbidden`.
+Other methods return `405 methodNotAllowed`. Unknown JSON fields are ignored for forward
+compatibility; required fields must occur once and contain strings.
+
+Backups include the GET response as `config/icon-origins.json`. The device stores it at
+`/config/icon-origins.json` using a temporary sibling and atomic replacement. It is not
+exposed as a gallery image or writable via the generic file API. Restore validates this
+optional entry, applies it after icon files, and removes links to absent files. Old backups
+without the entry still restore; retained old links must always be checked against actual
+file bytes. Corrupt metadata is skipped with a restore warning.
+
 ## Web UI and static assets
 
 ### GET /
 
-The gzipped web UI, embedded in the firmware. Served for `/` and `/index.html`.
+The gzipped web UI, embedded in the firmware. Served for `/`, `/index.html` and
+`/fullscreen`.
+
+At `/fullscreen` the page drops its chrome and shows only the live matrix, scaled to fill the
+window at a whole-pixel factor - made for an iframe on a dashboard.
 
 | Status | Condition |
 |---|---|
@@ -1987,14 +2047,15 @@ Anything not matched above answers **404** `notFound` with message `unknown rout
 | DELETE | `/api/v1/audio/mp3/{name}` | [remove an MP3](#delete-apiv1audiomp3name) |
 | PUT | `/api/v1/audio/stations` | [replaces the whole list](#put-apiv1audiostations) |
 | GET | `/api/v1/capabilities` | [names this build supports](#get-apiv1capabilities) |
-| GET | `/api/v1/system` | [64 of 67 fields](#get-apiv1system) |
+| GET | `/api/v1/system` | [66 of 69 fields](#get-apiv1system) |
 | PUT | `/api/v1/system` | [partial merge + pin validation](#put-apiv1system) |
 | GET | `/api/v1/system/wifi-scan` | [async, 202 while running](#get-apiv1systemwifi-scan) |
 | GET | `/api/v1/logs` | [incremental](#get-apiv1logs) |
 | GET | `/api/v1/files` | [list](#get-apiv1files) |
 | POST | `/api/v1/files` | [multipart upload](#post-apiv1files) |
 | DELETE | `/api/v1/files` | [by `?path=`, allowlisted](#delete-apiv1files) |
+| GET, PUT, DELETE | `/api/v1/icons/origins` | [local Hub links](#icon-origins) |
 | POST | `/update` | [firmware image](#post-update) |
 | POST | `/api/v1/restore` | [backup ZIP; available in AP mode](#post-apiv1restore) |
-| GET | `/`, `/index.html` | [web UI](#get) |
+| GET | `/`, `/index.html`, `/fullscreen` | [web UI](#get) |
 | GET | `/ICONS/*`, `/MELODIES/*`, `/PALETTES/*`, `/MP3/*`, `/SCRIPTS/*`, `/apploop.json` | [static assets](#web-ui-and-static-assets) |

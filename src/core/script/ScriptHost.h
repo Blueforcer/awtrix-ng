@@ -32,8 +32,6 @@ class ScriptHost {
   ScriptHost(const ScriptHost&) = delete;
   ScriptHost& operator=(const ScriptHost&) = delete;
 
-  void setLimit(std::size_t n) { limit_ = n; }
-
   const ScriptServices& services() const { return svc_; }
 
   void setRunningScripts(std::vector<std::string> running);
@@ -51,7 +49,7 @@ class ScriptHost {
   void tick(const RenderCtx& ctx, const std::string& currentAppId,
             const std::string& incomingAppId = std::string());
   void staggerFirstLoops(int64_t stepMs);
-  void handleButton(const std::string& currentAppId, const std::string& btn);
+  bool handleButton(const std::string& currentAppId, const std::string& btn);
   bool wantsShow(const std::string& name);
   long durationMs(const std::string& name) const;
   bool scrollHolds(const std::string& name) const;
@@ -76,6 +74,7 @@ class ScriptHost {
     std::string desc;
     std::string author;
     std::string version;
+    std::string icons;
   };
   std::map<std::string, Info> list() const;
 
@@ -144,8 +143,6 @@ class ScriptHost {
   SharedState shared_;
   std::string vmError_;
 
-  // Counts apps and modules together, so a module occupies one of the installable slots.
-  std::size_t limit_ = 16;
   std::vector<std::string> running_;
   bool runningKnown_ = false;
   std::map<std::string, std::unique_ptr<ScriptApp>> apps_;

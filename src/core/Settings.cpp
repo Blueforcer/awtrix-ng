@@ -72,6 +72,7 @@ const char* const kSepModeNames[] = {"steady", "blink", "pulse"};
 const char* const kDateOrderNames[] = {"dayMonthYear", "monthDayYear", "yearMonthDay"};
 const char* const kDateSepNames[] = {"dot", "slash", "dash"};
 const char* const kYearModeNames[] = {"none", "twoDigit", "fourDigit"};
+const char* const kTransitionDirectionNames[] = {"normal", "reverse"};
 
 constexpr Field kFields[] = {
     mkBool("autoBrightness", &Settings::autoBrightness),
@@ -79,6 +80,7 @@ constexpr Field kFields[] = {
     mkBool("autoTransition", &Settings::autoTransition),
     mkColor("textColor", &Settings::textColor),
     mkTransition("transitionEffect", &Settings::transitionEffect),
+    mkEnum("transitionDirection", &Settings::transitionDirection, kTransitionDirectionNames, 2),
     mkInt("transitionDurationMs", &Settings::transitionDurationMs, 0, INT_MAX),
     mkLong("appDurationMs", &Settings::appDurationMs),
     mkInt("timeMode", &Settings::timeMode, 0, 6),

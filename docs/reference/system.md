@@ -4,7 +4,7 @@
 Assistant, NTP and timezone, identity, web port and authentication, sensor and battery
 calibration, the auto-brightness range, panel layout, and the complete runtime GPIO map.
 
-It is **67 flat fields**, one JSON object, no nesting. This page documents every one of them.
+It is **69 flat fields**, one JSON object, no nesting. This page documents every one of them.
 
 [Settings](settings.md) is a different resource: it controls how the display *behaves* -
 brightness, apps, transitions - and is written with `PATCH /api/v1/settings`. How your panel is
@@ -88,8 +88,8 @@ both fail with `422`); the float fields accept any number in range.
 
 ### What `PUT` does not check
 
-Beyond the numeric ranges, the two enums (`panelStart`, `panelWiring`), the dotted-quad address
-fields and the blanking rules below, strings are not validated, and unknown keys are ignored
+Beyond the numeric ranges, the three enums (`panelStart`, `panelWiring`, `panelColorOrder`), the
+dotted-quad address fields and the blanking rules below, strings are not validated, and unknown keys are ignored
 without error - the resource is a merge, not a replacement. The **deeper GPIO rules**
 (duplicates, input-only pins, the matrix whitelist) are separate and answer
 `400 invalidPinConfig`; the rules and their exact messages are in
@@ -320,13 +320,15 @@ width follows from the first two - `panelWidth × panels` - and the height is al
 | `panels` | int | 1–128 | `1` | How many identical panels the strip runs through, left to right. `panelWidth × panels` must come to 32–128, or the write is `422 validationFailed` on `panelWidth`. | yes, if the total width changes |
 | `panelStart` | enum | `topLeft` `topRight` `bottomLeft` `bottomRight` | `topLeft` | The corner the first LED sits in. Names are case-insensitive; anything else is `422`. | no |
 | `panelWiring` | enum | `rows` `columns` | `rows` | Whether the strip runs along the rows or down the columns inside a panel. | no |
+| `panelColorOrder` | enum | `rgb` `rbg` `grb` `gbr` `brg` `bgr` | `grb` | Physical colour-byte order expected by the LEDs. Use `rgb` when red and green are swapped on an RGB panel. | no |
 | `panelSerpentine` | bool | - | `true` | Every second row (or column) runs backwards - the zigzag most panels are wired in. `false` = every run starts on the same side. | no |
 | `panelChainReverse` | bool | - | `false` | The data cable enters the chain at the other end, without changing how a panel is wired inside. | no |
 | `panelChainSerpentine` | bool | - | `false` | Every second panel along the cable is mounted rotated 180°, so one panel's output sits beside the next panel's input. | no |
 | `mirror` | bool | - | `false` | Flips the picture left to right. | no |
 | `rotate` | bool | - | `false` | Turns the picture 180°. Also swaps the left and right button, which is correct for a physically upside-down panel. | no |
 
-`panelStart`, `panelWiring` and `panelSerpentine` describe how a **panel** is wired;
+`panelStart`, `panelWiring`, `panelColorOrder` and `panelSerpentine` describe how a **panel** is
+wired;
 `panelChainReverse` and `panelChainSerpentine` describe how the **panels are chained**;
 `mirror` and `rotate` describe how the picture is **drawn** on the result. They compose - the
 display transform is applied first, then the chain order, then the wiring map inside a panel.
@@ -346,6 +348,7 @@ exception is the total width, which is fixed at boot: a change to `panelWidth ×
 | Four 8×8 tiles, each wired from its right edge | `panelWidth` 8, `panels` 4, `panelStart` `topRight`, `panelChainReverse` true |
 | Every second tile mounted upside down | `panelChainSerpentine` true |
 | A 32×8 panel wired in columns | `panelWiring` `columns` |
+| A panel where red and green are swapped | `panelColorOrder` `rgb` |
 | A 64-pixel-wide panel | `panelWidth` 64 |
 
 ```bash
@@ -358,6 +361,9 @@ wrong order, or every second panel upside down, reach for `panelChainReverse` an
 `panelChainSerpentine`. The web UI's **Panel** section shows the resulting size
 (`32 × 8 = 256 LEDs`) while you edit.
 
+If the picture geometry is correct but individual colours are wrong, change `panelColorOrder`
+instead. A red/green swap normally means an RGB panel is being driven with the default GRB order.
+
 ## Buttons
 
 | Key | Type | Range | Default | Effect | Reboot |
@@ -367,11 +373,14 @@ wrong order, or every second panel upside down, reach for `panelChainReverse` an
 
 `buttonCallback` lets the buttons trigger something in your house - a lamp, a scene, a Node-RED
 flow. Set it to the URL of your listener and AWTRIX sends it a `POST` with
-`Content-Type: application/x-www-form-urlencoded` and this body:
+`Content-Type: application/json` and this body:
 
+```json
+{"button":"left","state":true,"uid":"dcda0c29dcb8"}
 ```
-button=<left|middle|right>&state=<1|0>&uid=<mac>
-```
+
+`button` is `left`, `middle` or `right`, `state` is `true` when the button goes down and `false`
+when it is released, and `uid` is the device id from `GET /api/v1/device`.
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/system \
@@ -381,10 +390,11 @@ curl -X PUT http://<awtrix-ip>/api/v1/system \
 
 What to expect from it:
 
-* **One press is two calls** - `state=1` when the button goes down, `state=0` when it is released.
-  Act on `state=1` and ignore the other, or measure the gap to detect a hold.
+* **One press is two calls** - `"state":true` when the button goes down, `"state":false` when it
+  is released. Act on `true` and ignore the other, or measure the gap to detect a hold.
 * **The buttons keep their normal job.** The webhook runs alongside app switching; use
-  [`blockNavigation`](settings.md#buttons) if left/right should only drive your automation.
+  [`blockNavigation`](settings.md#buttons) if left/right should only drive your automation, or a
+  script that returns `true` from `on_button()` to take single presses on its own screen.
 * **`middle`, not `select`** - MQTT and scripts use `select` for the same button. The names follow
   the wiring: `swapButtons` and `rotate` do not rename them.
 * **Plain `http://` only**, no TLS and no auth header, so keep the listener on your own network. An
@@ -429,13 +439,6 @@ The universe and pixel mapping, the five-second hold window and the security imp
 | `tempDecimals` | uint8 | 0–2 | `0` | Number of decimal places the Temperature app shows. Outside 0–2 → `422`. **Applies live.** | no |
 | `debugMode` | bool | - | `false` | Turns on verbose request/command tracing (`logdbg`) to the serial port and the log console. Off keeps the log quiet. **Applies live.** | no |
 | `scriptingEnabled` | bool | - | `true` | Master switch for [Berry scripting](../guides/scripting.md). Off frees the memory the interpreter occupies - watch `freeHeapBytes` in `GET /api/v1/device` to see how much on your board - and no script runs. Stored scripts are not deleted, and they stay **fully editable**: listing, reading, saving and deleting a script all work with this off, so a script that made the device unreachable can be repaired. Only execution stops; saved changes take effect on the next boot once it is switched back on. Holding **left+right** for three seconds while switching the device on sets this to `false` from the panel, for when a script has made it unreachable ([troubleshooting](../troubleshooting/troubleshooting.md#scripts-eat-the-memory-and-awtrix-never-comes-up)). | yes |
-| `scriptLimit` | int | 0–32 | `16` | How many [Berry scripts](../guides/scripting.md) may be resident at once. `0` refuses every install. Installing past it → [`507`](http.md#put-apiv1appsscriptname). Lowering it below the number installed removes nothing - those scripts keep running and stay replaceable, and only a new name is refused. **Applies live**, on the next install. | no |
-| `scriptMaxBytes` | int | 1024–32768 | `16384` | Largest script source AWTRIX accepts, in bytes. Lowering it refuses new installs above the new size. A script already stored that now exceeds the new limit is not deleted - it stays listed, readable and deletable - but it stops running: the app shows `ERR:<name>` on the panel until you raise the limit again or replace the script with shorter source. **Applies live**, and to a stored script the next time it is loaded. | no |
-
-`scriptLimit` is a count, not the on/off switch - that is `scriptingEnabled`. Behind the count
-there is also a memory ceiling, listed in [Limits](limits.md#scripting): once the resident scripts
-reach it a new install is refused, and nothing already running is thrown out. Read `freeHeapBytes`
-and `largestFreeBlockBytes` from `GET /api/v1/device` before raising the limit.
 
 Install, read and remove scripts with [`/api/v1/apps/script/{name}`](http.md#scripts); the language
 itself is in [Scripting](../guides/scripting.md).
@@ -445,9 +448,10 @@ Colour control is not on this route: `colorCorrection` and `colorTint` live on
 
 ## GPIO map
 
-`PUT /api/v1/system` also carries the fourteen `int` GPIO fields (`pinMatrix`, `pinBtnLeft`,
+`PUT /api/v1/system` also carries the sixteen `int` GPIO fields (`pinMatrix`, `pinBtnLeft`,
 `pinBtnSelect`, `pinBtnRight`, `pinBattery`, `pinLdr`, `pinBuzzer`, `pinI2cSda`, `pinI2cScl`,
-`pinDfRx`, `pinDfTx`, `pinI2sBclk`, `pinI2sLrclk`, `pinI2sDout`). `-1` disables a feature (except
+`pinDfRx`, `pinDfTx`, `pinI2sBclk`, `pinI2sLrclk`, `pinI2sDout`, `pinI2sMclk`, `pinAmpEnable`).
+`-1` disables a feature (except
 `pinMatrix`, which cannot be disabled), and **every change requires a reboot**.
 
 The map is validated against the fully merged configuration, so a partial `PUT` is checked against

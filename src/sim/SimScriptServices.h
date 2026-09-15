@@ -16,6 +16,7 @@
 
 #include "core/script/HttpBodyFilter.h"
 #include "core/script/ScriptServices.h"
+#include "persistence/FsFreeSpace.h"
 #include "sim/SimStore.h"
 #include "system/Log.h"
 #include "vendor/httplib.h"
@@ -59,9 +60,9 @@ class SimScriptHttp : public script::IScriptHttp {
       if (res) {
         r.status = res->status;
         script::HttpBodyFilter filter;
-        filter.begin(req.find, req.keep, maxBytes);
+        filter.begin(req.find, req.keep, script::httpBodyCap(maxBytes));
         filter.feed(res->body.data(), res->body.size());
-        r.ok = filter.matched();
+        r.ok = filter.matched() && !filter.outOfRoom();
         if (r.ok) r.body = std::move(filter.body());
       }
       pending_.fetch_sub(1);
@@ -123,9 +124,14 @@ class SimScriptStore : public script::IScriptStoreSink {
 
   void save(const std::string& name, const std::string& source) {
     if (!nameIsSafe(name)) return;
-    if (source.size() > script::kMaxSourceCeilingBytes) return;
+    if (!fitsOnDisk(source.size() + pendingBytesExcept())) {
+      logf("scripts: %s not saved, no room on flash (%u bytes)", name.c_str(),
+           static_cast<unsigned>(source.size()));
+      return;
+    }
     flush();
     writeFile(sourcePath(name), source);
+    free_.stale();
   }
 
   void remove(const std::string& name) {
@@ -135,6 +141,7 @@ class SimScriptStore : public script::IScriptStoreSink {
     std::filesystem::remove(std::filesystem::u8path(sourcePath(name)), ec);
     std::filesystem::remove(std::filesystem::u8path(storePath(name)), ec);
     flush();
+    free_.stale();
   }
 
   bool readSource(const std::string& name, std::string& out) const {
@@ -184,11 +191,23 @@ class SimScriptStore : public script::IScriptStoreSink {
 
   void storeChanged(const std::string& script, const std::string& json) override {
     if (!nameIsSafe(script)) return;
-    if (json.size() > script::kMaxStoreBytes) return;
+    if (!fitsOnDisk(json.size() + pendingBytesExcept(script))) {
+      if (!storeRefused_) {
+        storeRefused_ = true;
+        logf("scripts: store not saved for %s, no room on flash (%u bytes)", script.c_str(),
+             static_cast<unsigned>(json.size()));
+      }
+      return;
+    }
+    storeRefused_ = false;
     dirty_[script] = json;
   }
 
   void tick(int64_t nowMs) {
+    if (nowMs - lastFreeMs_ >= kFlushIntervalMs || nowMs < lastFreeMs_) {
+      free_.stale();
+      lastFreeMs_ = nowMs;
+    }
     if (dirty_.empty()) {
       lastFlushMs_ = nowMs;
       return;
@@ -203,10 +222,33 @@ class SimScriptStore : public script::IScriptStoreSink {
     const std::map<std::string, std::string> pending = std::move(dirty_);
     dirty_.clear();
     for (const auto& kv : pending) writeFile(storePath(kv.first), kv.second);
+    free_.stale();
   }
 
  private:
   static constexpr long kFlushIntervalMs = 5000;
+
+  // The device refuses a script write it has no flash for, and someone developing a script here
+  // has to be able to meet that refusal where they are working. Measured the same way the
+  // storage API measures it: the data directory against the stand-in total.
+  static std::size_t readFreeBytes() {
+    namespace stdfs = std::filesystem;
+    std::error_code ec;
+    uint64_t used = 0;
+    for (stdfs::recursive_directory_iterator it(stdfs::u8path(sim::dataDir()), ec), end;
+         !ec && it != end; ++it)
+      if (it->is_regular_file()) used += it->file_size(ec);
+    return used < sim::kFsTotalBytes ? static_cast<std::size_t>(sim::kFsTotalBytes - used) : 0;
+  }
+
+  bool fitsOnDisk(std::size_t bytes) { return fitsWithMargin(free_.bytes(readFreeBytes), bytes); }
+
+  std::size_t pendingBytesExcept(const std::string& script = std::string()) const {
+    std::size_t n = 0;
+    for (const auto& kv : dirty_)
+      if (kv.first != script) n += kv.second.size();
+    return n;
+  }
 
   static bool nameIsSafe(const std::string& name) {
     if (name.empty() || name.size() > 64) return false;
@@ -225,6 +267,9 @@ class SimScriptStore : public script::IScriptStoreSink {
 
   std::map<std::string, std::string> dirty_;
   int64_t lastFlushMs_ = 0;
+  int64_t lastFreeMs_ = 0;
+  FsFreeSpace free_;
+  bool storeRefused_ = false;
 };
 
 }

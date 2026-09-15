@@ -10,7 +10,7 @@
    loaded.
 
    Run:  node apps-tab.test.js */
-const { boot, goto, flush } = require('./harness');
+const { boot, goto, flush, stubXhr } = require('./harness');
 
 let failures = 0;
 function assert(cond, msg) {
@@ -22,7 +22,8 @@ const INVENTORY = [
   { name: 'Time', enabled: true, inLoop: true, slot: 0, present: true, origin: 'builtin' },
   { name: 'co2', enabled: true, inLoop: false, slot: 1, present: false, origin: null },
   { name: 'Weather', enabled: true, inLoop: true, slot: 2, present: true, origin: 'script',
-    headless: false, skipped: false, config: true, error: null, meta: {} },
+    headless: false, skipped: false, config: true, error: null,
+    meta: { icons: ['2105', '2106'] } },
   { name: 'Doorbell', enabled: true, inLoop: false, slot: 3, present: true, origin: 'script',
     headless: true, skipped: false, error: null, meta: {} },
   { name: 'Bridge', enabled: false, inLoop: false, slot: null, present: true, origin: 'script',
@@ -89,7 +90,7 @@ async function run() {
     'a row menu starts closed');
 
   const rowsOf = card => [...card.querySelectorAll('.approw')];
-  // Every row action lives behind the row's menu now, labelled with words.
+  // Other row actions live behind the row's menu, labelled with words.
   const btn = (row, label) => {
     const m = row.querySelector('.rowmenu .mbtn');
     if (m) m.click();
@@ -178,11 +179,24 @@ async function run() {
   const rowFor = name => [...window.document.querySelectorAll('.approw')]
     .find(r => r.querySelector('.nm') &&
                r.querySelector('.nm').firstChild.textContent === name);
-  const gearOf = row => btn(row, 'Settings');
+  const gearOf = row => row.querySelector(':scope > .cfgbtn');
 
   assert(!!gearOf(rowFor('Weather')), 'a script with settings offers Settings');
   assert(!gearOf(rowFor('Doorbell')), 'a script without settings does not');
   assert(!gearOf(rowFor('Time')), 'a built-in never does');
+
+  assert(!!btn(rowFor('Weather'), 'Install icons'), 'a script that names icons offers to fetch them');
+  assert(!btn(rowFor('Doorbell'), 'Install icons'), 'a script that names none does not');
+
+  window.localStorage.awtrixHubToken = 'apps-test-token';
+  store.iconBytes = { '2105': 'GIF89a-2105', '2106': 'GIF89a-2106' };
+  store.files['/ICONS'].set('2105.gif', 1);
+  const uploads = [];
+  stubXhr(window, uploads, store);
+  btn(rowFor('Weather'), 'Install icons').click();
+  await flush(200);
+  assert(uploads.map(u => u.files.map(f => f.name).join('')).join(',') === '2106.gif',
+    'and fetches only what the clock is missing');
 
   const panel = rowFor('Weather').querySelector('.appcfg');
   assert(!!panel && panel.hidden, 'the panel starts closed and unfetched');
@@ -265,10 +279,12 @@ async function run() {
   assert(ctl('city').querySelector('input[type=text]').value === 'Graz',
     'with the unsaved edit still in it');
 
-  // While the panel is open the row's menu button IS the close button, so
-  // getting back out is one click and not a trip through the menu.
-  const closeBtn = rowFor('Weather').querySelector('.rowmenu .mbtn');
-  assert(closeBtn.title === 'Close settings', 'the menu button becomes a close button');
+  // The direct settings button also closes the panel; actions stay accessible.
+  const closeBtn = gearOf(rowFor('Weather'));
+  assert(closeBtn.title === 'Close settings', 'the settings button closes an open panel');
+  assert(closeBtn.nextElementSibling.classList.contains('rowmenu'),
+    'settings is directly left of the actions dropdown');
+  assert(!btn(rowFor('Weather'), 'Settings'), 'settings is absent from the dropdown');
   closeBtn.click();
   await flush(20);
   assert(panel.hidden, 'and closes it again');

@@ -72,6 +72,8 @@ def ground_truth():
     errors |= set(re.findall(r'return \{"([a-zA-Z]+)", [0-9]+,', router))
     errors |= set(re.findall(r'err = \{[0-9]+, "([a-zA-Z]+)"',
                              read("src/persistence/SystemConfigApply.cpp")))
+    errors |= set(re.findall(r'\berror\([0-9]+,\s*"([a-zA-Z]+)"',
+                             read("src/core/icons/IconOrigins.cpp")))
     return settings, system, device, errors
 
 
@@ -105,13 +107,6 @@ CAPS = (
      "Shared script memory"),
     ("src/core/script/ScriptServices.h", r"kMaxHttpBody\s*=\s*([0-9 *]+);",
      "HTTP response body"),
-    ("src/core/script/HttpBodyFilter.h", r"kMaxHttpFind\s*=\s*([0-9 *]+);", "HTTP `find` needle"),
-    ("src/core/script/ScriptServices.h", r"kMaxHttpRequestBody\s*=\s*([0-9 *]+);",
-     "HTTP request body"),
-    ("src/core/script/ScriptServices.h", r"kMaxHttpHeaders\s*=\s*([0-9 *]+);",
-     "HTTP request headers"),
-    ("src/core/script/ScriptServices.h", r"kMaxHttpHeaderBytes\s*=\s*([0-9 *]+);",
-     "HTTP request headers"),
     ("src/system/ScriptHttpWorker.cpp", r"kConnectTimeoutMs\s*=\s*([0-9 *]+);",
      "HTTP connect and read timeout"),
     ("src/core/script/ScriptServices.h", r"kHttpTimeoutMs\s*=\s*([0-9 *]+);",
@@ -122,13 +117,11 @@ CAPS = (
      "MQTT subscriptions"),
     ("src/core/script/ScriptHost.h", r"AsyncQueue<MqttMessage,\s*([0-9 *]+)>",
      "MQTT messages waiting"),
-    ("src/core/script/ScriptServices.h", r"kMaxStoreBytes\s*=\s*([0-9 *]+);", "Store"),
     ("src/core/script/ScriptServices.h", r"kInstallReserveBytes\s*=\s*([0-9 *]+);",
      "Memory held back"),
     ("src/core/script/ScriptConfig.cpp", r"kMaxTextLen\s*=\s*([0-9 *]+);", "Setting text value"),
-    ("src/core/script/SharedState.h", r"kMaxSharedKeysPerApp\s*=\s*([0-9 *]+);", "Shared keys"),
     ("src/core/script/SharedState.h", r"kMaxSharedKeyChars\s*=\s*([0-9 *]+);", "Shared key names"),
-    ("src/core/script/SharedState.h", r"kMaxSharedBytesPerApp\s*=\s*([0-9 *]+);", "Shared bytes"),
+    ("src/core/audio/AudioStats.h", r"kBandCount\s*=\s*([0-9 *]+);", "Music bands"),
 )
 
 LIMITS_PAGE = "docs/reference/limits.md"

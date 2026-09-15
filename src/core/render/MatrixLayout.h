@@ -4,6 +4,7 @@
 #include <string>
 
 #include "core/StrCase.h"
+#include "core/render/PanelColorOrder.h"
 
 namespace awtrix {
 
@@ -40,6 +41,7 @@ struct MatrixLayout {
   int panels = 1;
   PanelStart panelStart = PanelStart::TopLeft;
   Wiring panelWiring = Wiring::Rows;
+  PanelColorOrder panelColorOrder = PanelColorOrder::Grb;
   bool panelSerpentine = true;
   bool panelChainReverse = false;
   bool panelChainSerpentine = false;
