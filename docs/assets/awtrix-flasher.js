@@ -156,7 +156,7 @@ function notice(text, kind = "warning") {
 if (root) {
   if (!("serial" in navigator)) {
     root.replaceChildren(notice(
-      "This browser cannot talk to a serial port. Use Chrome, Edge or Opera on a desktop, " +
+      "This browser cannot talk to a serial port. Use Firefox, Chrome, Edge or Opera on a desktop, " +
       "or the esptool instructions below."));
   } else {
     start();
