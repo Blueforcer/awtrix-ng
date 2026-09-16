@@ -8,7 +8,7 @@
 |---|---|
 | **The board** | A classic ESP32 with 4 MB of flash - what the common 32×8 clocks use - or an ESP32-S3 board. |
 | **A USB data cable** | Charge-only cables never show up as a serial port. |
-| **A browser, or `esptool`** | Chrome, Edge or Opera on a desktop can do the whole flash themselves. Everything else needs `pip install esptool`. |
+| **A browser, or `esptool`** | Firefox, Chrome, Edge or Opera on a desktop can do the whole flash themselves. Everything else needs `pip install esptool`. |
 
 Building the firmware yourself instead needs PlatformIO, Python and Node.js - that path is
 [Building from source](../advanced/building.md).

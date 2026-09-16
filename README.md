@@ -89,7 +89,7 @@ animations in the browser, and you can share anything you make back to the galle
 
 ## 🚀 Get going
 
-1. **Flash** - open the [browser flasher](https://blueforcer.github.io/awtrix-ng/getting-started/flashing/) in Chrome, Edge or Opera. Nothing to install.
+1. **Flash** - open the [browser flasher](https://blueforcer.github.io/awtrix-ng/getting-started/flashing/) in Firefox, Chrome, Edge or Opera. Nothing to install.
 2. **Wi-Fi** - the device opens its own access point on first boot and the setup page pops up by itself.
 3. **Say hello** - send the `curl` above to `awtrix-ng.local`, then open `http://awtrix-ng.local/` and look around.
 4. **Help yourself** - browse the [AWTRIX Hub](https://awtrix.de) for finished automations, scripts and icons and send them to your display in one click.
