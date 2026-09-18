@@ -44,7 +44,7 @@ class Countdown
 
     var p = re.matchall("\\d+", store.get("target"))
     if p != nil && size(p) >= 3
-      self.target = self.day_number(num(p[0], 0), num(p[1], 1), num(p[2], 1))
+      self.target = self.day_number(int(p[0]), int(p[1]), int(p[2]))
     end
   end
 
@@ -97,7 +97,7 @@ picks the new date up immediately.
 ## How it works
 
 **The date arrives as text, so it has to be parsed.** `re.matchall("\\d+", …)` pulls
-every run of digits out of `2026-12-24` and hands back three strings, which `num()`
+every run of digits out of `2026-12-24` and hands back three strings, which `int()`
 turns into numbers. This is deliberately forgiving: `2026/12/24` and `24.12.2026` would
 both produce three numbers too, though only the first of those is in the right order.
 Being clear in the `help=` text is cheaper than being clever in the parser.
