@@ -62,7 +62,7 @@ void MqttService::tick() {
     static const char* kNames[3] = {"left", "select", "right"};
     const auto& buttons = engine_->state().runtime().buttons;
     for (int i = 0; i < 3; ++i)
-      publish(std::string("state/buttons/") + kNames[i], buttons[i] ? "1" : "0", true);
+      publish(std::string("state/buttons/") + kNames[i], buttons[i] ? "1" : "0", false);
   }
   if (cadence_.settingsDue()) publish("state/settings", buildSettingsJson(*engine_), true);
   if (cadence_.radioDue()) publish("state/audio", buildAudioJson(*engine_), true);
