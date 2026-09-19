@@ -73,9 +73,9 @@ void PeripheryService::tick(int64_t nowMs) {
   // reaches the built-in navigation.
   bool tookLeft = false, tookSelect = false, tookRight = false;
   if (buttonHook_) {
-    if (lEdge) tookLeft = buttonHook_(swapped ? 2 : 0);
-    if (sEdge) tookSelect = buttonHook_(1);
-    if (rEdge) tookRight = buttonHook_(swapped ? 0 : 2);
+    tookLeft = buttonHook_(swapped ? 2 : 0, cur.left);
+    tookSelect = buttonHook_(1, cur.select);
+    tookRight = buttonHook_(swapped ? 0 : 2, cur.right);
   }
   if (lEdge && !tookLeft && !blocked)
     engine_->submit(Command(swapped ? CommandType::NextApp : CommandType::PreviousApp));

@@ -33,6 +33,8 @@ class BerryVM {
   bool method(const std::string& appKey, const char* name);
   bool method1(const std::string& appKey, const char* name, const std::string& a);
   bool method1Bool(const std::string& appKey, const char* name, const std::string& a, bool& out);
+  bool method2Bool(const std::string& appKey, const char* name, const std::string& a,
+                   const std::string& b, bool& out);
   bool methodString(const std::string& appKey, const char* name, std::string& out);
   bool methodBool(const std::string& appKey, const char* name, bool& out);
   bool methodInt(const std::string& appKey, const char* name, long& out);
@@ -58,7 +60,7 @@ class BerryVM {
               const std::string* c, std::string* out = nullptr);
   bool doMethod(const std::string& appKey, const char* name, int argc,
                 const std::string* a, std::string* out = nullptr,
-                bool* boolOut = nullptr, long* intOut = nullptr);
+                bool* boolOut = nullptr, long* intOut = nullptr, const std::string* b = nullptr);
   bool captureError(int rc);
 
   bvm* vm_ = nullptr;

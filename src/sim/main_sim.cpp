@@ -338,11 +338,8 @@ int main(int argc, char** argv) {
                cfg.hostname.empty() ? std::string("AWTRIX NG") : cfg.hostname, *g_hostResolver);
   display.configure([](const std::string& s, const std::string& p) { g_mqtt.publish(s, p, false); },
                     g_canvas);
-  g_periphery.setButtonHook([](int btn) {
-    static const char* kBtnNames[3] = {"left", "select", "right"};
-    if (g_scripts && btn >= 0 && btn < 3)
-      return g_scripts->handleButton(g_engine->currentAppId(), kBtnNames[btn]);
-    return false;
+  g_periphery.setButtonHook([](int btn, bool pressed) {
+    return g_scripts && g_scripts->handleButtonState(g_engine->currentAppId(), btn, pressed);
   });
 
   g_scriptSvc.http = &g_scriptHttp;

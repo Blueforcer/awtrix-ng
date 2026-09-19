@@ -87,6 +87,15 @@ void ScriptHost::activate() {
   effective_.http = &httpAdapter_;
   effective_.mqtt = &mqttAdapter_;
   effective_.shared = &shared_;
+  effective_.startTimer = [this](int32_t delay, bool repeat) {
+    const std::string owner = BindingScope::currentScript();
+    if (!svc_.monotonicMs || (owner != installingApp_ && apps_.count(owner) == 0))
+      return int32_t(0);
+    return timers_.add(owner, delay, repeat, svc_.monotonicMs());
+  };
+  effective_.cancelTimer = [this](int32_t id) {
+    return timers_.cancel(BindingScope::currentScript(), id);
+  };
   setServices(&effective_);
 }
 
@@ -258,7 +267,9 @@ bool ScriptHost::set(const std::string& name, const std::string& source,
     // Compiling is the peak allocation. The reserve makes the Berry allocator refuse rather
     // than eat the last of the heap, so a script too big to load fails instead of the device.
     heap::InstallReserve reserve(kInstallReserveBytes);
+    installingApp_ = name;
     app = std::make_unique<ScriptApp>(vm_, name, source, meta, *store, lastCtx());
+    installingApp_.clear();
   }
   vm_.gcCollect();
   reportHeap(name, vmBefore, freeBefore);
@@ -393,6 +404,9 @@ void ScriptHost::purge(const std::string& name) {
 // The host-side half: shared values, in-flight request ownership and mqtt subscriptions.
 void ScriptHost::forgetScript(const std::string& name) {
   shared_.purge(name);
+  timers_.purge(name);
+  for (auto& button : buttons_)
+    if (button.owner == name) button.owner.clear();
 
   for (auto it = httpOwner_.begin(); it != httpOwner_.end();)
     it = (it->second.script == name) ? httpOwner_.erase(it) : std::next(it);
@@ -456,6 +470,36 @@ void ScriptHost::sweepHttp(const RenderCtx* ctx) {
   }
 }
 
+void ScriptHost::drainTimers(const RenderCtx* ctx) {
+  for (const auto& app : apps_) {
+    if (!app.second->ok() && timers_.has(app.first)) {
+      timers_.purge(app.first);
+      vm_.call1("_timer_forget", app.first);
+    }
+  }
+  const int64_t now = svc_.monotonicMs ? svc_.monotonicMs() : 0;
+  const auto ready = timers_.due(now);
+  for (int32_t id : ready) {
+    const auto* entry = timers_.find(id);
+    if (!entry) continue;
+    const std::string owner = entry->owner;
+    auto app = apps_.find(owner);
+    if (app == apps_.end() || !app->second->ok()) {
+      timers_.purge(owner);
+      vm_.call1("_timer_forget", owner);
+      continue;
+    }
+    if (!active(owner)) continue;
+    timers_.advance(id, now);
+    app->second->dispatchTimer(id, ctx);
+    drainStoreFlush();
+    if (!app->second->ok()) {
+      timers_.purge(owner);
+      vm_.call1("_timer_forget", owner);
+    }
+  }
+}
+
 void ScriptHost::drainMqtt(const RenderCtx* ctx) {
   MqttMessage m;
   while (mqttQueue_.pop(m)) {
@@ -474,6 +518,8 @@ void ScriptHost::drainMqtt(const RenderCtx* ctx) {
 
 void ScriptHost::updateVisibility(const std::string& currentAppId,
                                   const std::string& incomingAppId, const RenderCtx* ctx) {
+  for (auto& button : buttons_)
+    if (button.owner != currentAppId) button.owner.clear();
   for (auto& kv : apps_) {
     const bool shown = kv.first == currentAppId || kv.first == incomingAppId;
     kv.second->notifyVisible(shown, ctx);
@@ -491,6 +537,7 @@ void ScriptHost::tick(const RenderCtx& ctx, const std::string& currentAppId,
   drainHttp(&ctx);
   sweepHttp(&ctx);
   drainMqtt(&ctx);
+  drainTimers(&ctx);
 
   // loop() runs once a second for every script, not once per frame, and the stagger set at
   // boot keeps them from all landing on the same tick.
@@ -521,6 +568,8 @@ void ScriptHost::staggerFirstLoops(int64_t stepMs) {
 void ScriptHost::setRunningScripts(std::vector<std::string> running) {
   running_ = std::move(running);
   runningKnown_ = true;
+  for (auto& button : buttons_)
+    if (!active(button.owner)) button.owner.clear();
 }
 
 // An installed script that is not in the rotation still exists but must not be driven.
@@ -556,11 +605,62 @@ bool ScriptHost::scrollHolds(const std::string& name) const {
 
 bool ScriptHost::handleButton(const std::string& currentAppId, const std::string& btn) {
   auto it = apps_.find(currentAppId);
-  if (it == apps_.end()) return false;
+  if (it == apps_.end() || !active(currentAppId)) return false;
   activate();
   const bool consumed = it->second->handleButton(btn, lastCtx());
   drainStoreFlush();
   return consumed;
+}
+
+
+bool ScriptHost::handleButtonState(const std::string& currentAppId, int button, bool pressed) {
+  if (button < 0 || button >= 3) return false;
+  static const char* const names[] = {"left", "select", "right"};
+  auto& state = buttons_[button];
+  if (!pressed && !state.down) return false;
+  const int64_t now = svc_.monotonicMs ? svc_.monotonicMs() : 0;
+  activate();
+  if (pressed && !state.down) {
+    state.down = true;
+    state.longSent = false;
+    state.pressedAt = now;
+    state.owner.clear();
+    auto app = apps_.find(currentAppId);
+    if (app != apps_.end() && active(currentAppId)) {
+      const bool consumed = app->second->handleButtonEvent(names[button], "press", lastCtx());
+      drainStoreFlush();
+      if (consumed) {
+        state.owner = currentAppId;
+        return true;
+      }
+    }
+    return handleButton(currentAppId, names[button]);
+  }
+  if (!state.down) return false;
+  auto app = apps_.find(state.owner);
+  if (state.owner != currentAppId || !active(state.owner) || app == apps_.end() ||
+      !app->second->ok() || !app->second->visible()) state.owner.clear();
+  if (!state.owner.empty()) {
+    const char* event = nullptr;
+    if (!pressed) event = "release";
+    else if (!state.longSent && now - state.pressedAt >= 600) {
+      state.longSent = true;
+      state.repeatAt = now + 150;
+      event = "long";
+    } else if (state.longSent && now >= state.repeatAt) {
+      state.repeatAt = now + 150;
+      event = "repeat";
+    }
+    if (event) {
+      app->second->handleButtonEvent(names[button], event, lastCtx());
+      drainStoreFlush();
+    }
+  }
+  if (!pressed) {
+    state.down = false;
+    state.owner.clear();
+  }
+  return false;
 }
 
 

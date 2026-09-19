@@ -555,11 +555,8 @@ void setup() {
     g_disco.begin(g_net.hostname(), cfg.webPort);
     if (cfg.artnet) g_artnet.begin();
   }
-  g_periphery.setButtonHook([](int btn) {
-    static const char* kBtnNames[3] = {"left", "select", "right"};
-    if (g_scripts && btn >= 0 && btn < 3)
-      return g_scripts->handleButton(g_engine->currentAppId(), kBtnNames[btn]);
-    return false;
+  g_periphery.setButtonHook([](int btn, bool pressed) {
+    return g_scripts && g_scripts->handleButtonState(g_engine->currentAppId(), btn, pressed);
   });
   g_display->setPublisher(publisher);
   g_display->setScreen(g_canvas);

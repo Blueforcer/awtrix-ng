@@ -123,6 +123,7 @@ Define only the methods you need. **Every method costs memory for as long as the
 | `draw()` | **every frame (~40×/second)** while the app is on screen | **yes** |
 | `on_show()` | the app has just been rotated in | no |
 | `on_hide()` | the app has just been rotated out | no |
+| `on_button_event(btn, event)` | press, long, repeat and release for a button the app takes | no |
 | `on_button(btn)` | a button was pressed while the app is on screen; `true` consumes it | no |
 | `should_show()` | the rotation has reached the app; `false` makes it skip past | no |
 | `duration()` | the rotation has reached the app; return ms to override the dwell | no |
@@ -180,7 +181,7 @@ out for the device's global app time (7000 ms out of the box). It changes only *
 ## 5. The API
 
 Every function below is a plain global, callable from any method with no import. The modules
-`display`, `http`, `mqtt`, `music`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
+`display`, `http`, `mqtt`, `music`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound`, `store` and `timer` are already
 there too. `json`, `string`, `math`, `gc` and `modbus` need an `import` line at the top of the file.
 
 ### 5.1 Panel and drawing
@@ -399,6 +400,39 @@ Minutes need zero-padding by hand - `str(5)` is `"5"`, not `"05"`:
     var mm = m < 10 ? "0" + str(m) : str(m)
     text(4, 6, str(hour()) + ":" + mm, 0xFFFFFF)
 ```
+
+### 5.6b Timers
+
+`timer.after(ms, callback)` runs once; `timer.every(ms, callback)` repeats.
+Both return an ID or `nil` for invalid arguments or a full timer pool.
+Use integer delays from 25 to 86400000 ms. Limits: 8 timers per app, 32 total.
+`timer.cancel(id)` returns whether your own pending timer was cancelled;
+`nil`, expired IDs and other apps' IDs return `false`.
+
+Callbacks take no arguments: `timer.after(3000, / -> self.reset())`.
+They cannot draw; update members and let `draw()` render them. Register in
+`setup()`, button handlers or callbacks, never each frame. Repeating callbacks
+can cancel their own timer. Timer timing uses elapsed time, not wall-clock time.
+
+Timers run while hidden or the matrix is off. Disabled apps receive no callbacks;
+an overdue timer fires once when re-enabled, with no catch-up burst. Busy devices
+may deliver late. Saving, removing or restarting the app clears its timers;
+errors stop them. They do not persist through a reboot. Start them in `setup()`.
+
+### 5.6c Button events
+
+`on_button_event(btn, event)` receives `btn` as `left`, `select` or `right`.
+The events are `press`, `long` (once after 600 ms), `repeat` (every 150 ms after
+long), and `release`. Return `true` on `press` to capture that button and receive
+the later events. Return values for later events are ignored. If press is not
+captured, existing `on_button(btn)` and then built-in navigation handle it as
+before. Capturing select suppresses its normal dismiss and double-press actions.
+
+Only the current visible app receives events. Capture ends on switching apps,
+disabling, replacing or removing the app; no later release is delivered to that
+interaction and a held button never transfers to another app. Clear temporary
+pressed state in `on_hide()` too. Button swap/rotation settings are respected.
+Do not draw in the handler. Existing `on_button(btn)` apps need no changes.
 
 ### 5.7 HTTP
 

@@ -27,6 +27,7 @@ class ScriptApp : public IApp {
     kOnButton,
     kShouldShow,
     kDuration,
+    kOnButtonEvent,
     kHookCount,
   };
 
@@ -45,6 +46,8 @@ class ScriptApp : public IApp {
   void notifyVisible(bool visible, const RenderCtx* ctx);
   void releaseIcons();
   bool handleButton(const std::string& btn, const RenderCtx* ctx);
+  bool handleButtonEvent(const std::string& btn, const std::string& event, const RenderCtx* ctx);
+  void dispatchTimer(int32_t id, const RenderCtx* ctx);
   void dispatchHttp(uint32_t id, int status, const std::string& body, bool ok,
                     const RenderCtx* ctx);
   void dispatchMqtt(const std::string& filter, const std::string& topic,

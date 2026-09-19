@@ -1158,6 +1158,29 @@ int b_log(bvm* vm) {
   be_return_nil(vm);
 }
 
+int b_timer_start(bvm* vm) {
+  int32_t id = 0;
+  if (g_svc && g_svc->startTimer && be_top(vm) >= 2 && be_isint(vm, 1) &&
+      be_isbool(vm, 2)) {
+    const bint delay = be_toint(vm, 1);
+    if (delay >= 25 && delay <= 86400000)
+      id = g_svc->startTimer(static_cast<int32_t>(delay), be_tobool(vm, 2) != 0);
+  }
+  if (!id) be_return_nil(vm);
+  be_pushint(vm, id);
+  be_return(vm);
+}
+
+int b_timer_cancel(bvm* vm) {
+  bool ok = false;
+  if (g_svc && g_svc->cancelTimer && be_top(vm) >= 1 && be_isint(vm, 1)) {
+    const bint id = be_toint(vm, 1);
+    if (id > 0 && id <= INT32_MAX) ok = g_svc->cancelTimer(static_cast<int32_t>(id));
+  }
+  be_pushbool(vm, ok);
+  be_return(vm);
+}
+
 int b_native_app(bvm* vm) {
   be_pushstring(vm, g_ctx.name.c_str());
   be_return(vm);
@@ -1214,6 +1237,8 @@ bool installBindings(BerryVM& vm, std::string& err) {
   // Everything below is raw plumbing the prelude wraps into the documented modules. The
   // leading underscore is what keeps these out of the generated script API reference.
   be_regfunc(b, "_native_app", b_native_app);
+  be_regfunc(b, "_native_timer_start", b_timer_start);
+  be_regfunc(b, "_native_timer_cancel", b_timer_cancel);
   be_regfunc(b, "_native_http_request", b_http_request);
   be_regfunc(b, "_native_mqtt_publish", b_mqtt_publish);
   be_regfunc(b, "_native_mqtt_subscribe", b_mqtt_subscribe);

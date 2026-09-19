@@ -125,6 +125,50 @@ end
 def _dispatch_http_str(id, status, body) _dispatch_http(int(id), body, int(status)) end
 def _dispatch_http_fail(id, status) _dispatch_http(int(id), nil, int(status)) end
 
+timer = module('timer')
+_timer_cbs = {}
+
+def _timer_start(ms, callback, repeat)
+  if type(callback) != 'function' return nil end
+  var id = _native_timer_start(ms, repeat)
+  if id != nil _timer_cbs[id] = [_native_app(), callback, repeat] end
+  return id
+end
+
+def _timer_after(ms, callback)
+  return _timer_start(ms, callback, false)
+end
+
+def _timer_every(ms, callback)
+  return _timer_start(ms, callback, true)
+end
+
+def _timer_cancel(id)
+  if !_native_timer_cancel(id) return false end
+  _timer_cbs.remove(id)
+  return true
+end
+
+def _timer_forget(name)
+  var dead = []
+  for id : _timer_cbs.keys()
+    if _timer_cbs[id][0] == name dead.push(id) end
+  end
+  for id : dead _timer_cbs.remove(id) end
+end
+
+def _dispatch_timer(id)
+  id = int(id)
+  var entry = _timer_cbs.find(id)
+  if entry == nil || entry[0] != _native_app() return end
+  if !entry[2] _timer_cbs.remove(id) end
+  entry[1]()
+end
+
+timer.after = _timer_after
+timer.every = _timer_every
+timer.cancel = _timer_cancel
+
 # ---- mqtt ------------------------------------------------------------------
 # Callbacks are keyed app -> {filter: cb}. The broker subscription itself is
 # shared across apps by the host's adapter; this table is what routes a
@@ -578,6 +622,7 @@ end
 # separately by the host (BerryVM::dropApp). Takes the name explicitly rather
 # than via _native_app(), because teardown does not run inside the app.
 def _app_forget(name)
+  _timer_forget(name)
   if _stores.contains(name) _stores.remove(name) end
   if _mqtt_cbs.contains(name) _mqtt_cbs.remove(name) end
   var dead = []

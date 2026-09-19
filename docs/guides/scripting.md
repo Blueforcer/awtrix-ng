@@ -105,7 +105,7 @@ row that sounds like the app you have in mind, and follow it.
 
 | For | The calls |
 |---|---|
-| [Being an app](#the-lifecycle) | `draw()` `setup()` `loop()` `on_show()` `on_hide()` `on_button()` `should_show()` `duration()` |
+| [Being an app](#the-lifecycle) | `draw()` `setup()` `loop()` `on_show()` `on_hide()` `on_button()` `on_button_event()` `should_show()` `duration()` |
 | [Drawing](#panel-and-drawing) | `clear()` `pixel()` `line()` `rect()` `rect_fill()` `circle()` `circle_fill()` `icon()` `width()` `height()` `rgb()` `hsv()` |
 | [Writing text](#panel-and-drawing) | `text()` `text_width()` `text_ink_width()` `font()` |
 | [Text that moves or shades](#styled-and-scrolling-text) | `scroll_text()` `ramp_text()` |
@@ -123,6 +123,7 @@ row that sounds like the app you have in mind, and follow it.
 | [Handing values to another app](#talking-to-other-apps) | `shared.set()` `shared.get()` `shared.age()` `shared.keys()` |
 | [Sharing code between apps](#sharing-code-between-scripts) | a `# @module` file, then `import` |
 | [Interrupting with an alert](#notifications) | `notify()` |
+| [Timers](#timers) | `timer.after()` `timer.every()` `timer.cancel()` |
 | [Making a noise](#sound) | `sound.play()` `sound.mp3()` `sound.melody()` `sound.track()` `sound.rtttl()` `sound.stop()` `sound.playing()` `sound.sinks()` |
 | [Reacting to the music](#music) | `music.bands()` `music.level()` `music.beat()` `music.playing()` |
 | [What the device measures](#reading-the-sensors) | `sensor.temperature()` `sensor.humidity()` `sensor.pressure()` `sensor.light()` `sensor.battery()` |
@@ -263,6 +264,7 @@ The hooks are **methods on your class**. Only `draw()` is required; define the o
 | `draw()` | every frame (~40/s) while your app is on screen | **yes** |
 | `on_show()` | your app has just been rotated in | no |
 | `on_hide()` | your app has just been rotated out | no |
+| `on_button_event(btn, event)` | a press, release or hold handled by your app; see [Button events](#button-events) | no |
 | `on_button(btn)` | a button was pressed while your app is on screen; `btn` is `"left"`, `"select"` or `"right"`, and `true` consumes the press | no |
 | `should_show()` | the rotation has reached you - return `false` to let it pass you by | no |
 | `duration()` | the rotation has reached you - return ms to override how long you stay | no |
@@ -700,6 +702,119 @@ end
 ```
 
 The return value counts completed runs, for an app that wants to act on one.
+
+### Timers
+
+Use `timer.after()` to do something later and `timer.every()` to repeat an
+action. Both return immediately, so the display keeps running.
+
+| Call | What it does |
+|---|---|
+| `timer.after(ms, callback)` | Calls your function once after the delay. |
+| `timer.every(ms, callback)` | Calls your function repeatedly, starting after the first interval. |
+| `timer.cancel(id)` | Stops one of your app's timers; returns `true` if it was still waiting. |
+
+The delay is a whole number of milliseconds, from **25 to 86,400,000** (one day).
+Starting a timer returns its ID, or `nil` if the arguments are invalid or there
+is no free slot. Each app can have **8 timers**, with **32 across all apps**.
+`timer.cancel(nil)` and cancelling a finished timer safely return `false`.
+No `import` is needed.
+
+This complete app briefly shows **GO** when you press the middle button:
+
+```berry
+class Reminder
+  var message, pending
+
+  def init()
+    self.message = "READY"
+  end
+
+  def reset()
+    self.message = "READY"
+    self.pending = nil
+  end
+
+  def on_button(btn)
+    if btn != "select" return false end
+    timer.cancel(self.pending)
+    self.message = "GO"
+    self.pending = timer.after(3000, / -> self.reset())
+    if self.pending == nil self.reset() end
+    return true
+  end
+
+  def draw()
+    text(0, 6, self.message)
+  end
+end
+return Reminder()
+```
+
+The callback takes no arguments. Use a closure such as `/ -> self.reset()` to
+access your app. Callbacks update values or trigger actions; drawing stays in
+`draw()`. Create timers in `setup()`, a button handler or another callback,
+not every frame in `draw()`.
+
+Timers also run while another app is on screen or the matrix is off. Deactivating
+an app stops its callbacks. When you activate it again, an overdue timer runs
+once; repeating timers then continue from that point. Delays can run
+late when the device is busy, and missed repeats are never replayed in a burst.
+Timers use elapsed time, so adjusting the clock does not affect them.
+
+Saving, deleting or restarting an app clears its old timers. A script error
+stops its timers too. Timers do not survive a device restart; create any timers
+you need again in `setup()`.
+
+### Button events
+
+For holding and releasing a button, add `on_button_event(btn, event)`.
+`btn` is `"left"`, `"select"` or `"right"`, respecting the device's button swap
+and rotation settings.
+
+| Event | When it arrives |
+|---|---|
+| `"press"` | Once when the button is pressed. Return `true` to take this press. |
+| `"long"` | Once after holding a button you took for 600 ms. |
+| `"repeat"` | Every 150 ms after `"long"`, while still held. |
+| `"release"` | Once when that button is released. |
+
+Only returning `true` from `"press"` takes the button. The other return values
+are ignored. If you do not take it, AWTRIX calls your existing `on_button(btn)`
+handler and then performs the usual navigation if that handler does not take it
+either. Existing apps need no changes. Taking the middle button also takes over
+its usual dismiss-notification and double-press actions for that press.
+
+This app counts middle-button presses and repeats while you hold the button:
+
+```berry
+class Counter
+  var count
+
+  def init()
+    self.count = 0
+  end
+
+  def on_button_event(btn, event)
+    if btn != "select" return false end
+    if event == "press" || event == "repeat"
+      self.count += 1
+    end
+    return true
+  end
+
+  def draw()
+    text(0, 6, str(self.count))
+  end
+end
+return Counter()
+```
+
+Events go only to the app that took the press, while it remains the current
+visible app. Switching apps, deactivating, saving or deleting the app ends that
+interaction; a held button is never handed to the next app. A release event is
+not sent after the interaction has ended. Reset any temporary pressed state in
+`on_hide()` as well as on `"release"`. Keep handlers short and draw in `draw()`.
 
 ### Time
 

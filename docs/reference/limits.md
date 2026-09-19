@@ -48,6 +48,7 @@ Berry scripts run under their own caps. How each one behaves in practice is in
 | HTTP connect and read timeout | 5 s each | the callback gets `nil, 0` |
 | HTTP request unanswered | 30 s | the callback gets `nil, 0`, the slot is freed |
 | HTTP requests in flight | 8 per script | `http.get()` calls back `nil, 0` immediately |
+| Script timers | 8 per app, 32 in total; 25 ms to 1 day | `timer.after()` and `timer.every()` return `nil` when full or invalid |
 | MQTT subscriptions | 8 per script | further `mqtt.subscribe()` calls are ignored |
 | MQTT messages waiting | 32, shared by every script | the oldest pending message is dropped |
 | Setting key | 1–24 characters of `A–Z`, `a–z`, `0–9`, `_`, starting with a letter | the line is skipped and the settings panel says so |

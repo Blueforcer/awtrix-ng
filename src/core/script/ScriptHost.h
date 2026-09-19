@@ -15,6 +15,7 @@
 #include "core/script/ScriptMeta.h"
 #include "core/script/ScriptServices.h"
 #include "core/script/SharedState.h"
+#include "core/script/ScriptTimers.h"
 
 namespace awtrix {
 class AppRegistry;
@@ -50,6 +51,7 @@ class ScriptHost {
             const std::string& incomingAppId = std::string());
   void staggerFirstLoops(int64_t stepMs);
   bool handleButton(const std::string& currentAppId, const std::string& btn);
+  bool handleButtonState(const std::string& currentAppId, int button, bool pressed);
   bool wantsShow(const std::string& name);
   long durationMs(const std::string& name) const;
   bool scrollHolds(const std::string& name) const;
@@ -124,6 +126,7 @@ class ScriptHost {
   void drainStoreFlush();
   void drainHttp(const RenderCtx* ctx);
   void sweepHttp(const RenderCtx* ctx);
+  void drainTimers(const RenderCtx* ctx);
   void drainMqtt(const RenderCtx* ctx);
   void updateVisibility(const std::string& currentAppId, const std::string& incomingAppId,
                         const RenderCtx* ctx);
@@ -141,6 +144,16 @@ class ScriptHost {
 
   BerryVM vm_;
   SharedState shared_;
+  ScriptTimers timers_;
+  std::string installingApp_;
+  struct HeldButton {
+    bool down = false;
+    bool longSent = false;
+    int64_t pressedAt = 0;
+    int64_t repeatAt = 0;
+    std::string owner;
+  };
+  HeldButton buttons_[3];
   std::string vmError_;
 
   std::vector<std::string> running_;

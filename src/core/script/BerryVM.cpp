@@ -270,7 +270,7 @@ void BerryVM::dropModule(const std::string& importName) {
 // tracked absolutely from `base` so every exit path can unwind the stack to where it began.
 bool BerryVM::doMethod(const std::string& appKey, const char* name, int argc,
                        const std::string* a, std::string* out, bool* boolOut,
-                       long* intOut) {
+                       long* intOut, const std::string* b) {
   if (!vm_) {
     err_ = "vm alloc failed";
     return false;
@@ -299,6 +299,7 @@ bool BerryVM::doMethod(const std::string& appKey, const char* name, int argc,
   }
   be_pushvalue(vm_, instSlot);
   if (argc >= 1) be_pushstring(vm_, a->c_str());
+  if (argc >= 2) be_pushstring(vm_, b->c_str());
 
   armBudget();
   rc = be_pcall(vm_, 1 + argc);
@@ -334,6 +335,11 @@ bool BerryVM::method1(const std::string& appKey, const char* name,
 bool BerryVM::method1Bool(const std::string& appKey, const char* name,
                           const std::string& a, bool& out) {
   return doMethod(appKey, name, 1, &a, nullptr, &out);
+}
+
+bool BerryVM::method2Bool(const std::string& appKey, const char* name,
+                          const std::string& a, const std::string& b, bool& out) {
+  return doMethod(appKey, name, 2, &a, nullptr, &out, nullptr, &b);
 }
 
 bool BerryVM::methodString(const std::string& appKey, const char* name,

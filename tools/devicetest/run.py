@@ -390,14 +390,27 @@ def test_pixels(api):
         return
     px = fb.get("pixels", [])
     lit = [p for p in px if p]
-    check("canvas size", (fb.get("width"), fb.get("height")) == (32, 8),
+    system_status, system = api.get("/api/v1/system")
+    expected_width = system.get("panelWidth", 32) * system.get("panels", 1)
+    check("canvas size", system_status == 200 and
+          (fb.get("width"), fb.get("height")) == (expected_width, 8),
           "%sx%s" % (fb.get("width"), fb.get("height")))
     check("pixel count matches", len(px) == fb.get("width", 0) * fb.get("height", 0), str(len(px)))
     check("app drew something", len(lit) > 0, "%d lit" % len(lit))
     check("drawn in the configured colour", 0x00FF00 in lit,
           "unique: %s" % sorted(set(lit))[:6])
-    check("nothing in the last column",
-          all(px[r * 32 + 31] == 0 for r in range(8)), "right edge lit")
+    st, _ = api.put_script(TEMP, "class Edge\n def draw()\n clear()\n"
+                          " pixel(width()-1,height()-1,0x123456)\n end\nend\nreturn Edge()")
+    if not check("edge probe installed", st == 200, "HTTP %s" % st):
+        return
+    api.put_json("/api/v1/apps/active", {"name": TEMP, "fast": True})
+    time.sleep(0.4)
+    st, edge = api.get("/api/v1/display/screen")
+    pixels = edge.get("pixels", []) if isinstance(edge, dict) else []
+    check("last pixel matches the configured canvas", st == 200 and
+          len(pixels) == expected_width * 8 and pixels[-1] == 0x123456 and
+          all(p == 0 for p in pixels[:-1]))
+    api.delete("/api/v1/apps/" + TEMP)
 
 
 def test_rotation(api):

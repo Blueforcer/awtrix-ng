@@ -152,6 +152,8 @@ struct ScriptServices {
   const EffectRegistry* overlays = nullptr;
   const GfxFont* fonts[kFontCount] = {nullptr, nullptr};
   const Canvas* panel = nullptr;
+  std::function<int32_t(int32_t, bool)> startTimer;
+  std::function<bool(int32_t)> cancelTimer;
   std::function<int64_t()> monotonicMs;
   std::function<void(const std::string&)> log;
   std::function<std::size_t()> freeHeap;

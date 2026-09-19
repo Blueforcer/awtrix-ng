@@ -11,7 +11,7 @@ namespace awtrix::script {
 namespace {
 
 const char* const kHookNames[ScriptApp::kHookCount] = {
-    "draw", "setup", "loop", "on_show", "on_hide", "on_button", "should_show", "duration",
+    "draw", "setup", "loop", "on_show", "on_hide", "on_button", "should_show", "duration", "on_button_event",
 };
 
 constexpr int64_t kIconIdleMs = 2000;
@@ -134,6 +134,21 @@ bool ScriptApp::handleButton(const std::string& btn, const RenderCtx* ctx) {
   BindingScope scope(nullptr, ctx, name_);
   enter("on_button", vm_.method1Bool(name_, "on_button", btn, consumed));
   return consumed;
+}
+
+bool ScriptApp::handleButtonEvent(const std::string& btn, const std::string& event,
+                                  const RenderCtx* ctx) {
+  if (broken_ || !visible_ || !has(kOnButtonEvent)) return false;
+  bool consumed = false;
+  BindingScope scope(nullptr, ctx, name_);
+  enter("on_button_event", vm_.method2Bool(name_, "on_button_event", btn, event, consumed));
+  return !broken_ && consumed;
+}
+
+void ScriptApp::dispatchTimer(int32_t id, const RenderCtx* ctx) {
+  if (broken_) return;
+  BindingScope scope(nullptr, ctx, name_);
+  enter("timer callback", vm_.call1("_dispatch_timer", std::to_string(id)));
 }
 
 // Goes through the prelude's dispatcher rather than the app instance, because the callback
