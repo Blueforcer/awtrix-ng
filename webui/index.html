@@ -111,6 +111,7 @@ main>.wide{grid-column:1/-1}
 .frow .key{display:none}
 .frow .help{color:var(--dim);font-size:12px;max-width:52ch}
 .frow .ctl{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+#upd-notes .ic{width:22px;height:22px}
 .unitwrap{position:relative;display:inline-flex;align-items:center}
 .unitwrap .unit{position:absolute;right:9px;color:var(--dim);font-size:12px;pointer-events:none;
   max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -885,9 +886,10 @@ function rowMenu(items){
   return el('div',{class:'rowmenu'},btn,list);
 }
 
-function armable(btn,fn){
+function armable(btn,fn,ready=()=>true){
   let armed=null,saved=null;
   btn.addEventListener('click',()=>{
+    if(!ready()){fn();return;}
     if(armed){clearTimeout(armed);armed=null;btn.classList.remove('armed');btn.replaceChildren(...saved);fn();return;}
     saved=[...btn.childNodes];
     btn.classList.add('armed');btn.replaceChildren(t('sure'));
@@ -945,9 +947,9 @@ const I18N={en:{
   apmaintH:'Restart AWTRIX to apply the WiFi settings you saved.',
   fwfile:'Upload firmware (.bin)',
   update:'Firmware update',updchk:'Check for updates',updchecking:'Checking GitHub…',
-  updcur:'{v} is the latest release.',updnew:'{v} is available',updfail:'GitHub could not be reached. Check your internet connection and try again.',
-  upddl:'Download',updnotes:'Release notes',updavail:'update available',
-  updhelp:'Download the file, then choose it under "Upload firmware".',
+  updcur:'{v} is the latest release.',updnew:'{v} is available',updfail:'Could not check for updates. Try again later.',updrate:'GitHub’s limit for anonymous requests from this internet connection has been reached. Try again later.',
+  updnotes:'Release notes',updavail:'update available',
+  updinstall:'Download & install',upddownloading:'Downloading firmware…',upduploading:'Uploading firmware…',updnotready:'The download is not ready for this release. Try again shortly or upload the file manually.',updbadfile:'Firmware verification failed. Nothing was uploaded. Try again.',updbusy:'A firmware update is already running.',
   resetset:'Reset settings',resetsetH:'Resets display settings to defaults (network stays).',
   factory:'Factory reset',factoryH:'Erases EVERYTHING (WiFi, files, settings). Type the hostname to confirm.',
   erase:'Erase everything',eraseNo:'Hostname does not match',
@@ -1134,9 +1136,9 @@ const I18N={en:{
   apmaintH:'Neustart, damit die gespeicherten WLAN-Einstellungen wirken.',
   fwfile:'Firmware hochladen (.bin)',
   update:'Firmware-Update',updchk:'Nach Update suchen',updchecking:'Frage GitHub…',
-  updcur:'{v} ist die neueste Version.',updnew:'{v} ist verfügbar',updfail:'GitHub ist nicht erreichbar. Prüfe deine Internetverbindung und versuche es erneut.',
-  upddl:'Herunterladen',updnotes:'Release Notes',updavail:'Update verfügbar',
-  updhelp:'Datei herunterladen und dann unter „Firmware hochladen“ auswählen.',
+  updcur:'{v} ist die neueste Version.',updnew:'{v} ist verfügbar',updfail:'Update-Prüfung fehlgeschlagen. Bitte später erneut versuchen.',updrate:'GitHubs Limit für anonyme Anfragen über diesen Internetanschluss ist erreicht. Bitte später erneut versuchen.',
+  updnotes:'Release Notes',updavail:'Update verfügbar',
+  updinstall:'Herunterladen & installieren',upddownloading:'Firmware wird heruntergeladen…',upduploading:'Firmware wird hochgeladen…',updnotready:'Der Download für diese Version ist noch nicht bereit. Bitte später erneut versuchen oder die Datei manuell hochladen.',updbadfile:'Firmware-Prüfung fehlgeschlagen. Es wurde nichts hochgeladen. Bitte erneut versuchen.',updbusy:'Ein Firmware-Update läuft bereits.',
   resetset:'Einstellungen zurücksetzen',resetsetH:'Setzt Anzeige-Einstellungen auf Standard zurück (Netzwerk bleibt).',
   factory:'Werkseinstellungen',factoryH:'Löscht ALLES (WLAN, Dateien, Einstellungen). Zur Bestätigung Hostname eintippen.',
   erase:'Alles löschen',eraseNo:'Hostname stimmt nicht überein',
@@ -2628,11 +2630,13 @@ async function collectBackup(cats){
      device:{hostname:S.sysHost},categories:included})});
   return entries;
 }
-function xhrPost(url,field,file,name,onProgress){
+function xhrPost(url,field,file,name,onProgress,timeout=0){
   return new Promise((res,rej)=>{
     const fd=new FormData();fd.append(field,file,name);
     const x=new XMLHttpRequest();
     x.open('POST',url);
+    x.timeout=timeout;
+    x.ontimeout=()=>rej(new Error(t('neterr')));
     x.upload.onprogress=e=>{if(e.lengthComputable&&onProgress)onProgress(e.loaded/e.total);};
     x.onload=()=>res(x);
     x.onerror=()=>rej(new Error(t('neterr')));
@@ -3648,6 +3652,8 @@ function progressRow(){
     set(p){fill.style.width=(p*100).toFixed(1)+'%';}};
 }
 const RELEASES_API='https://api.github.com/repos/Blueforcer/awtrix-ng/releases/latest';
+const OTA_BASE='https://blueforcer.github.io/awtrix-ng/firmware/ota/';
+let firmwareBusy=false;
 const UPD_KEY='awtrixUpdate';
 const UPD_TTL_MS=6*3600*1000;
 const verParts=v=>String(v||'').replace(/^v/,'').split('.').map(n=>parseInt(n,10)||0);
@@ -3660,11 +3666,10 @@ function updCached(){
   try{const c=JSON.parse(localStorage.getItem(UPD_KEY)||'null');if(c&&Date.now()-c.at<UPD_TTL_MS)return c;}catch(e){}
   return null;
 }
-async function updCheck(force){
-  if(!force){const c=updCached();if(c)return c;}
+async function updCheck(){
   if(navigator.onLine===false)throw new Error(t('updfail'));
   const r=await fetch(RELEASES_API,{headers:{Accept:'application/vnd.github+json'},cache:'no-store',signal:AbortSignal.timeout(10000)});
-  if(!r.ok)throw new Error('HTTP '+r.status);
+  if(!r.ok)throw new Error(t((r.status===403&&r.headers?.get('x-ratelimit-remaining')==='0')||r.status===429?'updrate':'updfail'));
   const j=await r.json();
   const assets={};
   for(const a of j.assets||[])if(a&&a.name)assets[a.name]=a.browser_download_url;
@@ -3677,52 +3682,102 @@ function updAvailable(c){
   const run=S.stats&&S.stats.version;
   return c&&c.usable&&run&&verNewer(c.version,run)?c:null;
 }
-function updateRow(){
-  const chkBtn=el('button',{'aria-label':t('updchk')},t('updchk'));
-  const dl=el('a',{id:'upd-dl',href:'#',target:'_blank',rel:'noopener'},t('upddl'));
-  const notes=el('a',{id:'upd-notes',href:'#',target:'_blank',rel:'noopener'},t('updnotes'));
+async function downloadFirmware(release,onProgress){
+  const image=S.stats&&S.stats.updateImage;
+  if(!['firmware-awtrix-ng.bin','firmware-awtrix-ng-s3-octal.bin','firmware-awtrix-ng-s3-quad.bin'].includes(image))throw new Error(t('updnotready'));
+  const options={credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(120000)};
+  const response=await fetch(OTA_BASE+'index.json',options);
+  if(!response.ok)throw new Error(t('updnotready'));
+  const manifest=await response.json();
+  const asset=manifest.assets&&manifest.assets[image];
+  if(manifest.version!=='v'+release.version||!/^v\d+\.\d+\.\d+$/.test(manifest.version)||!asset)throw new Error(t('updnotready'));
+  if(!Number.isSafeInteger(asset.size)||asset.size<256||asset.size>16*1024*1024||!/^[a-f0-9]{64}$/.test(asset.sha256))throw new Error(t('updbadfile'));
+  const r=await fetch(OTA_BASE+manifest.version+'/'+image,options);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const reader=r.body.getReader(),bytes=new Uint8Array(asset.size);
+  let offset=0;
+  try{
+    for(;;){
+      const {done,value}=await reader.read();
+      if(done)break;
+      if(offset+value.length>bytes.length)throw new Error(t('updbadfile'));
+      bytes.set(value,offset);offset+=value.length;onProgress(offset/bytes.length);
+    }
+  }finally{await reader.cancel();}
+  if(offset!==asset.size||bytes[0]!==0xe9||iconSha256(bytes)!==asset.sha256)throw new Error(t('updbadfile'));
+  return new File([bytes],image,{type:'application/octet-stream'});
+}
+function updateRow(install){
+  let available=null;
+  const installBtn=armable(el('button',{id:'upd-install','aria-label':t('updchk')},t('updchk')),()=>{
+    if(available)install(available);else show(true);
+  },()=>!!available);
+  const notes=el('a',{id:'upd-notes',style:'padding:4px;line-height:0',href:'#',target:'_blank',rel:'noopener',title:t('updnotes'),'aria-label':t('updnotes')},icon('file'));
   const status=el('div',{id:'upd-status',class:'help'},'');
-  const help=el('div',{class:'help'},'');
-  dl.hidden=true;notes.hidden=true;
+  notes.hidden=true;
   async function show(force){
-    chkBtn.disabled=true;status.textContent=t('updchecking');help.textContent='';
+    if(firmwareBusy)return;
+    available=null;
+    const cached=updCached();
+    status.textContent=t('version')+' '+((S.stats&&S.stats.version)||'');
+    if(!force&&!cached)return;
+    installBtn.disabled=true;if(force)status.textContent=t('updchecking');
     try{
-      const avail=updAvailable(await updCheck(force));
+      const avail=updAvailable(force?await updCheck():cached);
       const img=S.stats&&S.stats.updateImage;
       if(avail){
         status.textContent=t('updnew').replace('{v}',avail.version)+(avail.published?' ('+avail.published+')':'');
-        dl.hidden=!(img&&avail.assets[img]);
-        if(!dl.hidden){dl.href=avail.assets[img];help.textContent=t('updhelp');}
+        if(img&&avail.assets[img]){available=avail;installBtn.disabled=false;}
         notes.hidden=!avail.notes;
         if(!notes.hidden)notes.href=avail.notes;
       }else{
         status.textContent=t('updcur').replace('{v}',(S.stats&&S.stats.version)||'');
-        dl.hidden=true;notes.hidden=true;
+        notes.hidden=true;
       }
-    }catch(e){status.textContent=t('updfail');dl.hidden=true;notes.hidden=true;}
-    chkBtn.disabled=false;
+    }catch(e){status.textContent=t('version')+' '+((S.stats&&S.stats.version)||'');notes.hidden=true;toast(e.message===t('updrate')?e.message:t('updfail'),false);}
+    installBtn.textContent=t(available?'updinstall':'updchk');
+    installBtn.setAttribute('aria-label',installBtn.textContent);
+    installBtn.disabled=false;
   }
-  chkBtn.addEventListener('click',()=>show(true));
   show(false);
   return el('div',{class:'frow'},
-    el('div',{class:'lab'},el('div',{class:'l1'},el('b',null,t('update'))),status,help),
-    el('div',{class:'ctl'},[chkBtn,dl,notes]));
+    el('div',{class:'lab'},el('div',{class:'l1'},el('b',null,t('update'))),status),
+    el('div',{class:'ctl'},[notes,installBtn]));
 }
 function maintenanceSection(page){
   const fwIn=el('input',{type:'file',accept:'.bin'});
   const fwBtn=el('button',null,t('choose'));
   const fw=progressRow();
   fwBtn.addEventListener('click',()=>fwIn.click());
-  fwIn.addEventListener('change',async()=>{
-    const f=fwIn.files[0];if(!f)return;
-    fwBtn.disabled=true;fw.show();
+  const fwStatus=el('div',{id:'fw-status',class:'help',role:'status'},'');
+  async function installFirmware(source){
+    if(firmwareBusy){toast(t('updbusy'),false);return;}
+    firmwareBusy=true;fwBtn.disabled=true;fw.show();
+    const warn=e=>{e.preventDefault();e.returnValue='';};
+    window.addEventListener('beforeunload',warn);
+    const installBtn=document.getElementById('upd-install');
+    if(installBtn)installBtn.disabled=true;
     try{
-      const x=await xhrPost('/update','firmware',f,f.name,
-        p=>fw.set(p));
-      if(x.status<300){toast(t('rebooting'));setTimeout(()=>location.reload(),12000);return;}
-      throw new Error('HTTP '+x.status+' - '+x.responseText.slice(0,80));
-    }catch(e){toast(e.message,false);fwBtn.disabled=false;fw.hide();}
-  });
+      let file=source;
+      if(!(source instanceof File)){
+        fwStatus.textContent=t('upddownloading');
+        file=await downloadFirmware(source,p=>{fw.set(p);fwStatus.textContent=t('upddownloading')+' '+Math.round(p*100)+'%';});
+      }
+      fw.set(0);fwStatus.textContent=t('upduploading');
+      const x=await xhrPost('/update','firmware',file,file.name,
+        p=>{fw.set(p);fwStatus.textContent=t('upduploading')+' '+Math.round(p*100)+'%';},120000);
+      let result;try{result=JSON.parse(x.responseText);}catch(e){}
+      if(x.status<200||x.status>=300||!result||result.ok!==true)throw new Error('HTTP '+x.status+' - '+x.responseText.slice(0,80));
+      fwStatus.textContent=t('rebooting');toast(t('rebooting'));
+      window.removeEventListener('beforeunload',warn);
+      setTimeout(()=>location.reload(),12000);
+    }catch(e){
+      fwStatus.textContent='';toast(e.message,false);fw.hide();
+      firmwareBusy=false;fwBtn.disabled=false;if(installBtn)installBtn.disabled=false;
+      window.removeEventListener('beforeunload',warn);
+    }
+  }
+  fwIn.addEventListener('change',()=>{const file=fwIn.files[0];if(file)installFirmware(file);});
   fwIn.addEventListener('click',()=>{fwIn.value='';});
   const rebootBtn=armable(el('button',null,t('reboot')),()=>doReboot());
   const resetBtn=armable(el('button',{class:'danger'},t('resetset')),async()=>{
@@ -3736,11 +3791,10 @@ function maintenanceSection(page){
     try{await post('/api/v1/device/factory-reset');toast(t('rebooting'));setTimeout(()=>location.reload(),12000);}
     catch(e){toast(e.message,false);eraseBtn.disabled=false;}
   });
-  const ver=S.stats&&S.stats.version;
   page.section('maint',t('maint'),t('mainthelp'),[
-    updateRow(),
-    actionRow(t('fwfile'),ver?t('version')+' '+ver:null,[fwBtn,fwIn]),
-    fw.row,
+    updateRow(installFirmware),
+    actionRow(t('fwfile'),null,[fwBtn,fwIn]),
+    fwStatus,fw.row,
     actionRow(t('reboot'),null,[rebootBtn]),
     actionRow(t('resetset'),t('resetsetH'),[resetBtn]),
     actionRow(t('factory'),t('factoryH'),[hostIn,eraseBtn]),

@@ -76,6 +76,24 @@ jobs:
               json.dump({"version": sys.argv[1], "assets": names}, f, indent=1)
           print("web flasher serves %s: %s" % (sys.argv[1], ", ".join(names)))
           PY
+      - name: Prepare browser firmware updates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          if [ -z "$tag" ]; then exit 0; fi
+          mkdir -p "docs/firmware/ota/$tag"
+          gh release download "$tag" --pattern 'firmware-awtrix-ng*.bin' --dir "docs/firmware/ota/$tag"
+          python - "$tag" <<'PY'
+          import hashlib, json, pathlib, sys
+          tag = sys.argv[1]
+          root = pathlib.Path("docs/firmware/ota")
+          assets = {}
+          for name in ("firmware-awtrix-ng.bin", "firmware-awtrix-ng-s3-octal.bin", "firmware-awtrix-ng-s3-quad.bin"):
+              data = (root / tag / name).read_bytes()
+              assets[name] = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+          (root / "index.json").write_text(json.dumps({"version": tag, "assets": assets}), encoding="utf-8")
+          PY
       # A link to a heading that has been renamed is reported by mkdocs at INFO
       # level, so --strict walks straight past it and the broken anchor ships.
       # Fail on it explicitly.

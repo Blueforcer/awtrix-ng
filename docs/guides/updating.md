@@ -1,6 +1,6 @@
 # Updating firmware
 
-You upload a new firmware `.bin` yourself - from the web UI or with `curl` - and AWTRIX writes it
+Start an update in the web UI, or upload a firmware `.bin` yourself with the web UI or `curl`. AWTRIX writes it
 into its spare firmware slot, reboots, and comes back on the new version. Your settings and your
 uploaded files stay as they are.
 
@@ -49,15 +49,21 @@ Status codes for the route: [Firmware upload](../reference/http.md#firmware-uplo
 
 ## Checking for a newer release
 
-The System page's Maintenance section compares the running version with the latest release on
-GitHub each time you open it, and **Check for updates** asks again at any time. The check runs
+In the System page's Maintenance section, click **Check for updates** to compare the running
+version with the latest release on GitHub. Opening a page never starts a check. The check runs
 in your browser - AWTRIX itself never talks to GitHub - so it needs your computer or phone to be
 online, not the clock. The answer is kept for a few hours.
 
-When a newer release exists, the row names it, links its release notes, and offers a
-**Download** of exactly the file this board needs. Save it, then choose it under **Upload
-firmware** as described above. The dashboard's version line shows *update available* until the
-update is done.
+When a newer release exists, the row names it, links its release notes through the document icon, and offers a
+**Download & install** button for exactly the file this board needs. Click it and confirm.
+Your browser downloads and verifies the firmware, then uploads it to AWTRIX. Keep the page open
+and the device powered until it restarts. Progress is shown during download and upload; the page
+reloads automatically afterwards. Settings and uploaded files are kept.
+
+The download and verification run entirely on your computer or phone. AWTRIX receives only the
+normal firmware upload. If a release has just appeared, its browser download may take a few
+minutes to become ready. Try again shortly, or download the image from the release page and use **Upload firmware**.
+The dashboard's version line shows *update available* until the update is done.
 
 ## Which file to download
 

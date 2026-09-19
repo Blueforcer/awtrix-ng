@@ -1,5 +1,6 @@
 **Added**
 
+- **Install firmware updates from the web UI.** Click **Check for updates**, then **Download & install** and confirm. Updates are checked only when you ask. Your browser downloads and verifies the correct image, then uploads it to AWTRIX with progress shown throughout. Settings and files are kept.
 - **Modbus TCP for Berry scripts.** Read holding registers, input registers, coils and discrete inputs from local devices without blocking the display. Helpers decode signed integers and 32-bit floating-point values, with configurable host, port and unit ID.
 - **Timers and delayed actions.** `timer.after()` runs a callback once; `timer.every()` repeats it; `timer.cancel()` cancels it. Timers work in the background, including in headless scripts, and are cleaned up when a script is replaced, removed or fails.
 - **More button events for interactive apps.** `on_button_event()` supports press, long press, repeat and release. An app can capture a press and handle the whole gesture. Existing `on_button()` scripts and normal device navigation keep working when the new handler does not consume the press.
