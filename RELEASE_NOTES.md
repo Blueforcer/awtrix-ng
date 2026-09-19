@@ -1,38 +1,21 @@
 **Added**
 
-- **🎉 The AWTRIX Hub is here!** Discover community-made flows and icons, create your own in the Pixel Studio, and send your favourites straight to your display at [awtrix.de](https://awtrix.de). The Web UI automatically checks Hub-installed scripts for updates and applies them with one click, preserving their settings and protecting local changes.
-- **The live display on a page of its own**: `http://<awtrix-ip>/fullscreen`, made for an iframe on a Home Assistant dashboard (#29).
-- **Scripts can declare their Hub icons** with `# @icons ...`. The editor and Apps tab show missing icons and install them in one action.
-- The browser tab carries the hostname, so several AWTRIX open at once are told apart (#18).
-- Scripts can swallow a button press: return `true` from `on_button()`.
-- Scripts can switch the matrix with `display.power()` and read its state with `display.is_on()` (#56).
-- **The web UI checks for updates.** The System page compares the running version with the latest GitHub release and offers the download for exactly your board; the dashboard shows *update available*. The check runs in the browser, the clock never talks to GitHub. `GET /api/v1/device` now names the file it updates from as `updateImage`.
-- **Scripts can react to the music.** On an ESP32-S3 with a speaker, `music.bands()`, `music.level()` and `music.beat()` describe what the radio or a stored MP3 is playing, timed to the speaker. A spectrum display is one line: `bar_chart(music.bands(16, 8), "Rainbow", false)`. Other boards answer zeros, so the same script runs everywhere.
-- **More DIY audio hardware is supported.** `pinI2sMclk` supplies DACs requiring a master clock, while `pinAmpEnable` controls amplifiers with an enable input.
-- DIY panels can select their physical LED colour order in the Panel settings (#54).
-- Directional app transitions can run in their normal or reversed direction (#49).
-- Auto brightness can be switched directly from the dashboard; manual brightness stays disabled while it is active (#38).
-- Backup creation has an **All** switch that selects every available category at once (#43).
-- `progress()`, `bar_chart()` and `line_chart()` take an optional x offset.
-- Script HTTP requests accept `cap` to choose how much of a response may be retained, bounded by available memory.
-- Scripting tutorials on the documentation site.
+- **Modbus TCP for Berry scripts.** Read holding registers, input registers, coils and discrete inputs from local devices without blocking the display. Helpers decode signed integers and 32-bit floating-point values, with configurable host, port and unit ID.
+- **Timers and delayed actions.** `timer.after()` runs a callback once; `timer.every()` repeats it; `timer.cancel()` cancels it. Timers work in the background, including in headless scripts, and are cleaned up when a script is replaced, removed or fails.
+- **More button events for interactive apps.** `on_button_event()` supports press, long press, repeat and release. An app can capture a press and handle the whole gesture. Existing `on_button()` scripts and normal device navigation keep working when the new handler does not consume the press.
+- **Multiple icons in pushed apps and notifications.** The new `icons` array adds up to four independently animated icons at chosen positions, alongside the existing `icon` field.
+- **Adjustable spacing beside icons.** `iconGap` sets the gap between the main icon and text, from 0 to 128 pixels. The default remains one pixel.
 
 **Changed**
 
-- **The button webhook sends JSON.** `buttonCallback` now posts `{"button":"left","state":true,"uid":"…"}` with `Content-Type: application/json` instead of a form-encoded body. A listener that reads `button=…&state=1` needs adjusting.
-- **Berry scripts now use available memory instead of most fixed caps.** Besides removing `scriptLimit` and `scriptMaxBytes`, fixed limits on configuration fields, select options, imports, shared values, stores and HTTP request data were replaced with available-memory checks. Sending the two removed keys is ignored rather than refused, but a backup or an automation that still writes them needs looking at.
-- Berry VMs, regular expressions and GIF decoding retain less temporary memory, improving reliability when several scripts or animations run together.
+- **GIFs keep their own size, up to the panel dimensions.** Scripts, pushed apps and notifications support GIFs sized for custom panels. Text layout follows the icon's actual width; a panel-wide GIF becomes a background.
+- Each script app manages its own icons and releases them when hidden. File access and streamed log and Wi-Fi scan responses use less temporary memory.
+- The scripting documentation, AI prompt and downloadable agent skill cover Modbus, timers and extended button events, with corrected settings instructions and guidance for different panel sizes and PSRAM budgets.
 
 **Fixed**
 
-- An I2S amplifier crackled and hissed from power-on until the first sound played: the I2S lines floated until then. They are now held low from boot.
-- A notification with an empty `soundRtttl` was refused outright, so clients that send their whole schema - Home Assistant among them - got nothing at all (#27).
-- An app pushed under a built-in name like `Temperature` was stored and listed, but the panel kept showing the built-in. The pushed app takes the name over now (#37).
-- An icon that is a PNG under a `.jpg` name counted as drawn, leaving a black gap where the picture should be. The column goes back to the text and the log names the file (#23).
-- One time zone the browser does not know ended the System page halfway, with no maintenance and no backup below MQTT (#25).
-- Files in downloaded backup ZIPs now carry the backup creation time instead of invalid 1979/1601 timestamps (#44).
-- The Icons tab could show an empty Hub area, and the framed icon editor was not told which Hub to publish to.
-- Delete and duplicate in the icon editor were blank grey chips. Ships with the Hub, not with the firmware, so it is already fixed (#30).
+- Scrolling text no longer enters the gap beside an icon.
+- The countdown tutorial correctly parses months and days with leading zeros, such as `09`, instead of falling back to the default date.
 
 ---
 
