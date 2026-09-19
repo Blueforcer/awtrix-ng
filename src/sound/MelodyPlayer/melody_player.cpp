@@ -79,6 +79,8 @@ void MelodyPlayer::play(Melody &melody)
   {
     return;
   }
+  // Same hazard as playAsync(melody, ...): drop a pending ticker callback before the swap.
+  haltPlay();
   melodyState = make_unique<MelodyState>(melody);
   play();
 }
@@ -99,6 +101,12 @@ void releaseTone(MelodyPlayer *player)
 
 void changeTone(MelodyPlayer *player)
 {
+  // The ticker callback can fire on the timer task while the main thread is in stop() or is
+  // swapping melodyState for a new melody — never dereference it unchecked.
+  if (player->melodyState == nullptr)
+  {
+    return;
+  }
   player->melodyState->advance();
   if (player->melodyState->getIndex() + player->melodyState->isSilence() < player->melodyState->melody.getLength())
   {
@@ -207,6 +215,9 @@ void MelodyPlayer::playAsync(Melody &melody, bool loopMelody, void (*callback)(v
   {
     return;
   }
+  // Detach any pending ticker callback before freeing the old state, otherwise changeTone can
+  // run against a melodyState that no longer exists.
+  haltPlay();
   melodyState = make_unique<MelodyState>(melody);
   loop = loopMelody;
   stopCallback = callback;
