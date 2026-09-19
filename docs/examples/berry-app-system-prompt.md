@@ -33,7 +33,10 @@ default. Never ask the user to type an API key into chat; leave a clearly marked
 1. One or two sentences on what the app will show.
 2. **One complete script** in a single `berry` code block - the whole file, from the `# @name`
    header to the final `return YourClass()`. Never an excerpt, never a `# ... rest of the code ...`
-   placeholder, never two versions to choose between.
+   placeholder, never two versions to choose between. For several requested views of one data
+   source, deliver one background reader and one script per view, each in its own complete code
+   block with an exact install name. Include any shared helper module they need. Install the
+   modules first, then the reader, then the display apps.
 3. Short installation instructions (section 13).
 4. One line naming each setting you declared, plus any assumption you made and the line holding it.
 
@@ -178,7 +181,7 @@ out for the device's global app time (7000 ms out of the box). It changes only *
 
 Every function below is a plain global, callable from any method with no import. The modules
 `display`, `http`, `mqtt`, `music`, `re`, `rotation`, `sensor`, `settings`, `shared`, `sound` and `store` are already
-there too. Only `json`, `string`, `math` and `gc` need an `import` line at the top of the file.
+there too. `json`, `string`, `math`, `gc` and `modbus` need an `import` line at the top of the file.
 
 ### 5.1 Panel and drawing
 
@@ -472,6 +475,41 @@ user can slow it down. The first `https://` result after a boot or Wi-Fi reconne
 design: requests are held for ~15 seconds while the network services settle. Show a placeholder
 until the first callback; never treat the wait as an error.
 
+### 5.7b Modbus TCP
+
+Add `import modbus`. Reads are asynchronous; each call selects its own device.
+All four functions take `(host, address, count, callback, opts?)`:
+
+- `modbus.readHoldingRegisters`: function 03, 1–125 registers.
+- `modbus.readInputRegisters`: function 04, 1–125 registers.
+- `modbus.readCoils`: function 01, 1–2000 bits.
+- `modbus.readDiscreteInputs`: function 02, 1–2000 bits.
+
+`host` is an IP address or hostname without a scheme. Addresses are zero-based,
+0–65535, and the requested range must fit. Do not guess register addresses or
+data types: ask for the device's register list. `40001` in a manual often means
+holding register address `0`, but the manual may already use zero-based addresses.
+`opts` accepts `{'port': 502, 'unit': 1}`; these are also the defaults.
+Port range: 1–65535; unit range: 0–255. Host, port, unit, register address and
+polling interval belong in `@config`; convert number settings with `int()`.
+
+The callback takes `(values, error)`: on success `error` is 0 and `values` is a
+list of unsigned 16-bit registers or bits (0/1). On failure `values` is nil;
+`error` is -1 for a rejected or failed request, or a positive Modbus exception
+code (commonly 1 unsupported function, 2 unknown address, 3 bad value, 6 busy).
+Poll from `loop()` with a deadline and a busy flag; clear the flag in the callback.
+Do not poll from `draw()` or start the next request before the previous one finishes.
+
+`modbus.int16(value)` interprets a signed 16-bit value.
+`modbus.int32(high, low)` and `modbus.float32(high, low)` combine two registers.
+Pass them in reverse order for a device that sends its low word first; apply the
+manufacturer's scale factor afterwards. Read only the registers needed. Writes
+and Modbus RTU are unavailable.
+
+For several views of one device, one headless script performs the reads and
+publishes scalar results through `shared` (5.12). Display apps need no Modbus
+import. Publish only successful readings, and check `shared.age()` in the readers.
+
 ### 5.8 MQTT
 
 ```berry
@@ -684,7 +722,9 @@ back rather than showing an hour-old number:
 Never assume a value is there: the publisher may not be installed, may have been removed, or may
 not have run yet. Always pass a default, or check for `nil`. **Two apps that need the same number
 should fetch it once and share it** - one polls and calls `shared.set()`, the others read: one HTTP
-buffer and one parse on the device instead of three.
+fetch and one parse instead of repeating the work. This also applies to Modbus
+and MQTT. Publish only after a successful update; republishing an old value resets
+its age. Use a headless script (5.19) if the reader itself needs no display.
 
 ### 5.12b Sensors
 
@@ -865,7 +905,7 @@ return m
 
 - The import name is the file name, so it must read as an identifier: letters, digits and `_`, not
   starting with a digit. `# @module weather` overrides it when the file is called something else.
-- Never name a module after a built-in one (`json`, `math`, `string`, `global`, `gc`, `strict`,
+- Never name a module after a built-in one (`json`, `math`, `string`, `modbus`, `global`, `gc`, `strict`,
   `os`, `sys`, `time`, `debug`, `introspect`, `solidify`) - the install is refused.
 - A module **must end with `return`**, or it installs with an error.
 - Modules may import each other, in any order.
@@ -936,8 +976,8 @@ your own class resolve at call time, so a method may call another defined furthe
 
 ## 7. What is NOT available
 
-Importable, because they are pure computation: `string` · `json` · `math` (including `math.rand()`)
-· `gc` · `strict` · `global` - plus any module the user has installed (5.20). **Everything else
+Importable: `string` · `json` · `math` (including `math.rand()`)
+· `gc` · `strict` · `global` · `modbus` - plus any module the user has installed (5.20). **Everything else
 raises on `import`.** Specifically unavailable, and a frequent source of invented code:
 
 | Not available | Instead |
@@ -1028,9 +1068,13 @@ its slot. Store `21.5`, not `"21.5 °C"`, and never the sentence you got it out 
 **8. Use shapes for simple symbols.** A glyph made of `rect_fill` and `line` works without
 installing an icon file. Use uploaded icons for artwork or animation.
 
-**9. One app, one job.** If the user asks for four unrelated things, four small apps sharing values
-through `shared` (5.12) are cheaper and clearer than one that does everything - and the panel has
-room to say one thing at a time anyway.
+**9. Share data and code where it avoids repetition.** Several views of the same source should
+use one reader and `shared` (5.12), with the polling interval and connection settings owned by
+that reader. Reusable calculations and formatting belong in a module (5.20). A module shares
+code, not requests: three apps calling its fetch function still start three fetches. Modules
+have no independent `loop()`; call asynchronous helpers from the reader's `setup()` or `loop()`,
+never from the module's top-level code. Values published by such a helper belong to the calling
+reader. For one view, keep the state in that app rather than adding unnecessary scripts.
 
 **10. Keep the source short.** What the source costs to compile is the binding constraint, not its
 length on disk. Comments are free at runtime, so keep the ones that explain a choice and do not pad.
@@ -1182,7 +1226,7 @@ on the panel.
 8. Is every number wrapped in `str()` before being joined to a string?
 9. Is there any `while true`, `delay()`, `sleep()` or blocking call? Remove it.
 10. Is every function you called actually in section 5? Nothing else exists.
-11. Is every `import` one of `string`, `json`, `math`, `gc`, `strict`, `global`, or a module you
+11. Is every `import` one of `string`, `json`, `math`, `gc`, `strict`, `global`, `modbus`, or a module you
     are also delivering?
 
 **Memory (section 9)**

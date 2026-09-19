@@ -286,13 +286,24 @@ publishes, the others read:
     var t = shared.get("Weather.temp", 0)       # in every other app
 ```
 
-One HTTP buffer, one TLS handshake, one parse. `shared` holds scalars only - store the
-finished value there, never the raw body you got it out of. Use `shared.age()` to check
-how old a value is before trusting it.
+This works for HTTP, MQTT and Modbus readings. Fetch and decode once, then share
+the finished numbers or short strings. Do not copy the raw response into every
+app. Use `shared.age()` before displaying a reading, and show a fallback when
+it is missing or too old. Publish only after a successful read so a failed
+request does not make the last good value look fresh.
 
-A [headless app](recipe-doorbell.md) that does nothing but fetch and publish is a good
-shape for this. It never takes a turn on the panel and every drawing app gets its
-numbers for free.
+A [background script](../guides/scripting.md#running-without-ever-being-shown)
+can own the connection settings and polling interval without taking a turn on
+the panel. The [meter example](../guides/scripting.md#share-one-device-across-several-apps)
+shows one reader feeding two display apps. Keep at most one request in flight
+per reader and fetch only as often as the display needs new data.
+
+[Modules](../guides/scripting.md#sharing-code-between-scripts) solve a different
+problem: several apps can share one copy of common helper functions. Putting a
+fetch in a module does not prevent duplicate requests if every app calls it.
+Use modules for common code and `shared` for common readings. If only one app
+needs the data, keep it in that app; adding a background script and module for
+every small task also costs memory.
 
 ---
 

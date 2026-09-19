@@ -116,10 +116,14 @@ def extract(project_dir):
 
     builtins = _device_builtins(bindings)
     prelude_api, mods = _prelude(prelude)
+    modbus_api = [
+        "modbus.%s(host, address, count, callback, opts?)" % name
+        for name in ("readHoldingRegisters", "readInputRegisters", "readCoils", "readDiscreteInputs")
+    ] + ["modbus.int16(value)", "modbus.int32(high, low)", "modbus.float32(high, low)"]
     return {
-        "api": sorted(builtins) + prelude_api,
+        "api": sorted(builtins) + prelude_api + modbus_api,
         "mods": mods,
-        "core": _berry_core(baselib, conf),
+        "core": _berry_core(baselib, conf) + ["modbus"],
     }
 
 

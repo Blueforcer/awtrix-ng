@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "core/script/HttpBodyFilter.h"
+#include "core/script/ModbusTcp.h"
 #include "core/script/ScriptServices.h"
 #include "system/HeapCaps.h"
 #include "system/HeapProbe.h"
@@ -75,7 +76,10 @@ void ScriptHttpWorker::begin(ResultFn onResult) {
 bool ScriptHttpWorker::request(const script::HttpRequest& req) {
   if (!started_) return false;
   if (!WiFi.isConnected()) return false;
-  if (req.url.rfind("http://", 0) != 0 && req.url.rfind("https://", 0) != 0) return false;
+  if (script::modbus::isUrl(req.url)) {
+    script::modbus::Read read;
+    if (req.method != "GET" || !script::modbus::parse(req.url, read)) return false;
+  } else if (req.url.rfind("http://", 0) != 0 && req.url.rfind("https://", 0) != 0) return false;
   if (req.method.empty()) return false;
 
   if (pending_.load(std::memory_order_relaxed) >= kQueueCap) return false;
@@ -153,6 +157,10 @@ int64_t ScriptHttpWorker::connectedForMs() {
 // Runs on the worker task and blocks for as long as the request takes. The clients are stack-local
 // on purpose, so a TLS session's memory is handed straight back when this returns.
 void ScriptHttpWorker::fetch(const script::HttpRequest& req) {
+  if (script::modbus::isUrl(req.url)) {
+    fetchModbus(req);
+    return;
+  }
   script::HttpResult res;
   res.id = req.id;
 

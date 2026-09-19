@@ -23,6 +23,7 @@ be_extern_native_module(solidify);
 be_extern_native_module(introspect);
 be_extern_native_module(strict);
 be_extern_native_module(undefined);
+be_extern_native_module(modbus);
 
 /* user-defined modules declare start */
 
@@ -68,6 +69,7 @@ BERRY_LOCAL const bntvmodule_t* const be_module_table[] = {
     &be_native_module(strict),
 #endif
     &be_native_module(undefined),
+    &be_native_module(modbus),
     /* user-defined modules register start */
 
     /* user-defined modules register end */

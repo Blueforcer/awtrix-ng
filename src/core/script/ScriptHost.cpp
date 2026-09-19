@@ -26,7 +26,7 @@ bool isIdentifier(const std::string& s) {
 bool isReservedModule(const std::string& s) {
   static const char* const kReserved[] = {"json",  "math",  "string", "global",
                                           "gc",    "strict", "os",    "sys",
-                                          "time",  "debug", "introspect", "solidify"};
+                                          "time",  "debug", "introspect", "solidify", "modbus"};
   for (const char* r : kReserved)
     if (s == r) return true;
   return false;

@@ -56,6 +56,16 @@ the scripts come back terse: few, long methods, and only the part of a web
 response the app actually needs. You do not have to ask for that, and it does not
 change what the app does.
 
+If you want several views of one device or service, say so together, for example:
+
+> Read my energy meter once every ten seconds. Show power and voltage as two
+> separate apps, sharing the same readings.
+
+The assistant can then provide one background reader and small display apps,
+instead of having every app contact the device again. Common helper functions
+can live in a module. The [guide](scripting.md#choose-how-your-apps-work-together)
+explains when each approach is useful.
+
 ---
 
 ## As an agent skill

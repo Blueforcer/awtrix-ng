@@ -31,6 +31,7 @@ class ScriptHttpWorker : public script::IScriptHttp {
   static void taskEntry(void* self);
   void run();
   void fetch(const script::HttpRequest& req);
+  void fetchModbus(const script::HttpRequest& req);
   int64_t connectedForMs();
 
   script::AsyncQueue<Queued, kQueueCap> queue_;
