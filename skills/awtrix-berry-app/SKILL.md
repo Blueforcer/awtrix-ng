@@ -1,19 +1,21 @@
 ---
 name: awtrix-berry-app
-description: Write, install and debug Berry apps for an AWTRIX NG LED matrix clock (Ulanzi TC001 and other 32x8 panels). Use when the user wants something shown on their AWTRIX or pixel clock, asks for an AWTRIX app, script or .ax file, or reports an ERR: frame or a script error on the panel.
+description: Write, install and debug Berry apps for an AWTRIX NG LED matrix clock (Ulanzi TC001 and other supported LED panels). Use when the user wants something shown on their AWTRIX or pixel clock, asks for an AWTRIX app, script or .ax file, or reports an ERR: frame or a script error on the panel.
 license: PolyForm-Noncommercial-1.0.0
 compatibility: Installing and testing needs HTTP access to the device on the local network. Without it, write the script and hand it over for the web UI.
 metadata:
   author: Blueforcer
-  version: "1.0"
+  version: "1.1"
   homepage: https://github.com/Blueforcer/awtrix-ng
 ---
 
 # AWTRIX NG Berry apps
 
-An app is one Berry class in one file, drawn on a 32x8 LED panel and shown in a
-rotation with the other apps. The device is an ESP32 with a shared 96 KB Berry
-heap: small scripts are not a style preference, they are the constraint.
+An app is one Berry class in one file, drawn on an LED panel and shown in a
+rotation with the other apps. A common panel is 32x8, but sizes vary: always use
+`width()` and `height()`. ESP32 and ESP32-S3 devices share one Berry heap across
+all scripts: 96 KB without usable PSRAM, or a larger device-reported budget with
+PSRAM. Keep scripts small on either device.
 
 ## 1. Load the API before writing anything
 
@@ -36,6 +38,10 @@ Ask for the address once, then keep it for the session. Default hostname is
 ```bash
 curl -s http://$AWTRIX/api/v1/device
 ```
+
+Read `scriptHeapPool` and `scriptHeapBudgetBytes` from the device response before
+assuming a memory budget. `freeHeapBytes` reports free internal RAM; optional
+`psramFreeBytes` reports a separate pool. Neither is the Berry heap budget.
 
 - `401` - auth is on. Ask for user and password, then use `curl -u user:pass`.
 - Nothing answers - do not guess addresses. Write the script, give the user the
@@ -95,8 +101,9 @@ curl -sX PUT "http://$AWTRIX/api/v1/apps/active" \
 curl -s "http://$AWTRIX/api/v1/display/screen"
 ```
 
-`{"width":32,"height":8,"pixels":[...]}`, row-major, each pixel the packed
-`0xRRGGBB` as an unsigned decimal. Check what the user asked for: pixels are not
+The response is, for example, `{"width":32,"height":8,"pixels":[...]}`. Use the
+returned dimensions; pixels are row-major at index `y * width + x`, each the
+packed `0xRRGGBB` as an unsigned decimal. Check what the user asked for: pixels are not
 all `0`, nothing is clipped at the last column, the colours are the intended
 ones. Give the network app a moment - data arrives in `loop()`, about once a
 second.
@@ -104,11 +111,12 @@ second.
 **Pin the app again immediately before every read.** The app holds the panel for
 its dwell time only; a screenshot taken later is of whichever app the rotation
 walked on to, and it looks exactly like a broken app that drew the wrong thing.
-A red `ERR:` frame is the app itself reporting the compile error from step 4.
+A red `ERR:` frame reports a compile or runtime error; read the app's `error`.
 
-`GET /api/v1/apps` lists every app with `enabled` (it runs), `inLoop` (it is
-drawn, and `position` where), its `error`, and `skipped` when the script's own
-`should_show()` returned false.
+`GET /api/v1/apps` lists every app with `enabled`, `inLoop` (whether it is in
+the display rotation), `slot` (its zero-based position, or `null` outside the
+rotation), its `error`, and `skipped` when the script's own `should_show()`
+returned false.
 
 **A headless script has no panel to check.** `# @headless true` means it never
 draws, so it is absent from the rotation: pinning it answers `404 app not found`

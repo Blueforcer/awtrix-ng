@@ -47,10 +47,10 @@ working panel, not a tutorial.
 
 ## 2. The hardware
 
-A single LED panel, **32 pixels wide and 8 pixels tall** - about the size of a postage stamp, one
+An LED panel, commonly **32 pixels wide and 8 pixels tall** - about the size of a postage stamp, one
 short word at a time.
 
-- `x` runs `0`–`31` from the **left**, `y` runs `0`–`7` from the **top**. `(0, 0)` is top-left; a
+- On a 32×8 panel, `x` runs `0`–`31` from the **left**, `y` runs `0`–`7` from the **top**. `(0, 0)` is top-left; a
   *larger* `y` is *lower*.
 - Never hardcode `32` or `8`. Call `width()` and `height()` - some builds run a different panel
   size, and a script that measures adapts for free.
@@ -60,8 +60,11 @@ short word at a time.
 - The app is one page in a **rotation**: other apps take turns on the same panel. It is not a
   full-screen program.
 
-The processor is an ESP32 with roughly **168 KB of free RAM for everything** - firmware, network
-stack, TLS and every script together. A typical device has a handful of scripts. Yours is a guest.
+Devices use an ESP32 or ESP32-S3. Without usable PSRAM, all scripts share a **96 KB Berry heap
+budget**; with PSRAM, the budget is larger. Read `scriptHeapPool` and `scriptHeapBudgetBytes` from
+`GET /api/v1/device` when available. Free internal RAM (`freeHeapBytes`) and optional free PSRAM
+(`psramFreeBytes`) are separate from that budget. Without device access, target the 96 KB budget.
+A typical device has a handful of scripts. Yours is a guest.
 
 ---
 
@@ -644,7 +647,7 @@ instant the device boots instead of `...` until the network comes up: a
 **A hard rule, not a nicety. Every value the user might want to change gets a `# @config` line.
 Never hardcode such a value, never build a settings screen of your own, never tell the user to edit
 the script.** A `# @config` line in the header turns a stored value into a real field in the web
-UI: **Apps** tab → the `⋯` menu on that app's row → **Settings**. The script reads it with
+UI: **Apps** tab → the gear button on that app's row. The script reads it with
 `store.get(key)` and nothing else.
 
 ```berry
@@ -713,7 +716,8 @@ return location
   gets at it.
 - **The cache cannot go stale.** Saving a module's settings reinstalls it and restarts every app
   that imports it, so the top-level read runs again.
-- Module settings live on the same **Apps** tab, in the modules card, same `⋯` → **Settings**.
+- Module settings live on the same **Apps** tab: use the gear button on the module's row in the
+  **Modules** card.
 - **Decide by ownership:** `@config` on the app when only that app cares, on a module when a second
   app would want the same answer (a city, a locale, an API host). When in doubt, put it on the app.
 
@@ -1021,7 +1025,7 @@ raises on `import`.** Specifically unavailable, and a frequent source of invente
 | `open()` | nothing |
 | `print()` - exists, but writes only to the serial console | `log()`, which reaches the web UI |
 | `input()` - exists, but there is no console to type at | nothing; never call it |
-| `delay()` / `sleep()` - **no such thing** | count `loop()` calls, or use `now_ms()` / `epoch_ms()` for sub-second animation inside one frame |
+| `delay()` / `sleep()` - **no such thing** | `timer.after()` for delayed actions, `timer.every()` for recurring actions; `now_ms()` / `epoch_ms()` for animation in `draw()` |
 | a blocking HTTP call | `http.get()` with a callback |
 | a `while true` render loop | `draw()` **is** the loop; paint one frame and return |
 
@@ -1042,6 +1046,7 @@ anything that waits, waits by returning and being called again.
 | Free memory while the body is collected | brings `cap` down to what is there; running out mid-body drops the response | callback gets `nil` and the real status code |
 | HTTP requests in flight | 8 per app | callback gets `nil` immediately |
 | HTTP timeout | 5 s connect, 5 s read, 30 s total | callback gets `nil` |
+| Pending timers | 8 per app, 32 total; integer delay 25–86400000 ms | `timer.after()` / `timer.every()` return `nil` for invalid arguments or a full queue |
 | MQTT subscriptions | 8 per app | further subscribes ignored |
 | MQTT messages waiting | 32, shared by every script | the oldest is dropped |
 | Chart values | 16 | extras dropped |
@@ -1051,8 +1056,9 @@ anything that waits, waits by returning and being called again.
 
 **200 000 instructions is a great deal of drawing.** You will only meet that limit with an
 accidental infinite loop, never by painting a busy frame. **The heap limit is the one you can
-actually hit**: 96 KB is shared by every script, and a typical device already has several
-installed. Section 9 is how you stay a good neighbour.
+actually hit**: without PSRAM, 96 KB is shared by every script; with PSRAM, use the reported
+`scriptHeapBudgetBytes`. A typical device already has several scripts installed. Section 9 is how
+you stay a good neighbour.
 
 Any unhandled error leaves the app **stuck broken**: the panel shows `ERR:<name>` in red and the
 web UI shows the message. Nothing else on the device is affected, and saving the script again
@@ -1063,8 +1069,9 @@ clears it.
 ## 9. Writing for a small heap
 
 Every script shares **one Berry heap**, capped at 96 KB on a board without PSRAM. Your app's class,
-its methods, its members and everything it allocates come out of that one pot - and so does the
-memory the firmware needs to decode an icon, hold a pushed app or complete a TLS handshake. A
+its methods, its members and everything it allocates come out of that one pot. The firmware also
+needs memory outside the Berry heap to decode icons, hold pushed apps and complete TLS handshakes.
+Without PSRAM, these allocations compete for the same underlying internal RAM. A
 greedy script does not just risk its own `ERR:`; it makes *other* apps fail to install, icons draw
 as holes and HTTPS requests fall over. So: **write the smallest thing that does the job.** In order
 of how much they matter:
@@ -1305,8 +1312,8 @@ Close with these steps, in their language, and nothing longer:
 > 3. Paste the code in and press **Save** (or `Ctrl-S`).
 > 4. The app joins the rotation within a moment. Press the right button on the device to skip ahead
 >    to it.
-> 5. To change a setting, go to the **Apps** tab, open the `⋯` menu on the row for `<Name>` and
->    choose **Settings**. Saving there restarts the app.
+> 5. To change a setting, go to the **Apps** tab and click the gear button on the row for `<Name>`.
+>    Saving there restarts the app.
 >
 > If the panel shows **`ERR:`** in red, the script hit an error. The message is shown next to the
 > script in the Scripts tab - **copy it back to me and I will fix it.**

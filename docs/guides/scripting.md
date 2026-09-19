@@ -2311,9 +2311,9 @@ how you write scripts: the instruction limit above, and how much memory the scri
 AWTRIX share.
 
 **How many scripts fit** comes down to memory - [modules](#sharing-code-between-scripts)
-included, since they take the same memory. On a board without PSRAM - any 4 MB ESP32 - every
-script shares about 96 KB with the icon decoder, the pushed apps holding their content, and the
-room an HTTPS handshake needs. A handful of scripts is comfortable; a handful of scripts *and* a
+included, since they take the same memory. On a board without usable PSRAM, all scripts share
+a Berry heap budget of 96 KB. The icon decoder, pushed apps and HTTPS handshakes need additional
+memory from the same internal RAM. A handful of scripts is comfortable; a handful of scripts *and* a
 long list of pushed apps is where installs start being refused. An **ESP32-S3 with PSRAM** raises
 that ceiling to megabytes on the same build, with nothing to configure - AWTRIX decides at
 boot. If you want to push scripting hard, that is the board to be on.

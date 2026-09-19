@@ -157,7 +157,7 @@ that is not in it, the assistant will not use.
 
 Everything the assistant needs is in here: the full API, the app structure,
 AWTRIX's limits, and the mistakes language models reliably make when writing for
-a 32×8 panel. Paste the whole block; do not summarize or shorten it.
+a small LED panel. Paste the whole block; do not summarize or shorten it.
 
 Use the copy button in the top-right corner of the block.
 
