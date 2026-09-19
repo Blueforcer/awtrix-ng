@@ -130,8 +130,8 @@ Up to four additional icons animate independently at the positions you choose:
 You can also use the `icon` field in the same payload. See [Multiple icons](../reference/payload.md#multiple-icons)
 for drawing order and limits.
 
-Everything about how an icon renders and lays out - the `icon`, `iconMode` and `iconOffsetX`
-keys, the 9px text column, the full-width GIF background, and what happens when an icon is
+Everything about how an icon renders and lays out - the `icon`, `iconMode`, `iconOffsetX` and
+`iconGap` keys, the text column beside it, the full-width GIF background, and what happens when an icon is
 missing or cannot be displayed - is covered in the
 [payload reference → Icon](../reference/payload.md#icon).
 
@@ -233,4 +233,4 @@ path, or anything resolving outside `/ICONS`, `/MELODIES` or `/PALETTES` is reje
 * [Payload reference → Icon](../reference/payload.md#icon) - every icon key, with ranges and defaults
 * [HTTP reference → Files](../reference/http.md#files) - the three file routes in full
 * [Sound](sounds.md) - `/MELODIES` and the RTTTL format
-* [Text & colors](text.md) - the 9px column an icon takes from your text
+* [Text & colors](text.md) - the column an icon takes from your text

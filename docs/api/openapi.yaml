@@ -588,6 +588,8 @@ paths:
                   properties:
                     icons:
                       $ref: "#/components/schemas/PlacedIcons"
+                    iconGap:
+                      $ref: "#/components/schemas/IconGap"
                     scroll:
                       $ref: "#/components/schemas/Scroll"
                       description: >
@@ -605,6 +607,8 @@ paths:
                     properties:
                       icons:
                         $ref: "#/components/schemas/PlacedIcons"
+                      iconGap:
+                        $ref: "#/components/schemas/IconGap"
                   description: Indexed apps {name}0, {name}1, ...
       responses:
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -672,6 +676,8 @@ paths:
               properties:
                 icons:
                   $ref: "#/components/schemas/PlacedIcons"
+                iconGap:
+                  $ref: "#/components/schemas/IconGap"
       responses:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200": { $ref: "#/components/responses/Ok" }
@@ -1876,6 +1882,17 @@ components:
         stores and reads back as `#000000`, and `#FFFFFF` is a real value - only
         an explicit `null` means inherit/off.
       type: [string, array, integer, "null"]
+    IconGap:
+      type: integer
+      minimum: 0
+      maximum: 128
+      default: 1
+      description: >
+        Empty columns between the right edge of the `icon` and the text, bars
+        and line chart, counted from the icon's own width. `0` puts the text
+        right against the icon. Scrolling text is cut off at the far side of the
+        gap. Anything but an integer from 0 to 128 rejects the request with
+        422 validationFailed and `field: "iconGap"`.
     PlacedIcons:
       type: array
       maxItems: 4

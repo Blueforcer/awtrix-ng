@@ -18,7 +18,6 @@ namespace render {
 namespace {
 
 constexpr int kBaseline = kTextBaseline;
-constexpr int kIconTextGap = 8;
 
 std::string maybeUpper(const std::string& in, TextCase tc, bool globalUppercase) {
   const bool up = (tc == TextCase::Upper) || (tc == TextCase::Inherit && globalUppercase);
@@ -70,22 +69,25 @@ const ColorRamp* rampFor(const AppSpecExtras& x, bool wanted) {
   return wanted && x.palette.valid() ? &x.palette : nullptr;
 }
 
-void renderProgress(Canvas& c, const AppSpec& s, int iconWidth) {
-  const int x0 = iconWidth > 0 ? kIconTextGap : 0;
+int textColumn(const SpecRender& r) { return r.iconWidth > 0 ? r.iconWidth + r.iconGap : 0; }
+
+// The progress bar starts right at the icon's edge and runs under the gap, as on AWTRIX 3.
+void renderProgress(Canvas& c, const AppSpec& s, int x0) {
   const AppSpecExtras& x = s.extras();
   const ColorSource fill(x.progressColor, rampFor(x, x.progressUsesPalette));
   drawProgress(c, x.progress, fill, x.progressTrackColor, x0);
 }
 
 void renderDecorations(Canvas& c, const AppSpec& s, const GfxFont& font, uint32_t textColor,
-                       int iconWidth) {
+                       const SpecRender& r) {
   applyDrawOps(c, s, font, textColor);
-  renderProgress(c, s, iconWidth);
+  renderProgress(c, s, r.iconWidth);
+  const int column = textColumn(r);
   const AppSpecExtras& x = s.extras();
   const ColorSource chart(x.hasChartColor ? x.chartColor : textColor,
                           rampFor(x, x.chartUsesPalette));
-  drawBars(c, x.barChart, chart, x.chartAutoscale, iconWidth);
-  drawLineChart(c, x.lineChart, chart, x.chartAutoscale, iconWidth);
+  drawBars(c, x.barChart, chart, x.chartAutoscale, column);
+  drawLineChart(c, x.lineChart, chart, x.chartAutoscale, column);
 }
 
 
@@ -112,13 +114,15 @@ void renderText(Canvas& c, const AppSpec& s, const GfxFont& font, uint32_t color
   const text::TextMetrics m = text::measure(font, hasFragments ? fragRun : textStr);
   const int total = m.advance;
 
-  const int avail = c.width() - r.iconWidth;
+  const int column = textColumn(r);
+  const int avail = c.width() - column;
+  const bool animates = r.scroll && r.scroll->animates();
   float x;
   // Text that is not scrolling is centred in the space left of the icon and then clamped so it
   // can never run into it. Scrolling text takes the x the scroller worked out.
-  if (!r.scroll || !r.scroll->animates()) {
-    int xi = s.textCenter ? (r.iconWidth + (avail - m.inkWidth()) / 2 - m.inkLeft) : r.iconWidth;
-    if (xi + m.inkLeft < r.iconWidth) xi = r.iconWidth - m.inkLeft;
+  if (!animates) {
+    int xi = s.textCenter ? (column + (avail - m.inkWidth()) / 2 - m.inkLeft) : column;
+    if (xi + m.inkLeft < column) xi = column - m.inkLeft;
     x = static_cast<float>(xi);
   } else {
     x = r.textX;
@@ -136,7 +140,11 @@ void renderText(Canvas& c, const AppSpec& s, const GfxFont& font, uint32_t color
     paint.glyphCount = fragColors.size();
   }
 
+  // Scrolling text vanishes at the edge of the icon column rather than sliding up against the
+  // icon, so the gap stays clear. Static text is left alone, textOffsetX included.
+  if (animates) c.setClipX(r.textClipLeft, c.width() - 1);
   drawScrollRun(c, font, x, kBaseline, hasFragments ? fragRun : textStr, total, paint, r.scroll);
+  if (animates) c.clearClipX();
 }
 
 }
@@ -161,11 +169,11 @@ void renderSpec(Canvas& c, const AppSpec& s, const GfxFont& font, const SpecRend
   }
   const uint32_t textColor = s.hasTextColor ? s.textColor : r.defaultTextColor;
   if (s.textInFront) {
-    renderDecorations(c, s, font, textColor, r.iconWidth);
+    renderDecorations(c, s, font, textColor, r);
     renderText(c, s, font, textColor, r);
   } else {
     renderText(c, s, font, textColor, r);
-    renderDecorations(c, s, font, textColor, r.iconWidth);
+    renderDecorations(c, s, font, textColor, r);
   }
   // Dark red frame marks an app that outlived its lifetime and was kept rather than removed.
   if (s.lifeTimeEnd) c.drawRect(0, 0, c.width(), c.height(), 0x6e0700u);

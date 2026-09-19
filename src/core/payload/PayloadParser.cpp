@@ -9,6 +9,7 @@
 #include "core/payload/Base64.h"
 #include "core/payload/EffectSettingsJson.h"
 #include "core/payload/PaletteJson.h"
+#include "core/render/MatrixLayout.h"
 #include "core/sound/Rtttl.h"
 
 namespace awtrix {
@@ -26,7 +27,7 @@ const char* const kLifetimeExpiryNames[] = {"remove", "mark"};
 const char* const kAppKeys[] = {
     "text", "textCase", "font", "textInFront", "textCenter", "textColor",
     "textBlinkMs", "textFadeMs", "textOffsetX",
-    "backgroundColor", "icon", "icons", "iconMode", "iconOffsetX",
+    "backgroundColor", "icon", "icons", "iconMode", "iconOffsetX", "iconGap",
     "durationMs", "scroll", "repeat", "lifetimeMs", "lifetimeExpiry",
     "palette", "paletteBlend", "paletteSpan", "paletteSpeed",
     "barChart", "lineChart", "chartAutoscale", "chartColor",
@@ -513,6 +514,16 @@ Take takeIconMember(const std::string& k, api::JsonReader r, AppSpec& s, Dispatc
   if (k == "iconMode")
     return readEnumAt(r, "iconMode", kIconModeNames, s.iconMode, err) ? Take::Ok : Take::Failed;
   if (k == "iconOffsetX") { takeNum(r, s.iconOffsetX); return Take::Ok; }
+  if (k == "iconGap") {
+    long long v = 0;
+    if (!r.isInteger() || !r.asLong(v) || v < 0 || v > kMatrixWidthMax) {
+      if (err)
+        *err = {"iconGap", "expected an integer between 0 and " + std::to_string(kMatrixWidthMax)};
+      return Take::Failed;
+    }
+    s.iconGap = static_cast<int>(v);
+    return Take::Ok;
+  }
   if (k == "backgroundColor") {
     if (!readColorAt(r, "backgroundColor", s.backgroundColor, err)) return Take::Failed;
     s.hasBackgroundColor = true;

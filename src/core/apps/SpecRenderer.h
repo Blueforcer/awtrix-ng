@@ -13,7 +13,11 @@ namespace render {
 
 struct SpecRender {
   uint32_t defaultTextColor = 0xFFFFFFu;
+  // The icon's own width; text and charts start iconGap columns right of it.
   int iconWidth = 0;
+  int iconGap = 0;
+  // First column scrolling text may light; everything left of it belongs to the icon and its gap.
+  int textClipLeft = 0;
   int64_t nowMs = 0;
   float textX = 0;
   const ResolvedScroll* scroll = nullptr;

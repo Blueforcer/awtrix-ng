@@ -362,7 +362,7 @@ Full order: [Render order](../reference/payload.md#render-order).
 
 ## Combining with an icon
 
-An `icon` reserves 9px on the left - 8px of icon and a 1px gap. `barChart` and `lineChart` respect
+An `icon` reserves its own width plus `iconGap` on the left - 9px for an 8px icon with the default 1px gap. `barChart` and `lineChart` respect
 it and start at `x = 9`; `progress` starts at `x = 8`; draw commands ignore it completely and use
 raw coordinates, so they will paint over the icon.
 

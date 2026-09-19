@@ -61,7 +61,7 @@ export const KEY_MAP = {
 // NG payload keys that have no AWTRIX 3 spelling of their own. Together with
 // the KEY_MAP targets they form the set the engine recognises as "already
 // converted" -- anything outside both sets draws an unknown-key warning.
-export const NG_ONLY_KEYS = ["font", "iconOffsetX", "textInFront", "palette", "paletteBlend", "paletteSpan", "paletteSpeed", "chartColor", "scroll", "name", "durationMs", "lifetimeMs", "lifetimeExpiry", "textColor", "backgroundColor", "iconMode", "textOffsetX", "textCenter", "textBlinkMs", "textFadeMs", "barChart", "lineChart", "chartAutoscale", "progressColor", "progressTrackColor", "soundRtttl", "soundLoop", "effectSpeed"];
+export const NG_ONLY_KEYS = ["font", "iconOffsetX", "iconGap", "textInFront", "palette", "paletteBlend", "paletteSpan", "paletteSpeed", "chartColor", "scroll", "name", "durationMs", "lifetimeMs", "lifetimeExpiry", "textColor", "backgroundColor", "iconMode", "textOffsetX", "textCenter", "textBlinkMs", "textFadeMs", "barChart", "lineChart", "chartAutoscale", "progressColor", "progressTrackColor", "soundRtttl", "soundLoop", "effectSpeed"];
 
 // AWTRIX 3 draw command codes and the NG command names, one to one.
 export const DRAW_MAP = {"dp": "pixel", "dl": "line", "dr": "rect", "df": "rectFill", "dc": "circle", "dfc": "circleFill", "dt": "text", "db": "bitmap"};

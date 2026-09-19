@@ -1146,8 +1146,158 @@ static void test_icon_reloads_only_when_the_icon_changes() {
   TEST_ASSERT_EQUAL_STRING("two", r.icons.lastId.c_str());
 }
 
+static bool columnLit(const Canvas& c, int x) {
+  for (int y = 0; y < c.height(); ++y)
+    if (c.getPixel(x, y) != 0) return true;
+  return false;
+}
+
+static void test_scrolling_text_keeps_a_dark_column_beside_a_fixed_icon() {
+  Rig r;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "a",
+                       "{\"text\":\"AAAAAAAAAAAA\",\"icon\":\"1\"}"));
+  r.engine.execute(switchFast("a"));
+  int litGapFrames = 0, textPastGapFrames = 0;
+  for (int64_t t = 0; t <= 4000; t += 50) {
+    r.engine.tick(t);
+    r.pipe->renderFrame(r.canvas, t);
+    if (columnLit(r.canvas, 8)) ++litGapFrames;
+    if (r.pipe->textX() < 8.0f) ++textPastGapFrames;
+  }
+  TEST_ASSERT_TRUE_MESSAGE(textPastGapFrames > 0, "the text must scroll past the icon");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(0, litGapFrames, "column 8 must separate icon and text");
+}
+
+static void test_a_pushed_icon_keeps_the_dark_column_without_clipping_the_text() {
+  Rig r;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "a",
+                       "{\"text\":\"AAAAAAAAAAAA\",\"icon\":\"1\",\"iconMode\":\"push\"}"));
+  r.engine.execute(switchFast("a"));
+  int partialFrames = 0;
+  for (int64_t t = 0; t <= 4000; t += 50) {
+    r.engine.tick(t);
+    r.pipe->renderFrame(r.canvas, t);
+    const int ix = r.icons.lastBlitX;
+    if (ix <= -9 || ix >= 0) continue;
+    ++partialFrames;
+    TEST_ASSERT_FALSE_MESSAGE(columnLit(r.canvas, ix + 8), "the gap travels with the icon");
+    TEST_ASSERT_TRUE_MESSAGE(columnLit(r.canvas, ix + 9), "the text right of the gap is drawn");
+  }
+  TEST_ASSERT_TRUE_MESSAGE(partialFrames > 0, "the icon must be partly pushed at some point");
+}
+
+static void test_static_text_can_still_be_offset_into_the_gap_column() {
+  Rig r;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "a",
+      "{\"text\":\"A\",\"icon\":\"1\",\"textCenter\":false,\"textOffsetX\":-1}"));
+  r.engine.execute(switchFast("a"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+  TEST_ASSERT_TRUE(columnLit(r.canvas, 8));
+}
+
+static int firstTextColumn(const Canvas& c) {
+  for (int x = 0; x < c.width(); ++x)
+    for (int y = 0; y < c.height(); ++y) {
+      const uint32_t p = c.getPixel(x, y);
+      if (p != 0 && p != 0xABCDEFu) return x;
+    }
+  return -1;
+}
+
+static void showPushed(Rig& r, const char* json) {
+  r.engine.execute(cmd(CommandType::SetPushedApp, "a", json));
+  r.engine.execute(switchFast("a"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+}
+
+static void test_icon_gap_sets_where_static_text_starts() {
+  Rig wide;
+  showPushed(wide, "{\"text\":\"A\",\"icon\":\"1\",\"textCenter\":false,\"iconGap\":3}");
+  TEST_ASSERT_EQUAL_INT(11, firstTextColumn(wide.canvas));
+
+  Rig none;
+  showPushed(none, "{\"text\":\"A\",\"icon\":\"1\",\"textCenter\":false,\"iconGap\":0}");
+  TEST_ASSERT_EQUAL_INT(8, firstTextColumn(none.canvas));
+}
+
+static void test_scrolling_text_never_enters_a_wider_icon_gap() {
+  Rig r;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "a",
+                       "{\"text\":\"AAAAAAAAAAAA\",\"icon\":\"1\",\"iconGap\":3}"));
+  r.engine.execute(switchFast("a"));
+  int litGapFrames = 0, textPastGapFrames = 0;
+  for (int64_t t = 0; t <= 4000; t += 50) {
+    r.engine.tick(t);
+    r.pipe->renderFrame(r.canvas, t);
+    if (columnLit(r.canvas, 8) || columnLit(r.canvas, 9) || columnLit(r.canvas, 10))
+      ++litGapFrames;
+    if (r.pipe->textX() < 11.0f && firstTextColumn(r.canvas) == 11) ++textPastGapFrames;
+  }
+  TEST_ASSERT_TRUE_MESSAGE(textPastGapFrames > 0, "the text must scroll past the gap");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(0, litGapFrames, "columns 8 to 10 must stay dark");
+}
+
+static void test_a_wide_icon_reserves_its_own_width_plus_the_gap() {
+  Rig still;
+  still.icons.w = 12;
+  showPushed(still, "{\"text\":\"A\",\"icon\":\"1\",\"textCenter\":false}");
+  TEST_ASSERT_FALSE(columnLit(still.canvas, 12));
+  TEST_ASSERT_EQUAL_INT(13, firstTextColumn(still.canvas));
+
+  Rig moving;
+  moving.icons.w = 12;
+  moving.engine.execute(cmd(CommandType::SetPushedApp, "a",
+                            "{\"text\":\"AAAAAAAAAAAA\",\"icon\":\"1\"}"));
+  moving.engine.execute(switchFast("a"));
+  for (int64_t t = 0; t <= 4000; t += 50) {
+    moving.engine.tick(t);
+    moving.pipe->renderFrame(moving.canvas, t);
+    TEST_ASSERT_FALSE_MESSAGE(columnLit(moving.canvas, 12), "column 12 is the gap");
+  }
+}
+
+static void test_a_wide_icon_moves_the_progress_bar_to_its_right_edge() {
+  Rig r;
+  r.icons.w = 12;
+  showPushed(r, "{\"icon\":\"1\",\"progress\":50,"
+                "\"progressColor\":\"#FF0000\",\"progressTrackColor\":\"#0000FF\"}");
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, r.canvas.getPixel(21, 7));
+  TEST_ASSERT_EQUAL_HEX32(0x0000FFu, r.canvas.getPixel(22, 7));
+}
+
+static void test_a_pushed_icon_carries_the_whole_gap_off_the_panel() {
+  Rig r;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "a",
+      "{\"text\":\"AAAAAAAAAAAA\",\"icon\":\"1\",\"iconMode\":\"push\",\"iconGap\":3}"));
+  r.engine.execute(switchFast("a"));
+  int partialFrames = 0, furthest = 0;
+  for (int64_t t = 0; t <= 4000; t += 50) {
+    r.engine.tick(t);
+    r.pipe->renderFrame(r.canvas, t);
+    const int ix = r.icons.lastBlitX;
+    furthest = std::min(furthest, ix);
+    if (ix <= -8 || ix >= 0) continue;
+    ++partialFrames;
+    for (int g = 8; g <= 10; ++g)
+      TEST_ASSERT_FALSE_MESSAGE(columnLit(r.canvas, ix + g), "the gap travels with the icon");
+    TEST_ASSERT_TRUE_MESSAGE(columnLit(r.canvas, ix + 11), "the text follows the gap");
+  }
+  TEST_ASSERT_TRUE(partialFrames > 0);
+  TEST_ASSERT_EQUAL_INT(-11, furthest);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_icon_gap_sets_where_static_text_starts);
+  RUN_TEST(test_scrolling_text_never_enters_a_wider_icon_gap);
+  RUN_TEST(test_a_wide_icon_reserves_its_own_width_plus_the_gap);
+  RUN_TEST(test_a_wide_icon_moves_the_progress_bar_to_its_right_edge);
+  RUN_TEST(test_a_pushed_icon_carries_the_whole_gap_off_the_panel);
+  RUN_TEST(test_scrolling_text_keeps_a_dark_column_beside_a_fixed_icon);
+  RUN_TEST(test_a_pushed_icon_keeps_the_dark_column_without_clipping_the_text);
+  RUN_TEST(test_static_text_can_still_be_offset_into_the_gap_column);
   RUN_TEST(test_inplace_update_to_longer_text_starts_scrolling);
   RUN_TEST(test_inplace_update_with_identical_content_does_not_restart_scroll);
   RUN_TEST(test_icon_reloads_only_when_the_icon_changes);

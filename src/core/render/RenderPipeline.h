@@ -99,8 +99,7 @@ class RenderPipeline {
   void refreshPageContent(int64_t nowMs, bool isNotif);
   const GfxFont& fontFor(const AppSpec* spec) const;
 
-  render::ScrollLayout scrollLayoutFor(const AppSpec* spec, int canvasWidth,
-                                       bool iconReservesColumn) const;
+  render::ScrollLayout scrollLayoutFor(const AppSpec* spec, int canvasWidth, int column) const;
   void applyScroll(PageSlot& slot, const AppSpec* spec, int64_t nowMs);
   void advanceScroll(PageSlot& slot, const AppSpec* spec, int64_t nowMs, int parkAfter);
   int scrollParkAfter(const AppSpec* spec, bool isNotif) const;
@@ -108,6 +107,7 @@ class RenderPipeline {
   void loadPlacedIcons(PageSlot& slot, const AppSpec* spec, int64_t nowMs);
   void advanceIcons(PageSlot& slot, int64_t nowMs);
   bool iconIsFullScreen(const PageSlot* slot, int canvasWidth) const;
+  int iconColumn(const AppSpec& spec, const PageSlot* slot) const;
   const AppSpec* pageSpec(const std::string& id, bool isNotif) const;
   int iconShift(const AppSpec& spec, const PageSlot& slot) const;
 

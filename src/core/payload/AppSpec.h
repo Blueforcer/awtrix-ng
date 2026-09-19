@@ -92,6 +92,7 @@ struct AppSpec {
   std::string icon;
   IconMode iconMode = IconMode::Fixed;
   int iconOffsetX = 0;
+  int iconGap = 1;
   int textOffsetX = 0;
 
   int repeat = 0;
