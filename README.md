@@ -17,8 +17,8 @@ or skip the middleman entirely and **run your app on the device itself.**
 📖 **[Documentation](https://blueforcer.github.io/awtrix-ng/)** &nbsp;·&nbsp;
 🌐 **[AWTRIX Hub](https://awtrix.de)** &nbsp;·&nbsp;
 🚀 [Discord](https://discord.gg/5pbmeCrs3a) &nbsp;·&nbsp;
-⚡ [On-device scripting](#-run-your-app-on-the-device) &nbsp;·&nbsp;
-🔌 [Integrations](#-control-it-from-anything)
+⚡ [On-device scripting](#or-let-it-think-for-itself) &nbsp;·&nbsp;
+🔌 [Features](#-what-you-get)
 
 </div>
 
@@ -78,14 +78,14 @@ animations in the browser, and you can share anything you make back to the galle
 
 ## ✨ What you get
 
-- ⚡ **Apps that run on the device** - edited in the browser, surviving reboots
-- 🎨 **Real graphics** - scrolling colored text, icons, charts, background effects, weather overlays
-- 📥 **Push from anywhere** - screens into the rotation, or a one-shot alert that cuts in front
-- 🏠 **Home Assistant** - MQTT auto-discovery, no YAML
-- 🌡️ **Sensors** - auto-detected temperature/humidity, auto-brightness, battery
-- 🔊 **Sound** - RTTTL melodies through the buzzer or a DFPlayer
-- 🖥️ **Web UI on the device** - live matrix preview, script editor, every setting. No app, no cloud
-- ⚙️ **One image, any board** - pins are settings, not a build flavour
+- ⚡ **Apps that run on the device** - Berry scripts edited in the browser, surviving reboots, with their own settings, HTTP, MQTT and Modbus TCP
+- 📥 **Push from anywhere** - a pushed app that keeps its slot in the rotation, or a notification that cuts in front. HTTP or MQTT
+- 🎨 **Real graphics** - colored scrolling text, JPEG/GIF icons, charts, draw primitives, 19 effects, weather overlays, 22 transitions, custom palettes
+- 🔊 **Sound** - RTTTL melodies, your own MP3s, DFPlayer tracks, and **internet radio** on an ESP32-S3 - scripts can even draw the spectrum and beat
+- 🏠 **Integrations** - Home Assistant via MQTT auto-discovery, Art-Net pixel streaming, `/fullscreen` for a dashboard iframe
+- 🌡️ **Sensors** - temperature/humidity, auto-brightness, battery, buttons with a webhook
+- 🖥️ **Web UI on the device** - live preview, screenshot and GIF, script, icon and palette editors, backup, every setting. No app, no cloud
+- ⚙️ **One image, any board** - ESP32 and ESP32-S3; pins, panel width (32-128 px) and color order are settings, not a build flavour
 
 ## 🚀 Get going
 
