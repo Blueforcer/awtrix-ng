@@ -25,14 +25,18 @@ static const GfxFont kHighFont = {kB, highGlyphs(), 0xB0, 0xC2, 8};
 static const FontGlyph kWideG[] = {{0, 3, 3, 8, 0, 0}};
 static const GfxFont kWideFont = {kB, kWideG, 'A', 'A', 8};
 
-struct FakeIcon : script::IScriptIcon {
-  long lastNowMs = -1;
-  bool draw(Canvas& canvas, const std::string& name, int x, int y, int64_t nowMs) override {
+struct FakeIcon : script::IScriptIconSet {
+  int64_t firstNowMs = -1;
+  int64_t lastNowMs = -1;
+  int calls = 0;
+  bool draw(Canvas& canvas, std::string_view name, int x, int y, int64_t nowMs) override {
+    if (calls++ == 0) firstNowMs = nowMs;
     lastNowMs = nowMs;
     if (name == "missing") return false;
     canvas.setPixel(x, y, 0x00ABCDu);
     return true;
   }
+  void release() override {}
 };
 
 static script::ScriptServices g_svc;
@@ -41,10 +45,12 @@ static long g_ms = 0;
 
 void setUp() {
   g_ms = 0;
+  g_icon.firstNowMs = -1;
   g_icon.lastNowMs = -1;
+  g_icon.calls = 0;
   g_svc.http = nullptr;
   g_svc.mqtt = nullptr;
-  g_svc.icon = &g_icon;
+  g_svc.icon = nullptr;
   g_svc.storeSink = nullptr;
   g_svc.monotonicMs = [] { return g_ms; };
   script::setServices(&g_svc);
@@ -69,10 +75,11 @@ static void drawWith(const GfxFont& font, const char* user, Canvas& c) {
   script::BerryVM vm;
   TEST_ASSERT_TRUE(load(vm, user));
   RenderCtx ctx;
+  ctx.nowMs = g_ms;
   ctx.font = &font;
   ctx.fonts[0] = &font;
   ctx.fonts[1] = &kWideFont;
-  script::BindingScope s(&c, &ctx, "T");
+  script::BindingScope s(&c, &ctx, "T", nullptr, &g_icon);
   TEST_ASSERT_TRUE(vm.call("draw"));
 }
 
@@ -223,6 +230,53 @@ static void test_icon_forwards_animation_clock() {
   TEST_ASSERT_EQUAL_HEX32(0x00ABCDu, c.getPixel(3, 0));
 }
 
+static void test_icon_calls_share_render_timestamp_while_monotonic_clock_advances() {
+  Canvas c(32, 8);
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(load(vm, "def draw() icon('a', 0, 0) icon('b', 8, 0) end"));
+  g_ms = 9000;
+  g_svc.monotonicMs = [] { return ++g_ms; };
+  RenderCtx ctx;
+  ctx.nowMs = 4200;
+  {
+    script::BindingScope scope(&c, &ctx, "T", nullptr, &g_icon);
+    TEST_ASSERT_TRUE(vm.call("draw"));
+  }
+  TEST_ASSERT_EQUAL_INT(2, g_icon.calls);
+  TEST_ASSERT_EQUAL_INT64(4200, g_icon.firstNowMs);
+  TEST_ASSERT_EQUAL_INT64(4200, g_icon.lastNowMs);
+  TEST_ASSERT_EQUAL_INT(9000, g_ms);
+}
+
+static void test_icon_without_render_context_uses_monotonic_clock() {
+  Canvas c(32, 8);
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(load(vm, "def draw() icon('a', 0, 0) icon('b', 8, 0) end"));
+  g_ms = 9000;
+  g_svc.monotonicMs = [] { return ++g_ms; };
+  {
+    script::BindingScope scope(&c, nullptr, "T", nullptr, &g_icon);
+    TEST_ASSERT_TRUE(vm.call("draw"));
+  }
+  TEST_ASSERT_EQUAL_INT(2, g_icon.calls);
+  TEST_ASSERT_EQUAL_INT64(9001, g_icon.firstNowMs);
+  TEST_ASSERT_EQUAL_INT64(9002, g_icon.lastNowMs);
+}
+
+static void test_icon_without_a_set_returns_false_and_draws_nothing() {
+  Canvas c(32, 8);
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(load(vm, "def draw() pixel(0, 0, icon('a', 4, 0) ? 0xFF0000 : 0x00FF00) end"));
+  RenderCtx ctx;
+  {
+    script::BindingScope scope(&c, &ctx, "T");
+    TEST_ASSERT_TRUE(vm.call("draw"));
+  }
+  TEST_ASSERT_EQUAL_INT(0, g_icon.calls);
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(4, 0));
+}
+
 static void test_icon_unknown_returns_false() {
   Canvas c(32, 8);
   draw("def draw() pixel(0, 0, icon('missing', 0, 0) ? 0xFF0000 : 0x00FF00) end", c);
@@ -358,6 +412,9 @@ int main(int, char**) {
   RUN_TEST(test_missing_colour_args_read_as_zero);
   RUN_TEST(test_progress_without_args_draws_nothing);
   RUN_TEST(test_icon_forwards_animation_clock);
+  RUN_TEST(test_icon_calls_share_render_timestamp_while_monotonic_clock_advances);
+  RUN_TEST(test_icon_without_render_context_uses_monotonic_clock);
+  RUN_TEST(test_icon_without_a_set_returns_false_and_draws_nothing);
   RUN_TEST(test_icon_unknown_returns_false);
   RUN_TEST(test_no_canvas_is_a_silent_noop);
   return UNITY_END();

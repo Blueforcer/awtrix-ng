@@ -2,6 +2,7 @@
 
 #include <LittleFS.h>
 #include <esp_flash.h>
+#include <esp_littlefs.h>
 #include <esp_partition.h>
 
 #include "system/Log.h"
@@ -36,12 +37,20 @@ void checkFlashFitsTable() {
 bool begin() {
   checkFlashFitsTable();
   // The true formats on a failed mount, which is what a freshly flashed board needs.
-  if (!LittleFS.begin(true)) return false;
+  if (!LittleFS.begin(true, kMountPoint, 10, kPartitionLabel)) return false;
   ensureDir("/ICONS");
   ensureDir("/PALETTES");
   ensureDir("/MELODIES");
   ensureDir("/SCRIPTS");
   return true;
+}
+
+bool usage(std::size_t& totalBytes, std::size_t& usedBytes) {
+  size_t total = 0, used = 0;
+  const bool ok = esp_littlefs_info(kPartitionLabel, &total, &used) == ESP_OK;
+  totalBytes = ok ? total : 0;
+  usedBytes = ok ? used : 0;
+  return ok;
 }
 
 }

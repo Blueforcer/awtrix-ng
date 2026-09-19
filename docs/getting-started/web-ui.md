@@ -374,8 +374,8 @@ download the file or delete it after a second click to confirm.
 **Add** takes `.png`, `.jpg`, `.jpeg` and `.gif`, 8×8 for a static icon. PNG and JPG are turned into
 a GIF as they upload - sharper on the panel and smaller on AWTRIX - so `smiley.png` becomes
 `smiley.gif`, replacing an older `smiley.jpg` if you had one. Animated GIFs stay animated, and a
-full-width (32×8) animated GIF is also accepted - it renders as a background across the whole panel
-rather than a single icon tile; see [Payload → Icon](../reference/payload.md#icon).
+full-width animated GIF can cover your display behind the text. Keep the GIF within your
+display's width and height; see [Payload → Icon](../reference/payload.md#icon).
 
 Files upload one at a time, each with its own progress line.
 

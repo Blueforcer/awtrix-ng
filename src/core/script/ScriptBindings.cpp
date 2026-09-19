@@ -49,6 +49,7 @@ struct Ctx {
   bool storeDirty = false;
   const GfxFont* font = nullptr;
   ScrollBank* scroll = nullptr;
+  IScriptIconSet* icons = nullptr;
 };
 
 Ctx g_ctx;
@@ -446,9 +447,10 @@ int b_text_ink_width(bvm* vm) {
 
 int b_icon(bvm* vm) {
   bool ok = false;
-  if (canDraw(vm, 3) && g_svc && g_svc->icon && be_isstring(vm, 1)) {
-    const int64_t nowMs = (g_svc && g_svc->monotonicMs) ? g_svc->monotonicMs() : 0;
-    ok = g_svc->icon->draw(*g_ctx.canvas, be_tostring(vm, 1), argInt(vm, 2), argInt(vm, 3), nowMs);
+  if (canDraw(vm, 3) && g_ctx.icons && be_isstring(vm, 1)) {
+    const int64_t frameMs = g_ctx.rctx ? g_ctx.rctx->nowMs : nowMs();
+    ok = g_ctx.icons->draw(*g_ctx.canvas, std::string_view(be_tostring(vm, 1)), argInt(vm, 2),
+                           argInt(vm, 3), frameMs);
   }
   be_pushbool(vm, ok);
   be_return(vm);
@@ -1261,12 +1263,13 @@ void setServices(const ScriptServices* s) {
 const ScriptServices* services() { return g_svc; }
 
 BindingScope::BindingScope(Canvas* canvas, const RenderCtx* ctx, const std::string& name,
-                           ScrollBank* scroll) {
+                           ScrollBank* scroll, IScriptIconSet* icons) {
   g_ctx.canvas = canvas;
   g_ctx.rctx = ctx;
   g_ctx.name = name;
   g_ctx.font = nullptr;
   g_ctx.scroll = scroll;
+  g_ctx.icons = icons;
 }
 
 // Note what is NOT cleared: a pending store write outlives the scope on purpose, because the
@@ -1277,6 +1280,7 @@ BindingScope::~BindingScope() {
   g_ctx.name.clear();
   g_ctx.font = nullptr;
   g_ctx.scroll = nullptr;
+  g_ctx.icons = nullptr;
 }
 
 bool BindingScope::storeFlushPending() { return g_ctx.storeDirty; }

@@ -3,6 +3,7 @@
 #include <LittleFS.h>
 #include <Update.h>
 #include <WiFi.h>
+#include <dirent.h>
 #include <esp_heap_caps.h>
 // Included by name rather than left to the Arduino headers: the image marker below reads
 // CONFIG_SPIRAM_MODE_QUAD out of it, and an absent macro reads as octal - which is the wrong
@@ -18,6 +19,7 @@
 #include "core/ProvisioningPolicy.h"
 #include "core/api/ApiRouter.h"
 #include "core/api/MelodiesApi.h"
+#include "core/api/JsonStream.h"
 #include "core/api/JsonWriter.h"
 #include "core/api/StateJson.h"
 #include "core/backup/RestoreApplier.h"
@@ -28,10 +30,13 @@
 #include "core/script/ScriptHost.h"
 #include "core/script/ScriptServices.h"
 #include "hal/IBoard.h"
+#include "media/AssetFile.h"
 #include "persistence/DeviceConfig.h"
+#include "persistence/Filesystem.h"
 #include "persistence/FsRestoreSink.h"
 #include "persistence/IconOriginsStore.h"
 #include "persistence/SystemConfigApply.h"
+#include "persistence/VfsFile.h"
 #include "system/HeapCaps.h"
 #include "system/HeapProbe.h"
 #include "transport/http/UpdateImage.h"
@@ -58,6 +63,15 @@ constexpr unsigned long kSilentClientGraceMs = 50;
 
 constexpr std::size_t kBodyCopyMarginBytes = 4 * 1024;
 
+constexpr std::size_t kListBatchBytes = 1024;
+constexpr std::size_t kListEntryReserveBytes = 128;
+
+String storageTail() {
+  std::size_t total = 0, used = 0;
+  fs::usage(total, used);
+  return String("],\"usedBytes\":") + used + ",\"totalBytes\":" + total + "}";
+}
+
 class RawWebServer : public WebServer {
  public:
   using WebServer::WebServer;
@@ -83,6 +97,10 @@ const char* methodName(HTTPMethod m) {
     case HTTP_DELETE: return "DELETE";
     default: return "ANY";
   }
+}
+
+void sendChunk(void* server, const char* data, size_t len) {
+  static_cast<WebServer*>(server)->sendContent(data, len);
 }
 
 }
@@ -954,26 +972,35 @@ bool HttpApiServer::serveDiagnostics(const Request& req) {
       sendJson(202, "{\"scanning\":true}");
       return true;
     }
-    std::string out;
-    api::JsonWriter w(out);
-    w.beginArray();
+    server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server_->send(200, "application/json", "");
+    api::JsonStream out(sendChunk, server_);
+    out.put('[');
     for (int i = 0; i < n; ++i) {
-      w.beginObject();
-      w.member("ssid", std::string(WiFi.SSID(i).c_str()));
-      w.member("rssi", static_cast<int>(WiFi.RSSI(i)));
-      w.member("enc", WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
-      w.endObject();
+      if (i) out.put(',');
+      out.put("{\"ssid\":");
+      out.putString(WiFi.SSID(i).c_str());
+      out.put(",\"rssi\":");
+      out.putInt(WiFi.RSSI(i));
+      out.put(",\"enc\":");
+      out.put(WiFi.encryptionType(i) != WIFI_AUTH_OPEN ? "true" : "false");
+      out.put('}');
     }
-    w.endArray();
+    out.put(']');
+    out.flush();
+    server_->sendContent("");
     WiFi.scanDelete();
-    sendJson(200, out);
     return true;
   }
 
   if (req.path == "/api/v1/logs") {
     const uint32_t after =
         server_->hasArg("after") ? strtoul(server_->arg("after").c_str(), nullptr, 10) : 0;
-    sendJson(200, logbuf::jsonAfter(after));
+    server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server_->send(200, "application/json", "");
+    api::JsonStream out(sendChunk, server_);
+    logbuf::streamJsonAfter(after, out);
+    server_->sendContent("");
     return true;
   }
   return false;
@@ -1022,24 +1049,24 @@ bool HttpApiServer::serveSounds(const Request& req) {
     server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
     server_->send(200, "application/json", "");
     server_->sendContent("{\"melodies\":[");
-    File root = LittleFS.open("/MELODIES");
     bool first = true;
-    if (root && root.isDirectory())
-      for (File f = root.openNextFile(); f; f = root.openNextFile()) {
-        const std::string name = api::melodies::nameFromFile(std::string(f.name()));
+    if (DIR* root = ::opendir(fs::vfsPath("/MELODIES").c_str())) {
+      while (const dirent* e = ::readdir(root)) {
+        const std::string name = api::melodies::nameFromFile(std::string(e->d_name));
         if (name.empty()) continue;
+        media::PodBuffer<uint8_t> raw;
         std::string content;
-        content.reserve(f.size());
-        while (f.available()) content.push_back(static_cast<char>(f.read()));
+        if (media::readAsset(std::string("/MELODIES/") + e->d_name, raw))
+          content.assign(reinterpret_cast<const char*>(raw.data()), raw.size());
         const std::string entry =
             (first ? "" : ",") +
-            api::melodies::entryJson(name, content, static_cast<uint32_t>(f.size()));
+            api::melodies::entryJson(name, content, static_cast<uint32_t>(content.size()));
         server_->sendContent(entry.c_str());
         first = false;
       }
-    const String tail = String("],\"usedBytes\":") + LittleFS.usedBytes() +
-                        ",\"totalBytes\":" + LittleFS.totalBytes() + "}";
-    server_->sendContent(tail);
+      ::closedir(root);
+    }
+    server_->sendContent(storageTail());
     server_->sendContent("");
     return true;
   }
@@ -1116,22 +1143,29 @@ void HttpApiServer::listDir(const char* dir) {
   server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server_->send(200, "application/json", "");
   server_->sendContent("{\"files\":[");
-  File root = LittleFS.open(dir);
-  bool first = true;
-  if (root && root.isDirectory())
-    for (File f = root.openNextFile(); f; f = root.openNextFile()) {
-      std::string entry = first ? "" : ",";
+  const std::string base = dir;
+  std::string batch;
+  batch.reserve(kListBatchBytes + kListEntryReserveBytes);
+  if (DIR* root = dir[0] == '/' ? ::opendir(fs::vfsPath(base).c_str()) : nullptr) {
+    bool first = true;
+    while (const dirent* e = ::readdir(root)) {
+      if (!first) batch += ',';
       first = false;
-      api::JsonWriter ew(entry);
+      api::JsonWriter ew(batch);
       ew.beginObject();
-      ew.member("name", std::string(f.name()));
-      ew.member("size", static_cast<unsigned long>(f.size()));
+      ew.member("name", std::string(e->d_name));
+      const long size = e->d_type == DT_DIR ? 0 : fs::fileSize(base + "/" + e->d_name);
+      ew.member("size", static_cast<unsigned long>(size > 0 ? size : 0));
       ew.endObject();
-      server_->sendContent(entry.c_str());
+      if (batch.size() >= kListBatchBytes) {
+        server_->sendContent(batch.c_str(), batch.size());
+        batch.clear();
+      }
     }
-  const String tail = String("],\"usedBytes\":") + LittleFS.usedBytes() +
-                      ",\"totalBytes\":" + LittleFS.totalBytes() + "}";
-  server_->sendContent(tail);
+    ::closedir(root);
+  }
+  if (!batch.empty()) server_->sendContent(batch.c_str(), batch.size());
+  server_->sendContent(storageTail());
   server_->sendContent("");
 }
 

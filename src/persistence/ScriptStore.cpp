@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "persistence/Filesystem.h"
 #include "system/Log.h"
 
 namespace awtrix {
@@ -47,11 +48,11 @@ bool writeFile(const String& path, const std::string& body) {
   return true;
 }
 
-// usedBytes() walks the whole block allocation to add its answer up, so this is the reading
+// fs::usage() walks the whole block allocation to add its answer up, so this is the reading
 // FsFreeSpace exists to keep off the hot path.
 std::size_t readFreeBytes() {
-  const std::size_t total = LittleFS.totalBytes();
-  const std::size_t used = LittleFS.usedBytes();
+  std::size_t total = 0, used = 0;
+  fs::usage(total, used);
   return total > used ? total - used : 0;
 }
 

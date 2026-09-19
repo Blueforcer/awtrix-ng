@@ -482,7 +482,7 @@ build the same number from plain channel values.
 | `text_width(str)` | how far the pen moves - use it to chain runs and to space repeats | `var w = text_width("hi")` |
 | `text_ink_width(str)` | how wide the lit pixels are - use it to fit and to centre | `var w = text_ink_width("hi")` |
 | `font(name)` | switch to `"small"` or `"large"` for the rest of the frame | `font("large")` |
-| `icon(name, x, y)` | an 8×8 icon by name; `false` if it could not be drawn | `icon("1234", 0, 0)` |
+| `icon(name, x, y)` | an icon by name at its own size - JPG 8×8, GIF up to the panel dimensions; `false` if it could not be drawn | `icon("1234", 0, 0)` |
 | `rgb(r, g, b)` | pack a colour from channels (0–255) | `pixel(0, 0, rgb(255, 128, 0))` |
 | `hsv(h, s, v)` | pack a colour from hue/sat/val (h 0–360, s/v 0–100) | `hsv(second() * 6, 100, 100)` |
 
@@ -516,11 +516,39 @@ colour of its own, uses the colour of the call, and `font("large")` applies to a
 the same thing a [pushed app](../reference/payload.md#colored-fragments) does when its `text` is
 an array rather than a string.
 
-`icon()` draws from the same `/ICONS` folder the rest of AWTRIX uses - see [Icons & assets](icons.md). Give it the bare name, no path and no extension. **An animated GIF animates** - draw the same icon each frame and it plays, on the same schedule a [pushed app](pushed-apps.md)'s icon uses. A handful of icons stay cached, so cycling through a small set is cheap while fanning out over many costs a read each time.
+`icon()` draws an installed icon by name — see [Icons & assets](icons.md). Use the file name
+without its path or extension. A JPG is 8×8; a GIF uses its own size and must fit your display.
+A full-width GIF at `(0, 0)` covers the panel. Text or images drawn after it appear on top.
+Call `icon()` in `draw()` to keep an animated GIF playing automatically.
 
-`icon()` returns `false` for a name AWTRIX does not have, and briefly also when it is
-short on memory - that second case heals itself within a few seconds, but the icon draws
-nothing meanwhile. If a hole would be worse than a placeholder, paint one:
+Call `icon()` several times to show several icons. Each GIF uses its own colours and frame
+timing, so different icons can animate at different speeds. This example uses five installed
+8×8 icons and needs a display at least 40 pixels wide:
+
+```berry
+class Weather
+  def draw()
+    clear()
+    icon("sun", 0, 0)
+    icon("rain", 8, 0)
+    icon("cloud", 16, 0)
+    icon("wind", 24, 0)
+    icon("moon", 32, 0)
+  end
+end
+return Weather()
+```
+
+`x` and `y` position the icon's top-left corner. Parts outside the display are clipped.
+If icons overlap, the later call draws on top. Drawing the same icon name at two positions
+shows matching animation frames in both places. An animated icon starts from
+its first frame each time the app comes on screen.
+
+Up to **4 different icon names** can be drawn in one display frame. Calls for further names
+return `false`.
+
+`icon()` returns `false` when an icon cannot be displayed, for example if the file is missing
+or the device has insufficient memory. To show a placeholder instead of an empty space:
 
 ```berry
 if !icon(self.ic, 0, 0)

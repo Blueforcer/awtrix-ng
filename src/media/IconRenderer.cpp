@@ -26,7 +26,8 @@ bool jpgOutput(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
 }
 }
 
-bool draw(Canvas& canvas, const std::string& iconId, int x, int y) {
+bool draw(Canvas& canvas, const std::string& iconId, int x, int y, bool* outOfMemory) {
+  if (outOfMemory) *outOfMemory = false;
   media::PodBuffer<uint8_t> buf;
   std::string path;
   // Same convention as GifPlayer: anything longer than a plausible filename is inline base64.
@@ -34,6 +35,7 @@ bool draw(Canvas& canvas, const std::string& iconId, int x, int y) {
     const auto* in = reinterpret_cast<const unsigned char*>(iconId.c_str());
     const unsigned int maxLen = decode_base64_length(in, iconId.size());
     if (!buf.resize(maxLen)) {
+      if (outOfMemory) *outOfMemory = true;
       logf("icon: no memory for inline icon");
       return false;
     }
@@ -45,8 +47,10 @@ bool draw(Canvas& canvas, const std::string& iconId, int x, int y) {
     buf.resize(n);
   } else {
     path = "/ICONS/" + iconId + ".jpg";
-    if (!media::readAsset(path, buf)) {
-      logf("icon: %s missing or empty", path.c_str());
+    bool oom = false;
+    if (!media::readAsset(path, buf, &oom)) {
+      if (outOfMemory) *outOfMemory = oom;
+      logf(oom ? "icon: no memory for %s" : "icon: %s missing or empty", path.c_str());
       return false;
     }
   }

@@ -3,7 +3,9 @@
 #include <cstddef>
 #include <cstring>
 #include <memory>
+#include <limits>
 #include <type_traits>
+#include <utility>
 
 #include "media/MediaHeap.h"
 
@@ -17,14 +19,34 @@ class PodBuffer {
   static_assert(std::is_trivially_copyable<T>::value, "PodBuffer is for POD-like elements only");
 
  public:
+  PodBuffer() = default;
+  PodBuffer(const PodBuffer&) = delete;
+  PodBuffer& operator=(const PodBuffer&) = delete;
+  PodBuffer(PodBuffer&& other) noexcept
+      : data_(std::move(other.data_)), size_(std::exchange(other.size_, 0)),
+        cap_(std::exchange(other.cap_, 0)) {}
+  PodBuffer& operator=(PodBuffer&& other) noexcept {
+    if (this != &other) {
+      data_ = std::move(other.data_);
+      size_ = std::exchange(other.size_, 0);
+      cap_ = std::exchange(other.cap_, 0);
+    }
+    return *this;
+  }
+
   // Shrinking only moves the size; capacity is kept so the decoders can size a buffer to the
   // worst case and then trim it to what they actually produced without a second allocation.
-  bool resize(std::size_t n) {
+  bool resize(std::size_t n, std::size_t maxCapacity =
+                  std::numeric_limits<std::size_t>::max() / sizeof(T)) {
+    const std::size_t limit = std::numeric_limits<std::size_t>::max() / sizeof(T);
+    if (maxCapacity > limit) maxCapacity = limit;
+    if (n > maxCapacity) return false;
     if (n <= cap_) {
       size_ = n;
       return true;
     }
-    std::size_t newCap = cap_ ? cap_ * 2 : 16;
+    std::size_t newCap = cap_ ? (cap_ > maxCapacity / 2 ? maxCapacity : cap_ * 2) : 16;
+    if (newCap > maxCapacity) newCap = maxCapacity;
     if (newCap < n) newCap = n;
     T* p = static_cast<T*>(heap::acquire(newCap * sizeof(T)));
     if (!p) return false;

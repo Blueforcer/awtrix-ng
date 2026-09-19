@@ -10,13 +10,21 @@ namespace awtrix {
 class Canvas {
  public:
   Canvas(int width, int height);
+  // Non-owning view: pixels must hold at least width * height elements and outlive this
+  // Canvas and any copies of it. No allocation or initial clearing is performed. A null
+  // buffer or a nonpositive dimension creates an empty 0x0 canvas.
+  Canvas(int width, int height, uint32_t* pixels);
 
   int width() const { return width_; }
   int height() const { return height_; }
 
   void clear(uint32_t rgb = 0x000000u);
-  void setPixel(int x, int y, uint32_t rgb);
-  uint32_t getPixel(int x, int y) const;
+  void setPixel(int x, int y, uint32_t rgb) {
+    if (writable(x, y)) data()[static_cast<std::size_t>(y) * width_ + x] = rgb & 0xFFFFFFu;
+  }
+  uint32_t getPixel(int x, int y) const {
+    return inBounds(x, y) ? data()[static_cast<std::size_t>(y) * width_ + x] : 0u;
+  }
 
   void drawLine(int x0, int y0, int x1, int y1, uint32_t rgb);
   void drawRect(int x, int y, int w, int h, uint32_t rgb);
@@ -29,9 +37,11 @@ class Canvas {
   void setClipX(int left, int right);
   void clearClipX() { setClipX(0, width_ - 1); }
 
-  const uint32_t* data() const { return pixels_.data(); }
-  uint32_t* data() { return pixels_.data(); }
-  std::size_t size() const { return pixels_.size(); }
+  const uint32_t* data() const { return externalPixels_ ? externalPixels_ : pixels_.data(); }
+  uint32_t* data() { return externalPixels_ ? externalPixels_ : pixels_.data(); }
+  std::size_t size() const {
+    return externalPixels_ ? static_cast<std::size_t>(width_) * height_ : pixels_.size();
+  }
 
  private:
   bool inBounds(int x, int y) const { return x >= 0 && y >= 0 && x < width_ && y < height_; }
@@ -41,6 +51,7 @@ class Canvas {
   int clipLeft_ = 0;
   int clipRight_ = 0;
   std::vector<uint32_t> pixels_;
+  uint32_t* externalPixels_ = nullptr;
 };
 
 }

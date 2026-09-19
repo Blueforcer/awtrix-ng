@@ -331,11 +331,17 @@ text has to stay readable on top.
 
 ### 5.5 Icons
 
-`icon(name, x, y)` draws an **8×8 icon by name** from the device's icon folder. Give the bare name -
-no path, no extension. Animated GIFs animate on their own if you draw the same icon every frame. It
-returns `false` if the icon is unknown *or* if decoding transiently ran out of memory - one of the
-ways a memory-hungry script punishes its neighbours - so paint a fallback and the cell is never a
-hole: `if !icon(self.ic, 0, 0) rect_fill(0, 0, 8, 8, 0x222222) end`.
+`icon(name, x, y)` draws an **icon by name** from the device's icon folder, at the icon's own size:
+a JPG is 8×8, a GIF uses its own size and must fit the display. A full-width GIF at `(0, 0)`
+covers the panel and text drawn after it sits on top. Give the bare name - no path, no extension. Animated GIFs
+animate on their own if you draw the same icon every frame. It returns `false` if the icon is
+missing or cannot be displayed, so paint a fallback instead of leaving an empty space:
+`if !icon(self.ic, 0, 0) rect_fill(0, 0, 8, 8, 0x222222) end`.
+
+Call `icon()` several times for several images, each at its own `(x, y)` position. Different GIFs
+keep their own colours and animation speeds. Repeating the same name at different positions
+shows the same animation frame in each place. Up to 4 different names can be drawn per display
+frame; further names return `false`. Four 8×8 icons side by side fill a 32-pixel panel.
 
 **You cannot know which icons the user has installed**, and you cannot look an ID up. An icon name
 is a numeric ID from the icon database, and inventing one gives the user an empty cell. Three ways
@@ -1019,8 +1025,8 @@ charts take 16.
 **7. Prefer numbers to strings, and short strings to long ones.** An integer costs nothing beyond
 its slot. Store `21.5`, not `"21.5 °C"`, and never the sentence you got it out of.
 
-**8. Draw shapes rather than requiring assets.** A glyph made of `rect_fill` and `line` costs no
-memory and cannot fail; an icon needs a decode buffer a busy heap may refuse.
+**8. Use shapes for simple symbols.** A glyph made of `rect_fill` and `line` works without
+installing an icon file. Use uploaded icons for artwork or animation.
 
 **9. One app, one job.** If the user asks for four unrelated things, four small apps sharing values
 through `shared` (5.12) are cheaper and clearer than one that does everything - and the panel has

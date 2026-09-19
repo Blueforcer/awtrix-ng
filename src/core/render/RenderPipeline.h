@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 
 #include <memory>
@@ -18,14 +19,18 @@ namespace awtrix {
 
 class CoreEngine;
 
+enum class IconLoad : uint8_t { kGood, kMissing, kOom };
+
 class IPageIcon {
  public:
   virtual ~IPageIcon() = default;
-  virtual bool begin(const std::string& iconId) = 0;
+  virtual IconLoad begin(const std::string& iconId, int maxWidth, int maxHeight) = 0;
   virtual void clear() = 0;
   virtual void advance(int64_t nowMs) = 0;
-  virtual void blit(Canvas& dst, int xOffset) const = 0;
+  virtual void blit(Canvas& dst, int xOffset, int yOffset = 0) const = 0;
   virtual int width() const = 0;
+  // Allocated only for the additional absolute-position icons requested by a page.
+  virtual std::unique_ptr<IPageIcon> create() const { return nullptr; }
 };
 
 class IPageClock {
@@ -56,8 +61,19 @@ class RenderPipeline {
 
   float textX() const { return slotA_.scroll.x(); }
   const std::string& currentPageId() const { return lastRenderId_; }
+  void invalidateIcons() { ++iconGeneration_; }
 
  private:
+  struct PlacedIcon {
+    std::unique_ptr<IPageIcon> player;
+    std::string iconId;
+    int x = 0;
+    int y = 0;
+    bool valid = false;
+    bool missing = false;
+    int64_t retryAtMs = 0;
+  };
+
   // Per-page state that has to survive between frames. slotA_ is whatever is on screen, slotB_
   // the page being transitioned in; the two are swapped when that page takes over.
   struct PageSlot {
@@ -68,6 +84,12 @@ class RenderPipeline {
     int64_t retryAtMs = 0;
     render::ScrollController scroll;
     bool iconPushed = false;
+    std::unique_ptr<PlacedIcon[]> placedIcons;
+    std::size_t placedIconCount = 0;
+    int64_t placedRetryAtMs = 0;
+    bool missing = false;
+    uint32_t iconGeneration = 0;
+    bool iconsPending = false;
   };
 
   void renderPage(Canvas& dst, const std::string& id, int64_t nowMs, bool isNotif, PageSlot* slot);
@@ -83,6 +105,8 @@ class RenderPipeline {
   void advanceScroll(PageSlot& slot, const AppSpec* spec, int64_t nowMs, int parkAfter);
   int scrollParkAfter(const AppSpec* spec, bool isNotif) const;
   void loadIcon(PageSlot& slot, const std::string& pageId, const AppSpec* spec, int64_t nowMs);
+  void loadPlacedIcons(PageSlot& slot, const AppSpec* spec, int64_t nowMs);
+  void advanceIcons(PageSlot& slot, int64_t nowMs);
   bool iconIsFullScreen(const PageSlot* slot, int canvasWidth) const;
   const AppSpec* pageSpec(const std::string& id, bool isNotif) const;
   int iconShift(const AppSpec& spec, const PageSlot& slot) const;
@@ -91,6 +115,8 @@ class RenderPipeline {
   int width_, height_;
   std::unique_ptr<Canvas> transA_, transB_;
   std::string lastRenderId_;
+  std::atomic<uint32_t> iconGeneration_{0};
+  bool iconLoadedThisFrame_ = false;
   PageSlot slotA_, slotB_;
 };
 

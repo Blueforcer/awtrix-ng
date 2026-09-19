@@ -538,7 +538,7 @@ paths:
       tags: [apps]
       summary: Create or update a pushed app (a JSON body is required)
       description: |
-        Payload fields follow the AWTRIX pushed-app schema (text, icon,
+        Payload fields follow the AWTRIX pushed-app schema (text, icon, icons,
         textColor, draw, effect, ...). An ARRAY payload creates indexed apps
         `{name}0..n`; non-object elements are skipped. Time fields are
         milliseconds: `durationMs`, `lifetimeMs`, `textBlinkMs`, `textFadeMs`.
@@ -586,6 +586,8 @@ paths:
                   # Only the fields with a structure of their own are declared;
                   # the flat ones are tabulated in docs/reference/payload.md.
                   properties:
+                    icons:
+                      $ref: "#/components/schemas/PlacedIcons"
                     scroll:
                       $ref: "#/components/schemas/Scroll"
                       description: >
@@ -598,7 +600,11 @@ paths:
                         scroll anchor, so it lengthens each cycle by the same
                         amount in every mode. X axis only.
                 - type: array
-                  items: { type: object }
+                  items:
+                    type: object
+                    properties:
+                      icons:
+                        $ref: "#/components/schemas/PlacedIcons"
                   description: Indexed apps {name}0, {name}1, ...
       responses:
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -661,7 +667,11 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
+              properties:
+                icons:
+                  $ref: "#/components/schemas/PlacedIcons"
       responses:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200": { $ref: "#/components/responses/Ok" }
@@ -1866,6 +1876,45 @@ components:
         stores and reads back as `#000000`, and `#FFFFFF` is a real value - only
         an explicit `null` means inherit/off.
       type: [string, array, integer, "null"]
+    PlacedIcons:
+      type: array
+      maxItems: 4
+      description: |
+        Additional independently animated icons at absolute pixel positions.
+        Each GIF uses its own colors and frame timings. Available on pushed apps
+        and notifications. Drawn in array order after the icon field, text and
+        decorations, before overlays; later icons cover earlier ones.
+        They reserve no text columns and do not follow
+        iconMode. Negative positions clip at the panel edge. Empty or omitted
+        means no additional icons. Invalid entries or more than four icons
+        reject the entire request with 422 validationFailed and an icons field
+        path. Each icon uses its own image dimensions, bounded by the panel.
+      example:
+        - icon: weather
+          x: 0
+          y: 0
+        - icon: mail
+          x: 16
+          y: 0
+      items:
+        type: object
+        additionalProperties: false
+        required: [icon]
+        properties:
+          icon:
+            type: string
+            minLength: 1
+            description: Icon ID up to 64 characters; longer strings are inline base64 GIF or JPEG.
+          x:
+            type: integer
+            minimum: -65535
+            maximum: 65535
+            default: 0
+          y:
+            type: integer
+            minimum: -65535
+            maximum: 65535
+            default: 0
     Scroll:
       description: >
         Text motion. The same object is accepted in a pushed-app payload, a

@@ -14,6 +14,7 @@ dist/
 .idea/
 
 # Build / OS
+/.cache/
 *.bin
 *.elf
 *.o

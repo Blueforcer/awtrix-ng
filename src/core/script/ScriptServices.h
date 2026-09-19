@@ -3,7 +3,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
+#include <string_view>
 
 #include "core/audio/AudioStats.h"
 #include "core/render/Font.h"
@@ -116,10 +118,17 @@ struct MqttMessage {
   std::string filter;
 };
 
+class IScriptIconSet {
+ public:
+  virtual ~IScriptIconSet() = default;
+  virtual bool draw(Canvas& canvas, std::string_view name, int x, int y, int64_t nowMs) = 0;
+  virtual void release() = 0;
+};
+
 class IScriptIcon {
  public:
   virtual ~IScriptIcon() = default;
-  virtual bool draw(Canvas& canvas, const std::string& name, int x, int y, int64_t nowMs) = 0;
+  virtual std::unique_ptr<IScriptIconSet> createSet() = 0;
 };
 
 class IScriptStoreSink {

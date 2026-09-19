@@ -17,6 +17,7 @@
 #include "core/SocProfile.h"
 #include "core/api/ApiRouter.h"
 #include "core/api/JsonCoerce.h"
+#include "core/api/JsonStream.h"
 #include "core/api/JsonWriter.h"
 #include "core/api/MelodiesApi.h"
 #include "core/api/StateJson.h"
@@ -665,7 +666,14 @@ bool SimHttpServer::Impl::serveState(const httplib::Request& req, const std::str
     const uint32_t after = req.has_param("after")
                                ? strtoul(req.get_param_value("after").c_str(), nullptr, 10)
                                : 0;
-    sendJson(res, 200, logbuf::jsonAfter(after));
+    std::string body;
+    api::JsonStream out(
+        [](void* ctx, const char* data, size_t len) {
+          static_cast<std::string*>(ctx)->append(data, len);
+        },
+        &body);
+    logbuf::streamJsonAfter(after, out);
+    sendJson(res, 200, body);
     return true;
   }
   if (path == "/api/v1/scripts/shared") {

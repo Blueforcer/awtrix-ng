@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <ctime>
 
+#include "core/api/JsonStream.h"
+
 namespace awtrix {
 
 namespace {
@@ -46,27 +48,6 @@ void writeLine(const char* msg) {
   Serial.println(line);
 }
 
-void appendJsonEscaped(std::string& out, const char* s) {
-  for (; *s; ++s) {
-    const unsigned char c = static_cast<unsigned char>(*s);
-    switch (c) {
-      case '"': out += "\\\""; break;
-      case '\\': out += "\\\\"; break;
-      case '\n': out += "\\n"; break;
-      case '\r': break;
-      case '\t': out += "\\t"; break;
-      default:
-        if (c < 0x20) {
-          char buf[8];
-          snprintf(buf, sizeof(buf), "\\u%04x", c);
-          out += buf;
-        } else {
-          out += static_cast<char>(c);
-        }
-    }
-  }
-}
-
 }
 
 void logf(const char* fmt, ...) {
@@ -93,24 +74,22 @@ namespace logbuf {
 void setVerbose(bool on) { g_verbose = on; }
 bool verbose() { return g_verbose; }
 
-// Returns the lines newer than the caller's last sequence number plus the next one to ask for, so
+// Writes the lines newer than the caller's last sequence number plus the next one to ask for, so
 // the web UI can poll for a tail without re-reading the whole ring.
-std::string jsonAfter(uint32_t after) {
-  std::string out = "{\"next\":";
-  out += std::to_string(g_seq);
-  out += ",\"lines\":[";
+void streamJsonAfter(uint32_t after, api::JsonStream& out) {
+  out.put("{\"next\":");
+  out.putUnsigned(g_seq);
+  out.put(",\"lines\":[");
   bool first = true;
   for (size_t i = 0; i < g_count; ++i) {
     const Slot& e = g_slots[(g_head + i) % kLineSlots];
     if (e.seq <= after) continue;
-    if (!first) out += ',';
+    if (!first) out.put(',');
     first = false;
-    out += '"';
-    appendJsonEscaped(out, e.text);
-    out += '"';
+    out.putString(e.text, api::JsonStream::Escape::LogLine);
   }
-  out += "]}";
-  return out;
+  out.put("]}");
+  out.flush();
 }
 
 }

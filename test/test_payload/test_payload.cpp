@@ -607,9 +607,65 @@ static void test_valid_but_oversized_payload_is_not_reported_as_malformed() {
   TEST_ASSERT_EQUAL_INT((int)payload::JsonParse::Ok, (int)why);
 }
 
+static void test_positioned_icons_are_additive_on_apps_and_notifications() {
+  for (bool notification : {false, true}) {
+    AppSpec s;
+    TEST_ASSERT_TRUE(payload::parse(
+        "{\"icon\":\"legacy\",\"icons\":[{\"icon\":\"a\",\"x\":-3,\"y\":4},{\"icon\":\"b\"}]}",
+        notification, s));
+    TEST_ASSERT_EQUAL_STRING("legacy", s.icon.c_str());
+    TEST_ASSERT_EQUAL_UINT(2, s.extras().icons.size());
+    TEST_ASSERT_EQUAL_STRING("a", s.extras().icons[0].icon.c_str());
+    TEST_ASSERT_EQUAL_INT(-3, s.extras().icons[0].x);
+    TEST_ASSERT_EQUAL_INT(4, s.extras().icons[0].y);
+    TEST_ASSERT_EQUAL_INT(0, s.extras().icons[1].x);
+    TEST_ASSERT_EQUAL_INT(0, s.extras().icons[1].y);
+  }
+}
+
+static void test_positioned_icons_validate_types_coordinates_and_unknown_properties() {
+  const char* invalid[] = {
+      "{\"icons\":null}", "{\"icons\":{}}", "{\"icons\":[\"a\"]}",
+      "{\"icons\":[{}]}", "{\"icons\":[{\"icon\":1}]}", "{\"icons\":[{\"icon\":\"\"}]}",
+      "{\"icons\":[{\"icon\":\"a\",\"x\":1.5}]}",
+      "{\"icons\":[{\"icon\":\"a\",\"x\":65536}]}",
+      "{\"icons\":[{\"icon\":\"a\",\"y\":-65536}]}",
+      "{\"icons\":[{\"icon\":\"a\",\"y\":\"0\"}]}",
+      "{\"icons\":[{\"icon\":\"a\",\"width\":8}]}"};
+  for (const char* json : invalid) {
+    AppSpec s;
+    DispatchDetail err;
+    TEST_ASSERT_FALSE(payload::parse(json, false, s, nullptr, nullptr, &err));
+    TEST_ASSERT_TRUE(err.field.find("icons") == 0);
+    TEST_ASSERT_FALSE(err.message.empty());
+    TEST_ASSERT_EQUAL_UINT(0, s.extras().icons.size());
+  }
+}
+
+static void test_positioned_icon_count_is_bounded_without_partial_updates() {
+  std::string json = "{\"icons\":[";
+  for (std::size_t i = 0; i < kMaxPlacedIcons; ++i) {
+    if (i) json += ',';
+    json += "{\"icon\":\"a\"}";
+  }
+  AppSpec s;
+  TEST_ASSERT_TRUE(payload::parse(json + "]}", false, s));
+  TEST_ASSERT_EQUAL_UINT(kMaxPlacedIcons, s.extras().icons.size());
+  json += ",{\"icon\":\"ninth\"}]}";
+  DispatchDetail err;
+  TEST_ASSERT_FALSE(payload::parse(json, false, s, nullptr, nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("icons", err.field.c_str());
+  TEST_ASSERT_EQUAL_UINT(kMaxPlacedIcons, s.extras().icons.size());
+  TEST_ASSERT_TRUE(payload::parse("{\"icons\":[]}", false, s));
+  TEST_ASSERT_EQUAL_UINT(0, s.extras().icons.size());
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_valid_but_oversized_payload_is_not_reported_as_malformed);
+  RUN_TEST(test_positioned_icons_are_additive_on_apps_and_notifications);
+  RUN_TEST(test_positioned_icons_validate_types_coordinates_and_unknown_properties);
+  RUN_TEST(test_positioned_icon_count_is_bounded_without_partial_updates);
 
   RUN_TEST(test_palette_by_stock_name);
   RUN_TEST(test_palette_stops_are_spread_over_all_entries);

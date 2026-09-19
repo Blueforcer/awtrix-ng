@@ -14,6 +14,8 @@ const char* const kHookNames[ScriptApp::kHookCount] = {
     "draw", "setup", "loop", "on_show", "on_hide", "on_button", "should_show", "duration",
 };
 
+constexpr int64_t kIconIdleMs = 2000;
+
 }
 
 ScriptApp::ScriptApp(BerryVM& vm, std::string name, const std::string& source,
@@ -52,6 +54,11 @@ void ScriptApp::enter(const char* what, bool okResult) {
   if (okResult) return;
   broken_ = true;
   error_ = parseScriptError(vm_.lastError(), what);
+  releaseIcons();
+}
+
+void ScriptApp::releaseIcons() {
+  if (icons_) icons_->release();
 }
 
 void ScriptApp::render(Canvas& canvas, const RenderCtx& ctx) {
@@ -61,8 +68,10 @@ void ScriptApp::render(Canvas& canvas, const RenderCtx& ctx) {
     if (ctx.font) text::drawText(canvas, *ctx.font, 0, 6, "ERR:" + name_, 0xFF0000u);
     return;
   }
-  BindingScope scope(&canvas, &ctx, name_, &scroll_);
   const ScriptServices* svc = services();
+  lastRenderMs_ = ctx.nowMs;
+  if (!icons_ && svc && svc->icon) icons_ = svc->icon->createSet();
+  BindingScope scope(&canvas, &ctx, name_, &scroll_, icons_.get());
   // Same call twice: the timed branch only exists because reading the clock around every
   // frame is not worth paying for unless someone is listening to the numbers.
   if (!svc || !svc->logDebug) {
@@ -97,6 +106,7 @@ bool ScriptApp::wantsShow(const RenderCtx* ctx) {
 }
 
 void ScriptApp::notifyVisible(bool v, const RenderCtx* ctx) {
+  if (!v || (ctx && ctx->nowMs - lastRenderMs_ > kIconIdleMs)) releaseIcons();
   if (v == visible_) return;
   visible_ = v;
   if (!v) scroll_.clear();

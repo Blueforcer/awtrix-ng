@@ -8,7 +8,9 @@
 namespace awtrix {
 namespace media {
 
-bool readAsset(const std::string& path, PodBuffer<uint8_t>& out);
+// Reports allocation failure separately from a missing, empty or unreadable asset so callers
+// can retry memory pressure. The optional flag is reset on every call, including success.
+bool readAsset(const std::string& path, PodBuffer<uint8_t>& out, bool* outOfMemory = nullptr);
 
 }
 }

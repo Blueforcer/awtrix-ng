@@ -24,6 +24,7 @@ What AWTRIX publishes *to you* over MQTT has no size limit; only what you publis
 | Notification queue | 32, counting the one on screen | a stacked push is rejected with `507 insufficientStorage`; `stack: false` replaces the notification on screen and is never rejected |
 | Notifications per request | 1 | `422 validationFailed` - send one per request |
 | `barChart` / `lineChart` points | 16 | the 17th and later entries are dropped, the chart still draws |
+| Additional positioned icons (`icons`) | 4 per pushed app or notification, plus the ordinary `icon` | `422 validationFailed` on `icons`; the whole request is rejected |
 
 The 50 counts **new** names only: replacing a pushed app that already exists always works, whatever
 the count says. An array payload is all-or-nothing against the cap - if the new names in the batch
@@ -53,6 +54,10 @@ Berry scripts run under their own caps. How each one behaves in practice is in
 | Setting text value | 256 characters, or `maxlen=` if you set one | the change is refused, `422`, nothing is written |
 | Shared key names | 1–24 characters of `A–Z`, `a–z`, `0–9`, `_`, `-` | `shared.set()` returns `false`, nothing changes |
 | Music bands | 32 | `music.bands(n)` answers at most 32 values; a smaller `n` merges neighbours |
+| Different script icons per frame | 4 icon IDs | `icon()` returns `false` for a 5th distinct ID in the same `draw()` |
+
+Using the same script icon ID at several positions counts as one icon. Those copies animate
+together.
 
 The instruction limit is per **entry into script code** - one `draw()`, one `loop()`, one button
 press, one HTTP callback each get the full 200 000 again, and it is not a limit a `try`/`except`
@@ -88,7 +93,7 @@ Which formats are accepted, and how each one is drawn, is in
 | --- | --- | --- |
 | Panel width | [`panelWidth × panels`](system.md#panel-and-orientation), default `32 × 1`, must come to 32–128 | outside the range: `422 validationFailed` on `panelWidth` |
 | Panel height | 8 pixels | fixed; not configurable |
-| Icon canvas | 32×8 pixels, regardless of the panel width | a GIF whose **first** frame is larger does not play at all; if a later frame is larger, decoding stops there and AWTRIX loops the frames decoded before it |
+| GIF dimensions | up to the panel's width and height | resize larger GIFs before uploading; every animation frame must fit |
 
 ## What is *not* limited
 

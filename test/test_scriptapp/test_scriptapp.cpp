@@ -23,6 +23,48 @@ static const GfxFont kFont = {kBitmap, kGlyphs, 'A', 'Z', 8};
 
 static script::ScriptServices g_svc;
 
+namespace {
+
+struct CountingIcons : script::IScriptIcon {
+  struct Set : script::IScriptIconSet {
+    explicit Set(CountingIcons& owner) : owner_(owner) { ++owner_.alive; }
+    ~Set() override { --owner_.alive; }
+    bool draw(Canvas& canvas, std::string_view, int x, int y, int64_t) override {
+      ++owner_.draws;
+      ++owner_.held;
+      canvas.setPixel(x, y, 0x00ABCDu);
+      return true;
+    }
+    void release() override {
+      ++owner_.releases;
+      owner_.held = 0;
+    }
+    CountingIcons& owner_;
+  };
+
+  std::unique_ptr<script::IScriptIconSet> createSet() override {
+    if (failCreates > 0) {
+      --failCreates;
+      return nullptr;
+    }
+    ++created;
+    return std::unique_ptr<script::IScriptIconSet>(new Set(*this));
+  }
+
+  void reset() { created = draws = releases = alive = held = failCreates = 0; }
+
+  int created = 0;
+  int draws = 0;
+  int releases = 0;
+  int alive = 0;
+  int held = 0;
+  int failCreates = 0;
+};
+
+CountingIcons g_icons;
+
+}
+
 void setUp() {
   g_svc.http = nullptr;
   g_svc.mqtt = nullptr;
@@ -996,6 +1038,177 @@ static std::string trace(script::ScriptApp& app) {
   return out;
 }
 
+static const char* kIconApp = "class I def draw() icon('a', 0, 0) end end\nreturn I()";
+
+static void test_first_render_creates_one_icon_set() {
+  g_icons.reset();
+  g_svc.icon = &g_icons;
+  Engine e;
+  script::ScriptApp app(e.vm, "I", kIconApp, script::ScriptMeta{}, "", nullptr);
+  TEST_ASSERT_EQUAL_INT(0, g_icons.created);
+  Canvas c(32, 8);
+  RenderCtx ctx;
+  app.render(c, ctx);
+  app.render(c, ctx);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.created);
+  TEST_ASSERT_EQUAL_INT(2, g_icons.draws);
+  TEST_ASSERT_EQUAL_HEX32(0x00ABCDu, c.getPixel(0, 0));
+}
+
+static void test_icon_set_creation_failure_is_retried_next_frame() {
+  g_icons.reset();
+  g_icons.failCreates = 1;
+  g_svc.icon = &g_icons;
+  Engine e;
+  script::ScriptApp app(e.vm, "I", kIconApp, script::ScriptMeta{}, "", nullptr);
+  Canvas c(32, 8);
+  RenderCtx ctx;
+  app.render(c, ctx);
+  TEST_ASSERT_TRUE(app.ok());
+  TEST_ASSERT_EQUAL_INT(0, g_icons.draws);
+  app.render(c, ctx);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.created);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.draws);
+}
+
+static void test_hidden_app_releases_icons_on_every_tick() {
+  g_icons.reset();
+  g_svc.icon = &g_icons;
+  Engine e;
+  script::ScriptApp app(e.vm, "I", kIconApp, script::ScriptMeta{}, "", nullptr);
+  Canvas c(32, 8);
+  RenderCtx ctx;
+  app.notifyVisible(true, &ctx);
+  app.render(c, ctx);
+  TEST_ASSERT_EQUAL_INT(0, g_icons.releases);
+  app.notifyVisible(false, &ctx);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.releases);
+  TEST_ASSERT_EQUAL_INT(0, g_icons.held);
+
+  app.render(c, ctx);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.held);
+  app.notifyVisible(false, &ctx);
+  TEST_ASSERT_EQUAL_INT(2, g_icons.releases);
+  TEST_ASSERT_EQUAL_INT(0, g_icons.held);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.created);
+}
+
+static void test_visible_app_that_is_not_rendered_releases_after_idle() {
+  g_icons.reset();
+  g_svc.icon = &g_icons;
+  Engine e;
+  script::ScriptApp app(e.vm, "I", kIconApp, script::ScriptMeta{}, "", nullptr);
+  Canvas c(32, 8);
+  RenderCtx ctx;
+  ctx.nowMs = 1000;
+  app.notifyVisible(true, &ctx);
+  app.render(c, ctx);
+  ctx.nowMs = 3000;
+  app.notifyVisible(true, &ctx);
+  TEST_ASSERT_EQUAL_INT(0, g_icons.releases);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.held);
+  ctx.nowMs = 3001;
+  app.notifyVisible(true, &ctx);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.releases);
+  TEST_ASSERT_EQUAL_INT(0, g_icons.held);
+
+  app.render(c, ctx);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.held);
+  ctx.nowMs = 3026;
+  app.notifyVisible(true, &ctx);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.releases);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.created);
+}
+
+static void test_script_that_breaks_releases_its_icons() {
+  g_icons.reset();
+  g_svc.icon = &g_icons;
+  Engine e;
+  script::ScriptApp app(e.vm, "B",
+                        "class B\n"
+                        "  var n\n"
+                        "  def init() self.n = 0 end\n"
+                        "  def draw()\n"
+                        "    icon('a', 0, 0)\n"
+                        "    self.n += 1\n"
+                        "    if self.n > 1 raise 'test_error', 'second frame' end\n"
+                        "  end\n"
+                        "end\n"
+                        "return B()",
+                        script::ScriptMeta{}, "", nullptr);
+  Canvas c(32, 8);
+  RenderCtx ctx;
+  ctx.font = &kFont;
+  app.notifyVisible(true, &ctx);
+  app.render(c, ctx);
+  TEST_ASSERT_TRUE(app.ok());
+  TEST_ASSERT_EQUAL_INT(0, g_icons.releases);
+  app.render(c, ctx);
+  TEST_ASSERT_FALSE(app.ok());
+  TEST_ASSERT_EQUAL_INT(1, g_icons.releases);
+  TEST_ASSERT_EQUAL_INT(0, g_icons.held);
+  app.render(c, ctx);
+  TEST_ASSERT_EQUAL_INT(2, g_icons.draws);
+}
+
+static void test_app_that_never_compiled_creates_no_icon_set() {
+  g_icons.reset();
+  g_svc.icon = &g_icons;
+  Engine e;
+  script::ScriptApp app(e.vm, "X", "class X def draw( end\nreturn X()", script::ScriptMeta{}, "",
+                        nullptr);
+  TEST_ASSERT_FALSE(app.ok());
+  Canvas c(32, 8);
+  RenderCtx ctx;
+  ctx.font = &kFont;
+  app.render(c, ctx);
+  app.notifyVisible(false, &ctx);
+  TEST_ASSERT_EQUAL_INT(0, g_icons.created);
+}
+
+static void test_destroying_an_app_destroys_its_icon_set() {
+  g_icons.reset();
+  g_svc.icon = &g_icons;
+  Engine e;
+  {
+    script::ScriptApp app(e.vm, "I", kIconApp, script::ScriptMeta{}, "", nullptr);
+    Canvas c(32, 8);
+    RenderCtx ctx;
+    app.render(c, ctx);
+    TEST_ASSERT_EQUAL_INT(1, g_icons.alive);
+  }
+  TEST_ASSERT_EQUAL_INT(0, g_icons.alive);
+}
+
+static void test_headless_app_never_creates_an_icon_set() {
+  g_icons.reset();
+  g_svc.icon = &g_icons;
+  Engine e;
+  script::ScriptMeta meta;
+  meta.headless = true;
+  script::ScriptApp app(e.vm, "H", "class H def loop() end end\nreturn H()", meta, "", nullptr);
+  RenderCtx ctx;
+  app.tickLoop(ctx);
+  app.notifyVisible(true, &ctx);
+  app.notifyVisible(false, &ctx);
+  TEST_ASSERT_EQUAL_INT(0, g_icons.created);
+}
+
+static void test_icon_without_an_icon_service_is_harmless() {
+  g_svc.icon = nullptr;
+  Engine e;
+  script::ScriptApp app(e.vm, "I",
+                        "class I def draw() pixel(0, 0, icon('a', 4, 0) ? 0xFF0000 : 0x00FF00) end end\n"
+                        "return I()",
+                        script::ScriptMeta{}, "", nullptr);
+  Canvas c(32, 8);
+  RenderCtx ctx;
+  app.render(c, ctx);
+  app.notifyVisible(false, &ctx);
+  TEST_ASSERT_TRUE(app.ok());
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 0));
+}
+
 static void test_lifecycle_sequence() {
   Engine e;
   script::ScriptApp app(e.vm, "L",
@@ -1547,5 +1760,14 @@ int main(int, char**) {
   RUN_TEST(test_two_apps_are_isolated);
   RUN_TEST(test_re_module_search_match_matchall);
   RUN_TEST(test_re_module_keeps_binary_arguments_alive_during_matchall);
+  RUN_TEST(test_first_render_creates_one_icon_set);
+  RUN_TEST(test_icon_set_creation_failure_is_retried_next_frame);
+  RUN_TEST(test_hidden_app_releases_icons_on_every_tick);
+  RUN_TEST(test_visible_app_that_is_not_rendered_releases_after_idle);
+  RUN_TEST(test_script_that_breaks_releases_its_icons);
+  RUN_TEST(test_app_that_never_compiled_creates_no_icon_set);
+  RUN_TEST(test_destroying_an_app_destroys_its_icon_set);
+  RUN_TEST(test_headless_app_never_creates_an_icon_set);
+  RUN_TEST(test_icon_without_an_icon_service_is_harmless);
   return UNITY_END();
 }

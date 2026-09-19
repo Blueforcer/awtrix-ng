@@ -141,8 +141,8 @@ work.
 `self.line != nil && left > 0`, keeping `left` in a member. The rotation then skips
 straight past it instead of showing a permanent zero.
 
-**Add an icon.** `icon(name, 0, 0)` draws an 8×8 icon from the device's icon folder, and
-the text starts at `x = 9` when there is one. Icon IDs differ from device to device, so
+**Add an icon.** `icon(name, 0, 0)` draws an icon from the device's icon folder, and
+the text starts at `x = 9` next to an 8 px wide one. Icon IDs differ from device to device, so
 make it a `# @config … text` field rather than picking one for the user.
 
 ---

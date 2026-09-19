@@ -226,6 +226,7 @@ int main(int argc, char** argv) {
   g_board.begin();
   g_board.setMatrixLayout(cfg.matrixLayout());
   g_canvas = new Canvas(g_board.matrixWidth(), g_board.matrixHeight());
+  g_scriptIcon.setPanelSize(g_board.matrixWidth(), g_board.matrixHeight());
   g_power = new render::PowerAnimator(g_board.matrixWidth(), g_board.matrixHeight());
   g_audio.setTone(g_board.toneSink());
   g_audio.setTrack(g_board.trackSink());
@@ -451,6 +452,7 @@ int main(int argc, char** argv) {
   }
   g_http.setOnAssetsChanged([] {
     g_scriptIcon.invalidate();
+    if (g_pipeline) g_pipeline->invalidateIcons();
     render::clearPaletteCache();
   });
 

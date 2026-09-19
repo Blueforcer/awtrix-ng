@@ -10,6 +10,7 @@ struct RenderCtx;
 namespace awtrix::script {
 
 class BerryVM;
+class IScriptIconSet;
 class ScrollBank;
 struct ScriptServices;
 
@@ -22,7 +23,7 @@ const ScriptServices* services();
 class BindingScope {
  public:
   BindingScope(Canvas* canvas, const RenderCtx* ctx, const std::string& scriptName,
-               ScrollBank* scroll = nullptr);
+               ScrollBank* scroll = nullptr, IScriptIconSet* icons = nullptr);
   ~BindingScope();
   BindingScope(const BindingScope&) = delete;
   BindingScope& operator=(const BindingScope&) = delete;

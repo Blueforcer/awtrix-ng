@@ -35,24 +35,55 @@ struct FSystem : ISystemService {
 struct FakeIcon : IPageIcon {
   int begins = 0, clears = 0, advances = 0, blits = 0;
   bool beginOk = true;
+  IconLoad failAs = IconLoad::kOom;
   int w = 8;
   int lastBlitX = -1;
+  int maxWidth = 0, maxHeight = 0;
+  int64_t lastAdvanceMs = 0;
+  int64_t firstAdvanceMs = -1;
+  std::string failId;
+  bool factoryOk = true;
+  int factoryMinClears = 0;
+  mutable int creates = 0;
+  int destroys = 0;
+  mutable std::vector<FakeIcon*> children;
+  FakeIcon* factoryOwner = nullptr;
   std::string lastId;
-  bool begin(const std::string& id) override {
+  ~FakeIcon() override {
+    if (factoryOwner) ++factoryOwner->destroys;
+  }
+  IconLoad begin(const std::string& id, int width, int height) override {
     ++begins;
     lastId = id;
-    return beginOk;
+    maxWidth = width;
+    maxHeight = height;
+    const FakeIcon& rules = factoryOwner ? *factoryOwner : *this;
+    if (!rules.failId.empty() && id == rules.failId) return rules.failAs;
+    return beginOk && rules.beginOk ? IconLoad::kGood : rules.failAs;
   }
   void clear() override { ++clears; }
-  void advance(int64_t) override { ++advances; }
-  void blit(Canvas& dst, int xOffset) const override {
+  void advance(int64_t nowMs) override {
+    if (advances++ == 0) firstAdvanceMs = nowMs;
+    lastAdvanceMs = nowMs;
+  }
+  void blit(Canvas& dst, int xOffset, int yOffset = 0) const override {
     auto* self = const_cast<FakeIcon*>(this);
     self->blits++;
     self->lastBlitX = xOffset;
+    const uint32_t color = lastId == "red" ? 0xFF0000u :
+                           lastId == "green" ? 0x00FF00u : 0xABCDEFu;
     for (int y = 0; y < 8; ++y)
-      for (int x = 0; x < w; ++x) dst.setPixel(x + xOffset, y, 0xABCDEFu);
+      for (int x = 0; x < w; ++x) dst.setPixel(x + xOffset, y + yOffset, color);
   }
   int width() const override { return w; }
+  std::unique_ptr<IPageIcon> create() const override {
+    if (!factoryOk || clears < factoryMinClears) return nullptr;
+    auto child = std::make_unique<FakeIcon>();
+    child->factoryOwner = const_cast<FakeIcon*>(this);
+    children.push_back(child.get());
+    ++creates;
+    return child;
+  }
 };
 
 struct CaptureEffect : IEffect {
@@ -119,7 +150,7 @@ struct Rig {
   FakeIcon iconsB;
   RenderPipeline* pipe = nullptr;
 
-  Rig() {
+  Rig(int width = 32, int height = 8) : canvas(width, height) {
     audio.setTone(&tone);
     RenderPipelineDeps d;
     d.engine = &engine;
@@ -132,7 +163,7 @@ struct Rig {
     d.iconsB = &iconsB;
     d.audio = &audio;
     d.clock = &clock;
-    pipe = new RenderPipeline(32, 8, d);
+    pipe = new RenderPipeline(width, height, d);
   }
   ~Rig() { delete pipe; }
 };
@@ -414,6 +445,201 @@ static void test_failed_icon_retries_on_timer_and_heals() {
   r.pipe->renderFrame(r.canvas, 60000);
   TEST_ASSERT_EQUAL_INT(3, r.icons.begins);
   TEST_ASSERT_TRUE(r.icons.blits > 0);
+}
+
+static void test_panel_bounds_reach_pushed_app_and_notification_icons() {
+  Rig r(51, 16);
+  r.engine.execute(cmd(CommandType::SetPushedApp, "ic", "{\"icon\":\"pushed\"}"));
+  r.engine.execute(switchFast("ic"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+  TEST_ASSERT_EQUAL_STRING("pushed", r.icons.lastId.c_str());
+  TEST_ASSERT_EQUAL_INT(51, r.icons.maxWidth);
+  TEST_ASSERT_EQUAL_INT(16, r.icons.maxHeight);
+
+  r.engine.execute(cmd(CommandType::Notify, "", "{\"icon\":\"notification\"}"));
+  r.engine.tick(10);
+  r.pipe->renderFrame(r.canvas, 10);
+  const auto& icon = r.icons.lastId == "notification" ? r.icons : r.iconsB;
+  TEST_ASSERT_EQUAL_STRING("notification", icon.lastId.c_str());
+  TEST_ASSERT_EQUAL_INT(51, icon.maxWidth);
+  TEST_ASSERT_EQUAL_INT(16, icon.maxHeight);
+}
+
+static void test_multiple_icons_render_in_payload_order_at_absolute_coordinates() {
+  Rig r(51, 16);
+  r.engine.execute(cmd(CommandType::SetPushedApp, "icons",
+      "{\"icons\":[{\"icon\":\"red\",\"x\":1,\"y\":1},"
+      "{\"icon\":\"green\",\"x\":5,\"y\":5}]}"));
+  r.engine.execute(switchFast("icons"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+  r.pipe->renderFrame(r.canvas, 25);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, r.canvas.getPixel(1, 1));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, r.canvas.getPixel(5, 5));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, r.canvas.getPixel(12, 12));
+  TEST_ASSERT_EQUAL_HEX32(0u, r.canvas.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_INT(2, r.icons.creates);
+  TEST_ASSERT_EQUAL_INT(51, r.icons.children[0]->maxWidth);
+  TEST_ASSERT_EQUAL_INT(16, r.icons.children[1]->maxHeight);
+  TEST_ASSERT_EQUAL_INT(0, r.icons.begins);
+  r.pipe->renderFrame(r.canvas, 100);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.children[0]->begins);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.children[1]->begins);
+  TEST_ASSERT_EQUAL_INT(2, r.icons.children[0]->advances);
+  TEST_ASSERT_EQUAL_INT(2, r.icons.children[1]->advances);
+}
+
+static void test_icons_of_a_page_start_animating_on_the_same_frame() {
+  Rig r;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "icons",
+      "{\"icon\":\"red\",\"icons\":[{\"icon\":\"red\",\"x\":12},"
+      "{\"icon\":\"red\",\"x\":22}]}"));
+  r.engine.execute(switchFast("icons"));
+  r.engine.tick(0);
+  for (int now = 0; now <= 100; now += 25) r.pipe->renderFrame(r.canvas, now);
+  TEST_ASSERT_EQUAL_INT(2, r.icons.creates);
+  TEST_ASSERT_EQUAL_INT64(50, r.icons.firstAdvanceMs);
+  TEST_ASSERT_EQUAL_INT64(50, r.icons.children[0]->firstAdvanceMs);
+  TEST_ASSERT_EQUAL_INT64(50, r.icons.children[1]->firstAdvanceMs);
+  TEST_ASSERT_EQUAL_INT(r.icons.advances, r.icons.children[0]->advances);
+  TEST_ASSERT_EQUAL_INT(r.icons.advances, r.icons.children[1]->advances);
+}
+
+static void test_an_icon_waiting_for_memory_does_not_hold_back_the_others() {
+  Rig r;
+  r.icons.failId = "big";
+  r.icons.failAs = IconLoad::kOom;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "icons",
+      "{\"icons\":[{\"icon\":\"big\",\"x\":0},{\"icon\":\"red\",\"x\":12}]}"));
+  r.engine.execute(switchFast("icons"));
+  r.engine.tick(0);
+  for (int now = 0; now <= 100; now += 25) r.pipe->renderFrame(r.canvas, now);
+  TEST_ASSERT_EQUAL_INT(2, r.icons.creates);
+  TEST_ASSERT_EQUAL_INT(0, r.icons.children[0]->advances);
+  TEST_ASSERT_EQUAL_INT64(25, r.icons.children[1]->firstAdvanceMs);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, r.canvas.getPixel(12, 0));
+}
+
+static void test_additional_icons_load_one_per_frame_after_the_page_icon() {
+  Rig r;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "icons",
+      "{\"icon\":\"main\",\"icons\":[{\"icon\":\"red\",\"x\":12},"
+      "{\"icon\":\"green\",\"x\":22}]}"));
+  r.engine.execute(switchFast("icons"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.begins);
+  TEST_ASSERT_EQUAL_INT(0, r.icons.creates);
+  r.pipe->renderFrame(r.canvas, 25);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.creates);
+  r.pipe->renderFrame(r.canvas, 50);
+  TEST_ASSERT_EQUAL_INT(2, r.icons.creates);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, r.canvas.getPixel(12, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, r.canvas.getPixel(22, 0));
+  r.pipe->renderFrame(r.canvas, 75);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.begins);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.children[0]->begins);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.children[1]->begins);
+}
+
+static void test_missing_icons_wait_for_an_asset_change_instead_of_a_timer() {
+  Rig r;
+  r.icons.beginOk = false;
+  r.icons.failAs = IconLoad::kMissing;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "ic",
+      "{\"text\":\"A\",\"icon\":\"nope\",\"icons\":[{\"icon\":\"red\",\"x\":16}]}"));
+  r.engine.execute(switchFast("ic"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+  r.pipe->renderFrame(r.canvas, 25);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.begins);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.children[0]->begins);
+  r.pipe->renderFrame(r.canvas, 5000);
+  r.pipe->renderFrame(r.canvas, 60000);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.begins);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.children[0]->begins);
+
+  r.icons.beginOk = true;
+  r.pipe->invalidateIcons();
+  r.pipe->renderFrame(r.canvas, 60025);
+  TEST_ASSERT_EQUAL_INT(2, r.icons.begins);
+  r.pipe->renderFrame(r.canvas, 60050);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, r.canvas.getPixel(16, 0));
+  TEST_ASSERT_TRUE(r.icons.blits > 0);
+}
+
+static void test_multiple_notification_icons_clip_and_animate_independently() {
+  Rig r;
+  r.engine.execute(cmd(CommandType::Notify, "",
+      "{\"icon\":\"legacy\",\"icons\":[{\"icon\":\"red\",\"x\":-4,\"y\":-4},"
+      "{\"icon\":\"green\",\"x\":28,\"y\":4}]}"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+  r.pipe->renderFrame(r.canvas, 25);
+  r.pipe->renderFrame(r.canvas, 50);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, r.canvas.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(0xABCDEFu, r.canvas.getPixel(4, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, r.canvas.getPixel(31, 7));
+  TEST_ASSERT_EQUAL_INT(1, r.icons.begins);
+  TEST_ASSERT_EQUAL_INT(2, r.icons.creates);
+  TEST_ASSERT_TRUE(r.icons.children[0] != r.icons.children[1]);
+  r.pipe->renderFrame(r.canvas, 150);
+  TEST_ASSERT_EQUAL_INT(150, r.icons.children[0]->lastAdvanceMs);
+  TEST_ASSERT_EQUAL_INT(150, r.icons.children[1]->lastAdvanceMs);
+}
+
+static void test_position_only_updates_keep_icon_players_and_removal_releases_them() {
+  Rig r;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "icons",
+      "{\"icons\":[{\"icon\":\"red\",\"x\":0}]}"));
+  r.engine.execute(switchFast("icons"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+  r.engine.execute(cmd(CommandType::SetPushedApp, "icons",
+      "{\"icons\":[{\"icon\":\"red\",\"x\":16}]}"));
+  r.pipe->renderFrame(r.canvas, 100);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.creates);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.children[0]->begins);
+  TEST_ASSERT_EQUAL_HEX32(0u, r.canvas.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, r.canvas.getPixel(16, 0));
+  r.engine.execute(cmd(CommandType::SetPushedApp, "icons", "{\"icons\":[]}"));
+  r.pipe->renderFrame(r.canvas, 200);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.destroys);
+  TEST_ASSERT_EQUAL_HEX32(0u, r.canvas.getPixel(16, 0));
+}
+
+static void test_positioned_icon_factory_failure_retries_without_blocking_page() {
+  Rig r;
+  r.icons.factoryOk = false;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "icons",
+      "{\"backgroundColor\":\"#123456\",\"icons\":[{\"icon\":\"red\",\"x\":16}]}"));
+  r.engine.execute(switchFast("icons"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+  TEST_ASSERT_EQUAL_HEX32(0x123456u, r.canvas.getPixel(16, 0));
+  r.icons.factoryOk = true;
+  r.pipe->renderFrame(r.canvas, 4999);
+  TEST_ASSERT_EQUAL_INT(0, r.icons.creates);
+  r.pipe->renderFrame(r.canvas, 5000);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.creates);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, r.canvas.getPixel(16, 0));
+}
+
+static void test_page_change_releases_old_icon_before_allocating_new_instances() {
+  Rig r;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "one", "{\"icon\":\"old\"}"));
+  r.engine.execute(cmd(CommandType::SetPushedApp, "two",
+      "{\"icons\":[{\"icon\":\"red\",\"x\":16}]}"));
+  r.engine.execute(switchFast("one"));
+  r.engine.tick(0);
+  r.pipe->renderFrame(r.canvas, 0);
+  r.icons.factoryMinClears = r.icons.clears + 1;
+  r.engine.execute(switchFast("two"));
+  r.engine.tick(10);
+  r.pipe->renderFrame(r.canvas, 10);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.creates);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, r.canvas.getPixel(16, 0));
 }
 
 static void test_repeat_holds_a_notification_not_the_rotation() {
@@ -719,6 +945,47 @@ static void test_incoming_icon_keeps_its_place_during_a_transition() {
                                 "the incoming icon must start in its column");
 }
 
+static void test_positioned_icons_survive_transition_handover_without_reopening() {
+  Rig r;
+  auto& settings = r.engine.state().settings();
+  settings.transitionEffect = static_cast<int>(Transition::Fade);
+  settings.transitionDurationMs = 1000;
+  r.engine.execute(cmd(CommandType::SetPushedApp, "one",
+      "{\"icon\":\"legacy\",\"icons\":[{\"icon\":\"red\",\"x\":0}]}"));
+  r.engine.execute(cmd(CommandType::SetPushedApp, "two",
+      "{\"icons\":[{\"icon\":\"green\",\"x\":16}]}"));
+  r.engine.execute(switchFast("one"));
+  runUntil(r, 0, 3000);
+  TEST_ASSERT_EQUAL_INT(1, r.icons.creates);
+  const int clearsBeforeHandover = r.icons.clears;
+  r.engine.execute(cmd(CommandType::SwitchApp, "two"));
+  runUntil(r, 3050, 4100);
+  TEST_ASSERT_EQUAL_INT(1, r.iconsB.creates);
+  TEST_ASSERT_EQUAL_INT(1, r.iconsB.children[0]->begins);
+  TEST_ASSERT_TRUE(r.iconsB.children[0]->advances > 1);
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, r.canvas.getPixel(16, 0));
+  TEST_ASSERT_EQUAL_INT(1, r.icons.destroys);
+  TEST_ASSERT_EQUAL_INT(clearsBeforeHandover + 1, r.icons.clears);
+  r.pipe->renderFrame(r.canvas, 4200);
+  TEST_ASSERT_EQUAL_INT(clearsBeforeHandover + 1, r.icons.clears);
+}
+
+static void test_invalid_icon_lists_leave_existing_apps_and_notifications_untouched() {
+  Rig r;
+  TEST_ASSERT_TRUE(r.engine.execute(cmd(CommandType::SetPushedApp, "icons",
+      "{\"icons\":[{\"icon\":\"red\"}]}")) == DispatchResult::Ok);
+  TEST_ASSERT_TRUE(r.engine.execute(cmd(CommandType::SetPushedApp, "icons",
+      "{\"icons\":[{\"icon\":\"green\",\"x\":true}]}")) == DispatchResult::ValidationError);
+  TEST_ASSERT_EQUAL_STRING("icons[0].x", r.engine.lastDetail().field.c_str());
+  TEST_ASSERT_EQUAL_STRING("red", r.engine.pushedApp("icons")->extras().icons[0].icon.c_str());
+  TEST_ASSERT_TRUE(r.engine.execute(cmd(CommandType::Notify, "",
+      "{\"icons\":[{\"icon\":\"red\"}]}")) == DispatchResult::Ok);
+  TEST_ASSERT_TRUE(r.engine.execute(cmd(CommandType::Notify, "",
+      "{\"stack\":false,\"icons\":[{\"icon\":\"green\",\"unknown\":0}]}")) ==
+      DispatchResult::ValidationError);
+  TEST_ASSERT_EQUAL_STRING("red", r.engine.notifications().current().extras().icons[0].icon.c_str());
+}
+
 static void test_builtin_app_renders_via_clock() {
   Rig r;
   TimeApp timeApp;
@@ -897,6 +1164,16 @@ int main(int, char**) {
   RUN_TEST(test_fullscreen_icon_survives_and_text_draws_over_it);
   RUN_TEST(test_icon_decoded_once_per_page_but_advanced_every_frame);
   RUN_TEST(test_failed_icon_retries_on_timer_and_heals);
+  RUN_TEST(test_panel_bounds_reach_pushed_app_and_notification_icons);
+  RUN_TEST(test_multiple_icons_render_in_payload_order_at_absolute_coordinates);
+  RUN_TEST(test_icons_of_a_page_start_animating_on_the_same_frame);
+  RUN_TEST(test_an_icon_waiting_for_memory_does_not_hold_back_the_others);
+  RUN_TEST(test_additional_icons_load_one_per_frame_after_the_page_icon);
+  RUN_TEST(test_missing_icons_wait_for_an_asset_change_instead_of_a_timer);
+  RUN_TEST(test_multiple_notification_icons_clip_and_animate_independently);
+  RUN_TEST(test_position_only_updates_keep_icon_players_and_removal_releases_them);
+  RUN_TEST(test_positioned_icon_factory_failure_retries_without_blocking_page);
+  RUN_TEST(test_page_change_releases_old_icon_before_allocating_new_instances);
   RUN_TEST(test_repeat_holds_a_notification_not_the_rotation);
   RUN_TEST(test_repeat_still_holds_the_rotation_for_a_pushed_app);
   RUN_TEST(test_overflowing_text_is_not_held_by_the_default);
@@ -917,6 +1194,8 @@ int main(int, char**) {
   RUN_TEST(test_incoming_page_is_drawn_with_its_own_scroll);
   RUN_TEST(test_incoming_scroll_survives_the_page_change);
   RUN_TEST(test_incoming_icon_keeps_its_place_during_a_transition);
+  RUN_TEST(test_positioned_icons_survive_transition_handover_without_reopening);
+  RUN_TEST(test_invalid_icon_lists_leave_existing_apps_and_notifications_untouched);
   RUN_TEST(test_builtin_app_renders_via_clock);
   RUN_TEST(test_a_pushed_app_shadows_the_builtin_of_the_same_name);
   RUN_TEST(test_effect_settings_reset_between_apps);

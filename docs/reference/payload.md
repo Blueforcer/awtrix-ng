@@ -244,20 +244,21 @@ With `direction: left`, an `inline` text rests at the start of that area, while 
 | `icon` | string | - | `""` | Icon ID, or inline base64 when longer than 64 chars |
 | `iconMode` | string | `fixed` · `pushOnce` · `push` | `fixed` | Whether approaching text shoves the icon aside |
 | `iconOffsetX` | int | px | `0` | X shift of the icon |
+| `icons` | array | up to 4 objects | `[]` | Additional icons at absolute `x`, `y` positions |
 
 The mode is chosen purely by **length**:
 
 - **64 characters or fewer** - an icon ID resolved against the filesystem. Animated `/ICONS/<id>.gif` is tried **first**, then static `/ICONS/<id>.jpg`.
 - **More than 64 characters** - inline base64 data, decoded and sniffed: a `GIF8` magic makes it an animated GIF, otherwise it is decoded as JPEG.
 
-Only JPEG and GIF are supported - no PNG, no BMP. Icons are drawn at rows 0–7.
+Only JPEG and GIF are supported - no PNG, no BMP. The `icon` image starts at the top row of the display.
 
 - **JPEG** always occupies an 8×8 square. A larger image is not rejected, but only its top-left 8×8 corner is shown, so draw JPEG icons at 8×8.
-- **GIF** keeps its own width, up to the full 32×8 panel.
+- **GIF** keeps its own width and height, up to the active panel's dimensions.
 
 A non-string `icon` is ignored.
 
-An icon narrower than the panel reserves a **9px column** (8px icon + 1px gap) that indents text, bars and the line chart. A GIF spanning the full 32 px is treated as a **background** instead: it is drawn at x=0 beneath the text, indents nothing, and replaces the app's `backgroundColor` colour and any `effect`. An icon that is missing or fails to decode falls back to the icon-less layout rather than leaving a black column.
+An icon narrower than the panel reserves a **9px column** (8px icon + 1px gap) that indents text, bars and the line chart. A GIF spanning the panel's full width is treated as a **background** instead: it is drawn at x=0 beneath the text, indents nothing, and replaces the app's `backgroundColor` colour and any `effect`. An icon that is missing or cannot be loaded falls back to the icon-less layout rather than leaving a black column.
 
 Transparent GIF pixels render as **black** on the first frame of an animation; within an animation they keep what the previous frame drew there.
 
@@ -271,13 +272,49 @@ Transparent GIF pixels render as **black** on the first frame of an animation; w
 
 The shift travels 0 → −9px as the text approaches. Does nothing when `icon` is empty.
 
-`iconOffsetX` moves the icon on the X axis only - there is no Y counterpart, the icon always occupies rows 0–7. It does not change the 9px column reserved for text and charts, so a positive `iconOffsetX` slides the icon *under* the text rather than moving the text out of the way.
+`iconOffsetX` moves the ordinary `icon` on the X axis only; it starts at the top row. It does not change the 9px column reserved for text and charts, so a positive `iconOffsetX` slides the icon *over* the text rather than moving the text out of the way: the icon is painted after the text and covers it. Use `icons` below for freely positioned images.
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
   -H 'Content-Type: application/json' \
   -d '{"text":"Long headline that scrolls","icon":"1234","iconMode":"push"}'
 ```
+
+### Multiple icons
+
+Pushed apps and notifications accept the same optional `icons` array:
+
+```json
+{
+  "icons": [
+    {"icon": "weather", "x": 0, "y": 0},
+    {"icon": "mail", "x": 12, "y": 0},
+    {"icon": "music", "x": 24, "y": 0}
+  ]
+}
+```
+
+Each object requires a nonempty `icon` string with the same ID/base64 convention as the ordinary
+`icon` field. `x` and `y` are optional integers, defaulting to zero, from −65535 to 65535. Negative
+coordinates clip at the display edge. Images retain their own size and must fit the panel's
+width and height before positioning.
+
+Each entry animates independently, including two entries using the same image. Each GIF uses
+its own colors and frame timings. Icons draw in array order after text, decorations and the
+ordinary `icon`, before the overlay; later entries
+cover earlier ones. They reserve no text columns and do not move with `iconMode`. You can also
+set `icon` to show an image beside the text or a full-width GIF background.
+
+There are at most **4 additional icons per page**. More than 4 entries, an invalid coordinate,
+a missing `icon`, or an unknown object property rejects the entire request with
+`422 validationFailed` and a field such as `icons[1].x`. If an image cannot be loaded, that icon
+is skipped and the rest of the page is shown. An image that does not exist is looked for again
+once a file is uploaded or deleted; one that failed for lack of memory is retried after five
+seconds. Additional icons load one per frame, so a page with several appears over a few frames;
+their animations start together once all of them are there.
+
+Send `"icons": []` to remove a pushed app's additional icons. In scripts, call `icon(name, x, y)`
+several times in `draw()`; see [Panel and drawing](../guides/scripting.md#panel-and-drawing).
 
 ## Timing & how long a page lives
 
@@ -597,9 +634,10 @@ Each frame is painted in this order:
 
 1. **Background** - the effect if `effect` resolves, otherwise a clear to `backgroundColor` or black.
 2. **Text and decorations** - if `textInFront`, decorations then text; otherwise text then decorations. Decorations are always `draw` commands → progress → bar chart → line chart.
-3. **Icon** - drawn at rows 0–7, at `iconOffsetX` plus any `iconMode` shift.
-4. **Overlay** - the per-app overlay if set, else the global one.
-5. **Stale marker** - a dark-red frame if a `lifetimeExpiry: "mark"` app has expired. Drawn before the icon and overlay, so those paint over it.
+3. **Icon** - starts at the top row, at `iconOffsetX` plus any `iconMode` shift. A full-width ordinary icon is the background instead.
+4. **Additional icons** - `icons` entries, in array order, at their absolute `x`, `y` positions.
+5. **Overlay** - the per-app overlay if set, else the global one.
+6. **Stale marker** - a dark-red frame if a `lifetimeExpiry: "mark"` app has expired. Drawn before the icons and overlay, so those paint over it.
 
 ## Worked example
 

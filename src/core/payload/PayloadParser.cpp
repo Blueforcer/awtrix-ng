@@ -26,7 +26,7 @@ const char* const kLifetimeExpiryNames[] = {"remove", "mark"};
 const char* const kAppKeys[] = {
     "text", "textCase", "font", "textInFront", "textCenter", "textColor",
     "textBlinkMs", "textFadeMs", "textOffsetX",
-    "backgroundColor", "icon", "iconMode", "iconOffsetX",
+    "backgroundColor", "icon", "icons", "iconMode", "iconOffsetX",
     "durationMs", "scroll", "repeat", "lifetimeMs", "lifetimeExpiry",
     "palette", "paletteBlend", "paletteSpan", "paletteSpeed",
     "barChart", "lineChart", "chartAutoscale", "chartColor",
@@ -453,7 +453,59 @@ Take takePaletteMember(const std::string& k, api::JsonReader r, AppSpec& s, Disp
   return Take::NotMine;
 }
 
+bool readPlacedIcons(api::JsonReader r, AppSpec& s, DispatchDetail* err) {
+  auto fail = [&](const std::string& field, const std::string& message) {
+    if (err) *err = {field, message};
+    return false;
+  };
+  if (!r.isArray()) return fail("icons", "expected an array of positioned icons");
+  api::JsonReader count = r;
+  count.enterArray();
+  std::size_t size = 0;
+  while (count.nextElement()) {
+    if (++size > kMaxPlacedIcons)
+      return fail("icons", "at most " + std::to_string(kMaxPlacedIcons) +
+                               " positioned icons are allowed");
+    if (!count.skipValue())
+      return fail("icons[" + std::to_string(size - 1) + "]", "invalid icon object");
+  }
+
+  std::vector<PlacedIconSpec> icons;
+  icons.reserve(size);
+  r.enterArray();
+  while (r.nextElement()) {
+    const std::string field = "icons[" + std::to_string(icons.size()) + "]";
+    api::JsonReader item = r;
+    if (!item.enterObject()) return fail(field, "expected an icon object");
+    PlacedIconSpec icon;
+    while (item.nextMember()) {
+      const std::string key(item.key());
+      const std::string member = field + "." + key;
+      if (key == "icon") {
+        if (!item.isString()) return fail(member, "expected a nonempty icon string");
+        icon.icon.clear();
+        if (!item.appendString(icon.icon) || icon.icon.empty())
+          return fail(member, "expected a nonempty icon string");
+      } else if (key == "x" || key == "y") {
+        long long value = 0;
+        if (!item.isInteger() || !item.asLong(value) || value < -65535 || value > 65535)
+          return fail(member, "expected an integer between -65535 and 65535");
+        (key == "x" ? icon.x : icon.y) = static_cast<int>(value);
+      } else {
+        return fail(member, "unknown icon property");
+      }
+      if (!item.skipValue()) return fail(member, "invalid icon property value");
+    }
+    if (icon.icon.empty()) return fail(field + ".icon", "expected a nonempty icon string");
+    icons.push_back(std::move(icon));
+    if (!r.skipValue()) return fail(field, "invalid icon object");
+  }
+  if (!icons.empty() || !s.extras().icons.empty()) s.extrasMut().icons = std::move(icons);
+  return true;
+}
+
 Take takeIconMember(const std::string& k, api::JsonReader r, AppSpec& s, DispatchDetail* err) {
+  if (k == "icons") return readPlacedIcons(r, s, err) ? Take::Ok : Take::Failed;
   if (k == "icon") {
     if (r.isString()) r.appendString(s.icon);
     return Take::Ok;

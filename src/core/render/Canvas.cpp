@@ -10,23 +10,20 @@ Canvas::Canvas(int width, int height)
       clipRight_(width_ - 1),
       pixels_(static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_), 0u) {}
 
+Canvas::Canvas(int width, int height, uint32_t* pixels)
+    : width_(pixels && width > 0 && height > 0 ? width : 0),
+      height_(width_ > 0 ? height : 0),
+      clipRight_(width_ - 1),
+      externalPixels_(width_ > 0 ? pixels : nullptr) {}
+
 void Canvas::setClipX(int left, int right) {
   clipLeft_ = left > 0 ? left : 0;
   clipRight_ = right < width_ - 1 ? right : width_ - 1;
 }
 
 void Canvas::clear(uint32_t rgb) {
-  for (auto& p : pixels_) p = rgb;
-}
-
-void Canvas::setPixel(int x, int y, uint32_t rgb) {
-  if (!writable(x, y)) return;
-  pixels_[static_cast<std::size_t>(y) * width_ + x] = rgb & 0xFFFFFFu;
-}
-
-uint32_t Canvas::getPixel(int x, int y) const {
-  if (!inBounds(x, y)) return 0u;
-  return pixels_[static_cast<std::size_t>(y) * width_ + x];
+  uint32_t* pixels = data();
+  for (std::size_t i = 0; i < size(); ++i) pixels[i] = rgb;
 }
 
 // Bresenham with a single error term: err tracks the accumulated deviation so no division or

@@ -39,8 +39,17 @@ struct TextFragment {
   uint32_t color = 0xFFFFFFu;
 };
 
+inline constexpr std::size_t kMaxPlacedIcons = 4;
+
+struct PlacedIconSpec {
+  std::string icon;
+  int x = 0;
+  int y = 0;
+};
+
 // The rarely used half of AppSpec, kept behind a shared pointer so a plain text app stays small.
 struct AppSpecExtras {
+  std::vector<PlacedIconSpec> icons;
   render::ColorRamp palette;
   bool textUsesPalette = false;
   bool chartUsesPalette = false;

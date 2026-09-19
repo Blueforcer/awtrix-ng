@@ -60,6 +60,50 @@ static void test_fill_circle_center_and_radius() {
   TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(4, 7));
 }
 
+static void test_external_buffer_drawing_and_clear() {
+  uint32_t pixels[] = {0x010203u, 0u, 0u, 0u, 0u, 0u};
+  Canvas c(3, 2, pixels);
+  const Canvas& readOnly = c;
+  TEST_ASSERT_EQUAL_PTR(pixels, c.data());
+  TEST_ASSERT_EQUAL_PTR(pixels, readOnly.data());
+  TEST_ASSERT_EQUAL_UINT(6u, (unsigned)c.size());
+  TEST_ASSERT_EQUAL_HEX32(0x010203u, c.getPixel(0, 0));
+  c.setClipX(1, 1);
+  c.fillRect(-1, -1, 5, 4, 0xFF123456u);
+  TEST_ASSERT_EQUAL_HEX32(0x010203u, pixels[0]);
+  TEST_ASSERT_EQUAL_HEX32(0x123456u, pixels[1]);
+  TEST_ASSERT_EQUAL_HEX32(0u, pixels[2]);
+  TEST_ASSERT_EQUAL_HEX32(0x123456u, pixels[4]);
+  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(3, 1));
+  c.clear(0xABCDEFu);
+  for (uint32_t pixel : pixels) TEST_ASSERT_EQUAL_HEX32(0xABCDEFu, pixel);
+}
+
+static void test_empty_external_buffers() {
+  uint32_t pixel = 0x123456u;
+  Canvas canvases[] = {
+      Canvas(3, 2, nullptr), Canvas(0, 2, &pixel), Canvas(3, 0, &pixel),
+      Canvas(-1, 2, &pixel), Canvas(3, -1, &pixel)};
+  for (auto& c : canvases) {
+    TEST_ASSERT_EQUAL_INT(0, c.width());
+    TEST_ASSERT_EQUAL_INT(0, c.height());
+    TEST_ASSERT_EQUAL_UINT(0u, (unsigned)c.size());
+    c.setPixel(0, 0, 0xFFFFFFu);
+    c.clear();
+    TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(0, 0));
+  }
+  TEST_ASSERT_EQUAL_HEX32(0x123456u, pixel);
+}
+
+static void test_owning_copy_keeps_independent_pixels() {
+  Canvas original(2, 1);
+  original.setPixel(0, 0, 0x123456u);
+  Canvas copy = original;
+  copy.setPixel(0, 0, 0xABCDEFu);
+  TEST_ASSERT_EQUAL_HEX32(0x123456u, original.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(0xABCDEFu, copy.getPixel(0, 0));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_dimensions_and_clear);
@@ -68,5 +112,8 @@ int main(int, char**) {
   RUN_TEST(test_fill_rect);
   RUN_TEST(test_draw_rect_outline_only);
   RUN_TEST(test_fill_circle_center_and_radius);
+  RUN_TEST(test_external_buffer_drawing_and_clear);
+  RUN_TEST(test_empty_external_buffers);
+  RUN_TEST(test_owning_copy_keeps_independent_pixels);
   return UNITY_END();
 }

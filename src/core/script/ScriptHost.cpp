@@ -172,6 +172,8 @@ bool ScriptHost::set(const std::string& name, const std::string& source,
   if (meta.module && refuseModule(name, meta)) return false;
 
   const bool isNew = !has(name);
+  const auto replaced = apps_.find(name);
+  if (replaced != apps_.end()) replaced->second->releaseIcons();
 
   if (svc_.freeHeap) {
     const std::size_t need = installNeedsBytes(source.size(), !isNew);

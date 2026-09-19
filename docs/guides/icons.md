@@ -87,22 +87,22 @@ anything you make yourself; `.jpg` is there for icons that already exist.
 
 ### Size
 
-An icon is at most **32×8** pixels, and that ceiling does not move with your panel width. Make
-JPEG icons 8×8. A GIF keeps its own size up to 32×8, so a GIF as wide as the panel fills the
-display and is drawn as a background behind the text rather than beside it.
+Make JPEG icons 8×8. A GIF keeps its own size up to the **active panel's width and height**, so
+a 41×8 GIF plays at full size on a 41×8 panel. In the `icon` field, a GIF as wide as the panel
+is drawn as a background behind the text. The same size limits apply to script icons, pushed
+apps and notifications.
 
-A GIF with any frame **larger** than 32×8 does not play at all: it is rejected outright, not
-cropped. Resize before uploading rather than relying on AWTRIX.
-
-There is no file-size limit, but a large or long animation costs far more memory than a small
-one. If icons start failing to load, that is the budget you are against.
+Keep every animation frame within the panel's width and height. Resize oversized GIFs before
+uploading. If an image does not load, try a smaller or shorter GIF. See [Limits](../reference/limits.md#display)
+for supported panel sizes.
 
 ### GIF playback
 
 | Behaviour | Detail |
 |---|---|
 | Looping | Infinite; the loop count in the file is ignored |
-| Frame delay | Taken from the GIF. A delay of `0` or less becomes **100 ms** |
+| Frame delay | Each GIF uses its own frame timings. A delay of `0` becomes **100 ms** |
+| Colors | Each GIF uses its own colors, including when several GIFs appear together |
 | Transparency | Transparent pixels keep whatever the previous frame drew there |
 
 ## Use an icon in a payload
@@ -115,9 +115,24 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
   -d '{"text":"Long headline that scrolls","icon":"1234","iconMode":"push"}'
 ```
 
+To show several images at once, use the optional `icons` array with `{icon, x, y}` objects.
+Up to four additional icons animate independently at the positions you choose:
+
+```json
+{
+  "icons": [
+    {"icon": "weather", "x": 0, "y": 0},
+    {"icon": "mail", "x": 16, "y": 0}
+  ]
+}
+```
+
+You can also use the `icon` field in the same payload. See [Multiple icons](../reference/payload.md#multiple-icons)
+for drawing order and limits.
+
 Everything about how an icon renders and lays out - the `icon`, `iconMode` and `iconOffsetX`
 keys, the 9px text column, the full-width GIF background, and what happens when an icon is
-missing or fails to decode - is covered in the
+missing or cannot be displayed - is covered in the
 [payload reference → Icon](../reference/payload.md#icon).
 
 ## Inline base64 icons

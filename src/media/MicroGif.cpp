@@ -1,6 +1,7 @@
 #include "media/MicroGif.h"
 
 #include <cstring>
+#include <limits>
 
 #include "core/render/Color.h"
 
@@ -9,29 +10,121 @@ namespace media {
 
 namespace {
 
-// A frame emits at most one new dictionary entry per pixel. Even an 8-bit palette starts
-// with only 258 entries; leave two spare slots for the next-code case and grow with the panel.
-constexpr int kLzwSlots = MicroGif::kMaxW * MicroGif::kMaxH + 258 + 2;
+// GIF codes have at most 12 bits, regardless of frame or panel size.
+constexpr int kLzwMaxSlots = 4096;
+
+bool pixelCountFits(int w, int h) {
+  return w > 0 && h > 0 && w <= std::numeric_limits<int>::max() / h &&
+         static_cast<std::size_t>(w) <=
+             std::numeric_limits<std::size_t>::max() / sizeof(uint32_t) / h;
+}
 
 // Interlaced GIFs store rows out of order in four passes (every 8th from 0, every 8th from 4,
 // every 4th from 2, every 2nd from 1). Maps decode order r to the row it belongs on.
 int interlacedRow(int r, int h) {
   static const int kStart[4] = {0, 4, 2, 1};
   static const int kStep[4] = {8, 8, 4, 2};
-  for (int p = 0; p < 4; ++p)
-    for (int y = kStart[p]; y < h; y += kStep[p])
-      if (r-- == 0) return y;
+  for (int p = 0; p < 4; ++p) {
+    const int rows = h > kStart[p] ? (h - kStart[p] + kStep[p] - 1) / kStep[p] : 0;
+    if (r < rows) return kStart[p] + r * kStep[p];
+    r -= rows;
+  }
   return 0;
 }
 
 }
 
 struct MicroGif::LzwScratch {
-  uint16_t prefix[kLzwSlots];
-  uint8_t suffix[kLzwSlots];
-  uint8_t stack[kLzwSlots];
-  uint8_t index[kMaxW * kMaxH];
+  // One aligned allocation for the dictionary, expansion stack and frame indices. A frame can
+  // create at most one dictionary entry per output pixel, so small icons need small tables too.
+  int initial = 0;
+  int slots = 0;
+  int stackSize = 0;
+  uint16_t* prefix = nullptr;
+  uint8_t* suffix = nullptr;
+  uint8_t* stack = nullptr;
+  uint8_t* index = nullptr;
+
+  bool allocate(int npix, int minCodeSize, ScratchClaim& claim) {
+    initial = (1 << minCodeSize) + 2;
+    slots = npix < kLzwMaxSlots - initial ? npix + initial : kLzwMaxSlots;
+    // Literal codes do not need dictionary records. No expansion can exceed the pixels
+    // already produced plus one, or the format's dictionary size.
+    const int entries = slots - initial;
+    stackSize = npix < kLzwMaxSlots ? npix : kLzwMaxSlots;
+    const std::size_t bytes = static_cast<std::size_t>(entries) * 3 + stackSize + npix;
+    prefix = claim.acquire((bytes + 1) / 2);
+    if (!prefix) return false;
+    suffix = reinterpret_cast<uint8_t*>(prefix + entries);
+    stack = suffix + entries;
+    index = stack + stackSize;
+    return true;
+  }
 };
+
+MicroGif::ScratchClaim* MicroGif::ScratchClaim::head_ = nullptr;
+PodBuffer<uint16_t>& MicroGif::ScratchClaim::workspace() {
+  static PodBuffer<uint16_t> buffer;
+  return buffer;
+}
+
+MicroGif::ScratchClaim::ScratchClaim() {
+  // Construct the pool before any containing global player finishes construction, so its
+  // destructor always runs after those players (including across translation units).
+  (void)workspace();
+}
+
+MicroGif::ScratchClaim::~ScratchClaim() { release(); }
+
+MicroGif::ScratchClaim::ScratchClaim(ScratchClaim&& other) noexcept {
+  *this = std::move(other);
+}
+
+MicroGif::ScratchClaim& MicroGif::ScratchClaim::operator=(ScratchClaim&& other) noexcept {
+  if (this == &other) return *this;
+  release();
+  words_ = other.words_;
+  prev_ = other.prev_;
+  next_ = other.next_;
+  if (words_) {
+    if (prev_) prev_->next_ = this;
+    else head_ = this;
+    if (next_) next_->prev_ = this;
+  }
+  other.words_ = 0;
+  other.prev_ = other.next_ = nullptr;
+  return *this;
+}
+
+void MicroGif::ScratchClaim::release() {
+  if (!words_) return;
+  if (prev_) prev_->next_ = next_;
+  else head_ = next_;
+  if (next_) next_->prev_ = prev_;
+  words_ = 0;
+  prev_ = next_ = nullptr;
+  std::size_t needed = 0;
+  for (const ScratchClaim* claim = head_; claim; claim = claim->next_)
+    if (claim->words_ > needed) needed = claim->words_;
+  // Shrinking must not itself require more memory. The next decoder allocates the smaller
+  // workspace on demand; closing the last player releases it entirely.
+  if (workspace().size() > needed) workspace().clear();
+}
+
+uint16_t* MicroGif::ScratchClaim::acquire(std::size_t words) {
+  if (!words_) {
+    next_ = head_;
+    if (head_) head_->prev_ = this;
+    head_ = this;
+  }
+  if (words > words_) words_ = words;
+  auto& buffer = workspace();
+  if (buffer.size() < words) {
+    buffer.clear();
+    if (!buffer.resize(words)) return nullptr;
+  }
+  return buffer.data();
+}
 
 int MicroGif::readByte() {
   if (pos_ >= len_) return -1;
@@ -56,10 +149,10 @@ bool MicroGif::skipSubBlocks() {
   }
 }
 
-bool MicroGif::begin(const uint8_t* data, std::size_t len) {
+bool MicroGif::begin(const uint8_t* data, std::size_t len, int maxWidth, int maxHeight) {
   *this = MicroGif{};
   // 6-byte signature plus the 7-byte logical screen descriptor is the shortest legal header.
-  if (!data || len < 13) return false;
+  if (!data || len < 13 || maxWidth <= 0 || maxHeight <= 0) return false;
   if (std::memcmp(data, "GIF87a", 6) != 0 && std::memcmp(data, "GIF89a", 6) != 0) return false;
   data_ = data;
   len_ = len;
@@ -75,8 +168,15 @@ bool MicroGif::begin(const uint8_t* data, std::size_t len) {
   }
   // An oversized logical screen is clamped rather than rejected; only individual frames bigger
   // than the panel are refused later on.
-  w_ = lw < kMaxW ? lw : kMaxW;
-  h_ = lh < kMaxH ? lh : kMaxH;
+  maxW_ = maxWidth < 65535 ? maxWidth : 65535;
+  maxH_ = maxHeight < 65535 ? maxHeight : 65535;
+  w_ = lw < maxW_ ? lw : maxW_;
+  h_ = lh < maxH_ ? lh : maxH_;
+  if (!pixelCountFits(w_, h_)) {
+    data_ = nullptr;
+    w_ = h_ = 0;
+    return false;
+  }
   globalColors_ = 0;
   // Bit 7 of the packed field means a global color table follows, bits 0-2 hold its size as
   // log2(entries) - 1.
@@ -104,6 +204,48 @@ void MicroGif::rewind() {
   restore_.resize(0);
 }
 
+bool MicroGif::exceedsFrameCount(int limit) const {
+  std::size_t at = firstFramePos_;
+  int count = 0;
+  const auto skipBlocks = [&]() -> bool {
+    while (at < len_) {
+      const std::size_t n = data_[at++];
+      if (!n) return true;
+      if (n > len_ - at) return false;
+      at += n;
+    }
+    return false;
+  };
+  if (!data_) return false;
+  while (at < len_) {
+    const int tag = data_[at++];
+    if (tag == 0x21) {
+      if (at == len_) return false;
+      ++at;  // Extension label; all extensions then use length-prefixed blocks.
+      if (!skipBlocks()) return false;
+    } else if (tag == 0x2C) {
+      if (len_ - at < 9) return false;
+      const int fw = data_[at + 4] | (data_[at + 5] << 8);
+      const int fh = data_[at + 6] | (data_[at + 7] << 8);
+      const int packed = data_[at + 8];
+      if (fw > maxW_ || fh > maxH_ || !pixelCountFits(fw, fh)) return false;
+      at += 9;
+      if (packed & 0x80) {
+        const std::size_t bytes = (1u << ((packed & 7) + 1)) * 3;
+        if (bytes > len_ - at) return false;
+        at += bytes;
+      }
+      if (at == len_ || data_[at] < 1 || data_[at] > 8) return false;
+      ++at;
+      if (++count > limit) return true;
+      if (!skipBlocks()) return false;
+    } else {
+      return false;
+    }
+  }
+  return false;
+}
+
 // Graphic Control Extension: transparency index, disposal method and the frame delay, which the
 // format stores in hundredths of a second.
 bool MicroGif::parseGce() {
@@ -123,7 +265,7 @@ bool MicroGif::parseGce() {
   return skipSubBlocks();
 }
 
-MicroGif::Step MicroGif::nextFrame(Canvas& dst, int& delayMs) {
+MicroGif::Step MicroGif::nextFrame(Canvas& dst, int& delayMs, bool clearFirst) {
   delayMs = 0;
   if (!data_) return Step::kError;
   // Block dispatch: 0x3B trailer, 0x2C image descriptor, 0x21 extension. A truncated file is
@@ -132,7 +274,12 @@ MicroGif::Step MicroGif::nextFrame(Canvas& dst, int& delayMs) {
     const int b = readByte();
     if (b < 0 || b == 0x3B) return Step::kEnd;
     if (b == 0x2C) {
-      const Step st = decodeImage(dst);
+      const std::size_t imagePos = pos_ - 1;
+      const Step st = decodeImage(dst, clearFirst);
+      if (st == Step::kOom) {
+        pos_ = imagePos;
+        return st;  // Retry this frame with its GCE intact; the destination is untouched.
+      }
       if (st == Step::kFrame) delayMs = pendingDelayMs_;
       transparent_ = -1;
       disposal_ = 0;
@@ -153,19 +300,14 @@ MicroGif::Step MicroGif::nextFrame(Canvas& dst, int& delayMs) {
   }
 }
 
-MicroGif::Step MicroGif::decodeImage(Canvas& dst) {
+MicroGif::Step MicroGif::decodeImage(Canvas& dst, bool clearFirst) {
   const int fx = readWord();
   const int fy = readWord();
   const int fw = readWord();
   const int fh = readWord();
   const int packed = readByte();
   if (fx < 0 || fy < 0 || fw <= 0 || fh <= 0 || packed < 0) return Step::kError;
-  if (fw > kMaxW || fh > kMaxH) return Step::kError;
-
-  // These tables are too large for the stack, and only ever one GIF decodes at a time, so
-  // a single shared static beats allocating per frame.
-  static LzwScratch s_scratch;
-  LzwScratch* const scratch = &s_scratch;
+  if (fw > maxW_ || fh > maxH_ || !pixelCountFits(fw, fh)) return Step::kError;
 
   const uint8_t* pal = palette_;
   int colors = globalColors_;
@@ -177,39 +319,49 @@ MicroGif::Step MicroGif::decodeImage(Canvas& dst) {
   }
   const bool interlaced = (packed & 0x40) != 0;
 
+  const int minCodeSize = readByte();
+  if (minCodeSize < 1 || minCodeSize > 8) return Step::kError;
+  const int npix = fw * fh;
+  LzwScratch scratch;
+  if (!scratch.allocate(npix, minCodeSize, scratch_)) return Step::kOom;
+  if (!lzwDecode(minCodeSize, scratch, scratch.index, npix)) return Step::kError;
+
+  int visibleW = (w_ < dst.width() ? w_ : dst.width()) - fx;
+  int visibleH = (h_ < dst.height() ? h_ : dst.height()) - fy;
+  visibleW = visibleW < 0 ? 0 : (visibleW < fw ? visibleW : fw);
+  visibleH = visibleH < 0 ? 0 : (visibleH < fh ? visibleH : fh);
+  const bool haveRestore = restore_.size() == static_cast<std::size_t>(prevW_) * prevH_;
+  // Reserve before changing the destination, preserving the old snapshot if allocation fails.
+  if (disposal_ == 3 && !restore_.resize(static_cast<std::size_t>(visibleW) * visibleH))
+    return Step::kOom;
+
+  if (clearFirst) dst.fillRect(0, 0, w_, h_, 0x000000u);
+
   if (prevDisposal_ == 2) {
     dst.fillRect(prevX_, prevY_, prevW_, prevH_, 0x000000u);
   } else if (prevDisposal_ == 3) {
-    const int n = prevW_ * prevH_;
-    if (restore_.size() == static_cast<std::size_t>(n)) {
+    if (haveRestore) {
       const uint32_t* saved = restore_.data();
       for (int y = 0; y < prevH_; ++y)
         for (int x = 0; x < prevW_; ++x)
           dst.setPixel(prevX_ + x, prevY_ + y, *saved++);
-    } else {
-      // Preserve the old bounded-memory fallback if the optional snapshot could not be allocated.
-      dst.fillRect(prevX_, prevY_, prevW_, prevH_, 0x000000u);
     }
   }
-  restore_.resize(0);
-
-  const int minCodeSize = readByte();
-  if (minCodeSize < 1 || minCodeSize > 8) return Step::kError;
-  const int npix = fw * fh;
-  if (!lzwDecode(minCodeSize, *scratch, scratch->index, npix)) return Step::kError;
+  prevDisposal_ = 0;
 
   // A restore-to-previous frame needs the destination pixels from before it is composited. Keep
   // only its rectangle, not a second logical-screen canvas.
-  if (disposal_ == 3 && restore_.resize(static_cast<std::size_t>(npix))) {
+  if (disposal_ == 3) {
     uint32_t* saved = restore_.data();
-    for (int y = 0; y < fh; ++y)
-      for (int x = 0; x < fw; ++x) *saved++ = dst.getPixel(fx + x, fy + y);
-  }
+    for (int y = 0; y < visibleH; ++y)
+      for (int x = 0; x < visibleW; ++x) *saved++ = dst.getPixel(fx + x, fy + y);
+  } else restore_.resize(0);
 
   for (int r = 0; r < fh; ++r) {
     const int y = interlaced ? interlacedRow(r, fh) : r;
-    const uint8_t* src = scratch->index + static_cast<std::size_t>(r) * fw;
-    for (int x = 0; x < fw; ++x) {
+    if (y >= visibleH) continue;
+    const uint8_t* src = scratch.index + static_cast<std::size_t>(r) * fw;
+    for (int x = 0; x < visibleW; ++x) {
       const int idx = src[x];
       if (idx == transparent_) continue;
       if (idx >= colors) continue;
@@ -221,8 +373,8 @@ MicroGif::Step MicroGif::decodeImage(Canvas& dst) {
   prevDisposal_ = disposal_;
   prevX_ = fx;
   prevY_ = fy;
-  prevW_ = fw;
-  prevH_ = fh;
+  prevW_ = visibleW;
+  prevH_ = visibleH;
   return Step::kFrame;
 }
 
@@ -294,18 +446,18 @@ bool MicroGif::lzwDecode(int minCodeSize, LzwScratch& s, uint8_t* out, int npix)
         c = prev;
       }
       while (c >= endCode + 1) {
-        if (sp - s.stack >= kLzwSlots) return false;
-        *sp++ = s.suffix[c];
-        c = s.prefix[c];
+        if (c >= nextSlot || c >= s.slots || sp - s.stack >= s.stackSize) return false;
+        *sp++ = s.suffix[c - s.initial];
+        c = s.prefix[c - s.initial];
       }
       if (c >= clearCode) return false;
       first = c;
-      if (sp - s.stack >= kLzwSlots) return false;
+      if (sp - s.stack >= s.stackSize) return false;
       *sp++ = static_cast<uint8_t>(c);
 
-      if (prev >= 0 && nextSlot < kLzwSlots) {
-        s.prefix[nextSlot] = static_cast<uint16_t>(prev);
-        s.suffix[nextSlot] = static_cast<uint8_t>(first);
+      if (prev >= 0 && nextSlot < s.slots) {
+        s.prefix[nextSlot - s.initial] = static_cast<uint16_t>(prev);
+        s.suffix[nextSlot - s.initial] = static_cast<uint8_t>(first);
         ++nextSlot;
         if (nextSlot == maxCode && codeSize < 12) {
           ++codeSize;

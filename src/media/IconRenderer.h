@@ -15,7 +15,8 @@ inline bool isPng(const uint8_t* data, std::size_t size) {
   return size >= 8 && std::memcmp(data, kMagic, sizeof(kMagic)) == 0;
 }
 
-bool draw(Canvas& canvas, const std::string& iconId, int x, int y);
+bool draw(Canvas& canvas, const std::string& iconId, int x, int y,
+          bool* outOfMemory = nullptr);
 
 }
 }

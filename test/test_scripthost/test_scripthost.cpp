@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,57 @@ void setUp() {
 }
 
 void tearDown() { script::heap::testing::resetBudgetBytes(); }
+
+namespace {
+
+struct CountingIcons : script::IScriptIcon {
+  struct Set : script::IScriptIconSet {
+    explicit Set(CountingIcons& owner) : owner_(owner) { ++owner_.alive; }
+    ~Set() override { --owner_.alive; }
+    bool draw(Canvas& canvas, std::string_view name, int x, int y, int64_t) override {
+      ++owner_.draws;
+      ++owner_.held;
+      owner_.holding.insert(std::string(name));
+      held_.insert(std::string(name));
+      canvas.setPixel(x, y, 0x00ABCDu);
+      return true;
+    }
+    void release() override {
+      ++owner_.releases;
+      owner_.held = 0;
+      for (const auto& n : held_) owner_.holding.erase(n);
+      held_.clear();
+    }
+    CountingIcons& owner_;
+    std::set<std::string> held_;
+  };
+
+  std::unique_ptr<script::IScriptIconSet> createSet() override {
+    if (failCreates > 0) {
+      --failCreates;
+      return nullptr;
+    }
+    ++created;
+    return std::unique_ptr<script::IScriptIconSet>(new Set(*this));
+  }
+
+  void reset() {
+    created = draws = releases = alive = held = failCreates = 0;
+    holding.clear();
+  }
+
+  int created = 0;
+  int draws = 0;
+  int releases = 0;
+  int alive = 0;
+  int held = 0;
+  int failCreates = 0;
+  std::set<std::string> holding;
+};
+
+CountingIcons g_icons;
+
+}
 
 static std::string app(const std::string& body) {
   return "class App\n" + body + "\nend\nreturn App()";
@@ -2078,6 +2130,79 @@ static void test_guarded_update_restores_broken_or_unsaved_replacement() {
   TEST_ASSERT_EQUAL(DispatchResult::ValidationError, svc.updateScript("S", "{}", detail));
 }
 
+static void renderApp(AppRegistry& reg, const char* name, const RenderCtx& ctx) {
+  IApp* a = reg.find(name);
+  TEST_ASSERT_NOT_NULL(a);
+  Canvas c(32, 8);
+  a->render(c, ctx);
+}
+
+static void test_icons_are_released_when_the_app_leaves_the_screen() {
+  g_icons.reset();
+  g_svc.icon = &g_icons;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("A", app("def draw() icon('a', 0, 0) end"));
+  host.set("B", app("def draw() icon('b', 0, 0) end"));
+  RenderCtx ctx;
+
+  host.tick(ctx, "A");
+  renderApp(reg, "A", ctx);
+  TEST_ASSERT_TRUE(g_icons.holding.count("a") == 1);
+
+  host.tick(ctx, "A", "B");
+  renderApp(reg, "A", ctx);
+  renderApp(reg, "B", ctx);
+  host.tick(ctx, "A", "B");
+  TEST_ASSERT_EQUAL_UINT(2, g_icons.holding.size());
+  TEST_ASSERT_EQUAL_INT(0, g_icons.releases);
+
+  host.tick(ctx, "B");
+  TEST_ASSERT_TRUE(g_icons.holding.count("a") == 0);
+  TEST_ASSERT_TRUE(g_icons.holding.count("b") == 1);
+
+  host.tick(ctx, "Time");
+  TEST_ASSERT_TRUE(g_icons.holding.empty());
+  TEST_ASSERT_EQUAL_INT(2, g_icons.created);
+}
+
+static void test_removing_a_visible_app_destroys_its_icon_set() {
+  g_icons.reset();
+  g_svc.icon = &g_icons;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("A", app("def draw() icon('a', 0, 0) end"));
+  RenderCtx ctx;
+  host.tick(ctx, "A");
+  renderApp(reg, "A", ctx);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.alive);
+  host.remove("A");
+  TEST_ASSERT_EQUAL_INT(0, g_icons.alive);
+}
+
+static void test_reinstalling_a_visible_app_releases_its_icons_first() {
+  g_icons.reset();
+  g_svc.icon = &g_icons;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("A", app("def draw() icon('a', 0, 0) end"));
+  RenderCtx ctx;
+  host.tick(ctx, "A");
+  renderApp(reg, "A", ctx);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.held);
+
+  TEST_ASSERT_FALSE(host.set("A", "class App def draw( end\nreturn App()") && host.errorOf("A").empty());
+  TEST_ASSERT_EQUAL_INT(1, g_icons.releases);
+  TEST_ASSERT_EQUAL_INT(0, g_icons.held);
+  TEST_ASSERT_EQUAL_INT(0, g_icons.alive);
+
+  TEST_ASSERT_TRUE(host.set("A", app("def draw() icon('b', 0, 0) end")));
+  host.tick(ctx, "A");
+  renderApp(reg, "A", ctx);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.alive);
+  TEST_ASSERT_EQUAL_INT(1, g_icons.held);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_guarded_copy_never_replaces_a_script);
@@ -2203,5 +2328,8 @@ int main(int, char**) {
   RUN_TEST(test_editing_a_modules_code_keeps_its_settings);
   RUN_TEST(test_a_stored_module_value_beats_a_changed_default);
   RUN_TEST(test_removing_a_module_releases_its_store);
+  RUN_TEST(test_icons_are_released_when_the_app_leaves_the_screen);
+  RUN_TEST(test_removing_a_visible_app_destroys_its_icon_set);
+  RUN_TEST(test_reinstalling_a_visible_app_releases_its_icons_first);
   return UNITY_END();
 }
