@@ -45,8 +45,8 @@ def build():
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for src, name in MEMBERS:
             try:
-                with open(src, "rb") as f:
-                    data = f.read()
+                with open(src, encoding="utf-8") as f:
+                    data = f.read().encode("utf-8")
             except OSError as e:
                 raise SystemExit("gen_agent_skill: cannot read a source: %s" % e)
             info = zipfile.ZipInfo(name, FIXED_TIME)
@@ -75,8 +75,8 @@ def stale():
         if sorted(z.namelist()) != sorted(name for _, name in MEMBERS):
             return "%s holds a different set of files" % os.path.relpath(OUT, ROOT)
         for src, name in MEMBERS:
-            with open(src, "rb") as f:
-                if z.read(name) != f.read():
+            with open(src, encoding="utf-8") as f:
+                if z.read(name) != f.read().encode("utf-8"):
                     return "%s is stale - %s changed after it was packed" % (
                         os.path.relpath(OUT, ROOT),
                         os.path.relpath(src, ROOT),
