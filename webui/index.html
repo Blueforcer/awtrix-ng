@@ -945,7 +945,7 @@ const I18N={en:{
   apmaintH:'Restart AWTRIX to apply the WiFi settings you saved.',
   fwfile:'Upload firmware (.bin)',
   update:'Firmware update',updchk:'Check for updates',updchecking:'Checking GitHub…',
-  updcur:'{v} is the latest release.',updnew:'{v} is available',updfail:'GitHub could not be reached. Check your internet connection and try again.',
+  updcur:'{v} is the latest release.',updnew:'{v} is available',updfail:'Could not check for updates. Try again later.',updrate:'GitHub’s limit for anonymous requests from this internet connection has been reached. Try again later.',
   upddl:'Download',updnotes:'Release notes',updavail:'update available',
   updhelp:'Install directly from your browser, or download the file for a manual upload. Keep this page open until the update finishes.',
   updinstall:'Download & install',upddownloading:'Downloading firmware…',upduploading:'Uploading firmware…',updnotready:'The download is not ready for this release. Try again shortly or upload the file manually.',updbadfile:'Firmware verification failed. Nothing was uploaded. Try again.',updbusy:'A firmware update is already running.',
@@ -1135,7 +1135,7 @@ const I18N={en:{
   apmaintH:'Neustart, damit die gespeicherten WLAN-Einstellungen wirken.',
   fwfile:'Firmware hochladen (.bin)',
   update:'Firmware-Update',updchk:'Nach Update suchen',updchecking:'Frage GitHub…',
-  updcur:'{v} ist die neueste Version.',updnew:'{v} ist verfügbar',updfail:'GitHub ist nicht erreichbar. Prüfe deine Internetverbindung und versuche es erneut.',
+  updcur:'{v} ist die neueste Version.',updnew:'{v} ist verfügbar',updfail:'Update-Prüfung fehlgeschlagen. Bitte später erneut versuchen.',updrate:'GitHubs Limit für anonyme Anfragen über diesen Internetanschluss ist erreicht. Bitte später erneut versuchen.',
   upddl:'Herunterladen',updnotes:'Release Notes',updavail:'Update verfügbar',
   updhelp:'Direkt im Browser installieren oder die Datei zum manuellen Hochladen herunterladen. Diese Seite bis zum Abschluss geöffnet lassen.',
   updinstall:'Herunterladen & installieren',upddownloading:'Firmware wird heruntergeladen…',upduploading:'Firmware wird hochgeladen…',updnotready:'Der Download für diese Version ist noch nicht bereit. Bitte später erneut versuchen oder die Datei manuell hochladen.',updbadfile:'Firmware-Prüfung fehlgeschlagen. Es wurde nichts hochgeladen. Bitte erneut versuchen.',updbusy:'Ein Firmware-Update läuft bereits.',
@@ -3666,11 +3666,10 @@ function updCached(){
   try{const c=JSON.parse(localStorage.getItem(UPD_KEY)||'null');if(c&&Date.now()-c.at<UPD_TTL_MS)return c;}catch(e){}
   return null;
 }
-async function updCheck(force){
-  if(!force){const c=updCached();if(c)return c;}
+async function updCheck(){
   if(navigator.onLine===false)throw new Error(t('updfail'));
   const r=await fetch(RELEASES_API,{headers:{Accept:'application/vnd.github+json'},cache:'no-store',signal:AbortSignal.timeout(10000)});
-  if(!r.ok)throw new Error('HTTP '+r.status);
+  if(!r.ok)throw new Error(t((r.status===403&&r.headers?.get('x-ratelimit-remaining')==='0')||r.status===429?'updrate':'updfail'));
   const j=await r.json();
   const assets={};
   for(const a of j.assets||[])if(a&&a.name)assets[a.name]=a.browser_download_url;
@@ -3723,9 +3722,12 @@ function updateRow(install){
   async function show(force){
     if(firmwareBusy)return;
     installBtn.disabled=true;available=null;
-    chkBtn.disabled=true;status.textContent=t('updchecking');help.textContent='';
+    const cached=updCached();
+    status.textContent=t('version')+' '+((S.stats&&S.stats.version)||'');
+    if(!force&&!cached)return;
+    chkBtn.disabled=true;if(force)status.textContent=t('updchecking');help.textContent='';
     try{
-      const avail=updAvailable(await updCheck(force));
+      const avail=updAvailable(force?await updCheck():cached);
       const img=S.stats&&S.stats.updateImage;
       if(avail){
         status.textContent=t('updnew').replace('{v}',avail.version)+(avail.published?' ('+avail.published+')':'');
@@ -3737,7 +3739,7 @@ function updateRow(install){
         status.textContent=t('updcur').replace('{v}',(S.stats&&S.stats.version)||'');
         dl.hidden=true;notes.hidden=true;
       }
-    }catch(e){status.textContent=t('updfail');dl.hidden=true;notes.hidden=true;}
+    }catch(e){status.textContent=t('version')+' '+((S.stats&&S.stats.version)||'');dl.hidden=true;notes.hidden=true;toast(e.message===t('updrate')?e.message:t('updfail'),false);}
     chkBtn.disabled=false;
   }
   chkBtn.addEventListener('click',()=>show(true));
@@ -3774,7 +3776,7 @@ function maintenanceSection(page){
       window.removeEventListener('beforeunload',warn);
       setTimeout(()=>location.reload(),12000);
     }catch(e){
-      fwStatus.textContent=e.message;toast(e.message,false);fw.hide();
+      fwStatus.textContent='';toast(e.message,false);fw.hide();
       firmwareBusy=false;fwBtn.disabled=false;if(installBtn)installBtn.disabled=false;
       window.removeEventListener('beforeunload',warn);
     }

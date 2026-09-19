@@ -26,12 +26,15 @@ async function openSystem(opts) {
   if (opts.device) Object.assign(ctx.store.device, opts.device);
   await goto(ctx.window, '#/system');
   await flush(60);
+  assert(githubCalls(ctx.netlog)===0,'opening the page never checks automatically');
+  ctx.window.document.querySelector('button[aria-label="Check for updates"]').click();
+  await flush(60);
   return ctx;
 }
 
 async function testNewerReleaseOffersTheMatchingFile() {
   const { window, netlog } = await openSystem({ latest: release('v1.1.2'), device: { updateImage: 'firmware-awtrix-ng-s3-quad.bin' } });
-  assert(githubCalls(netlog) === 1, 'opening the System page asks GitHub once');
+  assert(githubCalls(netlog) === 1, 'clicking Check for updates asks GitHub once');
   assert(status(window) && /1\.1\.2/.test(status(window).textContent), 'the row names the newer version');
   const a = download(window);
   assert(a && !a.hidden, 'a download link is offered');
@@ -70,7 +73,7 @@ async function testCheckIsCachedAcrossVisits() {
   window.close();
 }
 
-async function testUnreachableGithubIsReportedInTheRow() {
+async function testUnreachableGithubShowsNotification() {
   const ctx = await boot();
   ctx.window.localStorage.clear();
   const realFetch = ctx.window.fetch;
@@ -80,10 +83,24 @@ async function testUnreachableGithubIsReportedInTheRow() {
     return realFetch(input, opts);
   };
   await goto(ctx.window, '#/system');
+  ctx.window.document.querySelector('button[aria-label="Check for updates"]').click();
   await flush(60);
   const s = status(ctx.window);
-  assert(s && s.textContent.length > 0 && !/1\.1\.2/.test(s.textContent), 'the row says GitHub could not be reached');
+  assert(s && s.textContent==='Version 1.1.1', 'the row keeps only the running version after a failed check');
+  assert(ctx.window.document.querySelector('.toast.err')?.textContent.includes('Could not check'), 'failed check uses an error notification');
   assert(download(ctx.window) && download(ctx.window).hidden, 'nothing is offered when the check failed');
+  ctx.window.close();
+}
+
+async function testRateLimitHasSpecificNotification(){
+  const ctx=await boot();ctx.window.localStorage.clear();
+  const previous=ctx.window.fetch;
+  ctx.window.fetch=async (url,opts)=>String(url).includes('api.github.com')
+    ? {ok:false,status:403,headers:{get:()=> '0'}} : previous(url,opts);
+  await goto(ctx.window,'#/system');
+  ctx.window.document.querySelector('button[aria-label="Check for updates"]').click();await flush(60);
+  assert(ctx.window.document.querySelector('.toast.err')?.textContent.includes('anonymous requests'),'rate limit is explained without blaming connectivity');
+  assert(status(ctx.window).textContent==='Version 1.1.1','rate limit leaves a neutral version row');
   ctx.window.close();
 }
 
@@ -94,6 +111,7 @@ async function testOfflineSkipsTheCheck() {
   Object.defineProperty(ctx.window.navigator, 'onLine', { value: false, configurable: true });
   await goto(ctx.window, '#/system');
   await flush(60);
+  ctx.window.document.querySelector('button[aria-label="Check for updates"]').click();await flush(60);
   assert(githubCalls(ctx.netlog) === 0, 'no request leaves the browser while offline');
   ctx.window.close();
 }
@@ -150,7 +168,8 @@ async function testBadFirmwareNeverUploads(){
     const ctx=await firmwareCase(change);
     assert(ctx.uploads.length===0,'mismatched, corrupted, truncated or unavailable firmware is never uploaded');
     assert(!ctx.btn.disabled,'failed download allows a retry');
-    assert(ctx.window.document.getElementById('fw-status').textContent.length>0,'download failure is explained');
+    assert(ctx.window.document.querySelector('.toast.err')?.textContent.length>0,'download failure uses an error notification');
+    assert(ctx.window.document.getElementById('fw-status').textContent==='','failure leaves no inline error');
     ctx.window.close();
   }
 }
@@ -158,11 +177,21 @@ async function testBadFirmwareNeverUploads(){
 async function testRejectedFirmwareAllowsRetry(){
   const ctx=await firmwareCase({},400);
   assert(!ctx.btn.disabled,'device rejection allows a retry');
-  assert(/wrongChip/.test(ctx.window.document.getElementById('fw-status').textContent),'device rejection is shown');
+  assert(/wrongChip/.test(ctx.window.document.querySelector('.toast.err')?.textContent),'device rejection is shown');
+  ctx.window.close();
+}
+
+async function testNoAutomaticCheckAfterNavigation(){
+  const ctx=await boot();ctx.window.localStorage.clear();
+  for(const hash of ['#/system','#/','#/system'])await goto(ctx.window,hash);
+  assert(githubCalls(ctx.netlog)===0,'page visits and navigation never initiate a release check');
+  assert(status(ctx.window).textContent==='Version 1.1.1','unchecked row shows the installed version');
+  assert(!ctx.window.document.querySelector('.toast.err'),'no automatic update error notifications');
   ctx.window.close();
 }
 
 async function main() {
+  await testNoAutomaticCheckAfterNavigation();
   await testBrowserFirmwareInstall();
   await testBadFirmwareNeverUploads();
   await testRejectedFirmwareAllowsRetry();
@@ -170,8 +199,9 @@ async function main() {
   await testSameVersionIsUpToDate();
   await testPrereleaseDoesNotCount();
   await testCheckIsCachedAcrossVisits();
-  await testUnreachableGithubIsReportedInTheRow();
+  await testUnreachableGithubShowsNotification();
   await testOfflineSkipsTheCheck();
+  await testRateLimitHasSpecificNotification();
   await flush(20);
   console.log(`update-check: ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

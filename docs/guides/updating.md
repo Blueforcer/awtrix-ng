@@ -49,8 +49,8 @@ Status codes for the route: [Firmware upload](../reference/http.md#firmware-uplo
 
 ## Checking for a newer release
 
-The System page's Maintenance section compares the running version with the latest release on
-GitHub each time you open it, and **Check for updates** asks again at any time. The check runs
+In the System page's Maintenance section, click **Check for updates** to compare the running
+version with the latest release on GitHub. Opening a page never starts a check. The check runs
 in your browser - AWTRIX itself never talks to GitHub - so it needs your computer or phone to be
 online, not the clock. The answer is kept for a few hours.
 
