@@ -29,6 +29,25 @@ constexpr int64_t kOomLogIntervalMs = 60000;
 
 constexpr int kMaxCoordinate = 65535;
 
+constexpr std::size_t kBase64PrefixLen = sizeof("base64:") - 1;
+
+// Draws the common pixels/anim content of either cache entry kind onto the script canvas.
+template <class T>
+bool blitEntry(Canvas& canvas, T& e, int x, int y, int64_t nowMs) {
+  x = std::clamp(x, -kMaxCoordinate, kMaxCoordinate);
+  y = std::clamp(y, -kMaxCoordinate, kMaxCoordinate);
+
+  if (e.anim) {
+    Canvas buf(e.width, e.height, e.pixels.data());
+    e.anim->render(buf, nowMs);
+  }
+
+  for (int row = 0; row < e.height; ++row)
+    for (int col = 0; col < e.width; ++col)
+      canvas.setPixel(x + col, y + row, e.pixels[static_cast<size_t>(row) * e.width + col]);
+  return true;
+}
+
 }
 
 std::unique_ptr<script::IScriptIconSet> ScriptIcon::createSet() {
@@ -57,6 +76,8 @@ ScriptIconSet::~ScriptIconSet() = default;
 
 ScriptIconSet::Entry::~Entry() { delete anim; }
 
+ScriptIconSet::InlineEntry::~InlineEntry() { delete anim; }
+
 void ScriptIconSet::reset(Entry& e) {
   delete e.anim;
   e.anim = nullptr;
@@ -71,15 +92,35 @@ void ScriptIconSet::reset(Entry& e) {
 void ScriptIconSet::release() {
   entries_.reset();
   entryCount_ = 0;
+  inlineEntries_.reset();
+  inlineEntryCount_ = 0;
 }
 
-void ScriptIconSet::load(Entry& e, int64_t nowMs) {
+void ScriptIconSet::resetInline(InlineEntry& e) {
   delete e.anim;
   e.anim = nullptr;
   e.width = e.height = 0;
   e.pixels.clear();
+  e.state = State::kMissing;
+  e.nextRetryMs = 0;
+  e.retryStep = 0;
+  e.name.clear();
+}
 
-  const std::string name(e.name);
+void ScriptIconSet::load(Entry& e, int64_t nowMs) {
+  loadShared(e, std::string(e.name), nowMs);
+}
+
+void ScriptIconSet::loadInline(InlineEntry& e, int64_t nowMs) {
+  loadShared(e, e.name, nowMs);
+}
+
+template <class T>
+void ScriptIconSet::loadShared(T& e, const std::string& name, int64_t nowMs) {
+  delete e.anim;
+  e.anim = nullptr;
+  e.width = e.height = 0;
+  e.pixels.clear();
 
   // Capped at one resident frame on purpose: several icons can be cached at once, so animated
   // ones stream rather than each holding a pile of decoded frames.
@@ -177,8 +218,38 @@ ScriptIconSet::Entry* ScriptIconSet::acquire(std::string_view name, int64_t nowM
   return victim;
 }
 
+ScriptIconSet::InlineEntry* ScriptIconSet::acquireInline(std::string_view name, int64_t nowMs) {
+  for (InlineEntry* e = inlineEntries_.get(); e; e = e->next.get()) {
+    if (name == e->name) {
+      e->lastUsedMs = nowMs;
+      return e;
+    }
+  }
+
+  InlineEntry* victim = nullptr;
+  if (inlineEntryCount_ < kMaxInlineEntries) {
+    std::unique_ptr<InlineEntry> fresh(new (std::nothrow) InlineEntry());
+    if (!fresh) return nullptr;
+    victim = fresh.get();
+    fresh->next = std::move(inlineEntries_);
+    inlineEntries_ = std::move(fresh);
+    ++inlineEntryCount_;
+  } else {
+    for (InlineEntry* e = inlineEntries_.get(); e; e = e->next.get()) {
+      if (e->lastUsedMs != nowMs && (!victim || e->lastUsedMs < victim->lastUsedMs))
+        victim = e;
+    }
+    if (!victim) return nullptr;
+    resetInline(*victim);
+  }
+
+  victim->name.assign(name);
+  victim->lastUsedMs = nowMs;
+  loadInline(*victim, nowMs);
+  return victim;
+}
+
 bool ScriptIconSet::draw(Canvas& canvas, std::string_view name, int x, int y, int64_t nowMs) {
-  if (!nameIsSafe(name) || name.size() > kMaxNameLen) return false;
   if (canvas.width() <= 0 || canvas.height() <= 0) return false;
   if (service_.maxWidth() <= 0 || service_.maxHeight() <= 0) return false;
   if (generation_ != service_.generation()) {
@@ -186,22 +257,28 @@ bool ScriptIconSet::draw(Canvas& canvas, std::string_view name, int x, int y, in
     generation_ = service_.generation();
   }
 
+  // base64: prefixed names carry the image bytes and can be far longer than the 64-byte entry
+  // name slot, so they are routed to a dedicated inline cache instead of the named one.
+  if (name.rfind("base64:", 0) == 0) return drawInline(canvas, name, x, y, nowMs);
+
+  if (!nameIsSafe(name) || name.size() > kMaxNameLen) return false;
+
   Entry* e = acquire(name, nowMs);
   if (!e) return false;
   if (e->state == State::kOom && nowMs >= e->nextRetryMs) load(*e, nowMs);
   if (e->state != State::kGood) return false;
-  x = std::clamp(x, -kMaxCoordinate, kMaxCoordinate);
-  y = std::clamp(y, -kMaxCoordinate, kMaxCoordinate);
+  return blitEntry(canvas, *e, x, y, nowMs);
+}
 
-  if (e->anim) {
-    Canvas buf(e->width, e->height, e->pixels.data());
-    e->anim->render(buf, nowMs);
-  }
+bool ScriptIconSet::drawInline(Canvas& canvas, std::string_view name, int x, int y,
+                               int64_t nowMs) {
+  if (name.size() > kBase64PrefixLen + kMaxInlineBase64) return false;
 
-  for (int row = 0; row < e->height; ++row)
-    for (int col = 0; col < e->width; ++col)
-      canvas.setPixel(x + col, y + row, e->pixels[static_cast<size_t>(row) * e->width + col]);
-  return true;
+  InlineEntry* e = acquireInline(name, nowMs);
+  if (!e) return false;
+  if (e->state == State::kOom && nowMs >= e->nextRetryMs) loadInline(*e, nowMs);
+  if (e->state != State::kGood) return false;
+  return blitEntry(canvas, *e, x, y, nowMs);
 }
 
 }

@@ -58,7 +58,7 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
 
 AWTRIX looks for `/ICONS/1234.gif` first, then `/ICONS/1234.jpg`. Only GIF and JPEG work - no PNG. If nothing matches, the notification still shows, just without the icon and without the reserved icon column.
 
-You can also inline the image as base64 instead of uploading it first: any `icon` string longer than 64 characters is treated as inline data rather than an ID. Getting icons onto AWTRIX, and the base64 form, are covered in [Icons & assets](icons.md); the layout rules are at [Icon](../reference/payload.md#icon).
+You can also inline the image as base64 instead of uploading it first: prefix the `icon` string with `base64:`. Getting icons onto AWTRIX, and the base64 form, are covered in [Icons & assets](icons.md); the layout rules are at [Icon](../reference/payload.md#icon).
 
 ## Sound
 

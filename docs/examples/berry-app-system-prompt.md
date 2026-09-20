@@ -340,7 +340,8 @@ text has to stay readable on top.
 
 `icon(name, x, y)` draws an **icon by name** from the device's icon folder, at the icon's own size:
 a JPG is 8×8, a GIF uses its own size and must fit the display. A full-width GIF at `(0, 0)`
-covers the panel and text drawn after it sits on top. Give the bare name - no path, no extension. Animated GIFs
+covers the panel and text drawn after it sits on top. Give the bare name - no path, no extension.
+You can also pass a `base64:` prefixed string for inline image data. Animated GIFs
 animate on their own if you draw the same icon every frame. It returns `false` if the icon is
 missing or cannot be displayed, so paint a fallback instead of leaving an empty space:
 `if !icon(self.ic, 0, 0) rect_fill(0, 0, 8, 8, 0x222222) end`.

@@ -511,7 +511,7 @@ build the same number from plain channel values.
 | `text_width(str)` | how far the pen moves - use it to chain runs and to space repeats | `var w = text_width("hi")` |
 | `text_ink_width(str)` | how wide the lit pixels are - use it to fit and to centre | `var w = text_ink_width("hi")` |
 | `font(name)` | switch to `"small"` or `"large"` for the rest of the frame | `font("large")` |
-| `icon(name, x, y)` | an icon by name at its own size - JPG 8×8, GIF up to the panel dimensions; `false` if it could not be drawn | `icon("1234", 0, 0)` |
+| `icon(name, x, y)` | an icon by name or `base64:` + inline data, at its own size - JPG 8×8, GIF up to the panel dimensions; `false` if it could not be drawn | `icon("1234", 0, 0)` |
 | `rgb(r, g, b)` | pack a colour from channels (0–255) | `pixel(0, 0, rgb(255, 128, 0))` |
 | `hsv(h, s, v)` | pack a colour from hue/sat/val (h 0–360, s/v 0–100) | `hsv(second() * 6, 100, 100)` |
 

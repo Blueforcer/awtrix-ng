@@ -152,7 +152,7 @@ Every AWTRIX 3 custom-app key, and where it went. The full definition of each ne
 
 | AWTRIX 3 | AWTRIX NG | What to change |
 |---|---|---|
-| `icon` | `icon` | Unchanged - icon ID, or inline base64 for JPEG and GIF |
+| `icon` | `icon` | Unchanged - icon ID, or `base64:` + inline data for JPEG and GIF |
 | `pushIcon` `0` / `1` / `2` | `iconMode` `"fixed"` / `"pushOnce"` / `"push"` | Number → word |
 
 ### Timing and lifetime
