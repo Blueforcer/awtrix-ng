@@ -241,16 +241,17 @@ With `direction: left`, an `inline` text rests at the start of that area, while 
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `icon` | string | - | `""` | Icon ID, or inline base64 when longer than 64 chars |
+| `icon` | string | - | `""` | Icon ID, or `base64:`-prefixed inline data |
 | `iconMode` | string | `fixed` · `pushOnce` · `push` | `fixed` | Whether approaching text shoves the icon aside |
 | `iconOffsetX` | int | px | `0` | X shift of the icon |
 | `iconGap` | int | 0–128 px | `1` | Empty columns between the icon and the text |
 | `icons` | array | up to 4 objects | `[]` | Additional icons at absolute `x`, `y` positions |
 
-The mode is chosen purely by **length**:
+The mode is chosen by **prefix**:
 
-- **64 characters or fewer** - an icon ID resolved against the filesystem. Animated `/ICONS/<id>.gif` is tried **first**, then static `/ICONS/<id>.jpg`.
-- **More than 64 characters** - inline base64 data, decoded and sniffed: a `GIF8` magic makes it an animated GIF, otherwise it is decoded as JPEG.
+- **`base64:` prefix** - the rest of the string is inline base64 data, decoded and sniffed: a `GIF8` magic makes it an animated GIF, otherwise it is decoded as JPEG.
+- **64 characters or fewer, no prefix** - an icon ID resolved against the filesystem. Animated `/ICONS/<id>.gif` is tried **first**, then static `/ICONS/<id>.jpg`.
+- **More than 64 characters, no prefix** - legacy length heuristic, treated as inline base64 like the prefixed form. It can misclassify a long icon ID, so prefer the explicit prefix.
 
 Only JPEG and GIF are supported - no PNG, no BMP. The `icon` image starts at the top row of the display.
 

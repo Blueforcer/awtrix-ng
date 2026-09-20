@@ -18,9 +18,10 @@ class GifPlayer {
   };
 
   ~GifPlayer();
-  // iconId is either the stem of /ICONS/<id>.gif or, above 64 characters, a base64-encoded GIF
-  // sent inline by the API. Limits come from the panel; buffers follow the GIF's own size.
-  // maxResidentFrames 0 means "whatever the RAM budget allows".
+  // iconId is either the stem of /ICONS/<id>.gif, a base64: prefixed GIF sent inline by the API,
+  // or (legacy, above 64 characters) a base64-encoded GIF inferred by length. Limits come from
+  // the panel; buffers follow the GIF's own size. maxResidentFrames 0 means "whatever the RAM
+  // budget allows".
   OpenResult open(const std::string& iconId, int maxWidth, int maxHeight,
                   bool firstFrameOnly = false,
                   int maxResidentFrames = 0);

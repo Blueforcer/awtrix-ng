@@ -325,6 +325,40 @@ void test_unsafe_names_rejected() {
   TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
 }
 
+void test_base64_prefix_draws_inline_icon() {
+  std::string b64(encode_base64_length(kGif8x8TwoFrames_len), '\0');
+  encode_base64(kGif8x8TwoFrames, kGif8x8TwoFrames_len,
+                reinterpret_cast<unsigned char*>(&b64[0]));
+  const std::string icon = "base64:" + b64;
+  TEST_ASSERT_TRUE(icon.size() > 64);
+  TEST_ASSERT_TRUE(icon.find('/') != std::string::npos);
+  useAsset(nullptr, 0);
+  ScriptIcon si;
+  auto set = si.createSet();
+  Canvas c(32, 8);
+  si.setPanelSize(c.width(), c.height());
+
+  TEST_ASSERT_TRUE(set->draw(c, icon, 0, 0, 0));
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+  assertColorNear(0xFF0000u, c.getPixel(0, 0));
+  assertColorNear(0xFF0000u, c.getPixel(7, 7));
+
+  // The inline entry is cached like a named one, so the animation advances on later draws.
+  TEST_ASSERT_TRUE(set->draw(c, icon, 0, 0, 250));
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+  assertColorNear(0x00FF00u, c.getPixel(0, 0));
+}
+
+void test_base64_prefix_icon_obeys_size_cap() {
+  const std::string icon = "base64:" + std::string(16 * 1024 + 8, 'A');
+  ScriptIcon si;
+  auto set = si.createSet();
+  Canvas c(32, 8);
+  si.setPanelSize(c.width(), c.height());
+  TEST_ASSERT_FALSE(set->draw(c, icon, 0, 0, 0));
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+}
+
 void test_panel_sized_script_icon_draws_all_rows_and_columns() {
   const auto asset = sizedGif(51, 16);
   useAsset(asset.data(), asset.size());
@@ -778,6 +812,8 @@ int main(int, char**) {
   RUN_TEST(test_offset_is_honoured);
   RUN_TEST(test_invalidate_reloads_wide_icon);
   RUN_TEST(test_unsafe_names_rejected);
+  RUN_TEST(test_base64_prefix_draws_inline_icon);
+  RUN_TEST(test_base64_prefix_icon_obeys_size_cap);
   RUN_TEST(test_panel_sized_script_icon_draws_all_rows_and_columns);
   RUN_TEST(test_script_icon_reloads_when_panel_bounds_change);
   RUN_TEST(test_destination_size_does_not_restart_script_animation);

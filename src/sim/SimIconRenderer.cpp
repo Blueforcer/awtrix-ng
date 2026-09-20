@@ -51,16 +51,19 @@ bool draw(Canvas& canvas, const std::string& iconId, int x, int y, bool* outOfMe
   if (outOfMemory) *outOfMemory = false;
   media::PodBuffer<uint8_t> buf;
   std::string path;
-  // Longer than any legal icon name, so treat it as an inline base64 JPEG rather than a lookup.
-  if (iconId.size() > 64) {
+  // Mirrors IconRenderer.cpp: a base64: prefix marks the string as inline image data; a name
+  // longer than any legal icon id falls back to the legacy length heuristic.
+  const bool isB64 = iconId.rfind("base64:", 0) == 0;
+  if (isB64 || iconId.size() > 64) {
     const auto* in = reinterpret_cast<const unsigned char*>(iconId.c_str());
-    const unsigned int maxLen = decode_base64_length(in, iconId.size());
+    const unsigned int prefixLen = isB64 ? 7 : 0;
+    const unsigned int maxLen = decode_base64_length(in + prefixLen, iconId.size() - prefixLen);
     if (!buf.resize(maxLen)) {
       if (outOfMemory) *outOfMemory = true;
       logf("icon: no memory for inline icon");
       return false;
     }
-    const unsigned int n = decode_base64(in, iconId.size(), buf.data());
+    const unsigned int n = decode_base64(in + prefixLen, iconId.size() - prefixLen, buf.data());
     if (n == 0) {
       logf("icon: inline base64 decode failed");
       return false;
