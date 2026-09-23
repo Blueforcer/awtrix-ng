@@ -73,6 +73,15 @@ mkdocs build --strict                  # docs build, no broken links or anchors
 cd webui/test && npm install && npm test
 ```
 
+To run them all without installing a toolchain, use the CI image in
+`tools/container/`:
+
+```bash
+podman build -t awtrix-build tools/container
+podman run --rm -v "$PWD":/w:Z -v pio-home:/root/.platformio \
+    awtrix-build tools/container/ci-local.sh all
+```
+
 ### Generated files you may have to regenerate
 
 Several checked-in files are produced by generators that **no normal build

@@ -1,0 +1,18 @@
+FROM docker.io/library/node:22-bookworm AS node
+FROM docker.io/library/python:3.12
+
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends cmake ninja-build zip \
+    && pip install --no-cache-dir platformio pyyaml
+
+# Mount the checkout at /w and persist downloaded toolchains in this volume.
+# Docs dependencies are installed by ci-local.sh from the mounted checkout,
+# keeping `podman build ... tools/container` independent of external files.
+ENV PLATFORMIO_CORE_DIR=/root/.platformio
+VOLUME /root/.platformio
+WORKDIR /w
+CMD ["bash"]
