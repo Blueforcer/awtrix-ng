@@ -1474,6 +1474,7 @@ paths:
         | `lowBatteryThreshold` | 0..100 |
         | `minBrightness`, `maxBrightness` | 0..255 |
         | `panelWidth` | 1..128 |
+        | `panelHeight` | 8..16 |
         | `panels` | 1..128 |
         | `tempOffset` | -20..20 |
         | `humOffset` | -50..50 |
@@ -2325,6 +2326,12 @@ components:
             Width of one panel in pixels. panelWidth x panels must come to
             between 32 and 128, or the write is rejected with 422 on
             panelWidth. A change of the total width applies after a reboot.
+        panelHeight:
+          type: integer
+          default: 8
+          minimum: 8
+          maximum: 16
+          description: Height of every panel in pixels. Applies after a reboot.
         panels:
           type: integer
           default: 1

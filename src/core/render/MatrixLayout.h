@@ -8,7 +8,8 @@
 
 namespace awtrix {
 
-inline constexpr int kMatrixHeight = 8;
+inline constexpr int kMatrixHeightMin = 8;
+inline constexpr int kMatrixHeightMax = 16;
 inline constexpr int kMatrixWidthMin = 32;
 inline constexpr int kMatrixWidthMax = 128;
 
@@ -38,6 +39,7 @@ inline std::string enumNameChoices(const char* const* names, int count) {
 
 struct MatrixLayout {
   int panelWidth = 32;
+  int panelHeight = 8;
   int panels = 1;
   PanelStart panelStart = PanelStart::TopLeft;
   Wiring panelWiring = Wiring::Rows;
@@ -49,7 +51,7 @@ struct MatrixLayout {
   bool rotate180 = false;
 
   int width() const { return panelWidth * panels; }
-  int height() const { return kMatrixHeight; }
+  int height() const { return panelHeight; }
   int ledCount() const { return width() * height(); }
 
   bool bottomStart() const {

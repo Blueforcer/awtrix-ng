@@ -44,6 +44,7 @@ struct DeviceConfig {
   bool ldrOnGround = false;
   long brightnessSmoothing = 10000;
   int panelWidth = 32;
+  int panelHeight = 8;
   int panels = 1;
   PanelStart panelStart = PanelStart::TopLeft;
   Wiring panelWiring = Wiring::Rows;
@@ -87,6 +88,7 @@ struct DeviceConfig {
   MatrixLayout matrixLayout() const {
     MatrixLayout l;
     l.panelWidth = panelWidth;
+    l.panelHeight = panelHeight;
     l.panels = panels;
     l.panelStart = panelStart;
     l.panelWiring = panelWiring;

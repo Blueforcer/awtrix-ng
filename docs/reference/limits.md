@@ -93,7 +93,7 @@ Which formats are accepted, and how each one is drawn, is in
 | Limit | Value | At the edge |
 | --- | --- | --- |
 | Panel width | [`panelWidth × panels`](system.md#panel-and-orientation), default `32 × 1`, must come to 32–128 | outside the range: `422 validationFailed` on `panelWidth` |
-| Panel height | 8 pixels | fixed; not configurable |
+| Panel height | [`panelHeight`](system.md#panel-and-orientation), 8–16 pixels, default `8`; applies after reboot | outside the range: `422 validationFailed` on `panelHeight` |
 | GIF dimensions | up to the panel's width and height | resize larger GIFs before uploading; every animation frame must fit |
 
 ## What is *not* limited

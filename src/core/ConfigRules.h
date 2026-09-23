@@ -42,6 +42,7 @@ inline const NumRange* ranges(std::size_t& count) {
       {"minBrightness", 0, 255, true},
       {"maxBrightness", 0, 255, true},
       {"panelWidth", 1, kMatrixWidthMax, true},
+      {"panelHeight", kMatrixHeightMin, kMatrixHeightMax, true},
       {"panels", 1, kMatrixWidthMax, true},
       {"tempOffset", -20, 20, false},
       {"humOffset", -50, 50, false},

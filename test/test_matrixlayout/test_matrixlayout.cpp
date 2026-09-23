@@ -25,7 +25,7 @@ int refTileFromRight(int cx, int cy) {
   return cy * 8 + (7 - ((cy & 1) ? (7 - cx) : cx));
 }
 
-constexpr int kMaxLeds = kMatrixWidthMax * kMatrixHeight;
+constexpr int kMaxLeds = kMatrixWidthMax * kMatrixHeightMax;
 
 struct Grid {
   int panelWidth;
@@ -182,7 +182,7 @@ static void test_bijection_over_the_valid_config_space() {
           layout.panelStart = start;
           layout.panelWiring = wiring ? Wiring::Columns : Wiring::Rows;
           layout.panelSerpentine = panelSerp != 0;
-          TEST_ASSERT_EQUAL_INT(kMatrixHeight, layout.height());
+          TEST_ASSERT_EQUAL_INT(kMatrixHeightMin, layout.height());
           TEST_ASSERT_TRUE(layout.width() >= kMatrixWidthMin &&
                            layout.width() <= kMatrixWidthMax);
           assertBijection(layout);
@@ -369,7 +369,15 @@ static void test_all_chain_combinations_are_bijections() {
               layout.panelSerpentine = panelSerp != 0;
               layout.panelChainReverse = reverse != 0;
               layout.panelChainSerpentine = chainSerp != 0;
-              assertBijection(layout);
+              for (int height : {8, 11, 16}) {
+                layout.panelHeight = height;
+                TEST_ASSERT_EQUAL_INT(layout.width() * height, layout.ledCount());
+                for (int transform = 0; transform < 4; ++transform) {
+                  layout.mirror = (transform & 1) != 0;
+                  layout.rotate180 = (transform & 2) != 0;
+                  assertBijection(layout);
+                }
+              }
             }
           }
         }
@@ -388,12 +396,37 @@ static void test_sanitize_keeps_a_valid_layout() {
   TEST_ASSERT_FALSE(out.panelSerpentine);
 }
 
-static void test_height_is_always_eight() {
+static void test_default_height_is_eight() {
   MatrixLayout wide;
   wide.panelWidth = 64;
   TEST_ASSERT_EQUAL_INT(8, wide.height());
   TEST_ASSERT_EQUAL_INT(512, wide.ledCount());
   TEST_ASSERT_EQUAL_INT(8, tiles8x8().height());
+}
+
+static void test_runtime_height_mapping_and_sanitization() {
+  for (int h : {8, 11, 16}) {
+    MatrixLayout layout;
+    layout.panelWidth = 53;
+    layout.panelHeight = h;
+    bool changed = true;
+    TEST_ASSERT_EQUAL_INT(h, sanitizeMatrixLayout(layout, &changed).height());
+    TEST_ASSERT_FALSE(changed);
+    for (int y = 0; y < h; ++y)
+      for (int x = 0; x < 53; ++x)
+        TEST_ASSERT_EQUAL_INT(refUlanzi(x, y, 53), layout.xyToIndex(x, y));
+    layout.panelWiring = Wiring::Columns;
+    for (int y = 0; y < h; ++y)
+      for (int x = 0; x < 53; ++x)
+        TEST_ASSERT_EQUAL_INT(refColumns(x, y, h), layout.xyToIndex(x, y));
+  }
+  for (int h : {-1, 7, 17, 100}) {
+    MatrixLayout layout;
+    layout.panelHeight = h;
+    bool changed = false;
+    TEST_ASSERT_EQUAL_INT(h < 8 ? 8 : 16, sanitizeMatrixLayout(layout, &changed).height());
+    TEST_ASSERT_TRUE(changed);
+  }
 }
 
 static void test_sanitize_rejects_a_width_outside_the_envelope() {
@@ -475,7 +508,8 @@ int main(int, char**) {
   RUN_TEST(test_chain_serpentine_parity_follows_the_cable);
   RUN_TEST(test_all_chain_combinations_are_bijections);
   RUN_TEST(test_sanitize_keeps_a_valid_layout);
-  RUN_TEST(test_height_is_always_eight);
+  RUN_TEST(test_default_height_is_eight);
+  RUN_TEST(test_runtime_height_mapping_and_sanitization);
   RUN_TEST(test_sanitize_rejects_a_width_outside_the_envelope);
   RUN_TEST(test_sanitize_clamps_nonsense_fields);
   RUN_TEST(test_sanitize_keeps_the_display_transforms);

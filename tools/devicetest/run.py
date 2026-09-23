@@ -392,8 +392,9 @@ def test_pixels(api):
     lit = [p for p in px if p]
     system_status, system = api.get("/api/v1/system")
     expected_width = system.get("panelWidth", 32) * system.get("panels", 1)
+    expected_height = system.get("panelHeight", 8)
     check("canvas size", system_status == 200 and
-          (fb.get("width"), fb.get("height")) == (expected_width, 8),
+          (fb.get("width"), fb.get("height")) == (expected_width, expected_height),
           "%sx%s" % (fb.get("width"), fb.get("height")))
     check("pixel count matches", len(px) == fb.get("width", 0) * fb.get("height", 0), str(len(px)))
     check("app drew something", len(lit) > 0, "%d lit" % len(lit))
@@ -408,7 +409,7 @@ def test_pixels(api):
     st, edge = api.get("/api/v1/display/screen")
     pixels = edge.get("pixels", []) if isinstance(edge, dict) else []
     check("last pixel matches the configured canvas", st == 200 and
-          len(pixels) == expected_width * 8 and pixels[-1] == 0x123456 and
+          len(pixels) == expected_width * expected_height and pixels[-1] == 0x123456 and
           all(p == 0 for p in pixels[:-1]))
     api.delete("/api/v1/apps/" + TEMP)
 

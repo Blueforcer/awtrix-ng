@@ -355,6 +355,21 @@ void test_panel_width_product_must_fit_the_envelope() {
 
 void test_panel_fields_are_range_checked() {
   cfgrules::ConfigError e;
+  for (int height : {7, 17}) {
+    Body bad;
+    bad.set("panelHeight", height);
+    TEST_ASSERT_FALSE(ok(bad, e));
+    TEST_ASSERT_EQUAL_STRING("panelHeight", e.field.c_str());
+  }
+  for (int height : {8, 11, 16}) {
+    Body good;
+    good.set("panelHeight", height);
+    TEST_ASSERT_TRUE(ok(good, e));
+  }
+  Body fractional;
+  fractional.set("panelHeight", 11.5);
+  TEST_ASSERT_FALSE(ok(fractional, e));
+  TEST_ASSERT_EQUAL_STRING("panelHeight", e.field.c_str());
   Body a;
   a.set("panelWidth", 129);
   TEST_ASSERT_FALSE(ok(a, e));

@@ -484,7 +484,7 @@ panel. Anything you draw off the edge is simply clipped, never an error.
 
 Ask `width()` rather than writing `32`: someone running two or four panels in a
 row has 64 or 128 columns, and an app that measures fills them instead of
-huddling in the first quarter. The height is always 8.
+huddling in the first quarter. The height is configurable from 8 to 16 (default 8).
 
 Both answer while a frame is being drawn, which is where layout belongs anyway -
 in `setup()`, before there is a frame, they say `0`.
@@ -499,7 +499,7 @@ build the same number from plain channel values.
 | Call | Does | Example |
 |---|---|---|
 | `width()` | panel width in pixels - 32 as a rule, more on a chained panel | `var w = width()` |
-| `height()` | panel height in pixels (always 8) | `var h = height()` |
+| `height()` | panel height in pixels (8–16, default 8) | `var h = height()` |
 | `clear(color?)` | fill the frame; black when omitted | `clear()` |
 | `pixel(x, y, color)` | one pixel | `pixel(0, 0, 0xFF0000)` |
 | `line(x0, y0, x1, y1, color)` | a line | `line(0, 0, width() - 1, 7, 0x00FF00)` |

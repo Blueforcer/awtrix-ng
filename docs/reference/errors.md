@@ -389,6 +389,7 @@ changes nothing and `field` names the offending key:
 | `lowBatteryThreshold` | 0–100 |
 | `minBrightness`, `maxBrightness` | 0–255 |
 | `panelWidth` | 1–128 |
+| `panelHeight` | 8–16 |
 | `panels` | 1–128 |
 | `tempOffset` | −20–20 |
 | `humOffset` | −50–50 |

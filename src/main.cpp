@@ -381,10 +381,11 @@ void setup() {
       g_net.apMode() ? 80 : (cfg.webPort > 0 ? static_cast<uint16_t>(cfg.webPort) : 80);
   g_http.begin(webPort, *g_engine, *g_board, *g_canvas, uid, cfg, g_net.apMode());
   // Re-applies everything that can change without a restart. A different panel count would need
-  // a differently sized canvas and LED buffer, so only same-width layouts are taken live.
+  // a differently sized canvas and LED buffer, so only same-size layouts are taken live.
   g_http.setOnConfigChanged([] {
     const MatrixLayout layout = g_cfg.matrixLayout();
-    if (layout.width() == g_board->matrixWidth()) g_board->setMatrixLayout(layout);
+    if (layout.width() == g_board->matrixWidth() && layout.height() == g_board->matrixHeight())
+      g_board->setMatrixLayout(layout);
     g_engine->state().runtime().tempDecimals = g_cfg.tempDecimals;
     logbuf::setVerbose(g_cfg.debugMode);
     g_mqtt.applyHaConfig(g_cfg);

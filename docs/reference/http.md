@@ -1627,6 +1627,7 @@ Behaviour to know:
 | `brightnessSmoothing` | long | `10000` | ms the panel takes to follow an ambient-light change (0–60000); `0` = instantly |
 | `lowBatteryThreshold` | integer | `0` | 0–100 %; below it `GET /api/v1/device` reports `lowBattery: true`. `0` = off |
 | `panelWidth` | integer | `32` | 1–128; `panelWidth × panels` must come to 32–128 |
+| `panelHeight` | integer | `8` | 8–16; applies after a reboot |
 | `panels` | integer | `1` | 1–128; how many panels the strip runs through |
 | `panelStart` | string | `"topLeft"` | `topLeft` · `topRight` · `bottomLeft` · `bottomRight` |
 | `panelWiring` | string | `"rows"` | `rows` · `columns` |

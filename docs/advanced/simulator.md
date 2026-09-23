@@ -69,6 +69,14 @@ update are logged and ignored - restart the binary, or delete files under
 `simdata/`, instead. The simulator never asks for an HTTP login, whatever
 `authEnabled` is set to.
 
+## Panel geometry
+
+The simulator uses the same `panelWidth`, `panelHeight` and `panels` configuration as
+the device. For a 53×11 panel, send `PUT /api/v1/system` with
+`{"panelWidth":53,"panelHeight":11,"panels":1}`, then restart the binary. The saved
+size in `simdata/device.json` is used for the canvas and all frame buffers at startup;
+size changes never resize a running canvas. The default remains 32×8.
+
 ## MQTT
 
 Set `mqttHost` and switch `mqttEnabled` on - on the web UI's MQTT tab, with

@@ -1526,6 +1526,7 @@ const SYSF={
    {derive:v=>({tz:TZRULE.get(v)||'UTC0'})}),
  tz:F('hidden','text','Timezone rule|Zeitzonen-Regel',''),
  panelWidth:F('panel','number','Panel width|Panel-Breite','Pixels across one panel.|Pixel in der Breite eines Panels.',{min:1,max:128,unit:'px'}),
+ panelHeight:F('panel','number','Panel height|Panel-Höhe','Pixels high; requires a reboot.|Pixel in der Höhe; Neustart erforderlich.',{min:8,max:16,unit:'px'}),
  panels:F('panel','number','Panels|Panels','How many panels are chained.|Wie viele Panels verkettet sind.',{min:1,max:128}),
  panelStart:F('panel','select','First LED|Erste LED','Corner the data cable arrives at.|Ecke, an der das Datenkabel ankommt.',{opt:[
    ['topLeft','Top left|Oben links'],['topRight','Top right|Oben rechts'],
@@ -1626,7 +1627,7 @@ function applyGpioCaps(c){
 const PINKEYS=['pinMatrix','pinBtnLeft','pinBtnSelect','pinBtnRight','pinBattery','pinLdr',
   'pinBuzzer','pinI2cSda','pinI2cScl','pinDfRx','pinDfTx','pinI2sBclk','pinI2sLrclk','pinI2sDout',
   'pinI2sMclk','pinAmpEnable'];
-const REBOOT_KEYS=new Set(['wifiSsid','wifiPass','netStatic','ip','gateway','subnet','dns1','dns2',
+const REBOOT_KEYS=new Set(['panelHeight','wifiSsid','wifiPass','netStatic','ip','gateway','subnet','dns1','dns2',
   'wifiConnectTimeout','hostname','webPort','mqttEnabled','mqttHost','mqttPort','mqttUser',
   'mqttPass','mqttPrefix','statsInterval','dfplayer','scriptingEnabled'].concat(PINKEYS));
 function paintPinUse(fields){
@@ -1655,8 +1656,9 @@ function paintPanelSize(fields,out){
   const pw=Number(fields.panelWidth.get()),n=Number(fields.panels.get()),w=pw*n;
   const bad=(w<32||w>128)?t('pnBadWidth'):'';
   out.className='badge '+(bad?'bad':'good');
-  out.replaceChildren(bad||w+' × 8 = '+(w*8)+' '+t('pnLeds')+' · '+
-    (n>1?n+' '+t('pnPanelsOf')+' '+pw+' × 8':t('pnOne')));
+  const h=Number(fields.panelHeight.get());
+  out.replaceChildren(bad||w+' × '+h+' = '+(w*h)+' '+t('pnLeds')+' · '+
+    (n>1?n+' '+t('pnPanelsOf')+' '+pw+' × '+h:t('pnOne')));
 }
 let gen=0;
 function poller(fn,ms){

@@ -380,7 +380,7 @@ A panel you wired yourself also needs describing: how wide one panel is, how man
 cable runs through, which corner it enters, whether the strip runs along rows or columns, and
 whether every second run comes back the other way.
 
-The panel **height is fixed at 8 pixels**; the width is `panelWidth × panels` and must come to
+The panel **height is configurable from 8 to 16 pixels** (`panelHeight`, default 8); the width is `panelWidth × panels` and must come to
 between 32 and 128 (so 32 × 8 = 256 LEDs by default).
 
 The keys, their ranges and the settings for the common builds are documented once, under
