@@ -287,10 +287,14 @@ inline void LookingEyesEffect::render(Canvas& c, int64_t f) {
     bottom = 7 - lid / 2;
   }
 
+  // The tables describe an eight-row sprite, not the panel geometry. Scale row
+  // boundaries together so the ball, lids and pupil use the full canvas; at H=8
+  // this is the original pixel-for-pixel rendering.
+  const auto row = [&](int y) { return y * c.height() / 8; };
   for (const int x0 : eyeX) {
     for (int y = top; y <= bottom; ++y)
-      c.fillRect(x0 + kBallX[y], y, kBallW[y], 1, 0xFFFFFFu);
-    c.fillRect(x0 + px, py, 2, 2, 0x000000u);
+      c.fillRect(x0 + kBallX[y], row(y), kBallW[y], row(y + 1) - row(y), 0xFFFFFFu);
+    c.fillRect(x0 + px, row(py), 2, row(py + 2) - row(py), 0x000000u);
   }
 }
 

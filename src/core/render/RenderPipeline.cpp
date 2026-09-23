@@ -7,6 +7,7 @@
 
 #include "core/CoreEngine.h"
 #include "core/apps/SpecRenderer.h"
+#include "core/render/ContentBand.h"
 #include "core/render/StatusPixels.h"
 #include "core/render/TransitionComposer.h"
 
@@ -178,8 +179,12 @@ void RenderPipeline::renderPage(Canvas& dst, const std::string& id, int64_t nowM
     if (r.effect) r.effect->setSettings(es);
     if (fullScreen) slot->icon->blit(dst, 0);
     render::renderSpec(dst, spec, fontFor(&spec), r);
-    if (r.iconWidth && slot && slot->valid)
-      slot->icon->blit(dst, spec.iconOffsetX + iconShift(spec, *slot));
+    if (r.iconWidth && slot && slot->valid) {
+      Canvas band = render::contentBand(dst);
+      const bool tile = r.iconWidth == 8 && slot->icon->height() == 8;
+      slot->icon->blit(tile ? band : dst,
+                       spec.iconOffsetX + iconShift(spec, *slot));
+    }
     if (slot) {
       for (std::size_t i = 0; i < slot->placedIconCount; ++i) {
         const auto& icon = slot->placedIcons[i];

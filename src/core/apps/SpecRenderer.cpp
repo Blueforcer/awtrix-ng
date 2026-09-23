@@ -7,6 +7,7 @@
 
 #include "core/StrCase.h"
 #include "core/render/Color.h"
+#include "core/render/ContentBand.h"
 #include "core/render/Gfx2d.h"
 #include "core/render/ScrollText.h"
 #include "core/render/TextEncoding.h"
@@ -91,8 +92,9 @@ void renderDecorations(Canvas& c, const AppSpec& s, const GfxFont& font, uint32_
 }
 
 
-void renderText(Canvas& c, const AppSpec& s, const GfxFont& font, uint32_t color,
+void renderText(Canvas& panel, const AppSpec& s, const GfxFont& font, uint32_t color,
                 const SpecRender& r) {
+  Canvas c = contentBand(panel);
   const bool hasFragments = !s.fragments.empty();
   if (!hasFragments && s.text.empty()) return;
 

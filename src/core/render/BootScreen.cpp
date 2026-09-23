@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "core/render/Color.h"
+#include "core/render/ContentBand.h"
 #include "core/render/ColorRamp.h"
 #include "core/render/TextRenderer.h"
 
@@ -77,7 +78,7 @@ uint32_t rampAtColumn(int col, int origin) {
 
 int ngRestX(const Canvas& c) { return (c.width() - kNgWidth) / 2; }
 
-int ngRestY(const Canvas& c) { return (c.height() - kNgHeight) / 2; }
+int ngRestY(const Canvas& c) { return contentBandTop(c.height()); }
 
 int logoX(const Canvas& c, const GfxFont& font) {
   return (c.width() - text::width(font, kLogo)) / 2;
@@ -125,7 +126,8 @@ void plotBrightest(Canvas& c, int x, int y, uint32_t rgb) {
 
 void renderLogo(Canvas& out, const GfxFont& font) {
   out.clear(color::kBlack);
-  text::drawText(out, font, logoX(out, font), kBaselineY, kLogo, 0xFFFFFFu);
+  Canvas band = contentBand(out);
+  text::drawText(band, font, logoX(out, font), kBaselineY, kLogo, 0xFFFFFFu);
 }
 
 struct Point {
@@ -313,7 +315,8 @@ bool drawBootAddress(Canvas& c, const GfxFont& font, const std::string& address,
   text::TextPaint paint;
   paint.ramp = &ramp;
   paint.rampOriginPx = origin + tail;
-  text::drawRun(c, font, static_cast<float>(x + tail), kBaselineY, address, paint);
+  Canvas band = contentBand(c);
+  text::drawRun(band, font, static_cast<float>(x + tail), kBaselineY, address, paint);
 
   drawStars(c, nowMs);
   return x + tail + text::width(font, address) >= 0;

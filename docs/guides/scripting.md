@@ -477,8 +477,14 @@ The short examples in this section show a single method for brevity - read them 
 
 ### Panel and drawing
 
-The panel is a grid eight pixels high and - on a Ulanzi and most others - thirty-two
-wide. **`x` runs from `0` at the left to `width() - 1`, `y` runs 0–7 from the
+Script coordinates are absolute on the full canvas, with `(0,0)` at the panel's
+top-left. Scripts are not shifted into the centred eight-row body-text band.
+Always query `height()` (the runtime panel height, e.g. 11 on a 53×11 panel)
+and `width()` rather than assuming 8 rows or 32 columns. Charts scale to all
+`height()` rows; `progress()` draws on `height()-1`.
+
+The panel is a grid, normally eight pixels high and thirty-two wide on a Ulanzi.
+**`x` runs from `0` at the left to `width() - 1`, `y` runs `0 .. height()-1` from the
 top** - so `(0, 0)` is the top-left corner and a *larger* `y` is *lower* on the
 panel. Anything you draw off the edge is simply clipped, never an error.
 

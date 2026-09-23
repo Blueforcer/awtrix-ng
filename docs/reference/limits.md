@@ -2,6 +2,23 @@
 
 Every cap AWTRIX enforces, and what it answers when you reach one.
 
+## Tall panels: content band and full canvas
+
+The panel height `H` is 8–16 pixels (default 8). On taller panels, body text,
+primary 8×8 icons and built-in apps keep their original eight-row layout in a
+vertically centred band starting at `floor((H - 8) / 2)`. At 53×11 the band is
+rows 1–8; at 32×8 nothing moves.
+
+Background colours, effects, overlays, transitions and charts use the full
+canvas, rows `0 .. H-1`. Progress stays on row `H-1` (row 10 at 53×11).
+GIF decoding uses the panel width and height as its size limits; images retain
+their own dimensions rather than being stretched. Full-screen images are not
+shifted into the text band.
+
+Draw commands, positioned icons and script drawing use absolute top-left canvas
+coordinates with no band offset. Scripts must query `width()` and `height()`;
+never assume an eight-row canvas.
+
 ## Requests
 
 | Limit | Value | At the edge |

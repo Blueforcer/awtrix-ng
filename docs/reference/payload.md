@@ -177,7 +177,7 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
 
 ### `textInFront`
 
-`textInFront` sets z-order, not position - the baseline is row 6 either way. With `true` the decorations (draw commands, progress bar, charts) are painted first and the text lands **on top**; the default `false` paints the text first and the decorations over it.
+`textInFront` sets z-order, not position - the baseline is row 6 within the centred eight-row content band either way. With `true` the decorations (draw commands, progress bar, charts) are painted first and the text lands **on top**; the default `false` paints the text first and the decorations over it.
 
 ### Positioning and centering
 
@@ -391,7 +391,10 @@ It works the same for pushed apps and notifications.
 `barChart` and `lineChart` can be combined; both are drawn. Both are capped at 16 entries, with extras silently dropped, and both share `chartAutoscale`. Non-numeric entries coerce to 0.
 
 - **`chartAutoscale: true`** - the chart spans `min .. max` of the data, where `max` is floored at 1 and `min` at 0. An all-positive series therefore spans `0 .. max`; the range only opens downward once a value is actually negative.
-- **`chartAutoscale: false`** - the range is fixed at `0 .. 8`: a value of 8 fills the full 8px height, and values outside the range clamp to the canvas.
+- **`chartAutoscale: false`** - the data range stays fixed at `0 .. 8`, regardless of panel height: a value of 8 fills all `H` rows, and values outside the range clamp to the canvas.
+
+Both chart types scale to the full panel height, not the centred text band. At
+53×11 their vertical range reaches rows 0–10.
 
 **`barChart`** divides the space to the right of the icon column evenly among the values - each bar at least 1px wide, separated by a 1px gap. Bars are anchored to the row where the value **zero** falls: with all-positive data that is the bottom row, so a bar's height is proportional to its value as a fraction of the range max. Once the series contains a negative value the baseline lifts off the bottom, positive bars grow up from it and negative bars hang below it.
 
@@ -406,6 +409,9 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/traffic \
 `chartColor` colors both charts. Unfilled cells are not painted at all - they keep whatever the background or effect put there.
 
 ## Progress bar
+
+The bottom row is `y = H-1`: row 7 at 32×8, row 10 at 53×11. Progress does not
+move with the centred eight-row text band.
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
@@ -544,6 +550,11 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/forecast \
 ```
 
 ## Draw commands
+
+Coordinates are absolute on the full canvas: `(0,0)` is the panel's top-left,
+and `(width-1,height-1)` is its bottom-right. No text-band offset is applied.
+Use the configured panel dimensions instead of assuming eight rows. In scripts,
+query `width()` and `height()`.
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
