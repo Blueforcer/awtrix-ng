@@ -16,6 +16,16 @@ ones ask for.
 
 ---
 
+## Galactic Unicorn display (Pico firmware)
+
+The display initialization, 14-plane stream layout and PIO program are adapted
+from [pimoroni/pimoroni-pico](https://github.com/pimoroni/pimoroni-pico/tree/v1.23.0/libraries/galactic_unicorn),
+tag **v1.23.0**, commit `3440ab232cdc2b019bb8d16f67b0448502efd9dc`.
+Copyright (c) 2021 Pimoroni Ltd; **MIT**, full notice in
+[MIT-Pimoroni.txt](LICENSES/MIT-Pimoroni.txt).
+The port excludes pico_graphics and audio, adds dynamic PIO allocation and
+tear-free double buffering, and uses the NG gamma setting at 14-bit precision.
+
 ## Compiled into the firmware image
 
 These are linked into `firmware-awtrix-ng*.bin`, so their notices travel with

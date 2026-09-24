@@ -1,43 +1,35 @@
 #include <unity.h>
-#include "hal/GalacticUnicornBoard.cpp"
-
+#include "hal/GalacticUnicornDefaults.h"
+#include "hal/GalacticUnicornDisplay.h"
 using namespace awtrix;
 void setUp() {}
 void tearDown() {}
-
 void geometry_and_defaults() {
-  auto cfg = galacticUnicornDefaults();
-  GalacticUnicornBoard board(cfg);
-  TEST_ASSERT_EQUAL(53, board.matrixWidth());
-  TEST_ASSERT_EQUAL(11, board.matrixHeight());
+  const auto cfg = galacticUnicornDefaults();
+  TEST_ASSERT_EQUAL(53,cfg.panelWidth);
+  TEST_ASSERT_EQUAL(11,cfg.panelHeight);
+  TEST_ASSERT_EQUAL(1,cfg.panels);
   TEST_ASSERT_FALSE(cfg.scriptingEnabled);
-  cfg.panelHeight = 8;
-  cfg.panelWidth = 32;
-  GalacticUnicornBoard letterbox(cfg);
-  TEST_ASSERT_EQUAL(53, letterbox.matrixWidth());
-  TEST_ASSERT_EQUAL(8, letterbox.matrixHeight());
-  cfg.panelHeight = 16;
-  TEST_ASSERT_EQUAL(11, GalacticUnicornBoard(cfg).matrixHeight());
+  TEST_ASSERT_EQUAL(53,galactic::Width);
+  TEST_ASSERT_EQUAL(8,galactic::sanitizeHeight(8));
+  TEST_ASSERT_EQUAL(11,galactic::sanitizeHeight(16));
 }
-void peripherals_are_not_claimed() {
-  GalacticUnicornBoard board;
-  board.begin();
-  TEST_ASSERT_FALSE(board.hasBattery());
-  TEST_ASSERT_FALSE(board.hasLightSensor());
-  TEST_ASSERT_FALSE(board.sensors().hasSensor());
-  TEST_ASSERT_FALSE(board.sensors().hasHumidity());
-  TEST_ASSERT_NULL(board.toneSink());
-  TEST_ASSERT_NULL(board.trackSink());
-  TEST_ASSERT_EQUAL(-1, board.readBatteryMillivolts());
-  ButtonState buttons{true, true, true};
-  board.pollButtons(buttons);
-  TEST_ASSERT_FALSE(buttons.left || buttons.select || buttons.right);
-  Canvas canvas(53, 11);
-  board.show(canvas);
+void input_pin_contract() {
+  TEST_ASSERT_EQUAL(28,galactic::LightSensor);
+  TEST_ASSERT_EQUAL(2,galactic::LightAdc);
+  TEST_ASSERT_EQUAL(0,galactic::ButtonA);
+  TEST_ASSERT_EQUAL(1,galactic::ButtonB);
+  TEST_ASSERT_EQUAL(3,galactic::ButtonC);
+  TEST_ASSERT_EQUAL(6,galactic::ButtonD);
+  TEST_ASSERT_EQUAL(27,galactic::Sleep);
+  TEST_ASSERT_EQUAL(7,galactic::VolumeUp);
+  TEST_ASSERT_EQUAL(8,galactic::VolumeDown);
+  TEST_ASSERT_EQUAL(21,galactic::BrightnessUp);
+  TEST_ASSERT_EQUAL(26,galactic::BrightnessDown);
 }
 int main() {
   UNITY_BEGIN();
   RUN_TEST(geometry_and_defaults);
-  RUN_TEST(peripherals_are_not_claimed);
+  RUN_TEST(input_pin_contract);
   return UNITY_END();
 }
