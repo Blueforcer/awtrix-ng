@@ -65,6 +65,8 @@
 #include "system/Log.h"
 #include "system/MonotonicClock.h"
 #include "system/PeripheryService.h"
+#include "system/PeripheryHttp.h"
+#include "core/BuiltinCatalog.h"
 #include "system/ScriptHttpWorker.h"
 #include "transport/ScriptMqttBridge.h"
 #include "transport/http/HttpApiServer.h"
@@ -84,38 +86,9 @@ DeviceDisplay* g_display = nullptr;
 DeviceSystem* g_system = nullptr;
 CoreEngine* g_engine = nullptr;
 AppRegistry g_apps;
-TimeApp g_timeApp;
-DateApp g_dateApp;
-TempApp g_tempApp;
-HumidityApp g_humApp;
-BatteryApp g_batApp;
+BuiltinCatalog g_builtins;
 EffectRegistry g_effects;
-PlasmaEffect g_fxPlasma;
-TheaterChaseEffect g_fxTheaterChase;
-FadeEffect g_fxFade;
-MovingLineEffect g_fxMovingLine;
-BrickBreakerEffect g_fxBrick;
-PingPongEffect g_fxPingPong;
-RadarEffect g_fxRadar;
-CheckerboardEffect g_fxCheck;
-FireworksEffect g_fxFire;
-PlasmaCloudEffect g_fxPlasmaCloud;
-RippleEffect g_fxRipple;
-SnakeEffect g_fxSnake;
-PacificaEffect g_fxPacifica;
-MatrixEffect g_fxMatrix;
-SwirlInEffect g_fxSwirlIn;
-SwirlOutEffect g_fxSwirlOut;
-LookingEyesEffect g_fxEyes;
-TwinklingStarsEffect g_fxStars;
-ColorWavesEffect g_fxWaves;
 EffectRegistry g_overlays;
-RainOverlay g_ovRain;
-SnowOverlay g_ovSnow;
-DrizzleOverlay g_ovDrizzle;
-StormOverlay g_ovStorm;
-ThunderOverlay g_ovThunder;
-FrostOverlay g_ovFrost;
 NetworkService g_net;
 HttpApiServer g_http;
 std::unique_ptr<net::IHostResolver> g_hostResolver;
@@ -265,36 +238,7 @@ void setup() {
 
   // Built-ins are registered up front; the script host later adds its apps and effects to these
   // same registries, which is why they outlive setup().
-  g_apps.add(&g_timeApp);
-  g_apps.add(&g_dateApp);
-  g_apps.add(&g_tempApp);
-  g_apps.add(&g_humApp);
-  g_apps.add(&g_batApp);
-  g_effects.add(&g_fxPlasma);
-  g_effects.add(&g_fxTheaterChase);
-  g_effects.add(&g_fxFade);
-  g_effects.add(&g_fxMovingLine);
-  g_effects.add(&g_fxBrick);
-  g_effects.add(&g_fxPingPong);
-  g_effects.add(&g_fxRadar);
-  g_effects.add(&g_fxCheck);
-  g_effects.add(&g_fxFire);
-  g_effects.add(&g_fxPlasmaCloud);
-  g_effects.add(&g_fxRipple);
-  g_effects.add(&g_fxSnake);
-  g_effects.add(&g_fxPacifica);
-  g_effects.add(&g_fxMatrix);
-  g_effects.add(&g_fxSwirlIn);
-  g_effects.add(&g_fxSwirlOut);
-  g_effects.add(&g_fxEyes);
-  g_effects.add(&g_fxStars);
-  g_effects.add(&g_fxWaves);
-  g_overlays.add(&g_ovRain);
-  g_overlays.add(&g_ovSnow);
-  g_overlays.add(&g_ovDrizzle);
-  g_overlays.add(&g_ovStorm);
-  g_overlays.add(&g_ovThunder);
-  g_overlays.add(&g_ovFrost);
+  g_builtins.addTo(g_apps, g_effects, g_overlays);
 
   g_engine->setOverlayRegistry(&g_overlays);
   g_engine->setEffectRegistry(&g_effects);
@@ -388,6 +332,7 @@ void setup() {
     g_mqtt.setCapabilitiesJson(std::move(caps));
   }
   g_periphery.begin(*g_engine, *g_board, cfg);
+  g_periphery.setButtonPost(postButton);
   g_periphery.setUid(uid);
   g_hostResolver = net::makeHostResolver();
   g_mqtt.begin(*g_engine, *g_board, cfg, uid, uid,

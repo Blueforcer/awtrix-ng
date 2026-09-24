@@ -21,6 +21,32 @@ inline constexpr uint8_t LightSensor = 28, LightAdc = 2;
 inline constexpr uint8_t ButtonA = 0, ButtonB = 1, ButtonC = 3, ButtonD = 6;
 inline constexpr uint8_t Sleep = 27, VolumeUp = 7, VolumeDown = 8;
 inline constexpr uint8_t BrightnessUp = 21, BrightnessDown = 26;
+enum class InputAction { Left, Select, Right, None, Power, VolumeUp, VolumeDown, BrightnessUp, BrightnessDown };
+struct Input { uint8_t pin; InputAction action; };
+inline constexpr std::array<Input, 9> Inputs{{
+    {ButtonA, InputAction::Left}, {ButtonB, InputAction::Select},
+    {ButtonC, InputAction::Right}, {ButtonD, InputAction::None},
+    {Sleep, InputAction::Power}, {VolumeUp, InputAction::VolumeUp},
+    {VolumeDown, InputAction::VolumeDown}, {BrightnessUp, InputAction::BrightnessUp},
+    {BrightnessDown, InputAction::BrightnessDown}}};
+class DebouncedButton {
+ public:
+  // Active-low conversion belongs to the GPIO adapter. True means pressed here.
+  bool update(bool pressed, int64_t nowMs) {
+    if (pressed != raw_) { raw_ = pressed; changedMs_ = nowMs; }
+    const bool previous = stable_;
+    if (nowMs - changedMs_ >= 35) stable_ = raw_;
+    return stable_ && !previous;
+  }
+  bool pressed() const { return stable_; }
+ private:
+  bool raw_ = false, stable_ = false;
+  int64_t changedMs_ = 0;
+};
+inline int stepClamped(int value, int delta, int maximum) {
+  const int64_t result = static_cast<int64_t>(value) + delta;
+  return result < 0 ? 0 : result > maximum ? maximum : static_cast<int>(result);
+}
 inline constexpr int sanitizeHeight(int h) { return h == 8 ? 8 : 11; }
 // Physical, top-down panel row, before the wiring's X/Y reversal.
 inline constexpr int physicalRow(int y, int height) {

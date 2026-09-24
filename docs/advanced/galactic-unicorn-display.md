@@ -40,22 +40,50 @@ ordering. A 14-bit LUT preserves panel precision instead of first quantizing
 to an 8-bit intermediate canvas. Gamma is applied **once**, using the NG gamma
 setting (default 1.9), replacing Pimoroni's fixed 2.2 curve. Brightness and color
 balance scale linear light **after** gamma, unlike the upstream brightness
-pre-scale. There is no second fixed gamma curve. Brightness is manual for
-now; automatic brightness needs the light sensor, which is not wired yet.
+pre-scale. There is no second fixed gamma curve. Manual and automatic brightness
+use the shared NG periphery service (median filtering, light curve and smoothing).
 
-## Input pins
+## Inputs
 
-These constants are declared in `hal/GalacticUnicornDisplay.h` but inputs are
-not implemented by this display-only phase:
+The map and pure debounce/step helpers live in `hal/GalacticUnicornDisplay.h`.
+All buttons are active low with internal pull-ups and 35 ms debounce. A held
+button acts once, not repeatedly; release and press again for another step.
 
-| Input | GPIO | Planned function |
+| Input | GPIO | Function |
 |---|---|---|
 | A / B / C | 0 / 1 / 3 | Left / select / right |
 | D | 6 | Unmapped |
 | Sleep | 27 | Display power toggle |
-| Volume up / down | 7 / 8 | NG volume |
-| Brightness up / down | 21 / 26 | NG brightness |
+| Volume up / down | 7 / 8 | `buzzerVolume` +/- 5, clamped 0–100 |
+| Brightness up / down | 21 / 26 | `brightness` +/- 10, clamped 0–255; disables auto brightness |
 | Light sensor | 28 (ADC2) | Automatic brightness |
+
+ADC2 supplies native 12-bit counts (0–4095), not lux. Cover/uncover the sensor
+with `autoBrightness` enabled to check the shared light curve and configured
+min/max brightness and smoothing. Brightness keys select manual mode through
+the same settings dispatcher as an API change. Volume keys use the onboard tone
+channel setting (`buzzerVolume`); no audio sink is implemented yet, so there is
+no audible output. DFPlayer/MP3/radio volume settings are not changed.
+
+A goes to the previous app, C to the next (subject to NG rotate/swapButtons and
+blockNavigation). B dismisses a notification; a double press within 300 ms
+toggles power unless navigation is blocked. The shared periphery emits the same
+`ButtonsChanged` state and left/middle/right callback names as Ulanzi. D is unmapped.
+Extra keys dispatch `SetSettings` or `SetDisplay`, emitting normal settings/power
+events; settings persist through the existing delayed LittleFS save. Power is
+runtime-only, like the API, and fades out/in with NG's power animator; this is not
+deep sleep. Button input continues while the panel is off.
+
+The current Pico bootstrap has no network: MQTT/HA delivery and HTTP button
+callbacks await the transport phase. Their source state/events are shared with
+ESP32, not a private button protocol. ESP32's HTTP callback adapter is unchanged;
+Pico networking must install its own `PeripheryService::setButtonPost` adapter.
+
+ESP32 and Pico register the same `core/BuiltinCatalog.h`: five apps, nineteen
+effects and six overlays, including the same palette-enabled subset. Missing
+battery/environmental sensors still hide their apps. Boot logs print these
+capability lists. With default settings expect Time 00:00/calendar 1, then Date
+01.01.24 until the later NTP phase; no separate splash. Saved settings may differ.
 
 Host tests cannot establish physical refresh timing, orientation, or absence of
 visible tearing; check those on the panel with the CI-built UF2.

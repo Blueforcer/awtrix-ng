@@ -6,7 +6,7 @@
 
 namespace awtrix {
 DeviceConfig galacticUnicornDefaults();
-// Single device-lifetime instance, called on core 0 only. Inputs are not wired yet.
+// Single device-lifetime instance, called on core 0 only.
 class GalacticUnicornBoard final : public IBoard {
  public:
   GalacticUnicornBoard() = default;
@@ -25,10 +25,11 @@ class GalacticUnicornBoard final : public IBoard {
   }
   void applyColorGrade(const render::GradeParams& grade) override { baseGrade_ = grade; updateGrade(); }
   bool hasBattery() const override { return false; }
-  bool hasLightSensor() const override { return false; }
+  bool hasLightSensor() const override { return true; }
   int readBatteryMillivolts() override { return -1; }
-  int readLdrRaw() override { return -1; }
-  void pollButtons(ButtonState& out) override { out = {}; }
+  int readLdrRaw() override;
+  void pollButtons(ButtonState& out) override;
+  std::array<bool, 9> readInputs() const;
   sound::IToneSink* toneSink() override { return nullptr; }
   sound::ITrackSink* trackSink() override { return nullptr; }
   ISensorBus& sensors() override { return sensors_; }

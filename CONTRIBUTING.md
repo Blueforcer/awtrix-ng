@@ -73,6 +73,7 @@ python tools/gen_agent_skill.py --check
 python tools/check_prelude_solidified.py
 python tools/check_font_sync.py
 python tools/check_partitions.py
+python tools/check_builtin_registration.py
 mkdocs build --strict                  # docs build, no broken links or anchors
 cd webui/test && npm install && npm test
 ```

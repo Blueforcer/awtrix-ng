@@ -8,7 +8,11 @@
 #include "core/FrameClock.h"
 #include "core/apps/builtin/DateApp.h"
 #include "core/apps/builtin/TimeApp.h"
+#include "core/BuiltinCatalog.h"
+#include "core/render/PowerAnimator.h"
 #include "system/Log.h"
+#include "system/PeripheryService.h"
+#include "system/GalacticUnicornControls.h"
 #include "core/render/RenderPipeline.h"
 #include "hal/BoardRegistry.h"
 #include "hal/GalacticUnicornBoard.h"
@@ -64,8 +68,10 @@ AppRegistry apps;
 EffectRegistry effects;
 EffectRegistry overlays;
 UnsetClock pageClock;
-TimeApp timeApp;
-DateApp dateApp;
+BuiltinCatalog builtins;
+PeripheryService periphery;
+GalacticUnicornControls controls;
+render::PowerAnimator* powerAnimator;
 int64_t nextFrameMs = 0;
 
 awtrix::DeviceConfig config;
@@ -88,8 +94,7 @@ void setup() {
   board = &awtrix::activeBoard(config);
   board->begin();
   board->setMatrixLayout(config.matrixLayout());
-  Serial.println(awtrix::api::capabilitiesJson({}, {}, {}, audioRouter.caps(),
-                  awtrix::platform::buildFeatures()).c_str());
+
   canvas = new awtrix::Canvas(board->matrixWidth(), board->matrixHeight());
   engine = new awtrix::CoreEngine(audioRouter, display, systemService);
   if (storageReady) {
@@ -105,10 +110,15 @@ void setup() {
   engine->setTemperatureAvailable(false);
   engine->setHumidityAvailable(false);
   engine->setPressureAvailable(false);
-  engine->setLightSensorAvailable(false);
+  engine->setLightSensorAvailable(board->hasLightSensor());
   // No script service is installed: the existing dispatcher returns Unavailable.
-  apps.add(&timeApp);
-  apps.add(&dateApp);
+  builtins.addTo(apps, effects, overlays);
+  engine->setEffectRegistry(&effects);
+  engine->setOverlayRegistry(&overlays);
+  Serial.println(awtrix::api::capabilitiesJson(effects.names(), effects.paletteNames(),
+                  overlays.names(), audioRouter.caps(), awtrix::platform::buildFeatures()).c_str());
+  periphery.begin(*engine, *board, config);
+  powerAnimator = new render::PowerAnimator(board->matrixWidth(), board->matrixHeight());
   awtrix::RenderPipelineDeps deps;
   deps.engine = engine;
   deps.apps = &apps;
@@ -125,6 +135,8 @@ void setup() {
 
 void loop() {
   const int64_t nowMs = static_cast<int64_t>(time_us_64() / 1000);
+  controls.tick(*engine, static_cast<awtrix::GalacticUnicornBoard*>(board)->readInputs(), nowMs);
+  periphery.tick(nowMs);
   if (settingsDirty && storageReady && !systemService.rebootPending && nowMs - lastSettingsSaveMs > 1500) {
     awtrix::nvs::saveSettings(engine->state().settings());
     settingsDirty = false;
@@ -134,12 +146,18 @@ void loop() {
   nextFrameMs = nowMs + awtrix::kFramePeriodMs;
   engine->tick(nowMs);
   audioRouter.tick(nowMs);
-  pipeline->renderFrame(*canvas, nowMs);
+  const bool wakeNotif = engine->hasNotification() && engine->notifications().current().wakeup;
+  switch (powerAnimator->update(!engine->state().runtime().matrixOff || wakeNotif, nowMs)) {
+    case awtrix::render::PowerAnimator::Phase::Off: canvas->clear(0); break;
+    case awtrix::render::PowerAnimator::Phase::Out: powerAnimator->composeOut(*canvas); break;
+    default:
+      pipeline->renderFrame(*canvas, nowMs);
+      powerAnimator->finish(*canvas);
+      break;
+  }
   const auto& settings = engine->state().settings();
   board->applyColorGrade(awtrix::render::gradeFrom(settings));
-  // Manual setting until the light sensor feeds the shared auto-brightness path.
-  const int brightness = settings.brightness;
-  board->setBrightness(static_cast<uint8_t>(brightness < 0 ? 0 : brightness > 255 ? 255 : brightness));
+
   board->show(*canvas);
 
   if (systemService.rebootPending) {

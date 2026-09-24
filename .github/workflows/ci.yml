@@ -185,6 +185,10 @@ jobs:
         # overlap or a misaligned app offset only shows up once someone flashes
         # it. Cheap to check here, expensive to discover in the field.
         run: python tools/check_partitions.py
+      - name: Check both firmwares register the shared built-in catalog
+        # main.cpp and main_rp2040.cpp each wire core/BuiltinCatalog.h in by hand; one that
+        # drifts back to its own list ships a different set of apps and effects.
+        run: python tools/check_builtin_registration.py
 
   release:
     name: Publish firmware release

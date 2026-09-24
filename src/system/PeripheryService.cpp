@@ -1,8 +1,5 @@
 #include "system/PeripheryService.h"
 
-#include <Arduino.h>
-#include <HTTPClient.h>
-#include <WiFiClient.h>
 
 #include <cmath>
 
@@ -15,20 +12,6 @@ namespace {
 constexpr long kSensorIntervalMs = 2000;
 constexpr long kLdrIntervalMs = 100;
 
-// Fires from the main loop with very short timeouts: a callback host that is down or slow would
-// otherwise freeze the display for the length of a TCP connect.
-void postButton(const std::string& url, const char* btn, bool state, const std::string& uid) {
-  WiFiClient wc;
-  HTTPClient http;
-  http.setConnectTimeout(300);
-  http.setTimeout(300);
-  if (!http.begin(wc, url.c_str())) return;
-  http.addHeader("Content-Type", "application/json");
-  String body = String("{\"button\":\"") + btn + "\",\"state\":" + (state ? "true" : "false") +
-                ",\"uid\":\"" + uid.c_str() + "\"}";
-  http.POST(body);
-  http.end();
-}
 
 }
 
@@ -96,10 +79,10 @@ void PeripheryService::tick(int64_t nowMs) {
     engine_->state().runtime().buttons = {cur.left, cur.select, cur.right};
     engine_->state().emit(StateEvent::ButtonsChanged);
   }
-  if (!cfg_->buttonCallback.empty()) {
-    if (cur.left != prev_.left) postButton(cfg_->buttonCallback, "left", cur.left, uid_);
-    if (cur.select != prev_.select) postButton(cfg_->buttonCallback, "middle", cur.select, uid_);
-    if (cur.right != prev_.right) postButton(cfg_->buttonCallback, "right", cur.right, uid_);
+  if (buttonPost_ && !cfg_->buttonCallback.empty()) {
+    if (cur.left != prev_.left) buttonPost_(cfg_->buttonCallback, "left", cur.left, uid_);
+    if (cur.select != prev_.select) buttonPost_(cfg_->buttonCallback, "middle", cur.select, uid_);
+    if (cur.right != prev_.right) buttonPost_(cfg_->buttonCallback, "right", cur.right, uid_);
   }
   prev_ = cur;
 

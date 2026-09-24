@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <hardware/clocks.h>
 #include <hardware/dma.h>
+#include <hardware/adc.h>
 #include <pico/time.h>
 
 namespace awtrix {
@@ -13,6 +14,13 @@ GalacticUnicornBoard::GalacticUnicornBoard(const DeviceConfig& cfg)
 void GalacticUnicornBoard::begin() {
   using namespace galactic;
   if (ready_) return;
+  for (const auto& input : Inputs) {
+    gpio_init(input.pin);
+    gpio_set_dir(input.pin, GPIO_IN);
+    gpio_pull_up(input.pin);
+  }
+  adc_init();
+  adc_gpio_init(LightSensor);
   if (invalidHeight_) Serial.println("warning: Galactic Unicorn panelHeight must be 8 or 11; using 11");
   // Keep blank asserted and select an invisible row throughout initialization/failure.
   for (uint pin = ColumnClock; pin <= Row3; ++pin) {
@@ -95,6 +103,22 @@ void GalacticUnicornBoard::begin() {
   ready_ = true;
   Serial.printf("display: PIO%u SM%d DMA%d+%d; CYW43 not initialized (network pending)\n",
                 pio_ == pio0 ? 0u : 1u, sm_, dataDma_, controlDma_);
+}
+
+int GalacticUnicornBoard::readLdrRaw() {
+  adc_select_input(galactic::LightAdc);
+  return adc_read(); // Native 12-bit counts, same 0..4095 curve as ESP32.
+}
+
+std::array<bool, 9> GalacticUnicornBoard::readInputs() const {
+  std::array<bool, 9> result{};
+  for (size_t i = 0; i < result.size(); ++i) result[i] = !gpio_get(galactic::Inputs[i].pin);
+  return result;
+}
+
+void GalacticUnicornBoard::pollButtons(ButtonState& out) {
+  const auto inputs = readInputs();
+  out = {inputs[0], inputs[1], inputs[2]}; // Debounced by the shared PeripheryService.
 }
 
 void GalacticUnicornBoard::show(const Canvas& canvas) {
