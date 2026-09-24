@@ -3,6 +3,7 @@
 #include <string>
 
 #include "core/PinRules.h"
+#include "platform/MatrixPins.h"
 
 using namespace awtrix;
 

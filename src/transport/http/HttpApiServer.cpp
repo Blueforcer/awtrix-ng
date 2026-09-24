@@ -18,6 +18,7 @@
 #include "core/CoreEngine.h"
 #include "core/ProvisioningPolicy.h"
 #include "core/api/ApiRouter.h"
+#include "platform/BuildFeatures.h"
 #include "core/api/MelodiesApi.h"
 #include "core/api/JsonStream.h"
 #include "core/api/JsonWriter.h"
@@ -280,6 +281,8 @@ std::string uploadPartPath(const std::string& path) { return path + ".part"; }
 // Runs once per chunk of the multipart body. Failures are only recorded in the upload* flags here;
 // handleFileUploadDone turns them into a status code afterwards.
 void HttpApiServer::handleFileUpload() {
+  if (featurePolicy(platform::buildFeatures(), std::string(server_->uri().c_str())) ==
+      DispatchResult::Unavailable) return;
   HTTPUpload& up = server_->upload();
   if (up.status == UPLOAD_FILE_START) {
     if (uploadFile_) uploadFile_.close();
@@ -344,6 +347,11 @@ void HttpApiServer::handleFileUpload() {
 }
 
 void HttpApiServer::handleFileUploadDone() {
+  if (featurePolicy(platform::buildFeatures(), std::string(server_->uri().c_str())) ==
+      DispatchResult::Unavailable) {
+    sendResult(api::httpResponse({}, DispatchResult::Unavailable, {}));
+    return;
+  }
   addCorsHeaders(false);
   if (apMode_) {
     sendError(403, "forbidden", "file upload is disabled during provisioning");
@@ -496,6 +504,7 @@ void HttpApiServer::scanImageMarker(const uint8_t* buf, size_t len) {
 }
 
 void HttpApiServer::handleUpdateUpload() {
+  if (!platform::buildFeatures().browserOta) return;
   HTTPUpload& up = server_->upload();
   if (apMode_) return;
   if (up.status == UPLOAD_FILE_START) {
@@ -571,6 +580,10 @@ void HttpApiServer::handleUpdateUpload() {
 }
 
 void HttpApiServer::handleUpdateDone() {
+  if (!platform::buildFeatures().browserOta) {
+    sendResult(api::httpResponse({}, DispatchResult::Unavailable, {}));
+    return;
+  }
   addCorsHeaders(false);
   if (apMode_) {
     sendError(403, "forbidden", "firmware update is disabled during provisioning");
@@ -671,6 +684,12 @@ void HttpApiServer::dispatch() {
   req.method = resolved.method;
   req.get = (req.method == "GET");
 
+  // Reject absent features before allocating bodies or serving transport-only routes.
+  if (featurePolicy(platform::buildFeatures(), req.path) == DispatchResult::Unavailable) {
+    dropRawBody();
+    sendResult(api::httpResponse({}, DispatchResult::Unavailable, {}));
+    return;
+  }
   if (takeBody(req)) return;
   if (rejectedByPolicy(req)) return;
 
@@ -844,7 +863,8 @@ bool HttpApiServer::serveAsset(const Request& req) {
 bool HttpApiServer::serveCommand(Request& req) {
   Command cmd;
   api::HttpResult immediate;
-  switch (api::routeHttp(req.method, req.path, std::move(req.body), cmd, immediate)) {
+  switch (api::routeHttp(req.method, req.path, std::move(req.body), cmd, immediate,
+                         platform::buildFeatures())) {
     case api::RouteOutcome::Respond:
       probe::report("req:route", 128);
       probe::begin();

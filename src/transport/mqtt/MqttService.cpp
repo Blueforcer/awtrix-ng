@@ -2,6 +2,7 @@
 
 #include "core/CoreEngine.h"
 #include "core/api/ApiRouter.h"
+#include "platform/BuildFeatures.h"
 #include "system/Log.h"
 #include "system/MonotonicClock.h"
 #include "transport/DeviceStateJson.h"
@@ -124,7 +125,7 @@ void MqttService::handleMessage(char* topic, uint8_t* payload, unsigned int len)
   engine_->state().runtime().receivedMessages++;
   Command cmd;
   std::string result;
-  switch (api::routeMqtt(suffix, body, cmd, result)) {
+  switch (api::routeMqtt(suffix, body, cmd, result, platform::buildFeatures())) {
     case api::RouteOutcome::Routed: {
       const DispatchResult r = engine_->execute(cmd);
       logdbg("mqtt cmd %s -> %d", suffix.c_str(), static_cast<int>(r));

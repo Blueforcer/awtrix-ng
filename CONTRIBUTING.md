@@ -65,6 +65,8 @@ Every push runs, and your PR needs all of it green:
 python scripts/test_native.py          # host unit tests
 pio run -e awtrix                      # both firmware images build
 pio run -e awtrix_s3_octal
+pio run -e galactic_unicorn            # both Pico UF2s build
+pio run -e galactic_unicorn_2w
 python tools/check_docs_sync.py        # docs match the firmware's real fields
 python tools/check_berry_api.py        # editor's Berry API table is current
 python tools/gen_agent_skill.py --check

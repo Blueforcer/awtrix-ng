@@ -37,7 +37,8 @@ inline std::string toJson(const SocProfile& soc) {
 
   const PinSet& d = soc.defaults;
   return std::string("{\"soc\":\"") + soc.id + "\",\"label\":\"" + soc.label +
-         "\",\"max\":" + std::to_string(soc.gpioMax) + ",\"missing\":" + ranges(soc.missing) +
+         "\",\"fixed\":" + (soc.fixedWiring ? "true" : "false") +
+         ",\"max\":" + std::to_string(soc.gpioMax) + ",\"missing\":" + ranges(soc.missing) +
          ",\"inputOnly\":" + ranges(soc.inputOnly) + ",\"reserved\":" + reserved(soc.reserved) +
          ",\"adc1\":" + ranges(soc.adc1) + ",\"strapping\":" + ranges(soc.strapping) +
          ",\"rtc\":" + ranges(soc.rtc) +

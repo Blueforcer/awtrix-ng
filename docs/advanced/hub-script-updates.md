@@ -30,7 +30,9 @@ The normal device authentication applies. The command is serialized with edits:
 404 means missing, 409 means changed since inspection, 422 means invalid source
 or a failed installation with diagnostic text, 503 means scripting unavailable,
 and 507 means insufficient capacity. Success is 200 `{"ok":true}`.
-Capabilities expose `scriptUpdates: true`. Old firmware must be upgraded first.
+Capabilities expose `scriptUpdates: true` when scripting is compiled in. Galactic
+Unicorn builds expose `scripting: false` and `scriptUpdates: false`; script routes
+return HTTP 503 `unavailable`. Old firmware must be upgraded first.
 For a separate copy, `expected_source: null` creates only a missing script; an
 existing name returns 409 and remains unchanged. Failed new installs are removed.
 The request uses the dynamically bounded source arena; the combined old/new JSON

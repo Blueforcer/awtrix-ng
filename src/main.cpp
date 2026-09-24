@@ -7,6 +7,7 @@
 #include <ctime>
 
 #include "AppConfig.h"
+#include "platform/BuildFeatures.h"
 #include "core/CoreEngine.h"
 #include "core/FrameClock.h"
 #include "core/StrCase.h"
@@ -407,7 +408,8 @@ void setup() {
     // Pushed once the sinks are all attached, so the PCM gains are not left at their defaults.
     g_engine->state().emit(StateEvent::SettingsChanged);
     auto caps = std::make_shared<const std::string>(api::capabilitiesJson(
-        g_effects.names(), g_effects.paletteNames(), g_overlays.names(), g_audio.caps()));
+        g_effects.names(), g_effects.paletteNames(), g_overlays.names(), g_audio.caps(),
+        platform::buildFeatures()));
     g_http.setCapabilitiesJson(caps);
     g_mqtt.setCapabilitiesJson(std::move(caps));
   }

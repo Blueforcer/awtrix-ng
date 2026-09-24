@@ -98,6 +98,38 @@ jobs:
           path: dist/usb-*.bin
           if-no-files-found: error
 
+  pico-build:
+    name: Pico firmware build (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [galactic_unicorn, galactic_unicorn_2w]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Cache PlatformIO
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install -U platformio esptool
+      - name: Build firmware
+        run: pio run -e ${{ matrix.env }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uf2-${{ matrix.env }}
+          path: .pio/build/${{ matrix.env }}/firmware.uf2
+          if-no-files-found: error
+
   docs:
     name: API docs match the firmware
     runs-on: ubuntu-latest
@@ -157,7 +189,7 @@ jobs:
   release:
     name: Publish firmware release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [native-tests, webui-tests, device-build, docs]
+    needs: [native-tests, webui-tests, device-build, pico-build, docs]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -174,7 +206,7 @@ jobs:
       - name: Install PlatformIO
         run: pip install -U platformio esptool
       - name: Build every firmware image
-        run: pio run -e awtrix -e awtrix_s3_octal -e awtrix_s3_quad
+        run: pio run -e awtrix -e awtrix_s3_octal -e awtrix_s3_quad -e galactic_unicorn -e galactic_unicorn_2w
       - name: Stage OTA assets
         # The file a user uploads to /update. One per SoC, and one more for the
         # S3's quad-PSRAM boards, whose PSRAM mode is compiled into the framework
@@ -185,6 +217,12 @@ jobs:
           cp .pio/build/awtrix/firmware.bin firmware-awtrix-ng.bin
           cp .pio/build/awtrix_s3_octal/firmware.bin firmware-awtrix-ng-s3-octal.bin
           cp .pio/build/awtrix_s3_quad/firmware.bin firmware-awtrix-ng-s3-quad.bin
+      - name: Stage the Galactic Unicorn images
+        # A Pico has no OTA: the UF2 dropped on its BOOTSEL drive is both the first install and
+        # every update, so each Pico gets exactly one file.
+        run: |
+          cp .pio/build/galactic_unicorn/firmware.uf2 firmware-galactic-unicorn.uf2
+          cp .pio/build/galactic_unicorn_2w/firmware.uf2 firmware-galactic-unicorn-2w.uf2
       - name: Stage the USB install images
         # What a user flashes over USB: bootloader, partition table, app. The
         # table is the only part that varies with flash size, which is why one
@@ -225,6 +263,8 @@ jobs:
             firmware-awtrix-ng.bin
             firmware-awtrix-ng-s3-octal.bin
             firmware-awtrix-ng-s3-quad.bin
+            firmware-galactic-unicorn.uf2
+            firmware-galactic-unicorn-2w.uf2
             usb-awtrix-ng.zip
             licenses-awtrix-ng.zip
       - name: Flip the release live, now that every asset is attached

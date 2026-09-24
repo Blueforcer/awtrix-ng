@@ -2,6 +2,8 @@
 #include <pico/time.h>
 
 #include "AppConfig.h"
+#include "platform/BuildFeatures.h"
+#include "core/api/CapabilitiesJson.h"
 #include "core/CoreEngine.h"
 #include "core/FrameClock.h"
 #include "core/apps/builtin/DateApp.h"
@@ -60,6 +62,8 @@ void setup() {
   const auto cfg = awtrix::galacticUnicornDefaults();
   board = &awtrix::activeBoard(cfg);
   board->begin();
+  Serial.println(awtrix::api::capabilitiesJson({}, {}, {}, audioRouter.caps(),
+                  awtrix::platform::buildFeatures()).c_str());
   canvas = new awtrix::Canvas(board->matrixWidth(), board->matrixHeight());
   engine = new awtrix::CoreEngine(audioRouter, display, systemService);
   engine->setBatteryAvailable(false);

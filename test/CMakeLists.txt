@@ -41,6 +41,7 @@ file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS
 )
 add_library(awtrix_core STATIC
   ${CORE_SOURCES}
+  "${AWTRIX_ROOT}/src/platform/SocProfile.cpp"
   "${AWTRIX_ROOT}/src/transport/ScriptMqttBridge.cpp"
 )
 target_compile_options(awtrix_core PRIVATE -O2)

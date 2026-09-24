@@ -1482,7 +1482,7 @@ firmware was built for, and the rules differ sharply between them: an ESP32 has 
 on 1–10. Read them here instead of hardcoding a table per chip.
 
 ```json
-"gpio":{"soc":"esp32s3","label":"ESP32-S3","max":48,
+"gpio":{"soc":"esp32s3","label":"ESP32-S3","fixed":false,"max":48,
         "missing":[[22,25]],"inputOnly":[],
         "reserved":[{"lo":19,"hi":20,"why":"the USB-JTAG interface"},
                     {"lo":26,"hi":37,"why":"the SPI flash and PSRAM"},
@@ -1495,6 +1495,7 @@ on 1–10. Read them here instead of hardcoding a table per chip.
 | Key | Meaning |
 |---|---|
 | `soc`, `label` | chip id and display name; same value as `soc` in the device state |
+| `fixed` | `true` when the pins are part of the board, as on the Galactic Unicorn: a pin map other than `defaults` is refused, and the web UI shows the pins instead of offering them. `false` on the ESP32 chips |
 | `max` | highest GPIO number that exists |
 | `missing` | inclusive ranges inside `0…max` the package does not bond out - rejected |
 | `inputOnly` | cannot drive an output, so they are refused for the matrix, buttons, buzzer, I²C and DFPlayer TX. Empty on the ESP32-S3 |
@@ -2067,3 +2068,33 @@ Anything not matched above answers **404** `notFound` with message `unknown rout
 | POST | `/api/v1/restore` | [backup ZIP; available in AP mode](#post-apiv1restore) |
 | GET | `/`, `/index.html`, `/fullscreen` | [web UI](#get) |
 | GET | `/ICONS/*`, `/MELODIES/*`, `/PALETTES/*`, `/MP3/*`, `/SCRIPTS/*`, `/apploop.json` | [static assets](#web-ui-and-static-assets) |
+
+## Galactic Unicorn build capabilities
+
+`GET /api/v1/capabilities` includes `scripting` (true on existing ESP32 and
+simulator builds, false on the Pico builds). `scriptUpdates` follows that flag.
+The `audio` flags come from registered sound sinks, not just build support:
+Pico currently reports buzzer, track, mp3 and radio false. A future I2S tone sink
+will enable buzzer without enabling MP3 or radio.
+
+Pico's disabled script source/shared/config routes, MP3 routes, radio station
+routes, MP3/radio play commands and browser `/update` return HTTP 503 with the
+existing `unavailable` error. MQTT audio commands return `ok:false` with the same
+error code (MQTT has no HTTP status). There are no MQTT script-upload commands.
+Outbound TLS is absent: radio and scripting, the outbound-network consumers,
+are disabled entirely. The portable policy also rejects explicit HTTPS stream
+play requests when TLS alone is disabled. Local file storage and icon-origin
+metadata are not outbound requests and remain independent of TLS support.
+
+`gpio.soc` is `rp2040` for both Unicorn variants, `gpio.label` identifies the
+board and `gpio.fixed` is `true`. All pin assignments are fixed: buttons A/B/C map
+to left/select/right (0/1/3), LDR is 28, I2S data/BCLK/LRCLK is 9/10/11, amplifier
+enable is 22. Battery, I2C, piezo buzzer and DFPlayer pins are -1: these builds
+read no I2C sensor, although the Qw/ST connector is wired to GPIO 4/5. `pinMatrix: -1` and an
+empty `gpio.matrix` list denote a fixed PIO panel, not a disabled display; panel
+pins 13-20 are reserved, never user-routable. Any change to the default pin set
+(including enabling DFPlayer) is refused. Existing ESP32 pin rules are unchanged.
+
+The Pico bootstrap compiles this contract but has no live HTTP/MQTT transports
+yet. Live verification belongs to the networking integration; the host policy
+tests are not a claim that a Pico currently serves these endpoints.

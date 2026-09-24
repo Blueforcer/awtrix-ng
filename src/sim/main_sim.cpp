@@ -22,6 +22,7 @@
 #include <string>
 
 #include "AppConfig.h"
+#include "platform/BuildFeatures.h"
 #include "core/CoreEngine.h"
 #include "core/FrameClock.h"
 #include "core/StrCase.h"
@@ -329,7 +330,8 @@ int main(int argc, char** argv) {
   g_engine->state().emit(StateEvent::SettingsChanged);
 
     std::string caps = api::capabilitiesJson(
-        g_effects.names(), g_effects.paletteNames(), g_overlays.names(), g_audio.caps());
+        g_effects.names(), g_effects.paletteNames(), g_overlays.names(), g_audio.caps(),
+        platform::buildFeatures());
     g_http.setCapabilitiesJson(caps);
     g_mqtt.setCapabilitiesJson(std::make_shared<const std::string>(caps));
   }

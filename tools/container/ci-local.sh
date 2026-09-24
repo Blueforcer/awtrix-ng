@@ -18,7 +18,7 @@ while (( $# )); do
     case "$1" in
         native|webui|docs|mkdocs) steps+=("$1"); shift ;;
         all)
-            steps+=(native webui docs mkdocs build:awtrix build:awtrix_s3_octal build:native_sim)
+            steps+=(native webui docs mkdocs build:awtrix build:awtrix_s3_octal build:native_sim build:galactic_unicorn build:galactic_unicorn_2w)
             shift ;;
         build)
             shift

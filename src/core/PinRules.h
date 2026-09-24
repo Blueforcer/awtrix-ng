@@ -43,6 +43,18 @@ inline bool isRtcWakePin(int pin, const SocProfile& soc) {
 // Checks a whole pin set at once and returns the first problem as a message meant for the user.
 // -1 means the peripheral is off, so only pinMatrix is ever required.
 inline bool validate(const PinSet& p, const SocProfile& soc, std::string& err) {
+  if (soc.fixedWiring) {
+    const auto& d = soc.defaults;
+    const int PinSet::*fields[] = {
+        &PinSet::matrix, &PinSet::btnLeft, &PinSet::btnSelect, &PinSet::btnRight,
+        &PinSet::battery, &PinSet::ldr, &PinSet::buzzer, &PinSet::i2cSda, &PinSet::i2cScl,
+        &PinSet::dfRx, &PinSet::dfTx, &PinSet::i2sBclk, &PinSet::i2sLrclk,
+        &PinSet::i2sDout, &PinSet::i2sMclk, &PinSet::ampEnable};
+    bool unchanged = p.dfplayerEnabled == d.dfplayerEnabled;
+    for (auto field : fields) unchanged = unchanged && p.*field == d.*field;
+    if (!unchanged) err = std::string(soc.label) + ": pin assignments are fixed";
+    return unchanged;
+  }
   struct Entry {
     const char* name;
     int pin;

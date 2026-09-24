@@ -1341,6 +1341,12 @@ paths:
                       interpolates between palette entries.
                   transitions: { type: array, items: { type: string } }
                   overlays: { type: array, items: { type: string } }
+                  scripting:
+                    type: boolean
+                    description: Berry scripting is compiled in; false on Galactic Unicorn builds.
+                  scriptUpdates:
+                    type: boolean
+                    description: Script source updates are supported; follows scripting.
                   audio:
                     type: object
                     description: What this panel can play. All four false means it makes no sound.
@@ -1365,8 +1371,13 @@ paths:
                       32-39; an ESP32-S3 has 0-48, no input-only pins at all and
                       ADC1 on 1-10. Ranges are inclusive `[lo, hi]` pairs.
                     properties:
-                      soc: { type: string, enum: [esp32, esp32s3] }
+                      soc: { type: string, enum: [esp32, esp32s3, rp2040] }
                       label: { type: string, description: "Display name of the chip, e.g. ESP32-S3" }
+                      fixed:
+                        type: boolean
+                        description: >
+                          True when the pins are part of the board (the Galactic
+                          Unicorn): a pin map other than `defaults` is refused.
                       max: { type: integer, description: highest GPIO number that exists }
                       missing:
                         type: array

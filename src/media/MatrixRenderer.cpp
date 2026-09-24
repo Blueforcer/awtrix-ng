@@ -4,6 +4,7 @@
 #include <FastLED.h>
 
 #include "core/PinRules.h"
+#include "platform/MatrixPins.h"
 #include "system/Log.h"
 
 namespace awtrix {

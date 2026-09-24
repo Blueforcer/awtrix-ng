@@ -213,7 +213,7 @@ MethodResolution resolveHttpMethod(const std::string& method, const std::string&
 
 // Turns a request into a Command, or into an immediate error response. NoMatch means the path is
 // served elsewhere - notably every GET, since reads are answered directly, not as commands.
-RouteOutcome routeHttp(const std::string& method, const std::string& path,
+static RouteOutcome routeHttpUnchecked(const std::string& method, const std::string& path,
                        std::string&& body, Command& cmd, HttpResult& immediate) {
   const Source src = Source::Http;
   const bool post = method == "POST";
@@ -462,7 +462,7 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
 
 // MQTT has no verbs, so an empty payload stands for the DELETE form of a command and shows up as
 // cmd.clear.
-RouteOutcome routeMqtt(const std::string& suffix, const std::string& payload,
+static RouteOutcome routeMqttUnchecked(const std::string& suffix, const std::string& payload,
                        Command& cmd, std::string& resultPayload) {
   const Source src = Source::Mqtt;
   auto command = [&](CommandType t) {
@@ -541,6 +541,37 @@ RouteOutcome routeMqtt(const std::string& suffix, const std::string& payload,
   if (op == "screen/get") return command(CommandType::SendScreen);
 
   return RouteOutcome::NoMatch;
+}
+
+RouteOutcome routeHttp(const std::string& method, const std::string& path,
+                       std::string&& body, Command& cmd, HttpResult& immediate,
+                       const FeatureSet& features) {
+  if (featurePolicy(features, path) == DispatchResult::Unavailable) {
+    immediate = httpResponse(cmd, DispatchResult::Unavailable, {});
+    return RouteOutcome::Respond;
+  }
+  const auto outcome = routeHttpUnchecked(method, path, std::move(body), cmd, immediate);
+  if (outcome == RouteOutcome::Routed &&
+      featurePolicy(features, cmd) == DispatchResult::Unavailable) {
+    immediate = httpResponse(cmd, DispatchResult::Unavailable, {});
+    return RouteOutcome::Respond;
+  }
+  return outcome;
+}
+
+RouteOutcome routeMqtt(const std::string& suffix, const std::string& payload,
+                       Command& cmd, std::string& resultPayload, const FeatureSet& features) {
+  if (featurePolicy(features, suffix) == DispatchResult::Unavailable) {
+    resultPayload = mqttResult(DispatchResult::Unavailable, {});
+    return RouteOutcome::Respond;
+  }
+  const auto outcome = routeMqttUnchecked(suffix, payload, cmd, resultPayload);
+  if (outcome == RouteOutcome::Routed &&
+      featurePolicy(features, cmd) == DispatchResult::Unavailable) {
+    resultPayload = mqttResult(DispatchResult::Unavailable, {});
+    return RouteOutcome::Respond;
+  }
+  return outcome;
 }
 
 // True for the .../result topics the device publishes itself, so a wildcard subscription does not

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "core/SocProfileJson.h"
+#include "core/FeatureSet.h"
 #include "core/Transitions.h"
 #include "core/sound/AudioRouter.h"
 
@@ -13,7 +14,9 @@ namespace api {
 inline std::string capabilitiesJson(const std::vector<std::string>& effects,
                                     const std::vector<std::string>& paletteEffects,
                                     const std::vector<std::string>& overlays,
-                                    const sound::Caps& audio) {
+                                    const sound::Caps& audio,
+                                    const FeatureSet& features = {},
+                                    const pins::SocProfile& profile = pins::activeProfile()) {
   auto list = [](const std::vector<std::string>& names) {
     std::string out = "[";
     bool first = true;
@@ -33,7 +36,9 @@ inline std::string capabilitiesJson(const std::vector<std::string>& effects,
          ",\"audio\":{\"buzzer\":" +
          flag(audio.buzzer) + ",\"track\":" + flag(audio.track) + ",\"mp3\":" + flag(audio.mp3) +
          ",\"radio\":" + flag(audio.radio) + "}" +
-         ",\"scriptUpdates\":true,\"gpio\":" + pins::toJson(pins::activeProfile()) + "}";
+         ",\"scripting\":" + flag(features.scripting) +
+         ",\"scriptUpdates\":" + flag(features.scripting) +
+         ",\"gpio\":" + pins::toJson(profile) + "}";
 }
 
 }
