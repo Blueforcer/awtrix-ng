@@ -40,12 +40,14 @@ pip install -U platformio
 Node 22+ is needed for a firmware build (the web UI is minified through `npx`
 before it is embedded) and for the web UI tests.
 
-## The four build targets
+## The build targets
 
 ```bash
 pio run  -e awtrix        # ESP32 firmware (stock pin defaults)
 pio run  -e awtrix_s3_octal     # ESP32-S3 firmware, octal PSRAM
 pio run  -e awtrix_s3_quad      # ESP32-S3 firmware, quad PSRAM
+pio run  -e galactic_unicorn    # Galactic Unicorn firmware, Pico W
+pio run  -e galactic_unicorn_2w # Galactic Unicorn firmware, Pico 2 W
 python scripts/test_native.py  # host unit tests for the portable core
 pio run  -e native_sim    # host simulator: full firmware + web UI, no hardware
 ```
