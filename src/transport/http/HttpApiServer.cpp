@@ -34,7 +34,7 @@
 #include "media/AssetFile.h"
 #include "persistence/DeviceConfig.h"
 #include "persistence/Filesystem.h"
-#include "persistence/FsRestoreSink.h"
+#include "persistence/LittleFsRestoreSink.h"
 #include "persistence/IconOriginsStore.h"
 #include "persistence/SystemConfigApply.h"
 #include "persistence/VfsFile.h"
@@ -206,40 +206,7 @@ const char* mimeFor(const std::string& path) {
   return "application/octet-stream";
 }
 
-class LittleFsRestoreSink : public backup::FsRestoreSink {
- public:
-  using backup::FsRestoreSink::FsRestoreSink;
-  bool beginFile(const std::string& path, std::string& err) override {
-    const String p(path.c_str());
-    const int slash = p.lastIndexOf('/');
-    if (slash > 0) {
-      const String dir = p.substring(0, slash);
-      if (!LittleFS.exists(dir)) LittleFS.mkdir(dir);
-    }
-    file_ = LittleFS.open(p, "w");
-    curPath_ = path;
-    if (!file_) {
-      err = "could not open for writing";
-      return false;
-    }
-    return true;
-  }
-  bool writeFile(const uint8_t* data, std::size_t n) override {
-    return file_ && file_.write(data, n) == n;
-  }
-  bool endFile() override {
-    if (file_) file_.close();
-    return true;
-  }
-  void abortFile() override {
-    if (file_) file_.close();
-    if (!curPath_.empty()) LittleFS.remove(String(curPath_.c_str()));
-  }
-
- private:
-  File file_;
-  std::string curPath_;
-};
+using LittleFsRestoreSink = backup::LittleFsRestoreSink;
 }
 
 void HttpApiServer::begin(uint16_t port, CoreEngine& engine, IBoard& board, Canvas& screen,

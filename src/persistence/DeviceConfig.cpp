@@ -1,6 +1,6 @@
 #include "persistence/DeviceConfig.h"
 
-#include <Preferences.h>
+#include "platform/Preferences.h"
 
 #include "persistence/DeviceConfigFields.h"
 
