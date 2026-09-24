@@ -22,10 +22,13 @@ One dynamically claimed PIO SM and two chained DMA channels continuously
 refresh fourteen binary-weighted bit planes without CPU refresh interrupts.
 PIO1 is preferred to leave PIO0 instruction memory for CYW43; allocation checks
 both free SMs and program space, and can fall back to PIO0. The startup log
-prints the actual display PIO/SM and DMA channels. The current bootstrap does
-**not initialize Wi-Fi**, so CYW43 has **no PIO assignment yet**. The network
-phase must log its actual assignment after initialization; no fixed SM is
-reserved or assumed by this driver.
+prints the actual display PIO/SM and DMA channels. The Pico variant's early
+`init_cyw43_wifi` call is deferred with a linker wrapper until after display
+startup. The radio log reports newly claimed PIO/SMs from the SDK allocation
+bitmap, without depending on CYW43's private bus structure. After the Wi-Fi join
+or AP startup, a bounded DMA-progress probe logs `refresh advancing` (or a
+failure). This checks DMA movement, not panel wiring or visual quality; check on
+the panel that the boot animation keeps moving while Wi-Fi connects.
 
 Two aligned 9,240-byte buffers (18,480 bytes total) fit in static RAM. `show()`
 packs the inactive buffer, publishes its aligned address, then waits until DMA
@@ -74,7 +77,7 @@ events; settings persist through the existing delayed LittleFS save. Power is
 runtime-only, like the API, and fades out/in with NG's power animator; this is not
 deep sleep. Button input continues while the panel is off.
 
-The current Pico bootstrap has no network: MQTT/HA delivery and HTTP button
+The current Pico build has Wi-Fi, but MQTT/HA delivery and HTTP button
 callbacks await the transport phase. Their source state/events are shared with
 ESP32, not a private button protocol. ESP32's HTTP callback adapter is unchanged;
 Pico networking must install its own `PeripheryService::setButtonPost` adapter.
@@ -83,7 +86,42 @@ ESP32 and Pico register the same `core/BuiltinCatalog.h`: five apps, nineteen
 effects and six overlays, including the same palette-enabled subset. Missing
 battery/environmental sensors still hide their apps. Boot logs print these
 capability lists. With default settings expect Time 00:00/calendar 1, then Date
-01.01.24 until the later NTP phase; no separate splash. Saved settings may differ.
+01.01.24 until the later NTP phase when connected. Saved settings may differ.
+
+## Wi-Fi and setup
+
+The shared `NetworkService` loads stored Wi-Fi credentials and uses the same
+boot timeout (15 seconds by default), five-second reconnect checks and weak-signal
+roam policy as ESP32. In provisioning mode the Pico retries the saved network every
+**60 seconds**, not 30: its one radio can only join on the AP's channel while the AP
+is up, so each retry stops the AP and captive DNS for one station-only join (up to
+the join timeout) and brings them back if it fails. The setup network disappearing
+for those seconds is expected. Retries pause while a phone is attached.
+Static IP uses Pico's different argument order and configures both DNS servers.
+Pico uses the core's worldwide country default and no-low-power mode, rather
+than ESP32's country/scan/sort APIs; strongest-BSSID selection is core-dependent.
+
+On a fresh boot without credentials, expect the boot logo followed by the
+animated rainbow **AP MODE** screen. A phone sees an open SSID
+**awtrixng-xxxxxx**, where `xxxxxx` is the last three MAC bytes in lowercase hex
+(or the configured hostname). DHCP and wildcard captive DNS use **192.168.4.1**.
+Hold **B / SELECT** for one second at boot to force this mode without erasing
+credentials. The render priority matches ESP32: power animation, moodlight,
+AP screen, normal apps (Art-Net is not installed yet).
+
+After a successful STA boot, mDNS publishes `<hostname>.local`, `_http._tcp`
+and `_awtrixng._tcp` on the configured web port (default 80), with the same
+`id` (lowercase MAC without colons), `name` and `type=awtrixng` TXT records.
+LEAmDNS is polled every loop. These records match ESP32, but **HTTP and its
+provisioning form are not wired yet**: joining the AP cannot save
+credentials yet and a phone may report no Internet/no working portal. NTP/TZ
+and the remaining system services are not wired yet either, so expect no
+synchronized clock.
+
+Hardware acceptance: flash the UF2, check the SSID/AP MODE behavior above,
+capture display and CYW43 PIO/SM logs plus `refresh advancing`, then check the
+animated boot screen during a stored-credential join. Host tests and firmware
+builds cannot establish physical Wi-Fi/display coexistence.
 
 Host tests cannot establish physical refresh timing, orientation, or absence of
 visible tearing; check those on the panel with the CI-built UF2.

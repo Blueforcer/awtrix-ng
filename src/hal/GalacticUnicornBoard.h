@@ -18,6 +18,7 @@ class GalacticUnicornBoard final : public IBoard {
   int matrixHeight() const override { return height_; }
   void begin() override;
   void show(const Canvas&) override;
+  void logRefreshProgress() const;
   void setBrightness(uint8_t brightness) override { brightness_ = brightness; updateGrade(); }
   // Only the drawing transforms apply; width, chaining and wiring are fixed by the hardware.
   void setMatrixLayout(const MatrixLayout& layout) override {

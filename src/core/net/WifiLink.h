@@ -75,6 +75,32 @@ inline void applyWifiAssoc(LinkStatus& s, WifiAssoc assoc, bool hasSsid, const s
   }
 }
 
+// CYW43 reports an AP that breaks off a join mid key exchange - common right after an unclean
+// reset, while the AP still holds the old association - with the same BADAUTH as a wrong password,
+// and the next join then succeeds. The ESP32 core reports WL_CONNECT_FAILED only for a real
+// authentication failure. This gate gives radios like CYW43 the same outcome: an authentication
+// failure means bad credentials once two join attempts in a row have ended in one; a single one
+// reads as a plain disconnect.
+class AuthFailureGate {
+ public:
+  // Call as each join attempt is issued, with what the radio reported for the attempt before it.
+  void noteJoin(WifiAssoc previous) {
+    if (previous != WifiAssoc::AuthFailed) failedJoins_ = 0;
+    else if (failedJoins_ < UINT8_MAX) ++failedJoins_;
+  }
+
+  // Passes one observation of the radio through, holding back an authentication failure until the
+  // join before this one failed the same way.
+  WifiAssoc filter(WifiAssoc assoc) {
+    if (assoc == WifiAssoc::Connected) failedJoins_ = 0;
+    if (assoc == WifiAssoc::AuthFailed && failedJoins_ == 0) return WifiAssoc::Disconnected;
+    return assoc;
+  }
+
+ private:
+  uint8_t failedJoins_ = 0;
+};
+
 // Records that a reconnect was just issued and when the next one is due. Split out of
 // applyWifiAssoc so the counter tracks retries rather than how often the caller polls.
 inline void noteWifiRetry(LinkStatus& s, uint32_t retryInMs) {

@@ -275,7 +275,7 @@ tab. AWTRIX also shows an outage on the panel itself - see [Connection dots](#co
 | `retryInMs` | integer | Milliseconds until the next attempt. `0` while connected, and while an attempt is running. | Same. |
 | `connects` | integer | Successful connections since boot. A number that keeps climbing is a link that keeps dropping - for `wifi`, usually a router or a range problem. | Same. |
 | `error` | string / null | Why it is not up **right now**. `null` when it is. | Same. |
-| `lastError` | string / null | The last reason this link went down, **kept after it recovers**. `null` until something goes wrong. | Same. |
+| `lastError` | string / null | The last reason this link went down, **kept after it recovers**. `null` until something goes wrong. `badCredentials` means the network refused the password on two joins in a row: the Pico's radio reports an AP that breaks off one join mid key exchange the same way, and the next join then connects. | Same. |
 
 !!! note "Why `wifi` has a `lastError`"
     While WiFi is down nothing can reach this API to ask why - the panel's red dot is the only

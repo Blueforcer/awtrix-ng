@@ -10,7 +10,12 @@
 #include "core/apps/builtin/TimeApp.h"
 #include "core/BuiltinCatalog.h"
 #include "core/render/PowerAnimator.h"
+#include "core/render/BootScreen.h"
+#include "core/render/ProvisioningScreen.h"
+#include "core/render/TextRenderer.h"
+#include "transport/net/NetworkService.h"
 #include "system/Log.h"
+#include "platform/rp2040/RadioStartup.h"
 #include "system/PeripheryService.h"
 #include "system/GalacticUnicornControls.h"
 #include "core/render/RenderPipeline.h"
@@ -71,6 +76,7 @@ UnsetClock pageClock;
 BuiltinCatalog builtins;
 PeripheryService periphery;
 GalacticUnicornControls controls;
+NetworkService network;
 render::PowerAnimator* powerAnimator;
 int64_t nextFrameMs = 0;
 
@@ -78,6 +84,23 @@ awtrix::DeviceConfig config;
 bool storageReady = false;
 bool settingsDirty = false;
 int64_t lastSettingsSaveMs = 0;
+
+bool holdingSelectAtBoot() {
+  ButtonState buttons;
+  board->pollButtons(buttons);
+  if (!buttons.select) return false;
+  const unsigned long start = millis();
+  while (millis() - start < 1000) {
+    board->pollButtons(buttons);
+    if (!buttons.select) return false;
+    delay(20);
+  }
+  canvas->clear(0);
+  text::drawText(*canvas, awtrixFont(), 0, 6, "SETUP", 0xFFA000u);
+  board->show(*canvas);
+  Serial.println("boot: SELECT held, forcing provisioning AP (credentials kept)");
+  return true;
+}
 }
 
 void setup() {
@@ -129,12 +152,25 @@ void setup() {
   deps.fonts[0] = &awtrix::awtrixFont(awtrix::FontId::Small);
   deps.fonts[1] = &awtrix::awtrixFont(awtrix::FontId::Large);
   pipeline = new awtrix::RenderPipeline(board->matrixWidth(), board->matrixHeight(), deps);
-  Serial.printf("boot: AWTRIX NG %s on %s (%dx%d); PIO/DMA panel, no network yet\n",
+  Serial.printf("boot: AWTRIX NG %s on %s (%dx%d); PIO/DMA panel\n",
                 AWTRIX_NG_VERSION, board->name(), board->matrixWidth(), board->matrixHeight());
+  const int64_t bootT0 = time_us_64() / 1000;
+  auto showBootLogo = [bootT0] {
+    render::drawBootLogo(*canvas, awtrixFont(), bootT0, time_us_64() / 1000);
+    board->show(*canvas);
+  };
+  showBootLogo();
+  const bool forceAp = holdingSelectAtBoot();
+  platform::beginRadio();
+  network.setStatus(&engine->state().runtime().wifi);
+  network.setOnJoinedFromAp([] { systemService.reboot(); });
+  network.begin(config, forceAp, showBootLogo);
+  static_cast<GalacticUnicornBoard*>(board)->logRefreshProgress();
 }
 
 void loop() {
   const int64_t nowMs = static_cast<int64_t>(time_us_64() / 1000);
+  network.tick();
   controls.tick(*engine, static_cast<awtrix::GalacticUnicornBoard*>(board)->readInputs(), nowMs);
   periphery.tick(nowMs);
   if (settingsDirty && storageReady && !systemService.rebootPending && nowMs - lastSettingsSaveMs > 1500) {
@@ -144,14 +180,21 @@ void loop() {
   }
   if (nowMs < nextFrameMs) { delay(1); return; }
   nextFrameMs = nowMs + awtrix::kFramePeriodMs;
-  engine->tick(nowMs);
   audioRouter.tick(nowMs);
+  engine->tick(nowMs);
   const bool wakeNotif = engine->hasNotification() && engine->notifications().current().wakeup;
   switch (powerAnimator->update(!engine->state().runtime().matrixOff || wakeNotif, nowMs)) {
     case awtrix::render::PowerAnimator::Phase::Off: canvas->clear(0); break;
     case awtrix::render::PowerAnimator::Phase::Out: powerAnimator->composeOut(*canvas); break;
     default:
-      pipeline->renderFrame(*canvas, nowMs);
+      if (engine->state().runtime().moodlightMode) {
+        canvas->clear(engine->state().runtime().moodlightColor);
+        board->setBrightness(engine->state().runtime().moodlightBrightness);
+      } else if (network.apMode()) {
+        render::drawProvisioningScreen(*canvas, awtrixFont(), nowMs);
+      } else {
+        pipeline->renderFrame(*canvas, nowMs);
+      }
       powerAnimator->finish(*canvas);
       break;
   }
