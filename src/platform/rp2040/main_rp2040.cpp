@@ -1,5 +1,18 @@
 #include <Arduino.h>
 #include <pico/time.h>
+#include <pico/rand.h>
+#include "core/effects/EffectNoise.h"
+#include "system/DeviceServices.h"
+#include "system/DevicePageServices.h"
+#include "system/ResetReason.h"
+#include "platform/rp2040/TimeService.h"
+#include "transport/net/DiscoveryService.h"
+#include "transport/net/ArtnetService.h"
+
+// Build-only measurement switch; production enables both UDP services.
+#ifndef AWTRIX_PICO_UDP
+#define AWTRIX_PICO_UDP 1
+#endif
 
 #include "AppConfig.h"
 #include "platform/BuildFeatures.h"
@@ -35,44 +48,29 @@ static_assert(!AWTRIX_FEATURE_SCRIPTING && !AWTRIX_FEATURE_MP3 &&
 
 namespace {
 using namespace awtrix;
-class UnsetClock final : public IPageClock {
- public:
-  void fill(RenderCtx& ctx, int64_t nowMs) override {
-    ctx.nowMs = nowMs;
-    ctx.epochMs = -1; // No NTP/RTC yet; built-ins render their unset-clock state.
-  }
-};
+
 class Display final : public IDisplayService {
  public:
   void sendScreen() override {} // No transport in this phase.
 };
-class System final : public ISystemService {
- public:
-  void reboot() override { rebootPending = true; }
-  void sleep(uint64_t) override { Serial.println("sleep unavailable"); }
-  void factoryReset() override {
-    LittleFS.remove("/NVS/awtrix-cfg.bin");
-    resetSettings();
-  }
-  void resetSettings() override {
-    LittleFS.remove("/NVS/awtrix-ng.bin");
-    resetPending = true;
-    rebootPending = true;
-  }
-  bool rebootPending = false;
-  bool resetPending = false;
-};
+
 IBoard* board;
 CoreEngine* engine;
 Canvas* canvas;
 RenderPipeline* pipeline;
 sound::AudioRouter audioRouter; // Null sinks honestly report MP3/radio unavailable.
 Display display;
-System systemService;
+DeviceSystem systemService;
 AppRegistry apps;
 EffectRegistry effects;
 EffectRegistry overlays;
-UnsetClock pageClock;
+DevicePageClock pageClock;
+platform::TimeService timeService;
+bool networkWasConnected = false;
+#if AWTRIX_PICO_UDP
+DiscoveryService discovery;
+ArtnetService artnet;
+#endif
 BuiltinCatalog builtins;
 PeripheryService periphery;
 GalacticUnicornControls controls;
@@ -105,6 +103,8 @@ bool holdingSelectAtBoot() {
 
 void setup() {
   Serial.begin(115200);
+  awtrix::noise::reseed(get_rand_32());
+  Serial.printf("reset: %s\n", platform::resetReasonName());
   // Never wait for a USB host: the panel must boot with power alone.
   storageReady = awtrix::fs::begin();
   if (!storageReady) Serial.println("storage: mount failed; persistence unavailable");
@@ -119,6 +119,8 @@ void setup() {
   board->setMatrixLayout(config.matrixLayout());
 
   canvas = new awtrix::Canvas(board->matrixWidth(), board->matrixHeight());
+  systemService.setWakeButtonPin(27);
+  systemService.setDisplayOff([] { canvas->clear(0); board->show(*canvas); });
   engine = new awtrix::CoreEngine(audioRouter, display, systemService);
   if (storageReady) {
     awtrix::nvs::loadSettings(engine->state().settings());
@@ -165,15 +167,29 @@ void setup() {
   network.setStatus(&engine->state().runtime().wifi);
   network.setOnJoinedFromAp([] { systemService.reboot(); });
   network.begin(config, forceAp, showBootLogo);
+  timeService.apply(config.tz, config.ntpServer);
+  networkWasConnected = network.isConnected();
+#if AWTRIX_PICO_UDP
+  if (networkWasConnected) discovery.begin(network.hostname(), config.webPort);
+#endif
   static_cast<GalacticUnicornBoard*>(board)->logRefreshProgress();
 }
 
 void loop() {
   const int64_t nowMs = static_cast<int64_t>(time_us_64() / 1000);
   network.tick();
+  const bool connected = network.isConnected();
+  timeService.apply(config.tz, config.ntpServer, connected && !networkWasConnected);
+#if AWTRIX_PICO_UDP
+  if (connected && !networkWasConnected) discovery.begin(network.hostname(), config.webPort);
+  if (connected && config.artnet) artnet.begin();
+  else artnet.end();
+  if (connected) discovery.tick();
+#endif
+  networkWasConnected = connected;
   controls.tick(*engine, static_cast<awtrix::GalacticUnicornBoard*>(board)->readInputs(), nowMs);
   periphery.tick(nowMs);
-  if (settingsDirty && storageReady && !systemService.rebootPending && nowMs - lastSettingsSaveMs > 1500) {
+  if (settingsDirty && storageReady && !systemService.hasPending() && nowMs - lastSettingsSaveMs > 1500) {
     awtrix::nvs::saveSettings(engine->state().settings());
     settingsDirty = false;
     lastSettingsSaveMs = nowMs;
@@ -192,6 +208,10 @@ void loop() {
         board->setBrightness(engine->state().runtime().moodlightBrightness);
       } else if (network.apMode()) {
         render::drawProvisioningScreen(*canvas, awtrixFont(), nowMs);
+#if AWTRIX_PICO_UDP
+      } else if (artnet.tick(*canvas, nowMs)) {
+        // Art-Net owns this frame until the shared five-second hold expires.
+#endif
       } else {
         pipeline->renderFrame(*canvas, nowMs);
       }
@@ -203,9 +223,9 @@ void loop() {
 
   board->show(*canvas);
 
-  if (systemService.rebootPending) {
-    if (settingsDirty && storageReady && !systemService.resetPending)
+  if (systemService.hasPending() && !powerAnimator->busy()) {
+    if (settingsDirty && storageReady && !systemService.resetsSettings())
       awtrix::nvs::saveSettings(engine->state().settings());
-    rp2040.reboot();
+    systemService.runPending();
   }
 }

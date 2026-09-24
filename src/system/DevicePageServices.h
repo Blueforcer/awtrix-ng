@@ -13,12 +13,15 @@ namespace awtrix {
 class DevicePageClock : public IPageClock {
  public:
   void fill(RenderCtx& ctx, int64_t nowMs) override {
-    ctx.nowMs = nowMs;
     const auto now = std::chrono::system_clock::now();
-    const std::time_t t = std::chrono::system_clock::to_time_t(now);
     const int64_t epochMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                                 now.time_since_epoch())
                                 .count();
+    fillAt(ctx, nowMs, epochMs);
+  }
+  static void fillAt(RenderCtx& ctx, int64_t nowMs, int64_t epochMs) {
+    ctx.nowMs = nowMs;
+    const std::time_t t = static_cast<std::time_t>(epochMs / 1000);
     std::tm tmv{};
     localtime_r(&t, &tmv);
     ctx.hour = tmv.tm_hour;

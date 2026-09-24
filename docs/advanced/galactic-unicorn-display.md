@@ -86,7 +86,8 @@ ESP32 and Pico register the same `core/BuiltinCatalog.h`: five apps, nineteen
 effects and six overlays, including the same palette-enabled subset. Missing
 battery/environmental sensors still hide their apps. Boot logs print these
 capability lists. With default settings expect Time 00:00/calendar 1, then Date
-01.01.24 until the later NTP phase when connected. Saved settings may differ.
+01.01.24 while the clock is unset. After NTP sync they show local time/date.
+Saved settings may differ.
 
 ## Wi-Fi and setup
 
@@ -107,16 +108,61 @@ animated rainbow **AP MODE** screen. A phone sees an open SSID
 (or the configured hostname). DHCP and wildcard captive DNS use **192.168.4.1**.
 Hold **B / SELECT** for one second at boot to force this mode without erasing
 credentials. The render priority matches ESP32: power animation, moodlight,
-AP screen, normal apps (Art-Net is not installed yet).
+AP screen, Art-Net, normal apps.
 
 After a successful STA boot, mDNS publishes `<hostname>.local`, `_http._tcp`
 and `_awtrixng._tcp` on the configured web port (default 80), with the same
 `id` (lowercase MAC without colons), `name` and `type=awtrixng` TXT records.
 LEAmDNS is polled every loop. These records match ESP32, but **HTTP and its
 provisioning form are not wired yet**: joining the AP cannot save
-credentials yet and a phone may report no Internet/no working portal. NTP/TZ
-and the remaining system services are not wired yet either, so expect no
-synchronized clock.
+credentials yet and a phone may report no Internet/no working portal.
+
+## Time, reset and sleep
+
+The configured POSIX `tz` and `ntpServer` feed the core's asynchronous SNTP
+client. It restarts only when either changes, or on a disconnected-to-connected
+transition (matching ESP32 reconnect behavior). DNS/NTP retries are asynchronous.
+The same `DevicePageClock` as ESP32 converts UTC to local time, including DST;
+years before 2020 remain unset. After provisioning, expect AP MODE to go
+away and the clock/date to change from placeholders to the configured local
+time/date once the NTP server is reachable. No battery-backed clock is assumed.
+Effect noise is seeded from Pico SDK `get_rand_32()` hardware entropy at boot.
+
+Reset reporting uses the framework's best-effort cause: power-on → `poweron`,
+watchdog → `watchdog`, reboot → `software`, RUN pin/debug → `external`,
+brownout → `brownout` when distinguishable, otherwise `unknown`. ESP32 values
+are unchanged. Pico boot logs report this reason.
+
+The shared device command dispatcher queues reboot/sleep/reset and performs it
+after the response delay and display power animation, just like ESP32. The Pico
+has **no ESP32-style deep sleep with GPIO wake**. Sleep instead blanks the panel
+through the display-off callback, enables CYW43 aggressive power saving, and
+waits with short yields. The CPU, RAM and panel refresh hardware remain powered;
+this is not a low-microamp shutdown. Application/network request handling pauses.
+The same requested millisecond duration ends sleep; GPIO27 also wakes it. A key
+held on entry must be released before a new press wakes it. Wake reboots the
+application like ESP32 deep-sleep wake, but reports `software`, not `deepSleep`.
+The ordinary Sleep key display toggle remains separate and does not enter this
+timed sleep. Check timer wake and a release/new GPIO27 press on physical hardware.
+
+## UDP services
+
+Both builds include shared discovery (query `FIND_AWTRIXNG` on UDP 4210,
+reply `host[:port]` on 4211) and Art-Net on UDP 6454 when `artnet` is enabled.
+The Pico binding uses WiFiUDP, preserving the shared protocol implementation.
+Art-Net takes over below power/moodlight/AP screens and returns to apps five
+seconds after the last frame. Universes start at zero and hold 170 RGB pixels
+each, continuing across the 53x11 canvas. The frame buffer is allocated on first
+use. HTTP discovery advertises the web port; the HTTP server itself is not wired yet.
+
+Size comparison, measured when the UDP services were added (Pico W, same
+compiler/options, 512 KiB LittleFS; later features add to both builds alike): UDP
+enabled uses **100,784 bytes static RAM / 538,876 bytes flash**. The non-release
+`galactic_unicorn_udp_measure` build omits both services and uses **100,644 /
+536,908 bytes**: enabling them costs **140 bytes static RAM / 1,968 bytes flash**.
+An active 53x11 Art-Net frame additionally needs 2,332 heap bytes for its pixels,
+plus WiFiUDP/lwIP packet allocations. Both services fit comfortably; neither is
+reported as unavailable. The measurement environment is not a release target.
 
 Hardware acceptance: flash the UF2, check the SSID/AP MODE behavior above,
 capture display and CYW43 PIO/SM logs plus `refresh advancing`, then check the

@@ -2,10 +2,15 @@
 
 #include <Arduino.h>
 #include <LittleFS.h>
-#include <Preferences.h>
+#include "platform/Preferences.h"
 #include <WiFi.h>
+#if defined(AWTRIX_PLATFORM_RP2040)
+#include <pico/time.h>
+#include "system/PicoSleep.h"
+#else
 #include <driver/rtc_io.h>
 #include <esp_sleep.h>
+#endif
 
 #include <functional>
 
@@ -49,11 +54,20 @@ class DeviceSystem : public ISystemService {
   void resetSettings() override { pending_ = Pending::ResetSettings; }
 
   // Only an RTC-capable GPIO survives deep sleep; anything else is stored as -1 so the device wakes
-  // on the timer alone rather than never.
-  void setWakeButtonPin(int pin) { wakePin_ = pins::isRtcWakePin(pin) ? pin : -1; }
+  // on the timer alone rather than never. The Pico's emulated sleep watches its Sleep key, GPIO27.
+  void setWakeButtonPin(int pin) {
+#if defined(AWTRIX_PLATFORM_RP2040)
+    wakePin_ = pin == 27 ? pin : -1;
+#else
+    wakePin_ = pins::isRtcWakePin(pin) ? pin : -1;
+#endif
+  }
   void setDisplayOff(std::function<void()> fn) { displayOff_ = std::move(fn); }
 
   bool hasPending() const { return pending_ != Pending::None; }
+  bool resetsSettings() const {
+    return pending_ == Pending::FactoryReset || pending_ == Pending::ResetSettings;
+  }
   void runPending() {
     const Pending p = pending_;
     pending_ = Pending::None;
@@ -61,10 +75,21 @@ class DeviceSystem : public ISystemService {
       case Pending::Reboot:
         // The delays give the pending HTTP response and MQTT publish time onto the wire.
         delay(200);
-        ESP.restart();
+        restart();
         break;
       case Pending::Sleep:
         if (displayOff_) displayOff_();
+#if defined(AWTRIX_PLATFORM_RP2040)
+        delay(200);
+        WiFi.aggressiveLowPowerMode();
+        {
+          const auto pressed = [this] { return wakePin_ >= 0 && digitalRead(wakePin_) == LOW; };
+          PicoSleep sleeper(time_us_64() / 1000, sleepMs_, pressed());
+          while (!sleeper.wake(time_us_64() / 1000, pressed())) delay(10);
+        }
+        // Like ESP32 deep-sleep wake, begin a fresh application session.
+        restart();
+#else
         esp_sleep_enable_timer_wakeup(sleepMs_ * 1000ULL);
         if (wakePin_ >= 0) {
           const gpio_num_t g = static_cast<gpio_num_t>(wakePin_);
@@ -74,6 +99,7 @@ class DeviceSystem : public ISystemService {
         }
         delay(200);
         esp_deep_sleep_start();
+#endif
         break;
       case Pending::FactoryReset:
         // Three namespaces because older firmware wrote under different names; leaving one behind
@@ -82,15 +108,19 @@ class DeviceSystem : public ISystemService {
         clearNvs("awtrix-cfg");
         clearNvs("awtrix");
         LittleFS.format();
+#if defined(AWTRIX_PLATFORM_RP2040)
+        WiFi.disconnect(true);
+#else
         WiFi.disconnect(true, true);
+#endif
         delay(300);
-        ESP.restart();
+        restart();
         break;
       case Pending::ResetSettings:
         clearNvs("awtrix-ng");
         clearNvs("awtrix");
         delay(200);
-        ESP.restart();
+        restart();
         break;
       case Pending::None:
         break;
@@ -99,6 +129,13 @@ class DeviceSystem : public ISystemService {
 
 
  private:
+  static void restart() {
+#if defined(AWTRIX_PLATFORM_RP2040)
+    rp2040.reboot();
+#else
+    ESP.restart();
+#endif
+  }
   static void clearNvs(const char* ns) {
     Preferences p;
     p.begin(ns, false);

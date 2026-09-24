@@ -1,10 +1,39 @@
 #include "transport/net/UdpSocket.h"
 
+#if !defined(AWTRIX_PLATFORM_RP2040)
 #include <lwip/sockets.h>
+#endif
 
 #include <cstring>
 
 namespace awtrix {
+
+#if defined(AWTRIX_PLATFORM_RP2040)
+bool UdpSocket::open(uint16_t port) {
+  close();
+  fd_ = udp_.begin(port) ? 0 : -1;
+  return isOpen();
+}
+void UdpSocket::close() {
+  udp_.stop();
+  fd_ = -1;
+  havePeer_ = false;
+}
+int UdpSocket::receive(void* buf, std::size_t cap) {
+  if (!isOpen() || !cap) return -1;
+  if (udp_.parsePacket() <= 0) return 0;
+  peerAddr_ = static_cast<uint32_t>(udp_.remoteIP());
+  havePeer_ = true;
+  const int n = udp_.read(static_cast<unsigned char*>(buf), cap);
+  while (udp_.available()) udp_.read();
+  return n;
+}
+bool UdpSocket::replyTo(uint16_t port, const void* data, std::size_t len) {
+  if (!isOpen() || !havePeer_ || !udp_.beginPacket(IPAddress(peerAddr_), port)) return false;
+  const auto n = udp_.write(static_cast<const uint8_t*>(data), len);
+  return udp_.endPacket() && n == len;
+}
+#else
 
 bool UdpSocket::open(uint16_t port) {
   close();
@@ -59,5 +88,6 @@ bool UdpSocket::replyTo(uint16_t port, const void* data, std::size_t len) {
   return ::sendto(fd_, data, len, 0, reinterpret_cast<sockaddr*>(&to), sizeof(to)) ==
          static_cast<int>(len);
 }
+#endif
 
 }

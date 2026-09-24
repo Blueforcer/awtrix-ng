@@ -22,9 +22,10 @@ builds the ESP32 firmware.
 
 ## Build environments
 
-There are **eight**. Five build device firmware (`awtrix`, `awtrix_s3_octal`,
-`awtrix_s3_quad`, `galactic_unicorn`, `galactic_unicorn_2w`), one is a
-measurement build of the device firmware (`awtrix_probe`),
+There are **nine**. Five build device firmware (`awtrix`, `awtrix_s3_octal`,
+`awtrix_s3_quad`, `galactic_unicorn`, `galactic_unicorn_2w`), two are
+measurement builds of the device firmware (`awtrix_probe`,
+`galactic_unicorn_udp_measure`),
 and two run on the host (`native`, `native_sim`).
 
 ### `awtrix` - the ESP32 firmware
@@ -130,6 +131,9 @@ the portable core and the services ported to the Pico are linked.
 ```bash
 pio run -e galactic_unicorn
 ```
+
+`galactic_unicorn_udp_measure` is `galactic_unicorn` without the discovery and Art-Net
+services. It only exists to measure what they cost; CI does not build it.
 
 ### `awtrix_probe` - the heap measurement build
 
