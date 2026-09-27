@@ -13,6 +13,8 @@ does not restate.
 """
 
 import glob
+import configparser
+from decimal import Decimal, InvalidOperation
 import os
 import subprocess
 import sys
@@ -132,6 +134,46 @@ for soc, flash_text in REJECTED:
             "%s/%s: generator produced a table for a combination that does not fit"
             % (soc, flash_text)
         )
+
+# UF2 targets use framework linker layouts, not ESP-IDF partition tables.
+# Check every inherited filesystem reservation, without environment-name exemptions.
+config = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=(';',))
+config.read(os.path.join(ROOT, "platformio.ini"))
+
+
+def inherited_option(section, key, seen=()):
+    if section in seen:
+        raise ValueError("environment inheritance cycle: " + section)
+    if config.has_option(section, key):
+        return config.get(section, key).strip()
+    parents = config.get(section, "extends", fallback="").replace(',', ' ').split()
+    for parent in parents:
+        value = inherited_option(parent, key, seen + (section,))
+        if value is not None:
+            return value
+    if section != "env" and config.has_option("env", key):
+        return config.get("env", key).strip()
+    return None
+
+
+for section in config.sections():
+    if not section.startswith("env:"):
+        continue
+    try:
+        size = inherited_option(section, "board_build.filesystem_size")
+        if size is None:
+            continue  # ESP targets are checked through their generated tables above.
+        # arduino-pico sizes are MiB, e.g. 0.5m; unknown units fail, not skip.
+        if not size.lower().endswith('m'):
+            raise ValueError("filesystem size must use MiB (m)")
+        reserved = Decimal(size[:-1]) * 1024 * 1024
+        check(reserved.is_finite() and reserved >= gp.MIN_SPIFFS,
+              "%s: filesystem reservation %s is below the 512 KiB floor" % (section, size))
+        check(reserved.is_finite() and reserved % 4096 == 0,
+              "%s: filesystem reservation must be sector-aligned" % section)
+        print("%s: filesystem reservation %s bytes (framework linker layout)" % (section, reserved))
+    except (ValueError, InvalidOperation, configparser.Error) as e:
+        failures.append("%s: %s" % (section, e))
 
 if failures:
     print("partition tables: %d problem(s)" % len(failures))

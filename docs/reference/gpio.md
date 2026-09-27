@@ -1,10 +1,10 @@
 # GPIO & boards
 
-AWTRIX NG ships **one firmware per chip**, not per board. A commercial 32×8 clock, an AWTRIX 2
+On ESP32, AWTRIX NG ships **one firmware per chip**, not per board. A commercial 32×8 clock, an AWTRIX 2
 mainboard conversion and a panel you wired yourself all run the same binary; what differs is the pin map,
 which is runtime configuration stored on AWTRIX and editable through the API or the web UI.
 
-There are three images: `awtrix` for the ESP32, `awtrix_s3_octal` and `awtrix_s3_quad` for
+There are three ESP32 images: `awtrix` for the ESP32, `awtrix_s3_octal` and `awtrix_s3_quad` for
 the ESP32-S3 - see
 [Rules come from the chip](#rules-come-from-the-chip).
 
@@ -17,6 +17,34 @@ reference.
     you restart it.
 
 ## Rules come from the chip
+
+### Fixed-wiring Galactic Unicorn
+
+The `galactic_unicorn` (Pico W) and `galactic_unicorn_2w` (Pico 2 W) builds use
+the same fixed board map, not the configurable ESP32 layout below. Changing pin
+assignments or enabling DFPlayer is rejected with `400 invalidPinConfig` and
+“pin assignments are fixed”. `pinMatrix: -1` is the fixed multi-pin panel sentinel,
+**not** a disabled panel. Do not apply Ulanzi presets.
+
+| Peripheral | Fixed GPIO |
+| --- | --- |
+| Panel clock / data / latch / blank | 13 / 14 / 15 / 16 |
+| Row select | 17–20 |
+| A / B / C / D | 0 / 1 / 3 / 6 |
+| Sleep | 27 |
+| Volume + / − | 7 / 8 |
+| Brightness + / − | 21 / 26 |
+| Light sensor | 28 (12-bit ADC) |
+| Qw/ST connector (I²C SDA / SCL) | 4 / 5, unused: these builds read no I²C sensor, so `pinI2cSda` and `pinI2cScl` are `-1` |
+| Speaker BCLK / LRCLK / data / amplifier enable | 10 / 11 / 9 / 22 |
+
+The API profile identifies both as `rp2040`; use `updateImage` to distinguish
+the UF2 targets. The fixed pin defaults in `gpio` are authoritative. The matrix
+driver list is empty because this is a PIO panel, not a selectable LED-strip
+data pin. The RTC wake list is empty: timed sleep uses the GPIO27 emulation
+described in [Galactic Unicorn](../advanced/galactic-unicorn.md).
+
+### Configurable ESP32 boards
 
 An ESP32 and an ESP32-S3 do not agree on a single one of the rules below:
 

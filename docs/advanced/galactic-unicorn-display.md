@@ -2,7 +2,9 @@
 
 The Pico W/Pico 2 W board drives the fixed 53x11 panel using the display half
 of Pimoroni pico **v1.23.0** (`3440ab232cdc2b019bb8d16f67b0448502efd9dc`, MIT).
-Audio and pico_graphics are not included. See `THIRD-PARTY-NOTICES.md`.
+Pimoroni's audio and pico_graphics implementations are not included; RTTTL uses
+arduino-pico I²S instead. See `THIRD-PARTY-NOTICES.md` and the
+[installation and hardware verification guide](galactic-unicorn.md).
 
 ## Height and wiring
 
@@ -115,10 +117,11 @@ events; settings persist through the existing delayed LittleFS save. Power is
 runtime-only, like the API, and fades out/in with NG's power animator; this is not
 deep sleep. Button input continues while the panel is off.
 
-The current Pico build has Wi-Fi, but MQTT/HA delivery and HTTP button
-callbacks await the transport phase. Their source state/events are shared with
-ESP32, not a private button protocol. ESP32's HTTP callback adapter is unchanged;
-Pico networking must install its own `PeripheryService::setButtonPost` adapter.
+The Pico build includes Wi-Fi, MQTT/HA delivery and an HTTP button callback
+adapter. Their source state/events are shared with ESP32, not a private button
+protocol. The callback adapter is host-tested; the webhook itself has not
+yet been checked on hardware. A/B/C events in Home Assistant and the `alert`
+melody are verified on a Pico W.
 
 ESP32 and Pico register the same `core/BuiltinCatalog.h`: five apps, nineteen
 effects and six overlays, including the same palette-enabled subset. Missing
@@ -189,7 +192,8 @@ for the actual Pico W or Pico 2 W, not an ESP32 `.bin` image.
 
 Device heap facts use `rp2040.getFreeHeap()`. `minFreeHeapBytes` is the minimum
 sampled by device-state requests, not an allocator-wide low-water mark.
-`largestFreeBlockBytes` is 0 (unknown: arduino-pico provides no such query).
+`largestFreeBlockBytes` estimates the free top-of-heap block; allocator holes
+below that block are not enumerated, so it is a conservative estimate.
 PSRAM facts remain zero internally and the shared serializer omits those fields
 when no PSRAM exists. `scriptHeapPool` is `unavailable` with a zero budget.
 The body-copy guard checks total free heap on Pico, not the largest block;

@@ -119,6 +119,7 @@ pio run -e awtrix_s3_quad
 Pimoroni's Galactic Unicorn, a fixed 53×11 panel, on a Pico W (`galactic_unicorn`) or a
 Pico 2 W (`galactic_unicorn_2w`). The source filter is an explicit allowlist, so only
 the portable core and the services ported to the Pico are linked.
+See [Galactic Unicorn](galactic-unicorn.md) for flashing and features.
 
 | Property | Value |
 |---|---|
@@ -304,7 +305,7 @@ for the firmware builds and the web UI tests:
 | Web UI tests (jsdom) | `npm test` (in `webui/test`) | The web UI JS logic, loaded from the shipped `webui/index.html` via jsdom |
 | Firmware build | `pio run -e <env>`, then `scripts/factory_image.py --all` | Every device image - the matrix is `awtrix`, `awtrix_s3_octal`, `awtrix_s3_quad` - and a USB install image per flash size |
 | Pico firmware build | `pio run -e <env>` | `galactic_unicorn` and `galactic_unicorn_2w`; each UF2 is uploaded as the `uf2-<env>` artifact |
-| API docs match the firmware | `tools/check_docs_sync.py`, `tools/check_berry_api.py`, `tools/check_prelude_solidified.py`, `tools/check_font_sync.py`, `tools/check_partitions.py`, `tools/check_builtin_registration.py` | Documented fields and error codes, the editor's Berry table, the solidified prelude, the generated panel font, every partition table, and the shared built-in catalog |
+| API docs match the firmware | `tools/check_docs_sync.py`, `tools/check_berry_api.py`, `tools/check_prelude_solidified.py`, `tools/check_font_sync.py`, `tools/check_partitions.py`, `tools/check_builtin_registration.py`, `test/test_partition_reservations.py` | Documented fields and error codes, the editor's Berry table, the solidified prelude, the generated panel font, every partition table, and the shared built-in catalog; the partition check also validates each UF2 filesystem reservation |
 
 On a `v*` tag a release job additionally publishes every OTA image, the USB install
 images for each supported flash size and the Galactic Unicorn UF2s.

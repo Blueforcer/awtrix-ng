@@ -115,6 +115,17 @@ Which formats are accepted, and how each one is drawn, is in
 
 ## Galactic Unicorn (Pico W)
 
+The [Pico W and Pico 2 W builds](../advanced/galactic-unicorn.md) reserve **512 KiB
+LittleFS** on both 2 MB and 4 MB flash. Their fixed canvas is 53×11, or 53×8
+letterboxed compatibility mode; other heights fall back to 11 at boot.
+The generic 8–16 validation range does not resize the physical board.
+
+The initial Pico builds have no scripting VM (zero script heap budget), MP3,
+radio, outbound TLS or browser OTA. Script limits above apply only to a build
+reporting `scripting: true`. A stored `scriptingEnabled` value is accepted but
+inert without the VM. RTTTL tones are supported using the ordinary melody limits.
+See the board guide for feature errors, UF2 updates and sleep emulation.
+
 | Limit | Value | At the edge |
 | --- | --- | --- |
 | Hung or faulted firmware | hardware watchdog, ~8 s | reboots itself; `/api/v1/device` then reports `resetReason: "watchdog"` |

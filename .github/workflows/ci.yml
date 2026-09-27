@@ -189,6 +189,10 @@ jobs:
         # main.cpp and main_rp2040.cpp each wire core/BuiltinCatalog.h in by hand; one that
         # drifts back to its own list ships a different set of apps and effects.
         run: python tools/check_builtin_registration.py
+      - name: Test the UF2 filesystem reservation check
+        # check_partitions.py also validates each UF2 environment's LittleFS size; these
+        # cases prove it rejects a bad or missing reservation instead of passing everything.
+        run: python test/test_partition_reservations.py
 
   release:
     name: Publish firmware release

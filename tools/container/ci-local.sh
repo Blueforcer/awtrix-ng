@@ -74,6 +74,7 @@ for step in "${steps[@]}"; do
             run_step webui webui_tests
             run_step flowconv node --test "tools/flowconv/*.test.mjs" ;;
         docs)
+            run_step partition-reservation-tests python test/test_partition_reservations.py
             for check in check_docs_sync check_flow_converter gen_agent_skill \
                          check_berry_api check_prelude_solidified check_font_sync check_partitions check_builtin_registration; do
                 if [[ "$check" == gen_agent_skill ]]; then

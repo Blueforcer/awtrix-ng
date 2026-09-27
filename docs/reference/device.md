@@ -37,7 +37,7 @@ curl -i -X POST http://<awtrix-ip>/api/v1/device
 
 ## Response shape
 
-Keys are emitted in a fixed order. 21 fields are always present; up to 11 more appear only when the
+Keys are emitted in a fixed order. The fields below are always present; up to 11 more appear only when the
 hardware supports them.
 
 ```json
@@ -109,15 +109,15 @@ hardware supports them.
 
 ## Always-present fields
 
-These 23 keys are in every response, on every board, in every state.
+These keys are in every response, on every board, in every state.
 
 | Key | Type | Range / format | Units | Meaning |
 | --- | --- | --- | --- | --- |
 | `version` | string | - | - | Running firmware version. Same value as `GET /api/v1/version`. |
 | `uid` | string | 12 lowercase hex chars | - | Device identity: the WiFi MAC address, lowercased, colons stripped. Stable across reboots and reflashes. Also the default MQTT topic prefix and MQTT client id. |
 | `boardType` | string | constant `"awtrixng"` | - | A fixed constant in the device firmware - it does **not** vary with your GPIO configuration. The simulator reports `"simulator"` instead. |
-| `soc` | string | `esp32`, `esp32s3` | - | The chip this image was built for. Branch on this only to tell the two firmware images apart; for pin rules read `gpio` in `GET /api/v1/capabilities`. |
-| `updateImage` | string | `firmware-awtrix-ng.bin`, `firmware-awtrix-ng-s3-octal.bin`, `firmware-awtrix-ng-s3-quad.bin` | - | The release file this device updates from - the one `POST /update` accepts. The web UI uses it to offer the right download. Empty in the simulator. |
+| `soc` | string | `esp32`, `esp32s3`, `rp2040` | - | The image's GPIO profile. Both Pico W and Pico 2 W currently report `rp2040`; distinguish their images with `updateImage`, and read pin rules from `gpio` in `GET /api/v1/capabilities`. |
+| `updateImage` | string | ESP32 `.bin` or Pico `.uf2` filename | - | `firmware-awtrix-ng.bin`, `firmware-awtrix-ng-s3-octal.bin`, `firmware-awtrix-ng-s3-quad.bin`, `firmware-galactic-unicorn.uf2` or `firmware-galactic-unicorn-2w.uf2`. Pico images require USB BOOTSEL; `POST /update` does not accept them. Empty in the simulator. |
 | `ipAddress` | string | dotted quad | - | The station-mode IP address. In AP (provisioning) mode this is not the address you reached AWTRIX on. |
 | `hostname` | string | 1 … 32 chars | - | The name AWTRIX answers to on the network and publishes over mDNS. Read the configured value from `GET /api/v1/system`; that one is empty when the name is derived from the MAC (`awtrixng-` plus the last six hex digits of `uid`), which is why the two fields disagree on a device that was never named by hand. |
 | `wifiRssi` | integer | typically −30 (excellent) to −90 (unusable) | dBm | Current signal strength of the station connection. |
@@ -137,6 +137,17 @@ These 23 keys are in every response, on every board, in every state.
 | `messageCount` | integer | 0 … | count | Inbound **MQTT** command messages since boot - anything arriving under the topic prefix of your AWTRIX, including a script's own subscription if that topic sits under the prefix. The `/result` messages AWTRIX publishes back are not counted, and HTTP requests are never counted. Resets to 0 on reboot. |
 | `wifi` | object | - | - | Whether AWTRIX is on your network, and if not, why. See [Connection status](#connection-status). |
 | `mqtt` | object | - | - | Whether AWTRIX is talking to your broker, and if not, why. See [Connection status](#connection-status). |
+
+## Pico state notes
+
+Pico W and Pico 2 W keep `boardType: "awtrixng"`. Neither has PSRAM, and the
+Unicorn has no battery telemetry by default. `minFreeHeapBytes` is sampled when
+device state is requested, not an allocator-wide minimum. `largestFreeBlockBytes`
+estimates the free top-of-heap block; it cannot enumerate holes below it.
+Builds without scripting report `scriptingRunning: false`, `scriptHeapPool:
+"unavailable"` and `scriptHeapBudgetBytes: 0` regardless of the stored toggle.
+Emulated timed-sleep wake reports `software`, not `deepSleep`. See the
+[board guide](../advanced/galactic-unicorn.md) for hardware verification scope.
 
 ## PSRAM fields (conditional)
 

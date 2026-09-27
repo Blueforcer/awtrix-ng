@@ -51,6 +51,6 @@ backup and restore routes of the HTTP API; there is no new endpoint or backup
 format.
 
 Settings changes are coalesced over a 1.5 second save interval. Abrupt power loss
-inside that window can lose the most recent changes. Boot/reboot persistence and
-power-loss durability on actual flash remain hardware acceptance checks; host
-and firmware builds alone are not a claim that a physical Pico was reboot-tested.
+inside that window can lose the most recent changes. On a Pico W, settings, Wi-Fi
+credentials and scripts survive reboots and reflashing an application UF2; a power
+cut in the middle of a write has not been tested on hardware.
