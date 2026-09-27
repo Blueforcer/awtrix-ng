@@ -66,13 +66,39 @@ inline void MovingLineEffect::render(Canvas& c, int64_t f) {
 
 inline void BrickBreakerEffect::render(Canvas& c, int64_t f) {
   c.clear(0);
-  for (int y = 0; y < 3; ++y)
-    for (int x = 0; x < c.width(); x += 2) c.setPixel(x, y, color::fromHsv((x * 12) % 360, 100, 55));
-  // Triangle wave across the width: count up to the far edge, then mirror back.
-  int p = static_cast<int>(f) % (2 * (c.width() - 1));
-  int bx = p < c.width() ? p : 2 * (c.width() - 1) - p;
-  c.setPixel(bx, c.height() - 2, 0xFFFFFFu);
-  c.fillRect(bx - 1, c.height() - 1, 3, 1, 0x888888u);
+  const int w = c.width(), h = c.height();
+  if (w < 3 || h < 4) return;
+  const int columns = std::min(8, w / 2);
+  const uint32_t fullWall = (1u << (2 * columns)) - 1u;
+  uint32_t bricks = fullWall;
+  int x = w / 2, y = h - 2, dx = 1, dy = -1;
+  // Replay a bounded round, not elapsed uptime: seeks and dropped frames produce the same game.
+  const int step = static_cast<int>((f % 512 + 512) % 512);
+  for (int tick = 0; tick < step; ++tick) {
+    int nx = x + dx, ny = y + dy;
+    if (nx < 0 || nx >= w) { dx = -dx; nx = x + dx; }
+    if (ny < 0 || ny > h - 2) { dy = -dy; ny = y + dy; }
+    if (ny < 2) {
+      const uint32_t hit = 1u << (ny * columns + nx * columns / w);
+      if (bricks & hit) {
+        bricks &= ~hit;
+        dy = -dy;
+        ny = y;  // Contact frame: bounce away from the brick, not through its neighbour.
+      }
+    }
+    x = nx;
+    y = ny;
+    if (!bricks && y == h - 2) bricks = fullWall;
+  }
+  for (int row = 0; row < 2; ++row)
+    for (int col = 0; col < columns; ++col) {
+      if (!(bricks & (1u << (row * columns + col)))) continue;
+      const int left = (col * w + columns - 1) / columns;
+      const int right = ((col + 1) * w + columns - 1) / columns;
+      c.fillRect(left, row, right - left - 1, 1, color::fromHsv(col * 40, 100, 55));
+    }
+  c.setPixel(x, y, 0xFFFFFFu);
+  c.fillRect(std::max(0, std::min(w - 3, x - 1)), h - 1, 3, 1, 0x888888u);
 }
 
 inline void PingPongEffect::render(Canvas& c, int64_t f) {
@@ -162,14 +188,18 @@ inline void RippleEffect::render(Canvas& c, int64_t f) {
 
 inline void SnakeEffect::render(Canvas& c, int64_t f) {
   c.clear(0);
-  const int len = 6;
-  for (int i = 0; i < len; ++i) {
-    int p = static_cast<int>(f) - i;
-    if (p < 0) continue;
-    // The snake crawls in reading order, dropping to the next row every width steps.
-    int x = p % c.width();
-    int row = (p / c.width()) % c.height();
-    c.setPixel(x, row, paletteColor(static_cast<uint8_t>(i * 40), color::fromHsv(120, 100, 80 - i * 10)));
+  const int w = c.width(), h = c.height();
+  if (w < 2 || h < 2) return;
+  // Vertical serpentine: cross the whole height in seconds, then reverse at the far side.
+  const int64_t span = static_cast<int64_t>(w) * h;
+  const int64_t period = 2 * (span - 1);
+  for (int i = 0; i < 6; ++i) {
+    int64_t p = ((f % period) - i + period) % period;
+    if (p >= span) p = period - p;
+    const int x = static_cast<int>(p / h);
+    const int row = static_cast<int>(p % h);
+    const int y = x % 2 ? h - 1 - row : row;
+    c.setPixel(x, y, paletteColor(static_cast<uint8_t>(i * 40), color::fromHsv(120, 100, 80 - i * 10)));
   }
 }
 
@@ -227,26 +257,40 @@ inline void MatrixEffect::render(Canvas& c, int64_t f) {
   }
 }
 
-inline void SwirlInEffect::render(Canvas& c, int64_t f) {
+namespace fx {
+template <typename Colour>
+inline void travellingSwirl(Canvas& c, int64_t f, bool inward, Colour colour) {
   c.clear(0);
-  const int cx = c.width() / 2, cy = c.height() / 2;
-  for (int i = 0; i < 48; ++i) {
-    float a = i * 0.5f + f * kPhasePerStep;
-    float r = (48 - i) / 6.0f;
-    c.setPixel(cx + static_cast<int>(std::cos(a) * r), cy + static_cast<int>(std::sin(a) * r),
-               paletteColor(static_cast<uint8_t>(i * 5), color::fromHsv((i * 9) % 360, 100, 70)));
+  if (c.width() < 2 || c.height() < 2) return;
+  const float rx = (c.width() - 1) * 0.5f, ry = (c.height() - 1) * 0.5f;
+  const int points = 2 * std::max(c.width(), c.height());
+  const float phase = static_cast<float>((f % 200 + 200) % 200) / 200.0f;
+  const float rotation = static_cast<float>((f % 720 + 720) % 720) * (6.2831853f / 720);
+  // Two spiral packets move radially; modulo radius respawns particles at the opposite edge.
+  for (int i = 0; i < points; ++i) {
+    const float u = static_cast<float>(i) / (points - 1);
+    const float r0 = 0.55f + u * 0.30f + (inward ? -phase : phase);
+    const float r = r0 - std::floor(r0);
+    for (int arm = 0; arm < 2; ++arm) {
+      const float a = u * 6.2831853f + arm * 3.1415927f + (inward ? rotation : -rotation);
+      const int x = static_cast<int>(std::lround(rx + rx * r * std::cos(a)));
+      const int y = static_cast<int>(std::lround(ry + ry * r * std::sin(a)));
+      c.setPixel(x, y, colour(static_cast<uint8_t>(u * 255)));
+    }
   }
+}
+}
+
+inline void SwirlInEffect::render(Canvas& c, int64_t f) {
+  fx::travellingSwirl(c, f, true, [&](uint8_t index) {
+    return paletteColor(index, color::fromHsv(index * 360 / 256, 100, 70));
+  });
 }
 
 inline void SwirlOutEffect::render(Canvas& c, int64_t f) {
-  c.clear(0);
-  const int cx = c.width() / 2, cy = c.height() / 2;
-  for (int i = 0; i < 48; ++i) {
-    float a = i * 0.5f - f * kPhasePerStep;
-    float r = i / 6.0f;
-    c.setPixel(cx + static_cast<int>(std::cos(a) * r), cy + static_cast<int>(std::sin(a) * r),
-               paletteColor(static_cast<uint8_t>(i * 5), color::fromHsv((i * 9) % 360, 100, 70)));
-  }
+  fx::travellingSwirl(c, f, false, [&](uint8_t index) {
+    return paletteColor(index, color::fromHsv(index * 360 / 256, 100, 70));
+  });
 }
 
 inline void LookingEyesEffect::render(Canvas& c, int64_t f) {
