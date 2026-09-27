@@ -9,7 +9,10 @@
 namespace awtrix::platform {
 inline const char* resetReasonName() {
 #if defined(AWTRIX_PLATFORM_RP2040)
-  return picoResetReasonName(rp2040.getResetReason());
+  // Read once, at the first call in setup(): arming the watchdog rewrites the scratch register the
+  // framework reads, after which every later reboot would read back as "watchdog".
+  static const char* const name = picoResetReasonName(rp2040.getResetReason());
+  return name;
 #else
   switch (esp_reset_reason()) {
     case ESP_RST_POWERON: return "poweron";

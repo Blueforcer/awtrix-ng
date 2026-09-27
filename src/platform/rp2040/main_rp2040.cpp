@@ -32,6 +32,7 @@
 #include "system/Log.h"
 #include "platform/rp2040/RadioStartup.h"
 #include "system/PeripheryService.h"
+#include "system/Watchdog.h"
 #include "system/GalacticUnicornControls.h"
 #include "core/render/RenderPipeline.h"
 #include "hal/BoardRegistry.h"
@@ -168,12 +169,16 @@ void setup() {
                 AWTRIX_NG_VERSION, board->name(), board->matrixWidth(), board->matrixHeight());
   const int64_t bootT0 = time_us_64() / 1000;
   auto showBootLogo = [bootT0] {
+    watchdog::feed(); // also the Wi-Fi join's wait callback: up to 3 x wifiConnectTimeout
     render::drawBootLogo(*canvas, awtrixFont(), bootT0, time_us_64() / 1000);
     board->show(*canvas);
   };
   showBootLogo();
   const bool forceAp = holdingSelectAtBoot();
   platform::beginRadio();
+  // Armed after the LittleFS mount (a first-boot format can take longer than the timeout) and the
+  // radio bring-up; everything from here on either returns quickly or feeds it.
+  watchdog::begin();
   network.setStatus(&engine->state().runtime().wifi);
   network.setOnJoinedFromAp([] { systemService.reboot(); });
   network.begin(config, forceAp, showBootLogo);
@@ -207,6 +212,7 @@ void setup() {
 }
 
 void loop() {
+  watchdog::feed();
   const int64_t nowMs = static_cast<int64_t>(time_us_64() / 1000);
   network.tick();
   http.tick();

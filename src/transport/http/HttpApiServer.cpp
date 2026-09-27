@@ -50,8 +50,10 @@
 #include "persistence/VfsFile.h"
 #endif
 #include "system/HeapProbe.h"
+#include "transport/http/RequestHead.h"
 #include "transport/http/UpdateImage.h"
 #include "system/Log.h"
+#include "system/Watchdog.h"
 #include "transport/DeviceStateJson.h"
 #include "transport/http/WebUiAsset.h"
 
@@ -83,11 +85,171 @@ String storageTail() {
   return String("],\"usedBytes\":") + used + ",\"totalBytes\":" + total + "}";
 }
 
+#if defined(AWTRIX_PLATFORM_RP2040)
+// A connection whose request head is read off the socket ahead of WebServer's parser. The parser
+// then reads that head back from here, and the rest of the request from the socket. lwIP keeps
+// each TCP segment in its own buffer and WiFiClient::peekBytes() sees only the first, so a head
+// that spans segments could not be checked in place.
+class HeadClient : public WiFiClient {
+ public:
+  enum class Head { Waiting, Ready, TooLong };
+
+  HeadClient(const WiFiClient& accepted, char* buffer, size_t capacity)
+      : WiFiClient(accepted), buf_(buffer), cap_(capacity) {}
+
+  // Moves what has arrived into the buffer. Ready once the head is in, up to its blank line, and
+  // a body small enough to be read in one piece has arrived as well; TooLong if the buffer fills
+  // before the head ends.
+  Head gather() {
+    if (!headEnd_) {
+      const int more = WiFiClient::available();
+      if (more > 0 && len_ < cap_)
+        len_ += std::max(0, WiFiClient::read(reinterpret_cast<uint8_t*>(buf_ + len_),
+                                             std::min(cap_ - len_, static_cast<size_t>(more))));
+      headEnd_ = requesthead::end(buf_, len_, scanned_);
+      scanned_ = len_;
+      if (!headEnd_) return len_ == cap_ ? Head::TooLong : Head::Waiting;
+    }
+    const long body = requesthead::contentLength(buf_, headEnd_);
+    if (body <= 0 || body > kArenaBodyThresholdBytes) return Head::Ready;
+    const size_t have = len_ - headEnd_ + static_cast<size_t>(std::max(0, WiFiClient::available()));
+    return have >= static_cast<size_t>(body) ? Head::Ready : Head::Waiting;
+  }
+
+  int available() override { return static_cast<int>(pending()) + WiFiClient::available(); }
+  int read() override {
+    return pending() ? static_cast<uint8_t>(buf_[pos_++]) : WiFiClient::read();
+  }
+  int read(uint8_t* dst, size_t size) override {
+    const size_t n = std::min(size, pending());
+    if (!n) return WiFiClient::read(dst, size);
+    memcpy(dst, buf_ + pos_, n);
+    pos_ += n;
+    return static_cast<int>(n);
+  }
+  int peek() override { return pending() ? static_cast<uint8_t>(buf_[pos_]) : WiFiClient::peek(); }
+  size_t peekBytes(uint8_t* dst, size_t size) override {
+    const size_t n = std::min(size, pending());
+    if (!n) return WiFiClient::peekBytes(dst, size);
+    memcpy(dst, buf_ + pos_, n);
+    return n;
+  }
+
+ private:
+  size_t pending() const { return len_ - pos_; }
+
+  char* buf_;
+  size_t cap_;
+  size_t len_ = 0;
+  size_t pos_ = 0;
+  size_t scanned_ = 0;
+  size_t headEnd_ = 0;
+};
+#endif
+
 class RawWebServer : public WebServer {
  public:
   using WebServer::WebServer;
 #if defined(AWTRIX_PLATFORM_RP2040)
   void setRawReadTimeout(unsigned long ms) { client().Stream::setTimeout(ms); }
+
+  // WebServer parses the request line and headers, and reads a small body, with blocking reads
+  // that wait up to 5 s per byte, so a client trickling them could hold loop() past the 8 s
+  // watchdog. The parser runs only once HeadClient holds the whole head, up to its blank line,
+  // and, for a body small enough to be read in one piece, the whole body has arrived too. A head
+  // longer than kHeadBytes is answered 431 and closed; a client that has not got that far within
+  // HTTP_MAX_DATA_WAIT is dropped, as a silent one is. Larger bodies arrive through the raw and
+  // upload callbacks, which feed the watchdog. WebServer would parse a request in the same pass
+  // that accepts it, before this check could run, so a connection is accepted here and handed to
+  // WebServer on a later pass. WebServer only ever sees HeadClients: it creates a client itself
+  // only on a pass that starts without one, and this override never lets it do that.
+  void handleClient() override {
+    if (_currentStatus == HC_NONE) {
+      WiFiClient accepted = getServer().accept();
+      if (!accepted) return;
+      delete _currentClient;
+      _currentClient = new HeadClient(accepted, head_, sizeof(head_));
+      _currentStatus = HC_WAIT_READ;
+      _statusChange = millis();
+      return;
+    }
+    if (_currentStatus == HC_WAIT_READ && _currentClient) {
+      switch (static_cast<HeadClient*>(_currentClient)->gather()) {
+        case HeadClient::Head::Ready:
+          break;
+        case HeadClient::Head::TooLong:
+          refuse(kHeadTooLong, sizeof(kHeadTooLong) - 1);
+          return;
+        case HeadClient::Head::Waiting:
+          // WebServer applies the same timeout to a client that has sent nothing yet.
+          if (!_currentClient->available()) break;
+          if (millis() - _statusChange > HTTP_MAX_DATA_WAIT) refuse(nullptr, 0);
+          return;
+      }
+    }
+    WebServer::handleClient();
+  }
+
+ protected:
+  // Every response byte, headers included, goes through these two. A plain write() keeps going
+  // for as long as a slow reader drains a little every few seconds, which can outlast the
+  // watchdog; write only what the send buffer has room for and feed the watchdog while waiting.
+  // A client that takes nothing for HTTP_MAX_SEND_WAIT is given up on and its connection closed.
+  size_t _currentClientWrite(const char* b, size_t l) override { return writeFed(b, l); }
+  size_t _currentClientWrite_P(PGM_P b, size_t l) override { return writeFed(b, l); }
+
+ private:
+  static constexpr size_t kHeadBytes = 2048;
+  static constexpr size_t kWriteSliceBytes = 1460; // one TCP segment
+  static constexpr char kHeadTooLong[] =
+      "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\n"
+      "Content-Length: 0\r\n\r\n";
+
+  // One request is handled at a time, so the connection being read owns this buffer.
+  char head_[kHeadBytes];
+
+  // Answers with reply, if any, and closes the connection. What the client has already sent is
+  // read and dropped first: closing with it unread would reset the connection and lose the reply.
+  // Released here as well, since its unread bytes would bring it straight back to gather().
+  void refuse(const char* reply, size_t length) {
+    uint8_t sink[256];
+    for (int left = _currentClient->available(); left > 0;) {
+      const int n = _currentClient->read(sink, std::min(sizeof(sink), static_cast<size_t>(left)));
+      if (n <= 0) break;
+      left -= n;
+    }
+    if (reply) writeFed(reply, length);
+    _currentClient->stop();
+    delete _currentClient;
+    _currentClient = nullptr;
+    _currentStatus = HC_NONE;
+  }
+
+  size_t writeFed(const char* b, size_t l) {
+    size_t done = 0;
+    unsigned long progress = millis();
+    while (done < l && _currentClient->connected()) {
+      watchdog::feed();
+      const int room = _currentClient->availableForWrite();
+      if (room > 0) {
+        const size_t n = _currentClient->write(
+            b + done, std::min({l - done, static_cast<size_t>(room), kWriteSliceBytes}));
+        if (n) {
+          done += n;
+          progress = millis();
+          continue;
+        }
+      }
+      if (millis() - progress > HTTP_MAX_SEND_WAIT) {
+        // Closed, not just left: a response goes out in many writes (a file 1 KB at a time), and
+        // each would otherwise wait out its own HTTP_MAX_SEND_WAIT. Once closed, they return at once.
+        _currentClient->stop();
+        break;
+      }
+      delay(1);
+    }
+    return done;
+  }
 #else
   void setRawReadTimeout(unsigned long ms) { _currentClient.Stream::setTimeout(ms); }
 
@@ -308,6 +470,9 @@ std::string uploadPartPath(const std::string& path) { return path + ".part"; }
 // Runs once per chunk of the multipart body. Failures are only recorded in the upload* flags here;
 // handleFileUploadDone turns them into a status code afterwards.
 void HttpApiServer::handleFileUpload() {
+  // Every chunk arrives inside one loop() pass, refused uploads included (a disabled route still
+  // has to read the whole body before it can answer); a slow client must not trip the watchdog.
+  watchdog::feed();
   if (featurePolicy(platform::buildFeatures(), std::string(server_->uri().c_str())) ==
       DispatchResult::Unavailable) return;
   HTTPUpload& up = server_->upload();
@@ -414,6 +579,7 @@ void HttpApiServer::handleFileUploadDone() {
 // The backup zip is piped chunk by chunk through the reader and applier straight onto the
 // filesystem; there is nowhere near enough heap to hold the archive.
 void HttpApiServer::handleRestoreUpload() {
+  watchdog::feed(); // see handleFileUpload()
   HTTPUpload& up = server_->upload();
   if (up.status == UPLOAD_FILE_START) {
     restoreStarted_ = false;
@@ -468,6 +634,7 @@ void HttpApiServer::dropRawBody() {
 // Called by WebServer for every raw-body chunk. Script sources use a second arena that is
 // allocated at RAW_START and released again on completion, since it dwarfs the fixed body arena.
 void HttpApiServer::collectBody(HttpServerBase& server, const String& uri, HTTPRaw& raw) {
+  watchdog::feed(); // a script source arrives inside one loop() pass too; see handleFileUpload()
   const std::string method = methodName(server.method());
   const std::string path = uri.c_str();
   const bool rawSource = api::isRawBodyWrite(method, path);
@@ -532,6 +699,7 @@ void HttpApiServer::scanImageMarker(const uint8_t* buf, size_t len) {
 }
 
 void HttpApiServer::handleUpdateUpload() {
+  watchdog::feed(); // see handleFileUpload()
   if (!platform::buildFeatures().browserOta) return;
   HTTPUpload& up = server_->upload();
   if (apMode_) return;
@@ -633,7 +801,9 @@ void HttpApiServer::handleUpdateDone() {
   engine_->execute(Command(CommandType::Reboot));
 }
 #else
-void HttpApiServer::handleUpdateUpload() {}
+void HttpApiServer::handleUpdateUpload() {
+  watchdog::feed(); // the refused image is still read to the end; see handleFileUpload()
+}
 void HttpApiServer::handleUpdateDone() {
   addCorsHeaders(false);
   sendError(503, "unavailable", "browser update is unavailable; flash a UF2 over USB (BOOTSEL)");
@@ -846,6 +1016,25 @@ bool HttpApiServer::rejectedByPolicy(const Request& req) {
   return false;
 }
 
+// streamFile() writes straight to the client, past the Pico's fed writes, so there a file goes out
+// through sendContent() in pieces instead. Other boards keep streamFile().
+namespace {
+void sendFile(WebServer& server, File& f, const char* type) {
+#if defined(AWTRIX_PLATFORM_RP2040)
+  server.setContentLength(f.size());
+  server.send(200, type, "");
+  char buf[1024];
+  while (server.client().connected()) {
+    const size_t n = f.read(reinterpret_cast<uint8_t*>(buf), sizeof(buf));
+    if (n == 0) break;
+    server.sendContent(buf, n);
+  }
+#else
+  server.streamFile(f, type);
+#endif
+}
+}
+
 // The web UI is a gzip blob in flash, sent verbatim without decompressing. The ETag never changes
 // within a build, so a repeat visit costs a 304 instead of the whole transfer.
 bool HttpApiServer::serveWebUi(const Request& req) {
@@ -895,7 +1084,7 @@ bool HttpApiServer::serveAsset(const Request& req) {
     server_->send(304, "text/plain", "");
     return true;
   }
-  server_->streamFile(f, mimeFor(req.path));
+  sendFile(*server_, f, mimeFor(req.path));
   f.close();
   return true;
 }

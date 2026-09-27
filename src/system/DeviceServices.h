@@ -7,6 +7,7 @@
 #if defined(AWTRIX_PLATFORM_RP2040)
 #include <pico/time.h>
 #include "system/PicoSleep.h"
+#include "system/Watchdog.h"
 #else
 #include <driver/rtc_io.h>
 #include <esp_sleep.h>
@@ -85,7 +86,10 @@ class DeviceSystem : public ISystemService {
         {
           const auto pressed = [this] { return wakePin_ >= 0 && digitalRead(wakePin_) == LOW; };
           PicoSleep sleeper(time_us_64() / 1000, sleepMs_, pressed());
-          while (!sleeper.wake(time_us_64() / 1000, pressed())) delay(10);
+          while (!sleeper.wake(time_us_64() / 1000, pressed())) {
+            watchdog::feed();
+            delay(10);
+          }
         }
         // Like ESP32 deep-sleep wake, begin a fresh application session.
         restart();
@@ -107,6 +111,9 @@ class DeviceSystem : public ISystemService {
         clearNvs("awtrix-ng");
         clearNvs("awtrix-cfg");
         clearNvs("awtrix");
+#if defined(AWTRIX_PLATFORM_RP2040)
+        watchdog::stop();
+#endif
         LittleFS.format();
 #if defined(AWTRIX_PLATFORM_RP2040)
         WiFi.disconnect(true);

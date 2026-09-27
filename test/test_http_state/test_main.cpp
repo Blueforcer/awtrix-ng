@@ -6,6 +6,7 @@
 #include "core/script/ScriptInfo.h"
 #include "platform/rp2040/WifiCompat.h"
 #include "transport/http/BodyArena.h"
+#include "transport/http/RequestHead.h"
 
 using namespace awtrix;
 void setUp() {}
@@ -67,10 +68,28 @@ void raw_body_limit_is_eight_kib_and_recovers_after_overflow() {
   arena.reset(); arena.open(8192); arena.append("{}", 2); arena.finish();
   TEST_ASSERT_EQUAL(2, arena.view().size());
 }
+void request_head_is_found_however_it_is_split() {
+  const std::string req = "PUT /api/v1/system HTTP/1.1\r\nHost: x\r\nContent-Length: 12\r\n\r\n{\"a\":true}";
+  const std::size_t want = req.find("\r\n\r\n") + 4;
+  // Cut into two reads at every offset: the blank line is found whichever read it straddles.
+  for (std::size_t cut = 0; cut <= req.size(); ++cut) {
+    const std::size_t first = requesthead::end(req.data(), cut);
+    TEST_ASSERT_EQUAL(cut >= want ? want : 0, first);
+    if (!first) TEST_ASSERT_EQUAL(want, requesthead::end(req.data(), req.size(), cut));
+  }
+  const std::string open = "GET / HTTP/1.1\r\nHost: x\r\n";
+  TEST_ASSERT_EQUAL(0, requesthead::end(open.data(), open.size()));
+  TEST_ASSERT_EQUAL(12, requesthead::contentLength(req.data(), want));
+  const std::string mixed = "PUT / HTTP/1.1\r\ncontent-LENGTH: 3000\r\n\r\n";
+  TEST_ASSERT_EQUAL(3000, requesthead::contentLength(mixed.data(), mixed.size()));
+  const std::string inside = "GET / HTTP/1.1\r\nX-Content-Length: 5\r\n\r\n";
+  TEST_ASSERT_EQUAL(0, requesthead::contentLength(inside.data(), inside.size()));
+}
 int main() {
   UNITY_BEGIN();
   RUN_TEST(state_without_script_host);
   RUN_TEST(scan_starts_polls_and_restarts_after_empty_result);
   RUN_TEST(raw_body_limit_is_eight_kib_and_recovers_after_overflow);
+  RUN_TEST(request_head_is_found_however_it_is_split);
   return UNITY_END();
 }

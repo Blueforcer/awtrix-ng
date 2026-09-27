@@ -113,6 +113,15 @@ Which formats are accepted, and how each one is drawn, is in
 | Panel height | [`panelHeight`](system.md#panel-and-orientation), 8–16 pixels, default `8`; applies after reboot | outside the range: `422 validationFailed` on `panelHeight` |
 | GIF dimensions | up to the panel's width and height | resize larger GIFs before uploading; every animation frame must fit |
 
+## Galactic Unicorn (Pico W)
+
+| Limit | Value | At the edge |
+| --- | --- | --- |
+| Hung or faulted firmware | hardware watchdog, ~8 s | reboots itself; `/api/v1/device` then reports `resetReason: "watchdog"` |
+| Stalled HTTP client | a request must arrive within 5 s; a response the client stops taking for 5 s is abandoned | the connection is closed and the device carries on |
+| Request line and headers | 2 KB | a longer request is answered `431` and the connection is closed |
+| Deliberately slow upload | a body over 2 KB sent slower than about 180 bytes per second | can hold the loop past the watchdog, which restarts the Pico; ordinary slow networks are far faster |
+
 ## What is *not* limited
 
 - **Requests per second.** Neither the HTTP API nor MQTT rate-limits you.
