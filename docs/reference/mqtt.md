@@ -30,6 +30,22 @@ shape - hold on every topic below.
 These live in the device configuration, not in settings - see
 [System configuration](system.md). The MQTT client id is the device **uid**.
 
+The Galactic Unicorn uses these same settings, topic names, retain flags and
+Home Assistant discovery generator. Restart after changing broker settings,
+as on ESP32. Its Pico networking core resolves DNS and `.local` mDNS names;
+if a `.local` lookup fails it also tries DNS on the bare label. Unlike ESP32's
+background resolver task, each Pico lookup may pause the loop for up to one
+second (two seconds including that fallback). TCP connect/write use a 300 ms
+timeout, MQTT CONNACK uses two seconds, and bounded work feeds the eight-second
+hardware watchdog. Failed connections retain the shared retry backoff.
+
+Discovery keeps manufacturer `Blueforcer`, model `AWTRIX NG`, and stock entity
+names, including `mqtt_prefix` and the left/select/right button binary sensors.
+UID, hostname, firmware version and prefix are device-specific; optional sensor
+entities reflect fitted hardware (the Unicorn has light, but no battery or
+environment sensor). Unsupported audio/script commands still use the shared
+capability checks; enabling MQTT does not enable those features.
+
 ### Topic prefix `<P>`
 
 `<P>` is whatever you put in `mqttPrefix`. Leave it empty and AWTRIX falls back
@@ -308,6 +324,8 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/device/reboot' -m ''
 
 A valid value answers `{"ok":true}` on `.../result`, then AWTRIX enters deep
 sleep on the next loop pass; nothing is published after that.
+On the Galactic Unicorn the sleep is emulated, and the Sleep key (GPIO27) also ends it; see
+[`POST /api/v1/device/sleep`](http.md#post-apiv1devicesleep).
 
 ```bash
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/device/sleep' \

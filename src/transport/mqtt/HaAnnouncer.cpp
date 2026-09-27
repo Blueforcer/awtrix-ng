@@ -3,6 +3,7 @@
 #include "AppConfig.h"
 #include "hal/IBoard.h"
 #include "system/Log.h"
+#include "system/Watchdog.h"
 
 namespace awtrix {
 
@@ -13,6 +14,7 @@ class PubSubSink : public ha::IByteSink {
   explicit PubSubSink(PubSubClient& client) : client_(client) {}
 
   void write(const char* data, std::size_t len) override {
+    watchdog::feed(); // discovery is streamed in many individually bounded TCP writes
     client_.write(reinterpret_cast<const uint8_t*>(data), len);
   }
 

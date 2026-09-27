@@ -332,6 +332,30 @@ void test_unique_ids_are_distinct() {
   TEST_ASSERT_TRUE(std::adjacent_find(ids.begin(), ids.end()) == ids.end());
 }
 
+void test_unicorn_keeps_blueprint_identity_and_stock_button_names() {
+  DiscoveryContext ctx = baseContext();
+  ctx.hasLightSensor = true; // Unicorn has no battery or environment sensor.
+  const std::string json = emitToString(ctx);
+  const JsonReader doc = parsed(json);
+  TEST_ASSERT_EQUAL_STRING("Blueforcer", str(at(doc, "dev"), "mf").c_str());
+  TEST_ASSERT_EQUAL_STRING("AWTRIX NG", str(at(doc, "dev"), "mdl").c_str());
+  const JsonReader cmps = at(doc, "cmps");
+  TEST_ASSERT_EQUAL_size_t(21, memberCount(cmps));
+  TEST_ASSERT_EQUAL_STRING("MQTT prefix", str(at(cmps, "prefix"), "name").c_str());
+  TEST_ASSERT_EQUAL_STRING("~/state/prefix", str(at(cmps, "prefix"), "stat_t").c_str());
+  const char* keys[] = {"btnl", "btnm", "btnr"};
+  const char* names[] = {"Button left", "Button select", "Button right"};
+  const char* topics[] = {"~/state/buttons/left", "~/state/buttons/select", "~/state/buttons/right"};
+  for (int i = 0; i < 3; ++i) {
+    const JsonReader button = at(cmps, keys[i]);
+    TEST_ASSERT_EQUAL_STRING("binary_sensor", str(button, "p").c_str());
+    TEST_ASSERT_EQUAL_STRING(names[i], str(button, "name").c_str());
+    TEST_ASSERT_EQUAL_STRING(topics[i], str(button, "stat_t").c_str());
+    TEST_ASSERT_EQUAL_STRING("1", str(button, "pl_on").c_str());
+    TEST_ASSERT_EQUAL_STRING("0", str(button, "pl_off").c_str());
+  }
+}
+
 }
 
 void setUp() {}
@@ -353,6 +377,6 @@ int main(int, char**) {
   RUN_TEST(test_indicator_off_payload_is_a_command_the_firmware_accepts);
   RUN_TEST(test_every_component_carries_the_topic_base);
   RUN_TEST(test_unique_ids_are_distinct);
-  UNITY_END();
-  return 0;
+  RUN_TEST(test_unicorn_keeps_blueprint_identity_and_stock_button_names);
+  return UNITY_END();
 }

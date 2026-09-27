@@ -5,6 +5,7 @@
 #include "platform/BuildFeatures.h"
 #include "system/Log.h"
 #include "system/MonotonicClock.h"
+#include "system/Watchdog.h"
 #include "transport/DeviceStateJson.h"
 #include "transport/ScriptMqttBridge.h"
 
@@ -75,6 +76,7 @@ void MqttService::tick() {
 // Publishes in streaming form so the payload is never copied into the packet buffer; that keeps
 // state documents larger than the buffer's spare room from failing.
 bool MqttService::send(const std::string& topic, const std::string& payload, bool retained) {
+  watchdog::feed();
   PubSubClient* client = link_.client();
   if (!client->beginPublish(topic.c_str(), static_cast<unsigned int>(payload.size()), retained))
     return false;

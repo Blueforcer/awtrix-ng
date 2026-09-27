@@ -8,6 +8,7 @@
 #include "platform/rp2040/TimeService.h"
 #include "transport/net/DiscoveryService.h"
 #include "transport/net/ArtnetService.h"
+#include "transport/mqtt/MqttService.h"
 
 // Build-only measurement switch; production enables both UDP services.
 #ifndef AWTRIX_PICO_UDP
@@ -55,17 +56,12 @@ static_assert(!AWTRIX_FEATURE_SCRIPTING && !AWTRIX_FEATURE_MP3 &&
 namespace {
 using namespace awtrix;
 
-class Display final : public IDisplayService {
- public:
-  void sendScreen() override {} // No transport in this phase.
-};
-
 IBoard* board;
 CoreEngine* engine;
 Canvas* canvas;
 RenderPipeline* pipeline;
 sound::AudioRouter audioRouter; // Null sinks honestly report MP3/radio unavailable.
-Display display;
+DeviceDisplay display;
 DeviceSystem systemService;
 AppRegistry apps;
 EffectRegistry effects;
@@ -84,6 +80,8 @@ PeripheryService periphery;
 GalacticUnicornControls controls;
 NetworkService network;
 HttpApiServer http;
+MqttService mqtt;
+std::unique_ptr<net::IHostResolver> mqttResolver;
 render::PowerAnimator* powerAnimator;
 int64_t nextFrameMs = 0;
 
@@ -191,15 +189,25 @@ void setup() {
   const uint16_t webPort = network.apMode() ? 80 :
       (config.webPort > 0 ? static_cast<uint16_t>(config.webPort) : 80);
   http.begin(webPort, *engine, *board, *canvas, mac.c_str(), config, network.apMode());
-  http.setCapabilitiesJson(std::make_shared<const std::string>(api::capabilitiesJson(
+  auto capabilities = std::make_shared<const std::string>(api::capabilitiesJson(
       effects.names(), effects.paletteNames(), overlays.names(), audioRouter.caps(),
-      platform::buildFeatures())));
+      platform::buildFeatures()));
+  http.setCapabilitiesJson(capabilities);
+  mqtt.setCapabilitiesJson(std::move(capabilities));
+  mqttResolver = net::makeHostResolver();
+  mqtt.begin(*engine, *board, config, mac.c_str(), mac.c_str(),
+             config.hostname.empty() ? std::string("AWTRIX NG") : config.hostname, *mqttResolver);
+  display.setScreen(canvas);
+  display.setPublisher([](const std::string& topic, const std::string& payload) {
+    mqtt.publish(topic, payload, false);
+  });
   http.setOnConfigChanged([] {
     // The panel size is fixed, so only mirror and rotate reach the board, and they apply live.
     board->setMatrixLayout(config.matrixLayout());
     engine->state().runtime().tempDecimals = config.tempDecimals;
     logbuf::setVerbose(config.debugMode);
     timeService.apply(config.tz, config.ntpServer);
+    mqtt.applyHaConfig(config);
   });
   http.setOnAssetsChanged([] {
     pipeline->invalidateIcons();
@@ -229,6 +237,7 @@ void loop() {
   networkWasConnected = connected;
   controls.tick(*engine, static_cast<awtrix::GalacticUnicornBoard*>(board)->readInputs(), nowMs);
   periphery.tick(nowMs);
+  mqtt.tick();
   if (settingsDirty && storageReady && !systemService.hasPending() && nowMs - lastSettingsSaveMs > 1500) {
     awtrix::nvs::saveSettings(engine->state().settings());
     settingsDirty = false;

@@ -3,6 +3,7 @@
 #include <WiFi.h>
 
 #include "system/Log.h"
+#include "system/Watchdog.h"
 
 namespace awtrix {
 
@@ -44,6 +45,10 @@ void MqttLink::begin(const DeviceConfig& cfg, const std::string& clientId,
 
   if (!enabled_) return;
 
+#if defined(AWTRIX_PLATFORM_RP2040)
+  // arduino-pico applies this millisecond timeout to TCP connect and write, not just reads.
+  wifi_.setTimeout(300);
+#endif
   client_ = new PubSubClient(wifi_);
   if (!client_->setBufferSize(kMqttBufferBytes))
     logf("mqtt: could not allocate a %u-byte packet buffer; large commands will be dropped",
@@ -142,6 +147,7 @@ bool MqttLink::tick(uint32_t nowMs) {
 // Registers a retained "offline" will, so the broker publishes it for us if the device drops off
 // without saying goodbye.
 bool MqttLink::connectNow() {
+  watchdog::feed();
   const std::string will = prefix_ + "/availability";
   return (user_.empty() && pass_.empty())
              ? client_->connect(clientId_.c_str(), will.c_str(), 0, true, "offline")
