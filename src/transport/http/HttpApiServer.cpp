@@ -273,6 +273,10 @@ void HttpApiServer::begin(uint16_t port, CoreEngine& engine, IBoard& board, Canv
   server_->begin();
 }
 
+namespace {
+std::string uploadPartPath(const std::string& path) { return path + ".part"; }
+}
+
 // Runs once per chunk of the multipart body. Failures are only recorded in the upload* flags here;
 // handleFileUploadDone turns them into a status code afterwards.
 void HttpApiServer::handleFileUpload() {
@@ -308,7 +312,9 @@ void HttpApiServer::handleFileUpload() {
     uploadPath_ = fn.c_str();
     uploadContentOk_ = true;
     uploadContentChecked_ = false;
-    uploadFile_ = LittleFS.open(fn, "w");
+    // Written beside the target and renamed over it at the end, so a refused or broken upload
+    // leaves the file it would have replaced untouched (the simulator checks before it writes).
+    uploadFile_ = LittleFS.open(uploadPartPath(uploadPath_).c_str(), "w");
     uploadWriteOk_ = static_cast<bool>(uploadFile_);
   } else if (up.status == UPLOAD_FILE_WRITE) {
     // Sniff the first chunk only, which is enough to catch a file dropped into the wrong folder.
@@ -324,11 +330,16 @@ void HttpApiServer::handleFileUpload() {
     }
   } else if (up.status == UPLOAD_FILE_END) {
     if (uploadFile_) uploadFile_.close();
-    if ((!uploadContentOk_ || !uploadWriteOk_) && !uploadPath_.empty())
-      LittleFS.remove(uploadPath_.c_str());
+    if (uploadPath_.empty()) return;
+    const std::string part = uploadPartPath(uploadPath_);
+    // LittleFS rename replaces an existing target in one step, so the old file stays readable
+    // until the new one takes its place.
+    if (uploadContentOk_ && uploadWriteOk_)
+      uploadWriteOk_ = LittleFS.rename(part.c_str(), uploadPath_.c_str());
+    if (!uploadContentOk_ || !uploadWriteOk_) LittleFS.remove(part.c_str());
   } else if (up.status == UPLOAD_FILE_ABORTED) {
     if (uploadFile_) uploadFile_.close();
-    if (!uploadPath_.empty()) LittleFS.remove(uploadPath_.c_str());
+    if (!uploadPath_.empty()) LittleFS.remove(uploadPartPath(uploadPath_).c_str());
   }
 }
 

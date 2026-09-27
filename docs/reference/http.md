@@ -1801,6 +1801,13 @@ The multipart **field name is irrelevant** - any file part is accepted.
 | 415 | `unsupportedMediaType` - the content does not match the target folder: `/ICONS` needs GIF or JPEG magic bytes, `/MELODIES` must parse as RTTTL text, `/PALETTES` must be plain `RRGGBB`-per-line text, `/MP3` needs MP3 magic bytes (an ID3 tag or a frame sync) |
 | 500 | `internalError` - the write failed (storage full); nothing is left behind |
 
+A refused or failed upload never touches a file of the same name that is already there: the
+new content is kept aside until it has all arrived and passed the check, and only then replaces
+the old file. Until then both copies are on flash, so replacing a file needs room for the new one
+as well; without it the upload fails with `500` and the old file stays. If power is lost
+mid-upload, the partial copy can be left beside the target as `<name>.part`; remove it with
+[`DELETE /api/v1/files`](#delete-apiv1files).
+
 PNG is served correctly once on AWTRIX, but it is not accepted by the `/ICONS` upload check -
 only GIF and JPEG pass.
 
