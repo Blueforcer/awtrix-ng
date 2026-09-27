@@ -148,8 +148,7 @@ void setup() {
   builtins.addTo(apps, effects, overlays);
   engine->setEffectRegistry(&effects);
   engine->setOverlayRegistry(&overlays);
-  Serial.println(awtrix::api::capabilitiesJson(effects.names(), effects.paletteNames(),
-                  overlays.names(), audioRouter.caps(), awtrix::platform::buildFeatures()).c_str());
+
   periphery.begin(*engine, *board, config);
   powerAnimator = new render::PowerAnimator(board->matrixWidth(), board->matrixHeight());
   awtrix::RenderPipelineDeps deps;
@@ -181,6 +180,17 @@ void setup() {
   network.setStatus(&engine->state().runtime().wifi);
   network.setOnJoinedFromAp([] { systemService.reboot(); });
   network.begin(config, forceAp, showBootLogo);
+  static_cast<GalacticUnicornBoard*>(board)->beginAudio();
+  audioRouter.setTone(board->toneSink());
+  engine->state().subscribe([](StateEvent event) {
+    if (event != StateEvent::SettingsChanged) return;
+    const auto& s = engine->state().settings();
+    audioRouter.setVolumes(s.buzzerVolume, s.dfplayerVolume, s.mp3Volume, s.radioVolume);
+    audioRouter.setMuted(!s.soundEnabled);
+  });
+  engine->state().emit(StateEvent::SettingsChanged);
+  Serial.println(api::capabilitiesJson(effects.names(), effects.paletteNames(),
+                  overlays.names(), audioRouter.caps(), platform::buildFeatures()).c_str());
   timeService.apply(config.tz, config.ntpServer);
   networkWasConnected = network.isConnected();
   String mac = WiFi.macAddress();
@@ -243,6 +253,7 @@ void loop() {
     settingsDirty = false;
     lastSettingsSaveMs = nowMs;
   }
+  audioRouter.tick(nowMs);
   if (nowMs < nextFrameMs) { delay(1); return; }
   nextFrameMs = nowMs + awtrix::kFramePeriodMs;
   {
@@ -255,7 +266,6 @@ void loop() {
       windowStart = nowMs;
     }
   }
-  audioRouter.tick(nowMs);
   engine->tick(nowMs);
   const bool wakeNotif = engine->hasNotification() && engine->notifications().current().wakeup;
   switch (powerAnimator->update(!engine->state().runtime().matrixOff || wakeNotif, nowMs)) {

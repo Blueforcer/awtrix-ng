@@ -2089,8 +2089,8 @@ Anything not matched above answers **404** `notFound` with message `unknown rout
 `GET /api/v1/capabilities` includes `scripting` (true on existing ESP32 and
 simulator builds, false on the Pico builds). `scriptUpdates` follows that flag.
 The `audio` flags come from registered sound sinks, not just build support:
-Pico currently reports buzzer, track, mp3 and radio false. A future I2S tone sink
-will enable buzzer without enabling MP3 or radio.
+Pico reports `buzzer` true once its I²S tone sink starts, and track, mp3 and
+radio false.
 
 Pico's disabled script source/shared/config routes, MP3 routes, radio station
 routes, MP3/radio play commands and browser `/update` return HTTP 503 with the

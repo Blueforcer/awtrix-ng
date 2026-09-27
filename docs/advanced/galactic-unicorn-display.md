@@ -70,8 +70,41 @@ ADC2 supplies native 12-bit counts (0–4095), not lux. Cover/uncover the sensor
 with `autoBrightness` enabled to check the shared light curve and configured
 min/max brightness and smoothing. Brightness keys select manual mode through
 the same settings dispatcher as an API change. Volume keys use the onboard tone
-channel setting (`buzzerVolume`); no audio sink is implemented yet, so there is
-no audible output. DFPlayer/MP3/radio volume settings are not changed.
+channel setting (`buzzerVolume`), which scales the I2S speaker output from 0 to
+100 percent. DFPlayer/MP3/radio volume settings are not changed.
+
+### Speaker / RTTTL
+
+The onboard speaker is the `buzzer` capability, not an MP3 output. On successful
+I2S initialization the shared capabilities serializer reports
+`"audio":{"buzzer":true,"track":false,"mp3":false,"radio":false}`.
+Upload `s:d=4,o=6,b=125:c,e,g` as melody `alert`, then send a notification with
+`"sound":"alert"`. This reads `/MELODIES/alert.txt`. Inline `soundRtttl` uses the
+same parser and overrides `sound` when both are present, just as on ESP32.
+Set `buzzerVolume` (0–100) through `/api/v1/settings` or the volume keys.
+`soundEnabled` gates new one-shots.
+
+The arduino-pico I2S library supplied by the pinned PlatformIO platform drives
+GPIO 9 (data), 10 (BCLK), 11 (LRCLK); GPIO 22 is LOW when idle or volume is zero.
+Samples are signed 16-bit, identical on both channels, at 24 kHz, with linear
+amplitude scaling. The square-wave pitch, parsed note/rest lengths and 6 ms
+inter-note silence match the buzzer (the amplifier's loudness curve differs).
+Three 480-word DMA buffers plus the library silence buffer consume 7680 bytes
+on the heap, excluding small buffer descriptors and the parsed melody.
+Each loop pass supplies at most 1440 frames with non-blocking writes, before the
+frame-rate early return. The last DMA buffer is zero-padded and drained without
+waiting in the loop; stop/replacement aborts queued audio. No `flush()` or delay
+is used for playback. Network/filesystem stalls longer than the queued audio
+can cause silence underruns; they do not make audio block the watchdog loop.
+
+Audio starts after display and radio initialization. The display claims one SM
+(prefer PIO1, then PIO0), 24 instructions and two DMA channels. I2S claims one
+free SM, eight instructions and two other DMA channels through the same SDK
+allocators, with no fixed channel numbers or MCLK SM. Its startup log reports
+new claims as masks (PIO-SM bit = `4 * PIO index + SM`; DMA bit = channel).
+A resource failure keeps the amplifier muted and omits the tone capability.
+Hearing both notification forms, volume changes, idle mute and concurrent
+Wi-Fi/display operation can only be checked on the device.
 
 A goes to the previous app, C to the next (subject to NG rotate/swapButtons and
 blockNavigation). B dismisses a notification; a double press within 300 ms

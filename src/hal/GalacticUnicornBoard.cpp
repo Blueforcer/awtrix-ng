@@ -14,6 +14,9 @@ GalacticUnicornBoard::GalacticUnicornBoard(const DeviceConfig& cfg)
 void GalacticUnicornBoard::begin() {
   using namespace galactic;
   if (ready_) return;
+  // Keep the amp silent throughout boot, before radio/audio initialization.
+  pinMode(22, OUTPUT);
+  digitalWrite(22, LOW);
   for (const auto& input : Inputs) {
     gpio_init(input.pin);
     gpio_set_dir(input.pin, GPIO_IN);

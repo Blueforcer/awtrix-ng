@@ -24,7 +24,7 @@ class GalacticUnicornControls {
           break;
         case InputAction::VolumeUp:
         case InputAction::VolumeDown:
-          // The onboard tone channel uses NG's buzzerVolume setting. No sink yet.
+          // The onboard I2S tone channel uses NG's buzzerVolume setting.
           c.payload = "{\"buzzerVolume\":" + std::to_string(stepClamped(s.buzzerVolume,
               Inputs[i].action == InputAction::VolumeUp ? 5 : -5, 100)) + "}";
           break;
