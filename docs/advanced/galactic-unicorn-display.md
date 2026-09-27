@@ -62,6 +62,10 @@ button acts once, not repeatedly; release and press again for another step.
 | Brightness up / down | 21 / 26 | `brightness` +/- 10, clamped 0–255; disables auto brightness |
 | Light sensor | 28 (ADC2) | Automatic brightness |
 
+A, B and C also call the [`buttonCallback`](../reference/system.md) webhook on every press and
+release, with the same body as an ESP32 (`left`, `middle`, `right`). Connecting and waiting for
+the answer are each capped at 300 ms, so an unreachable listener only stalls the display briefly.
+
 ADC2 supplies native 12-bit counts (0–4095), not lux. Cover/uncover the sensor
 with `autoBrightness` enabled to check the shared light curve and configured
 min/max brightness and smoothing. Brightness keys select manual mode through

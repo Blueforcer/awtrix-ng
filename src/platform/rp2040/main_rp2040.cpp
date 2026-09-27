@@ -31,6 +31,7 @@
 #include "transport/http/HttpApiServer.h"
 #include "system/Log.h"
 #include "platform/rp2040/RadioStartup.h"
+#include "system/PeripheryHttp.h"
 #include "system/PeripheryService.h"
 #include "system/Watchdog.h"
 #include "system/GalacticUnicornControls.h"
@@ -205,6 +206,7 @@ void setup() {
     render::clearPaletteCache();
   });
   periphery.setUid(mac.c_str());
+  periphery.setButtonPost(postButton);
 #if AWTRIX_PICO_UDP
   if (networkWasConnected) discovery.begin(network.hostname(), config.webPort);
 #endif
