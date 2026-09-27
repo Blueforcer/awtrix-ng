@@ -2086,18 +2086,17 @@ Anything not matched above answers **404** `notFound` with message `unknown rout
 
 ## Galactic Unicorn build capabilities
 
-`GET /api/v1/capabilities` includes `scripting` (true on existing ESP32 and
-simulator builds, false on the Pico builds). `scriptUpdates` follows that flag.
+`GET /api/v1/capabilities` includes `scripting` (true on the ESP32, simulator and
+Pico builds unless built with `AWTRIX_FEATURE_SCRIPTING=0`). `scriptUpdates` follows that flag.
 The `audio` flags come from registered sound sinks, not just build support:
 Pico reports `buzzer` true once its I²S tone sink starts, and track, mp3 and
 radio false.
 
-Pico's disabled script source/shared/config routes, MP3 routes, radio station
-routes, MP3/radio play commands and browser `/update` return HTTP 503 with the
-existing `unavailable` error. MQTT audio commands return `ok:false` with the same
+Pico's MP3 routes, radio station routes, MP3/radio play commands and browser
+`/update` return HTTP 503 with the existing `unavailable` error. MQTT audio commands return `ok:false` with the same
 error code (MQTT has no HTTP status). There are no MQTT script-upload commands.
-Outbound TLS is absent: radio and scripting, the outbound-network consumers,
-are disabled entirely. The portable policy also rejects explicit HTTPS stream
+Outbound TLS is absent: radio is disabled entirely, and scripts run but their
+`http.*` requests and Modbus reads return `false`. The portable policy also rejects explicit HTTPS stream
 play requests when TLS alone is disabled. Local file storage and icon-origin
 metadata are not outbound requests and remain independent of TLS support.
 

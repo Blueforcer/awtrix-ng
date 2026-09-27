@@ -144,6 +144,7 @@ Pico W and Pico 2 W keep `boardType: "awtrixng"`. Neither has PSRAM, and the
 Unicorn has no battery telemetry by default. `minFreeHeapBytes` is sampled when
 device state is requested, not an allocator-wide minimum. `largestFreeBlockBytes`
 estimates the free top-of-heap block; it cannot enumerate holes below it.
+`scriptHeapBudgetBytes` is `49152` on the Pico W and `98304` on the Pico 2 W.
 Builds without scripting report `scriptingRunning: false`, `scriptHeapPool:
 "unavailable"` and `scriptHeapBudgetBytes: 0` regardless of the stored toggle.
 Emulated timed-sleep wake reports `software`, not `deepSleep`. See the

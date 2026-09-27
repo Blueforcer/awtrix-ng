@@ -11,7 +11,7 @@ void geometry_and_defaults() {
   TEST_ASSERT_EQUAL(53,cfg.panelWidth);
   TEST_ASSERT_EQUAL(11,cfg.panelHeight);
   TEST_ASSERT_EQUAL(1,cfg.panels);
-  TEST_ASSERT_FALSE(cfg.scriptingEnabled);
+  TEST_ASSERT_TRUE(cfg.scriptingEnabled); // the shared default: scripts run unless switched off
   TEST_ASSERT_EQUAL(53,galactic::Width);
   TEST_ASSERT_EQUAL(8,galactic::sanitizeHeight(8));
   TEST_ASSERT_EQUAL(11,galactic::sanitizeHeight(16));

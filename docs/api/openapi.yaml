@@ -1365,7 +1365,7 @@ paths:
                   overlays: { type: array, items: { type: string } }
                   scripting:
                     type: boolean
-                    description: Berry scripting is compiled in; false on Galactic Unicorn builds.
+                    description: Berry scripting is compiled in; false only on builds made with AWTRIX_FEATURE_SCRIPTING=0.
                   scriptUpdates:
                     type: boolean
                     description: Script source updates are supported; follows scripting.
@@ -2633,8 +2633,8 @@ components:
           type: integer
           description: >
             How large the shared Berry heap may grow before further installs are
-            refused. 98304 on internal RAM; roughly half of free PSRAM where the
-            script heap lives there.
+            refused. 98304 on internal RAM (49152 on the Pico W); roughly half of
+            free PSRAM where the script heap lives there.
         fps: { type: integer, description: measured render-loop rate }
         brightness: { type: integer, description: effective brightness after auto-brightness }
         lightLevel:

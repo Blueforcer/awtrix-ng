@@ -185,7 +185,8 @@ type checks (415), and settings validation (422). The Pico WebServer uses
 `HTTPServer&` request hooks, including its newer `canRaw` overload; larger
 bodies stream into the fixed arena instead of an unbounded String. Uploads
 and file/melody listing use LittleFS's File API rather than an ESP VFS mount.
-Scripting, MP3 and radio routes retain the shared 503 `unavailable` policy.
+MP3 and radio routes retain the shared 503 `unavailable` policy. Berry scripting is
+compiled in (see [Scripting on the Pico W](#scripting-on-the-pico-w)).
 `/update` returns 503 `unavailable` with an explicit instruction to flash a
 **UF2 over USB using BOOTSEL**; browser OTA is not supported. Use the UF2 built
 for the actual Pico W or Pico 2 W, not an ESP32 `.bin` image.
@@ -195,7 +196,9 @@ sampled by device-state requests, not an allocator-wide low-water mark.
 `largestFreeBlockBytes` estimates the free top-of-heap block; allocator holes
 below that block are not enumerated, so it is a conservative estimate.
 PSRAM facts remain zero internally and the shared serializer omits those fields
-when no PSRAM exists. `scriptHeapPool` is `unavailable` with a zero budget.
+when no PSRAM exists. `scriptHeapPool` is `internal`, with a 48 KB budget on the
+Pico W and 96 KB on the Pico 2 W; a build without scripting reports
+`unavailable` and 0.
 The body-copy guard checks total free heap on Pico, not the largest block;
 hardware soak testing is still needed to assess fragmentation and latency.
 
@@ -262,3 +265,16 @@ builds cannot establish physical Wi-Fi/display coexistence.
 
 Host tests cannot establish physical refresh timing, orientation, or absence of
 visible tearing; check those on the panel with the CI-built UF2.
+
+## Scripting on the Pico W
+
+Berry scripting is on in `galactic_unicorn` and `galactic_unicorn_2w`; build with
+`-D AWTRIX_FEATURE_SCRIPTING=0` to leave it out. The VM gets a 48 KB budget on the
+Pico W and 96 KB, the ESP32's, on the Pico 2 W (`scriptHeapBudgetBytes`, set with
+`-D AWTRIX_RP2040_SCRIPT_HEAP_KB=n`) from the one heap Wi-Fi, HTTP, MQTT and the
+display share; on the Pico W the interpreter itself costs about 19 KB of free heap
+with no script installed. Every call into a script is capped at
+`BerryVM::kInstructionLimit` instructions and returns to `loop()`, which feeds the
+8 s watchdog. Drawing, timers, storage, buttons, sound and MQTT work as on the ESP32;
+on the Pico `http.*` requests and Modbus reads (the same request path) return `false`
+and script icons are not drawn.

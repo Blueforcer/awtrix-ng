@@ -96,6 +96,12 @@ next to your script; fix the line it names and save again. The full story is und
     broker - point the simulator at one with `mqttHost` (see
     [the simulator's MQTT note](../advanced/simulator.md#mqtt)).
 
+!!! note "On the Galactic Unicorn"
+    Scripts run on the Pico W and Pico 2 W, with less memory for them: see
+    [Limits › Galactic Unicorn](../reference/limits.md#galactic-unicorn-pico-w). The Pico has no
+    outbound HTTP for scripts yet, so `http.*` calls and Modbus reads return `false`, and script
+    icons (`icon()`) are not drawn.
+
 ---
 
 ## Everything a script can do, on one screen

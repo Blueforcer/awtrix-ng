@@ -186,8 +186,8 @@ void restore_and_disabled_stores() {
   TEST_ASSERT_TRUE(sink.endFile()); TEST_ASSERT_EQUAL_STRING("new", testFiles["/ICONS/test.gif"].c_str());
   TEST_ASSERT_FALSE(sink.beginFile("/NVS/awtrix-cfg.bin", err));
   TEST_ASSERT_FALSE(sink.beginFile("/ICONS/../bad", err));
-  ScriptStore scripts; scripts.save("test", "source"); scripts.storeChanged("test", "{}"); scripts.flush();
-  TEST_ASSERT_TRUE(scripts.names().empty()); TEST_ASSERT_EQUAL(0, scripts.pendingCount());
+  // ScriptStore is the shared LittleFS one now that the Pico runs scripts; it needs directory
+  // listing this fake filesystem does not model, so it is exercised on the device (smoke.sh).
   radiostore::save("[]"); TEST_ASSERT_FALSE(testFiles.count("/radio.json"));
 }
 int main() {

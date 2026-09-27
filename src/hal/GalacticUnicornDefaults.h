@@ -6,7 +6,6 @@ inline DeviceConfig galacticUnicornDefaults() {
   cfg.panelWidth = 53;
   cfg.panelHeight = 11;
   cfg.panels = 1;
-  cfg.scriptingEnabled = false;
   return cfg;
 }
 }

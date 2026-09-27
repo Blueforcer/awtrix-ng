@@ -258,7 +258,19 @@ if [[ "$scripting" == false ]]; then
   call "no scripting" 503 GET /api/v1/scripts/shared && unavailable
   call "no scripting" 503 GET "/api/v1/apps/$name/config" && unavailable
 else
+  # Install, read back, list and delete a two-line app; cleanup() deletes it again if this stops.
   call "scripting" 200 GET /api/v1/scripts/shared
+  printf 'class Smoke\n  def draw()\n    clear()\n  end\nend\n\nreturn Smoke()\n' >"$tmp/script.ax"
+  call "install script" 200 PUT "/api/v1/apps/script/$name" -H 'Content-Type: text/plain' \
+    --data-binary "@$tmp/script.ax"
+  check "compiles" '.ok == true and .error == null'
+  RAW=1 call "script source" 200 GET "/api/v1/apps/script/$name"
+  if cmp -s "$tmp/body" "$tmp/script.ax"; then verdict 1 "  source round-trips" ""
+  else verdict 0 "  source round-trips" "(bytes differ)"; fi
+  call "apps" 200 GET /api/v1/apps
+  check "$name listed as a script" 'any(.[]; .name == $n and .origin == "script")' --arg n "$name"
+  call "delete script" 200 DELETE "/api/v1/apps/$name"
+  call "script is gone" 404 GET "/api/v1/apps/script/$name"
   # Script source is exempt from the 8 KB body cap, updates included: a big update of a missing
   # script is a 404, not a 413.
   printf '{"expected_source":"%s","source":"x"}' "$(head -c 9000 /dev/zero | tr '\0' a)" \

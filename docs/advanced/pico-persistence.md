@@ -42,8 +42,8 @@ or migrated and is deleted by `DeviceConfig::save()`. A store with only `ph` kee
 the default runtime height of 8; `pheight` round-trips independently, including 11.
 The JSON/API and backup/restore field remains `panelHeight`, not the on-flash key.
 
-App order uses the shared `/apploop.json` store. ScriptStore and RadioStore are no-op
-implementations on Pico (those features remain unavailable). The shared
+App order uses the shared `/apploop.json` store. Scripts use the shared ScriptStore under
+`/SCRIPTS`; RadioStore is a no-op implementation on Pico (radio remains unavailable). The shared
 `LittleFsRestoreSink` stages asset entries and renames complete files, so aborting
 an entry does not delete an existing asset. `FsRestoreSink`, config JSON and the
 portable backup parser compile for Pico. They are reached through the existing

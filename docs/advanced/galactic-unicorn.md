@@ -86,21 +86,50 @@ DFPlayer. Volume keys and `buzzerVolume` control that same output.
 ## Feature availability
 
 Always read **`GET /api/v1/capabilities`**, rather than inferring features from a
-chip name. This branch's Pico builds currently compile out the following:
+chip name.
+
+### Scripting
+
+Both versions run Berry scripts and report `scripting: true`, so the web UI shows
+Run scripts and the script pages. They share one heap with Wi-Fi, HTTP, MQTT and
+the display, so the budget depends on the chip:
+
+| | Pico W (RP2040) | Pico 2 W (RP2350) |
+| --- | --- | --- |
+| Script heap budget (`scriptHeapBudgetBytes`) | 48 KB | 96 KB, as on the ESP32 |
+| Interpreter cost with no script installed | about 19 KB of free heap | not measured on hardware |
+| Largest script that installs | about 7 KB of source | not measured on hardware |
+
+On the Pico W a failed install of a large script can leave the heap fragmented,
+so later installs are refused with `507` even though enough memory is free in
+total. Reboot to recover. Script `http.*` requests, and Modbus reads, which go
+through the same request path, return `false`, and script icons are not drawn on
+either board; timers, drawing, storage, buttons, sound and MQTT
+work as on the ESP32. The Pico 2 W is verified by build, host tests and the
+simulator only.
+
+If a script takes the device down on every boot, hold **A and C** together for
+three seconds while powering on. The panel shows `NOSCR` and the Unicorn starts
+without running scripts, exactly like left and right on other boards (see
+[troubleshooting](../troubleshooting/troubleshooting.md#scripts-eat-the-memory-and-awtrix-never-comes-up)).
+
+### Compiled out
+
+The Pico builds compile out the following:
 
 | Feature | Reason / behavior |
 | --- | --- |
-| Berry scripting | The initial memory-constrained port omits the VM and its platform workers. `scripting` is false and script routes return `503 unavailable`. |
 | MP3 playback and Internet radio | The port supplies a bounded RTTTL tone sink, not the decoder/streaming audio pipeline; their audio flags are false. |
 | Outbound TLS | No secure-client integration in the Pico transport; use a trusted local network and supported plain-HTTP endpoints. |
 | Browser OTA | No dual-slot updater for the Pico flash layout; update with USB UF2 instead. |
 
-`PUT /api/v1/system` still **accepts and stores `scriptingEnabled`** on a build
-without scripting, but the setting is inert: it cannot add code that was compiled
-out. The UI hides Run scripts and the script pages, showing “not available on
-this board”; MP3/radio sections and their controls follow their own capability
-flags. Builds with these capabilities keep the existing controls. A separate
-scripting port can therefore enable them without chip-name checks in the UI.
+`scriptingEnabled` turns the VM off at the next boot, as on the ESP32; stored
+scripts stay listable and editable. A build made with
+`-D AWTRIX_FEATURE_SCRIPTING=0` still **accepts and stores `scriptingEnabled`**,
+but the setting is inert there: `scripting` is false, script routes return
+`503 unavailable`, and the UI hides Run scripts and the script pages, showing
+“not available on this board”. MP3/radio sections and their controls follow
+their own capability flags.
 
 HTTP Basic authentication is not encryption. Do not expose this device directly
 to the Internet. Feature-disabled routes retain the shared error vocabulary,
