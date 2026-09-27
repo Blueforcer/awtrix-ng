@@ -60,6 +60,10 @@ Your browser downloads and verifies the firmware, then uploads it to AWTRIX. Kee
 and the device powered until it restarts. Progress is shown during download and upload; the page
 reloads automatically afterwards. Settings and uploaded files are kept.
 
+A Galactic Unicorn cannot install from the
+browser. Its row still names a newer release and links the release notes, where its `.uf2` is,
+and the Maintenance section explains the USB (BOOTSEL) route instead of offering **Upload firmware**.
+
 The download and verification run entirely on your computer or phone. AWTRIX receives only the
 normal firmware upload. If a release has just appeared, its browser download may take a few
 minutes to become ready. Try again shortly, or download the image from the release page and use **Upload firmware**.
