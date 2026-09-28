@@ -9,6 +9,7 @@
 
 **Changed**
 
+- **BrickBreaker, Snake and PingPong are real mini-games on every panel size.** BrickBreaker shows separate 3-pixel bricks (a third row from 11 rows up) knocked out one at a time, with two bounce angles. Snake chases red food and grows. PingPong has a paddle on each side. BrickBreaker and PingPong keep fixed colours; Snake still takes the palette for its body.
 - **GIFs keep their own size, up to the panel dimensions.** Scripts, pushed apps and notifications support GIFs sized for custom panels. Text layout follows the icon's actual width; a panel-wide GIF becomes a background.
 - Each script app manages its own icons and releases them when hidden. File access and streamed log and Wi-Fi scan responses use less temporary memory.
 - The scripting documentation, AI prompt and downloadable agent skill cover Modbus, timers and extended button events, with corrected settings instructions and guidance for different panel sizes and PSRAM budgets.

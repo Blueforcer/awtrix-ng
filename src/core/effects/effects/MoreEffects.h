@@ -64,50 +64,276 @@ inline void MovingLineEffect::render(Canvas& c, int64_t f) {
   for (int y = 0; y < c.height(); ++y) c.setPixel(x, y, col);
 }
 
+// The three mini-games replay a bounded round from a fixed start instead of keeping state
+// across frames: seeks, dropped frames and repeated calls all give the same picture. A round is
+// kRound frames, so the worst case is kRound - 1 constant-cost ticks per frame. All state is
+// fixed-size; nothing is allocated.
+namespace fx {
+
+constexpr int kGameRound = 512;
+
+inline int clampInt(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+// Splits an effect frame into the round it belongs to and the tick within that round.
+inline int roundTick(int64_t f, uint32_t& round) {
+  const int tick = static_cast<int>((f % kGameRound + kGameRound) % kGameRound);
+  round = static_cast<uint32_t>((f - tick) / kGameRound);
+  return tick;
+}
+
+// Bricks are 3 LEDs wide with a 1-LED gap, 2 rows (3 from 11 panel rows up). The ball moves at
+// 45 degrees or shallow (2 across per 1 down), picked by where it meets the 3-LED paddle. It
+// moves one LED at a time and stops on a hit, so a tick removes at most one brick and the ball
+// never stands on one.
+struct BrickGame {
+  static constexpr int kMaxColumns = 64;
+  int w = 0, h = 0, rows = 0, columns = 0, left = 0, remaining = 0;
+  uint64_t alive[3] = {};
+  int x = 0, y = 0, sx = 1, sy = -1, aim = 0;
+  bool shallow = false;
+  uint32_t seed = 0, bounces = 0;
+
+  void start(int width, int height, uint32_t round) {
+    w = width;
+    h = height;
+    rows = h >= 11 ? 3 : 2;
+    columns = std::min(kMaxColumns, (w + 1) / 4);
+    left = (w - (4 * columns - 1)) / 2;
+    refill();
+    seed = noise::hash2(round, 0x42524B4Bu);
+    bounces = 0;
+    x = w / 2;
+    y = h - 2;
+    sx = (seed & 1u) ? 1 : -1;
+    sy = -1;
+    shallow = false;
+    aim = 0;
+  }
+  void refill() {
+    const uint64_t full = columns >= 64 ? ~0ull : (1ull << columns) - 1u;
+    for (int r = 0; r < 3; ++r) alive[r] = r < rows ? full : 0;
+    remaining = rows * columns;
+  }
+  // The brick index (row * kMaxColumns + column) of a live brick at (px, py), or -1.
+  int brickAt(int px, int py) const {
+    if (py < 0 || py >= rows || px < left) return -1;
+    const int col = (px - left) / 4;
+    if (col >= columns || (px - left) % 4 == 3 || !((alive[py] >> col) & 1u)) return -1;
+    return py * kMaxColumns + col;
+  }
+  int paddleLeft() const { return clampInt(x + aim - 1, 0, w - 3); }
+  // One LED step; true when it hit (and removed) a brick instead of moving.
+  bool move(int mx, int my) {
+    if (mx && (x + mx < 0 || x + mx >= w)) { sx = -sx; mx = -mx; }
+    if (my && y + my < 0) { sy = -sy; my = -my; }
+    const int b = brickAt(x + mx, y + my);
+    if (b >= 0) {
+      alive[b / kMaxColumns] &= ~(1ull << (b % kMaxColumns));
+      --remaining;
+      if (my) sy = -sy; else sx = -sx;
+      return true;
+    }
+    x += mx;
+    y += my;
+    return false;
+  }
+  void tick() {
+    if (sy > 0 && y >= h - 2) {
+      // The paddle's aim decides the contact point: centre keeps 45 degrees, an edge sends the
+      // ball out shallow towards that side. The next approach gets a new aim.
+      const int rel = x - paddleLeft() - 1;
+      shallow = rel != 0;
+      if (rel) sx = rel;
+      sy = -1;
+      ++bounces;
+      aim = static_cast<int>(noise::hash2(seed + bounces, 0x50414444u) % 3u) - 1;
+    }
+    if (!move(sx, sy) && shallow) move(sx, 0);
+    if (!remaining && y >= h - 2) refill();
+  }
+};
+
+// Paddles on columns 0 and w-1 always cover the ball's row; the receiving one steers towards an
+// aim point, the other drifts back towards the ball's middle. The contact row picks the angle:
+// the paddle edge sends it at 45 degrees, the middle shallow (1 down per 2 across).
+struct PongGame {
+  int w = 0, h = 0, paddle = 3;
+  int x = 0, y = 0, sx = 1, sy = 1, aim = 0, top[2] = {0, 0};
+  bool shallow = false;
+  uint32_t seed = 0, rally = 0, ticks = 0;
+
+  void start(int width, int height, uint32_t round) {
+    w = width;
+    h = height;
+    paddle = h >= 11 ? 4 : 3;
+    seed = noise::hash2(round, 0x504F4E47u);
+    rally = ticks = 0;
+    x = w / 2;
+    y = h / 2;
+    sx = (seed & 1u) ? 1 : -1;
+    sy = (seed & 2u) ? 1 : -1;
+    shallow = false;
+    aim = static_cast<int>((seed >> 8) % static_cast<uint32_t>(paddle));
+    top[0] = top[1] = clampInt(y - (paddle - 1) / 2, 0, h - paddle);
+  }
+  void tick() {
+    ++ticks;
+    if ((sx < 0 && x <= 1) || (sx > 0 && x >= w - 2)) {
+      const int rel = y - top[sx < 0 ? 0 : 1];
+      sx = -sx;
+      // A corner ball meets the wall-side edge of a paddle pinned to the wall: that counts as
+      // the middle, or 45-degree rallies could lock into corner-to-corner forever.
+      shallow = (rel > 0 && rel < paddle - 1) || y == 0 || y == h - 1;
+      if (rel == 0) sy = -1;
+      if (rel == paddle - 1) sy = 1;
+      ++rally;
+      aim = static_cast<int>(noise::hash2(seed + rally, 0x41494D21u) % static_cast<uint32_t>(paddle));
+    }
+    x += sx;
+    if (!shallow || (ticks & 1u)) {
+      if (y + sy < 0 || y + sy >= h) sy = -sy;
+      y += sy;
+    }
+    for (int side = 0; side < 2; ++side) {
+      const bool receiving = (side == 0) == (sx < 0);
+      int t = top[side];
+      // The receiving paddle outpaces the ball (2 rows a tick against 1) so it reaches its aim
+      // point; the other one lags at half a row a tick.
+      if (receiving || (ticks & 1u)) {
+        const int want = clampInt(y - (receiving ? aim : (paddle - 1) / 2), 0, h - paddle);
+        const int reach = receiving ? 2 : 1;
+        t += clampInt(want - t, -reach, reach);
+      }
+      // Keep covering the ball's row; it moves at most one row a tick.
+      top[side] = clampInt(t, std::max(0, y - paddle + 1), std::min(h - paddle, y));
+    }
+  }
+};
+
+// Greedy snake on a field of up to 64x32 cells centred on the canvas. The head steers towards
+// the food, avoiding its body and dead ends; food rows walk a per-round permutation of the rows
+// so play covers the whole height. A stuck or full-length snake starts a new game at once.
+struct SnakeGame {
+  static constexpr int kMaxW = 64, kMaxH = 32, kMaxLen = 24, kStartLen = 4;
+  int w = 0, h = 0, ox = 0, oy = 0, cap = kMaxLen;
+  int len = 0, dir = 0, foodX = 0, foodY = 0, stride = 1, row0 = 0;
+  uint8_t segX[kMaxLen] = {}, segY[kMaxLen] = {};  // [0] is the head
+  uint64_t occupied[kMaxH] = {};
+  uint32_t seed = 0, food = 0, games = 0;
+  bool full = false;
+
+  void start(int width, int height, uint32_t round) {
+    w = std::min(width, kMaxW);
+    h = std::min(height, kMaxH);
+    ox = (width - w) / 2;
+    oy = (height - h) / 2;
+    cap = std::min(kMaxLen, w * h / 2);
+    seed = noise::hash2(round, 0x534E4B45u);
+    row0 = static_cast<int>((seed >> 8) % static_cast<uint32_t>(h));
+    stride = h > 1 ? 1 + static_cast<int>(seed % static_cast<uint32_t>(h - 1)) : 1;
+    while (gcd(stride, h) != 1) ++stride;
+    food = games = 0;
+    newGame();
+  }
+  static int gcd(int a, int b) { return b ? gcd(b, a % b) : a; }
+  bool busy(int px, int py) const { return (occupied[py] >> px) & 1u; }
+  void mark(int px, int py, bool on) {
+    if (on) occupied[py] |= 1ull << px; else occupied[py] &= ~(1ull << px);
+  }
+  bool open(int px, int py) const { return px >= 0 && px < w && py >= 0 && py < h && !busy(px, py); }
+  void newGame() {
+    ++games;
+    full = false;
+    for (uint64_t& row : occupied) row = 0;
+    len = std::min(kStartLen, cap);
+    dir = 0;
+    for (int i = 0; i < len; ++i) {
+      segX[i] = static_cast<uint8_t>(len - 1 - i);
+      segY[i] = static_cast<uint8_t>(h / 2);
+      mark(segX[i], segY[i], true);
+    }
+    placeFood();
+  }
+  // At most cap occupied cells, so the raster probe ends within cap + 1 cells.
+  void placeFood() {
+    ++food;
+    const int row = (row0 + static_cast<int>(food % static_cast<uint32_t>(h)) * stride) % h;
+    int cell = row * w + static_cast<int>(noise::hash2(seed + food, 0x464F4F44u) % static_cast<uint32_t>(w));
+    while (busy(cell % w, cell / w)) cell = (cell + 1) % (w * h);
+    foodX = cell % w;
+    foodY = cell / w;
+  }
+  void tick() {
+    if (full) { newGame(); return; }
+    static const int kDx[4] = {1, 0, -1, 0}, kDy[4] = {0, 1, 0, -1};
+    const int tailX = segX[len - 1], tailY = segY[len - 1];
+    mark(tailX, tailY, false);  // The tail moves on unless this step eats.
+    int best = -1, bestScore = 0;
+    for (int turn : {0, 1, 3}) {
+      const int d = (dir + turn) % 4;
+      const int nx = segX[0] + kDx[d], ny = segY[0] + kDy[d];
+      if (!open(nx, ny)) continue;
+      int exits = 0;
+      for (int e = 0; e < 4; ++e)
+        if (open(nx + kDx[e], ny + kDy[e])) ++exits;
+      const bool eats = nx == foodX && ny == foodY;
+      const int score = 4 * (std::abs(nx - foodX) + std::abs(ny - foodY)) + (exits || eats ? 0 : 1000) +
+                        (turn ? 1 : 0);
+      if (best < 0 || score < bestScore) { best = d; bestScore = score; }
+    }
+    if (best < 0) { newGame(); return; }
+    const int nx = segX[0] + kDx[best], ny = segY[0] + kDy[best];
+    const bool eats = nx == foodX && ny == foodY;
+    if (eats) { mark(tailX, tailY, true); ++len; }
+    for (int i = len - 1; i > 0; --i) { segX[i] = segX[i - 1]; segY[i] = segY[i - 1]; }
+    segX[0] = static_cast<uint8_t>(nx);
+    segY[0] = static_cast<uint8_t>(ny);
+    mark(nx, ny, true);
+    dir = best;
+    if (eats) {
+      full = len >= cap;
+      placeFood();
+    }
+  }
+};
+
+template <typename Game>
+inline void replayGame(Game& g, int w, int h, int64_t f) {
+  uint32_t round = 0;
+  const int ticks = roundTick(f, round);
+  g.start(w, h, round);
+  for (int t = 0; t < ticks; ++t) g.tick();
+}
+
+constexpr uint32_t kBallColour = 0xFFFFFFu, kPaddleColour = 0x888888u;
+constexpr uint32_t kPongBall = 0x00FF88u, kPongPaddle = 0xAAAAAAu, kSnakeFood = 0xFF2000u;
+constexpr int kBrickHue[3] = {0, 40, 200};
+
+}
+
 inline void BrickBreakerEffect::render(Canvas& c, int64_t f) {
   c.clear(0);
   const int w = c.width(), h = c.height();
   if (w < 3 || h < 4) return;
-  const int columns = std::min(8, w / 2);
-  const uint32_t fullWall = (1u << (2 * columns)) - 1u;
-  uint32_t bricks = fullWall;
-  int x = w / 2, y = h - 2, dx = 1, dy = -1;
-  // Replay a bounded round, not elapsed uptime: seeks and dropped frames produce the same game.
-  const int step = static_cast<int>((f % 512 + 512) % 512);
-  for (int tick = 0; tick < step; ++tick) {
-    int nx = x + dx, ny = y + dy;
-    if (nx < 0 || nx >= w) { dx = -dx; nx = x + dx; }
-    if (ny < 0 || ny > h - 2) { dy = -dy; ny = y + dy; }
-    if (ny < 2) {
-      const uint32_t hit = 1u << (ny * columns + nx * columns / w);
-      if (bricks & hit) {
-        bricks &= ~hit;
-        dy = -dy;
-        ny = y;  // Contact frame: bounce away from the brick, not through its neighbour.
-      }
-    }
-    x = nx;
-    y = ny;
-    if (!bricks && y == h - 2) bricks = fullWall;
-  }
-  for (int row = 0; row < 2; ++row)
-    for (int col = 0; col < columns; ++col) {
-      if (!(bricks & (1u << (row * columns + col)))) continue;
-      const int left = (col * w + columns - 1) / columns;
-      const int right = ((col + 1) * w + columns - 1) / columns;
-      c.fillRect(left, row, right - left - 1, 1, color::fromHsv(col * 40, 100, 55));
-    }
-  c.setPixel(x, y, 0xFFFFFFu);
-  c.fillRect(std::max(0, std::min(w - 3, x - 1)), h - 1, 3, 1, 0x888888u);
+  fx::BrickGame g;
+  fx::replayGame(g, w, h, f);
+  for (int row = 0; row < g.rows; ++row)
+    for (int col = 0; col < g.columns; ++col)
+      if ((g.alive[row] >> col) & 1u)
+        c.fillRect(g.left + 4 * col, row, 3, 1, color::fromHsv(fx::kBrickHue[row], 100, 55));
+  c.setPixel(g.x, g.y, fx::kBallColour);
+  c.fillRect(g.paddleLeft(), h - 1, 3, 1, fx::kPaddleColour);
 }
 
 inline void PingPongEffect::render(Canvas& c, int64_t f) {
   c.clear(0);
-  int px = static_cast<int>(f) % (2 * (c.width() - 1));
-  int x = px < c.width() ? px : 2 * (c.width() - 1) - px;
-  int py = static_cast<int>(f * 7 / 10) % (2 * (c.height() - 1));
-  int y = py < c.height() ? py : 2 * (c.height() - 1) - py;
-  c.setPixel(x, y, 0x00FF88u);
+  const int w = c.width(), h = c.height();
+  if (w < 4 || h < 3) return;
+  fx::PongGame g;
+  fx::replayGame(g, w, h, f);
+  c.fillRect(0, g.top[0], 1, g.paddle, fx::kPongPaddle);
+  c.fillRect(w - 1, g.top[1], 1, g.paddle, fx::kPongPaddle);
+  c.setPixel(g.x, g.y, fx::kPongBall);
 }
 
 inline void RadarEffect::render(Canvas& c, int64_t f) {
@@ -189,18 +415,15 @@ inline void RippleEffect::render(Canvas& c, int64_t f) {
 inline void SnakeEffect::render(Canvas& c, int64_t f) {
   c.clear(0);
   const int w = c.width(), h = c.height();
-  if (w < 2 || h < 2) return;
-  // Vertical serpentine: cross the whole height in seconds, then reverse at the far side.
-  const int64_t span = static_cast<int64_t>(w) * h;
-  const int64_t period = 2 * (span - 1);
-  for (int i = 0; i < 6; ++i) {
-    int64_t p = ((f % period) - i + period) % period;
-    if (p >= span) p = period - p;
-    const int x = static_cast<int>(p / h);
-    const int row = static_cast<int>(p % h);
-    const int y = x % 2 ? h - 1 - row : row;
-    c.setPixel(x, y, paletteColor(static_cast<uint8_t>(i * 40), color::fromHsv(120, 100, 80 - i * 10)));
-  }
+  if (w < 4 || h < 2) return;
+  fx::SnakeGame g;
+  fx::replayGame(g, w, h, f);
+  c.setPixel(g.ox + g.foodX, g.oy + g.foodY, fx::kSnakeFood);
+  // Head-to-tail gradient: palette index 0..255 when a palette is set, bright to dim green otherwise.
+  const int last = std::max(1, g.len - 1);
+  for (int i = 0; i < g.len; ++i)
+    c.setPixel(g.ox + g.segX[i], g.oy + g.segY[i],
+               paletteColor(static_cast<uint8_t>(i * 255 / last), color::fromHsv(120, 100, 90 - i * 60 / last)));
 }
 
 inline void PacificaEffect::render(Canvas& c, int64_t f) {
