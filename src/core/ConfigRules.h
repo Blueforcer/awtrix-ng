@@ -241,6 +241,26 @@ inline bool validateMatrixGeometry(int panelWidth, int panels, ConfigError& err)
   return true;
 }
 
+// A board with its panel built in (the Galactic Unicorn) has one width and a few heights. Any other
+// value would be stored and reported back while the panel went on drawing its own size.
+inline bool validateFixedPanel(const pins::SocProfile& soc, int panelWidth, int panels,
+                               int panelHeight, ConfigError& err) {
+  if (!soc.fixedPanelWidth) return true;
+  if (panelWidth != soc.fixedPanelWidth || panels != 1) {
+    err = {panels != 1 ? "panels" : "panelWidth",
+           std::string(soc.label) + ": the panel is one panel, " +
+               std::to_string(soc.fixedPanelWidth) + " pixels wide"};
+    return false;
+  }
+  if (panelHeight != soc.fixedPanelHeights[0] && panelHeight != soc.fixedPanelHeights[1]) {
+    err = {"panelHeight", std::string(soc.label) + ": panelHeight must be " +
+                              std::to_string(soc.fixedPanelHeights[0]) + " or " +
+                              std::to_string(soc.fixedPanelHeights[1])};
+    return false;
+  }
+  return true;
+}
+
 // bclk/lrclk/dout are the bus and go together; mclk and ampEnable are extras some DAC boards
 // need and are only meaningful once the bus itself is wired.
 inline bool validateAudioPins(int bclk, int lrclk, int dout, int mclk, int ampEnable,
@@ -265,8 +285,12 @@ inline bool validateAudioPins(int bclk, int lrclk, int dout, int mclk, int ampEn
 // Walks a /api/v1/system body and stops at the first key that breaks a rule. Keys that match none
 // of the rules are accepted untouched, which is what lets plain strings and flags pass through.
 // allowEmptyClears is for restoring a backup, where an empty wifiSsid is a real recorded value.
+// pinsKept: the caller replaces every pin with the board's own afterwards (a restore onto a board
+// with fixed wiring), so another board's pins are only type-checked, not held to this chip's range.
 inline bool validateSystemRead(api::JsonReader obj, ConfigError& err,
-                               bool allowEmptyClears = false) {
+                               bool allowEmptyClears = false,
+                               const pins::SocProfile& soc = pins::activeProfile(),
+                               bool pinsKept = false) {
   if (!obj.isObject()) return true;
   std::string subnetValue;
   const bool hasSubnet = detail::asString(api::memberValue(obj, "subnet"), subnetValue);
@@ -345,8 +369,8 @@ inline bool validateSystemRead(api::JsonReader obj, ConfigError& err,
         err = {key, "must be an integer GPIO (-1 = disabled)"};
         return false;
       }
-      const int gpioMax = pins::activeProfile().gpioMax;
-      if (p < -1 || p > gpioMax) {
+      const int gpioMax = soc.gpioMax;
+      if (!pinsKept && (p < -1 || p > gpioMax)) {
         err = {key, "must be -1 (disabled) or a GPIO in 0.." + std::to_string(gpioMax)};
         return false;
       }

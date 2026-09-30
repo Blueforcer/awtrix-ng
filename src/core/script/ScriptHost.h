@@ -13,6 +13,7 @@
 #include "core/script/BerryVM.h"
 #include "core/script/ScriptApp.h"
 #include "core/script/ScriptMeta.h"
+#include "core/script/ScriptInfo.h"
 #include "core/script/ScriptServices.h"
 #include "core/script/SharedState.h"
 #include "core/script/ScriptTimers.h"
@@ -65,19 +66,7 @@ class ScriptHost {
   }
   ScriptError errorOf(const std::string& name) const;
 
-  struct Info {
-    ScriptError error;
-    bool skipping = false;
-    bool headless = false;
-    bool module = false;
-    bool config = false;
-    std::string importName;
-    std::string metaName;
-    std::string desc;
-    std::string author;
-    std::string version;
-    std::string icons;
-  };
+  using Info = ScriptInfo;
   std::map<std::string, Info> list() const;
 
   std::vector<SharedEntry> sharedSnapshot() const;

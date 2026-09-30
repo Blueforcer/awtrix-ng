@@ -1,14 +1,22 @@
 #include "transport/http/HttpApiServer.h"
+#include "platform/BuildFeatures.h"
 
 #include <LittleFS.h>
+#if AWTRIX_FEATURE_BROWSER_OTA
 #include <Update.h>
+#endif
 #include <WiFi.h>
+#if !defined(AWTRIX_PLATFORM_RP2040)
 #include <dirent.h>
 #include <esp_heap_caps.h>
+#include "system/HeapCaps.h"
 // Included by name rather than left to the Arduino headers: the image marker below reads
 // CONFIG_SPIRAM_MODE_QUAD out of it, and an absent macro reads as octal - which is the wrong
 // answer to be arriving at by accident.
 #include <sdkconfig.h>
+#else
+#include <lwip/tcp.h>
+#endif
 
 #include <algorithm>
 
@@ -18,7 +26,6 @@
 #include "core/CoreEngine.h"
 #include "core/ProvisioningPolicy.h"
 #include "core/api/ApiRouter.h"
-#include "platform/BuildFeatures.h"
 #include "core/api/MelodiesApi.h"
 #include "core/api/JsonStream.h"
 #include "core/api/JsonWriter.h"
@@ -26,10 +33,12 @@
 #include "core/backup/RestoreApplier.h"
 #include "core/payload/PayloadParser.h"
 #include "core/render/Canvas.h"
-#include "core/script/ScriptConfig.h"
 #include "core/script/ScriptHeap.h"
+#if AWTRIX_FEATURE_SCRIPTING
+#include "core/script/ScriptConfig.h"
 #include "core/script/ScriptHost.h"
 #include "core/script/ScriptServices.h"
+#endif
 #include "hal/IBoard.h"
 #include "media/AssetFile.h"
 #include "persistence/DeviceConfig.h"
@@ -37,8 +46,9 @@
 #include "persistence/LittleFsRestoreSink.h"
 #include "persistence/IconOriginsStore.h"
 #include "persistence/SystemConfigApply.h"
+#if !defined(AWTRIX_PLATFORM_RP2040)
 #include "persistence/VfsFile.h"
-#include "system/HeapCaps.h"
+#endif
 #include "system/HeapProbe.h"
 #include "transport/http/UpdateImage.h"
 #include "system/Log.h"
@@ -76,6 +86,9 @@ String storageTail() {
 class RawWebServer : public WebServer {
  public:
   using WebServer::WebServer;
+#if defined(AWTRIX_PLATFORM_RP2040)
+  void setRawReadTimeout(unsigned long ms) { client().Stream::setTimeout(ms); }
+#else
   void setRawReadTimeout(unsigned long ms) { _currentClient.Stream::setTimeout(ms); }
 
   // WebServer serves one client at a time. Browsers like to open a socket and send nothing, which
@@ -87,7 +100,28 @@ class RawWebServer : public WebServer {
     }
     WebServer::handleClient();
   }
+#endif
 };
+
+#if defined(AWTRIX_PLATFORM_RP2040)
+// arduino-pico's lwIP has five TCP pcbs, and ClientContext drops every accepted connection to
+// TCP_PRIO_MIN while the listener stays at TCP_PRIO_NORMAL. A SYN that finds the pool full then
+// makes lwIP abort the oldest accepted connection to make room, so a browser opening eight sockets
+// at once saw two or three of them reset mid-request. At its clients' priority the listener can no
+// longer evict them: the extra SYN is dropped, and the client's retransmit gets in once a request
+// has been answered.
+struct ListenPcb : WiFiServer {
+  static tcp_pcb* of(WiFiServer& server) { return server.*(&ListenPcb::_listen_pcb); }
+};
+
+// lwIP reports that dropped SYN as accept(NULL, ERR_MEM), and WiFiServer would wrap the NULL pcb in
+// a client and fault. Only real connections reach it.
+tcp_accept_fn serverAccept = nullptr;
+err_t acceptConnected(void* arg, tcp_pcb* pcb, err_t err) {
+  if (pcb == nullptr || err != ERR_OK) return ERR_MEM;
+  return serverAccept(arg, pcb, err);
+}
+#endif
 
 const char* methodName(HTTPMethod m) {
   switch (m) {
@@ -117,10 +151,18 @@ class HttpApiServer::BodyHandler : public RequestHandler {
   bool canRaw(String) override {
     return srv_.server_->clientContentLength() > kArenaBodyThresholdBytes;
   }
-  void raw(WebServer& server, String uri, HTTPRaw& raw) override {
+#if defined(AWTRIX_PLATFORM_RP2040)
+  // Pico's parser invokes the newer overloads; the base implementations do
+  // not forward to the legacy hooks, even though those remain in the API.
+  bool canHandle(HttpServerBase&, HTTPMethod m, String uri) override {
+    return canHandle(m, uri);
+  }
+  bool canRaw(HttpServerBase&, String uri) override { return canRaw(uri); }
+#endif
+  void raw(HttpServerBase& server, String uri, HTTPRaw& raw) override {
     srv_.collectBody(server, uri, raw);
   }
-  bool handle(WebServer&, HTTPMethod, String) override {
+  bool handle(HttpServerBase&, HTTPMethod, String) override {
     srv_.dispatch();
     return true;
   }
@@ -131,6 +173,7 @@ class HttpApiServer::BodyHandler : public RequestHandler {
 
 namespace {
 
+#if AWTRIX_FEATURE_BROWSER_OTA
 // ESP image header: byte 0 is the magic, bytes 12 and 13 hold the chip id, little endian. An app
 // image carries an esp_app_desc_t at offset 32; a usb-*.bin install image starts with the
 // bootloader, which has none - and on the ESP32, whose bootloader sits at 0x1000, with erased
@@ -195,6 +238,16 @@ const char* chipIdName(uint16_t id) {
   }
 }
 
+#endif
+
+std::size_t bodyCopyRoom() {
+#if defined(AWTRIX_PLATFORM_RP2040)
+  return rp2040.getFreeHeap();
+#else
+  return heap_caps_get_largest_free_block(scriptBufferHeapCaps());
+#endif
+}
+
 const char* mimeFor(const std::string& path) {
   const size_t dot = path.rfind('.');
   const std::string ext = (dot == std::string::npos) ? "" : path.substr(dot);
@@ -220,7 +273,7 @@ void HttpApiServer::begin(uint16_t port, CoreEngine& engine, IBoard& board, Canv
   server_ = new RawWebServer(port);
   static const char* kCollectHeaders[] = {"If-None-Match", "Content-Type",
                                           api::kMethodOverrideHeader};
-  server_->collectHeaders(kCollectHeaders, 3);
+  server_->collectHeaders(static_cast<const char**>(kCollectHeaders), std::size_t{3});
   // Each pair is (completion handler, per-chunk upload handler). The upload handler runs many times
   // while the body streams in and cannot answer the client; only the completion handler can.
   server_->on(
@@ -239,6 +292,13 @@ void HttpApiServer::begin(uint16_t port, CoreEngine& engine, IBoard& board, Canv
   if (!bodyArena_.init(kMaxBodyBytes))
     logf("http: body arena allocation failed; body-carrying requests will be refused");
   server_->begin();
+#if defined(AWTRIX_PLATFORM_RP2040)
+  if (tcp_pcb* listener = ListenPcb::of(server_->getServer())) {
+    tcp_setprio(listener, TCP_PRIO_MIN);
+    serverAccept = reinterpret_cast<tcp_pcb_listen*>(listener)->accept;
+    tcp_accept(listener, acceptConnected);
+  }
+#endif
 }
 
 namespace {
@@ -407,7 +467,7 @@ void HttpApiServer::dropRawBody() {
 
 // Called by WebServer for every raw-body chunk. Script sources use a second arena that is
 // allocated at RAW_START and released again on completion, since it dwarfs the fixed body arena.
-void HttpApiServer::collectBody(WebServer& server, const String& uri, HTTPRaw& raw) {
+void HttpApiServer::collectBody(HttpServerBase& server, const String& uri, HTTPRaw& raw) {
   const std::string method = methodName(server.method());
   const std::string path = uri.c_str();
   const bool rawSource = api::isRawBodyWrite(method, path);
@@ -445,6 +505,7 @@ void HttpApiServer::collectBody(WebServer& server, const String& uri, HTTPRaw& r
 // across two chunks is still found. It stops at the first: a firmware image holds exactly one, and
 // an image from before the marker existed holds none - which is read as "says nothing" and let
 // through, so a downgrade to an older release still works.
+#if AWTRIX_FEATURE_BROWSER_OTA
 void HttpApiServer::scanImageMarker(const uint8_t* buf, size_t len) {
   for (size_t i = 0; i < len; ++i) {
     const char c = static_cast<char>(buf[i]);
@@ -571,6 +632,13 @@ void HttpApiServer::handleUpdateDone() {
   sendJson(200, "{\"ok\":true}");
   engine_->execute(Command(CommandType::Reboot));
 }
+#else
+void HttpApiServer::handleUpdateUpload() {}
+void HttpApiServer::handleUpdateDone() {
+  addCorsHeaders(false);
+  sendError(503, "unavailable", "browser update is unavailable; flash a UF2 over USB (BOOTSEL)");
+}
+#endif
 
 void HttpApiServer::tick() {
   if (server_) server_->handleClient();
@@ -652,6 +720,11 @@ void HttpApiServer::dispatch() {
   req.get = (req.method == "GET");
 
   // Reject absent features before allocating bodies or serving transport-only routes.
+  if (req.path == "/update" && !platform::buildFeatures().browserOta) {
+    dropRawBody();
+    handleUpdateDone();
+    return;
+  }
   if (featurePolicy(platform::buildFeatures(), req.path) == DispatchResult::Unavailable) {
     dropRawBody();
     sendResult(api::httpResponse({}, DispatchResult::Unavailable, {}));
@@ -726,7 +799,7 @@ bool HttpApiServer::takeBody(Request& req) {
       // Refuse instead of fragmenting: the copy needs one contiguous block, plus margin for
       // whatever parsing and dispatch will allocate on top of it.
       if (received.size() > 15 &&
-          heap_caps_get_largest_free_block(scriptBufferHeapCaps()) <
+          bodyCopyRoom() <
               received.size() + kBodyCopyMarginBytes) {
         arena.reset();
         if (rawSource) arena.release();
@@ -913,6 +986,7 @@ bool HttpApiServer::serveState(const Request& req) {
     sendJson(200, respBuf_);
     return true;
   }
+#if AWTRIX_FEATURE_SCRIPTING
   if (path == "/api/v1/scripts/shared") {
     if (!scripts_) {
       sendError(503, "unavailable", "scripting is not available");
@@ -951,6 +1025,7 @@ bool HttpApiServer::serveState(const Request& req) {
       return true;
     }
   }
+#endif
   return false;
 }
 
@@ -960,13 +1035,18 @@ bool HttpApiServer::serveDiagnostics(const Request& req) {
   // Scanning takes seconds and would block the loop, so the first call starts it and answers 202;
   // the caller polls until a result array comes back.
   if (req.path == "/api/v1/system/wifi-scan") {
+#if defined(AWTRIX_PLATFORM_RP2040)
+    // Unlike ESP32, Pico reports zero (not FAILED) before the first scan.
+    const int n = wifiScan_.poll(WiFi);
+#else
     const int n = WiFi.scanComplete();
     if (n == WIFI_SCAN_FAILED) {
       WiFi.scanNetworks(true);
       sendJson(202, "{\"scanning\":true}");
       return true;
     }
-    if (n == WIFI_SCAN_RUNNING) {
+#endif
+    if (n < 0) {
       sendJson(202, "{\"scanning\":true}");
       return true;
     }
@@ -977,17 +1057,24 @@ bool HttpApiServer::serveDiagnostics(const Request& req) {
     for (int i = 0; i < n; ++i) {
       if (i) out.put(',');
       out.put("{\"ssid\":");
-      out.putString(WiFi.SSID(i).c_str());
+      out.putString(String(WiFi.SSID(i)).c_str());
       out.put(",\"rssi\":");
       out.putInt(WiFi.RSSI(i));
       out.put(",\"enc\":");
+#if defined(AWTRIX_PLATFORM_RP2040)
+      out.put(WiFi.encryptionType(i) != ENC_TYPE_NONE ? "true" : "false");
+#else
       out.put(WiFi.encryptionType(i) != WIFI_AUTH_OPEN ? "true" : "false");
+#endif
       out.put('}');
     }
     out.put(']');
     out.flush();
     server_->sendContent("");
     WiFi.scanDelete();
+#if defined(AWTRIX_PLATFORM_RP2040)
+    wifiScan_.consumed();
+#endif
     return true;
   }
 
@@ -1048,6 +1135,29 @@ bool HttpApiServer::serveSounds(const Request& req) {
     server_->send(200, "application/json", "");
     server_->sendContent("{\"melodies\":[");
     bool first = true;
+#if defined(AWTRIX_PLATFORM_RP2040)
+    // arduino-pico has no VFS, so the directory is walked with the LittleFS File API.
+    File root = LittleFS.open("/MELODIES", "r");
+    if (root && root.isDirectory()) {
+      for (File file = root.openNextFile(); file; file = root.openNextFile()) {
+        if (file.isDirectory()) continue;
+        std::string leaf = file.name();
+        leaf = leaf.substr(leaf.find_last_of('/') + 1);
+        const std::string name = api::melodies::nameFromFile(leaf);
+        if (name.empty()) continue;
+        media::PodBuffer<uint8_t> raw;
+        std::string content;
+        if (media::readAsset("/MELODIES/" + leaf, raw))
+          content.assign(reinterpret_cast<const char*>(raw.data()), raw.size());
+        const std::string entry =
+            (first ? "" : ",") +
+            api::melodies::entryJson(name, content, static_cast<uint32_t>(content.size()));
+        server_->sendContent(entry.c_str());
+        first = false;
+      }
+      root.close();
+    }
+#else
     if (DIR* root = ::opendir(fs::vfsPath("/MELODIES").c_str())) {
       while (const dirent* e = ::readdir(root)) {
         const std::string name = api::melodies::nameFromFile(std::string(e->d_name));
@@ -1064,6 +1174,7 @@ bool HttpApiServer::serveSounds(const Request& req) {
       }
       ::closedir(root);
     }
+#endif
     server_->sendContent(storageTail());
     server_->sendContent("");
     return true;
@@ -1141,9 +1252,33 @@ void HttpApiServer::listDir(const char* dir) {
   server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server_->send(200, "application/json", "");
   server_->sendContent("{\"files\":[");
-  const std::string base = dir;
   std::string batch;
   batch.reserve(kListBatchBytes + kListEntryReserveBytes);
+#if defined(AWTRIX_PLATFORM_RP2040)
+  // arduino-pico has no VFS, so the directory is walked with the LittleFS File API.
+  File root = dir[0] == '/' ? LittleFS.open(dir, "r") : File();
+  if (root && root.isDirectory()) {
+    bool first = true;
+    for (File file = root.openNextFile(); file; file = root.openNextFile()) {
+      if (!first) batch += ',';
+      first = false;
+      api::JsonWriter ew(batch);
+      ew.beginObject();
+      std::string name = file.name();
+      name = name.substr(name.find_last_of('/') + 1);
+      ew.member("name", name);
+      const long size = file.isDirectory() ? 0 : file.size();
+      ew.member("size", static_cast<unsigned long>(size > 0 ? size : 0));
+      ew.endObject();
+      if (batch.size() >= kListBatchBytes) {
+        server_->sendContent(batch.c_str(), batch.size());
+        batch.clear();
+      }
+    }
+    root.close();
+  }
+#else
+  const std::string base = dir;
   if (DIR* root = dir[0] == '/' ? ::opendir(fs::vfsPath(base).c_str()) : nullptr) {
     bool first = true;
     while (const dirent* e = ::readdir(root)) {
@@ -1162,6 +1297,7 @@ void HttpApiServer::listDir(const char* dir) {
     }
     ::closedir(root);
   }
+#endif
   if (!batch.empty()) server_->sendContent(batch.c_str(), batch.size());
   server_->sendContent(storageTail());
   server_->sendContent("");

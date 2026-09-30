@@ -35,6 +35,13 @@ inline std::string toJson(const SocProfile& soc) {
     return out + ']';
   };
 
+  // A board with a built-in panel names it: one panel, this wide, and the heights it can run at.
+  std::string panel;
+  if (soc.fixedPanelWidth)
+    panel = ",\"panel\":{\"width\":" + std::to_string(soc.fixedPanelWidth) + ",\"heights\":[" +
+            std::to_string(soc.fixedPanelHeights[0]) + ',' +
+            std::to_string(soc.fixedPanelHeights[1]) + "]}";
+
   const PinSet& d = soc.defaults;
   return std::string("{\"soc\":\"") + soc.id + "\",\"label\":\"" + soc.label +
          "\",\"fixed\":" + (soc.fixedWiring ? "true" : "false") +
@@ -52,7 +59,7 @@ inline std::string toJson(const SocProfile& soc) {
          std::to_string(d.dfTx) + ",\"pinI2sBclk\":" + std::to_string(d.i2sBclk) +
          ",\"pinI2sLrclk\":" + std::to_string(d.i2sLrclk) + ",\"pinI2sDout\":" +
          std::to_string(d.i2sDout) + ",\"pinI2sMclk\":" + std::to_string(d.i2sMclk) +
-         ",\"pinAmpEnable\":" + std::to_string(d.ampEnable) + "}}";
+         ",\"pinAmpEnable\":" + std::to_string(d.ampEnable) + "}" + panel + "}";
 }
 
 }

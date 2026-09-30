@@ -13,7 +13,7 @@
 #include "core/render/Canvas.h"
 #include "core/render/Color.h"
 #include "core/script/ScriptHeap.h"
-#include "core/script/ScriptHost.h"
+#include "core/script/ScriptInfo.h"
 
 namespace awtrix {
 
@@ -250,8 +250,7 @@ static void appendIconsJson(std::string& out, const std::string& raw) {
 
 void appendAppsJson(std::string& out, CoreEngine& engine, const script::ScriptHost* scripts,
                     const std::vector<script::StoredScript>* stored) {
-  const std::map<std::string, script::ScriptHost::Info> info =
-      scripts ? scripts->list() : std::map<std::string, script::ScriptHost::Info>{};
+  const auto info = script::scriptInfo(scripts);
 
   const std::vector<std::string> here = engine.knownApps();
 
@@ -321,7 +320,7 @@ void appendAppsJson(std::string& out, CoreEngine& engine, const script::ScriptHo
     }
     out += '}';
   };
-  auto addModule = [&](const std::string& id, const script::ScriptHost::Info& mod) {
+  auto addModule = [&](const std::string& id, const script::ScriptInfo& mod) {
     if (!first) out += ',';
     first = false;
     out += "{\"name\":";
@@ -362,7 +361,7 @@ void appendAppsJson(std::string& out, CoreEngine& engine, const script::ScriptHo
     for (const script::StoredScript& s : *stored) {
       if (engine.isScriptApp(s.name)) continue;
       if (s.meta.module) {
-        script::ScriptHost::Info mod;
+        script::ScriptInfo mod;
         mod.module = true;
         mod.importName = s.meta.moduleName.empty() ? s.name : s.meta.moduleName;
         mod.metaName = s.meta.name;

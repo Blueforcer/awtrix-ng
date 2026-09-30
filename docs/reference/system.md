@@ -81,7 +81,8 @@ curl -X PUT http://<awtrix-ip>/api/v1/system \
 
 Each field's accepted range is the "Range" column of its own table below. Every `pin*` field takes
 `-1` (disabled) or a GPIO within the chip's range - 0–39 on the ESP32, 0–48 (22–25 do not exist) on
-the ESP32-S3; see [GPIO & boards](gpio.md).
+the ESP32-S3; see [GPIO & boards](gpio.md). On the Galactic Unicorn every pin is fixed, and a change
+is refused; see [Galactic Unicorn build capabilities](http.md#galactic-unicorn-build-capabilities).
 
 Integer fields also reject a non-integer (`{"mqttPort":"eighty"}` and `{"tempDecimals":1.5}`
 both fail with `422`); the float fields accept any number in range.
@@ -339,6 +340,11 @@ not about the image. On a single-panel device the two chain keys cannot change a
 Wiring is re-applied on the next frame, so you can try a setting and look at the panel. The one
 exception is the canvas size, which is fixed at boot: a change to `panelWidth × panels` or `panelHeight` needs
 `POST /api/v1/device/reboot`.
+
+The Galactic Unicorn's panel is built in: `panelWidth` is `53`, `panels` is `1`, and `panelHeight`
+is `11` or `8` (default `11`). Any other value, or a change to `panelStart`, `panelWiring`,
+`panelSerpentine`, `panelColorOrder` or the chain keys, is refused with `422 validationFailed`
+naming the field. `mirror` and `rotate` work as on any panel.
 
 ### The wirings people actually have
 

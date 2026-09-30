@@ -459,6 +459,7 @@ The status is **400**, and there is **no `field`** - the offending pin's name is
 | `pinBattery: must be an ADC1 pin (GPIO 32-39, usable while WiFi is on)` | ADC2 is unusable while WiFi is on. |
 | `pinLdr: must be an ADC1 pin (GPIO 32-39, usable while WiFi is on)` | Same. |
 | `duplicate pin <n> (<pinA>, <pinB>)` | Two enabled functions claim the same GPIO. When one of them is `pinMatrix` the message goes on to name the fix - see [No duplicates](gpio.md#6-no-duplicates). |
+| `Galactic Unicorn (Pico W / Pico 2 W): pin assignments are fixed` | Any pin change, or enabling the DFPlayer, on the Galactic Unicorn, whose wiring is part of the board. |
 
 Each message is built from the running chip's rules, so the numbers above are the ESP32's and an
 ESP32-S3 answers with its own. The per-chip values are in

@@ -181,6 +181,12 @@ every status code: [HTTP API → POST /api/v1/device/sleep](../reference/http.md
     which the default wiring uses; move it elsewhere and the timer is the only way back. See
     [GPIO & boards → The pin map](../reference/gpio.md#the-pin-map).
 
+!!! note "Galactic Unicorn"
+    The Pico W and Pico 2 W have no deep sleep. The same command blanks the panel and pauses
+    request handling, but the board stays powered, so it saves little. The timer or the **Sleep**
+    key (GPIO27) wakes it, not the select button. See
+    [Galactic Unicorn driver → Time, reset and sleep](../advanced/galactic-unicorn-display.md#time-reset-and-sleep).
+
 The matrix is blanked just before the board goes down. On wake the ESP32 **boots fresh** - the same
 sequence as a power cycle, so it re-reads its configuration, reconnects Wi-Fi, and the matrix comes
 back on (a blanked panel is a runtime state and does not survive).

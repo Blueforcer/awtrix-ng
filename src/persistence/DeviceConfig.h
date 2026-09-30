@@ -113,6 +113,16 @@ struct DeviceConfig {
     p.dfplayerEnabled = dfplayer;
     return p;
   }
+  void setPinSet(const pins::PinSet& p) {
+    pinMatrix = p.matrix;
+    pinBtnLeft = p.btnLeft; pinBtnSelect = p.btnSelect; pinBtnRight = p.btnRight;
+    pinBattery = p.battery; pinLdr = p.ldr; pinBuzzer = p.buzzer;
+    pinI2cSda = p.i2cSda; pinI2cScl = p.i2cScl;
+    pinDfRx = p.dfRx; pinDfTx = p.dfTx;
+    pinI2sBclk = p.i2sBclk; pinI2sLrclk = p.i2sLrclk; pinI2sDout = p.i2sDout;
+    pinI2sMclk = p.i2sMclk; pinAmpEnable = p.ampEnable;
+    dfplayer = p.dfplayerEnabled;
+  }
   bool validatePins(std::string& err) const { return pins::validate(pinSet(), err); }
 };
 

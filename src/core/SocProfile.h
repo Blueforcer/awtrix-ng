@@ -92,6 +92,9 @@ struct SocProfile {
   PinList matrix;
   PinSet defaults;
   bool fixedWiring = false;
+  // A panel built into the board: its width and the heights it can show. 0 means configurable.
+  int fixedPanelWidth = 0;
+  int fixedPanelHeights[2] = {0, 0};
 };
 
 namespace detail {
@@ -180,7 +183,7 @@ inline const SocProfile& rp2040Profile() {
       {nullptr, 0}, {nullptr, 0}, {reserved, detail::countOf(reserved)},
       {adc, detail::countOf(adc)}, {nullptr, 0}, {nullptr, 0}, {nullptr, 0},
       PinSet{-1, 0, 1, 3, -1, 28, -1, -1, -1, -1, -1, false, 10, 11, 9, -1, 22},
-      true};
+      true, 53, {8, 11}};
   return p;
 }
 

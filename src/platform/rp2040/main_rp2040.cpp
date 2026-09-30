@@ -22,11 +22,13 @@
 #include "core/apps/builtin/DateApp.h"
 #include "core/apps/builtin/TimeApp.h"
 #include "core/BuiltinCatalog.h"
+#include "core/render/PaletteStore.h"
 #include "core/render/PowerAnimator.h"
 #include "core/render/BootScreen.h"
 #include "core/render/ProvisioningScreen.h"
 #include "core/render/TextRenderer.h"
 #include "transport/net/NetworkService.h"
+#include "transport/http/HttpApiServer.h"
 #include "system/Log.h"
 #include "platform/rp2040/RadioStartup.h"
 #include "system/PeripheryService.h"
@@ -35,9 +37,11 @@
 #include "hal/BoardRegistry.h"
 #include "hal/GalacticUnicornBoard.h"
 #include "media/AwtrixFontAdapter.h"
+#include "media/DevicePageIcon.h"
 #include "persistence/Filesystem.h"
 #include "persistence/NvsSettings.h"
 #include "persistence/PaletteFiles.h"
+#include "persistence/SystemConfigApply.h"
 #include "persistence/AppOrderStore.h"
 #include <LittleFS.h>
 
@@ -65,6 +69,8 @@ AppRegistry apps;
 EffectRegistry effects;
 EffectRegistry overlays;
 DevicePageClock pageClock;
+DevicePageIcon pageIcon;
+DevicePageIcon pageIconB;
 platform::TimeService timeService;
 bool networkWasConnected = false;
 #if AWTRIX_PICO_UDP
@@ -75,6 +81,7 @@ BuiltinCatalog builtins;
 PeripheryService periphery;
 GalacticUnicornControls controls;
 NetworkService network;
+HttpApiServer http;
 render::PowerAnimator* powerAnimator;
 int64_t nextFrameMs = 0;
 
@@ -113,6 +120,7 @@ void setup() {
     config.load();
     awtrix::palettefiles::install();
   }
+  awtrix::sysconfig::adoptFixedBoard(config);
   logbuf::setVerbose(config.debugMode);
   board = &awtrix::activeBoard(config);
   board->begin();
@@ -151,6 +159,8 @@ void setup() {
   deps.effects = &effects;
   deps.overlays = &overlays;
   deps.clock = &pageClock;
+  deps.icons = &pageIcon;
+  deps.iconsB = &pageIconB;
   deps.fonts[0] = &awtrix::awtrixFont(awtrix::FontId::Small);
   deps.fonts[1] = &awtrix::awtrixFont(awtrix::FontId::Large);
   pipeline = new awtrix::RenderPipeline(board->matrixWidth(), board->matrixHeight(), deps);
@@ -169,6 +179,27 @@ void setup() {
   network.begin(config, forceAp, showBootLogo);
   timeService.apply(config.tz, config.ntpServer);
   networkWasConnected = network.isConnected();
+  String mac = WiFi.macAddress();
+  mac.replace(":", "");
+  mac.toLowerCase();
+  const uint16_t webPort = network.apMode() ? 80 :
+      (config.webPort > 0 ? static_cast<uint16_t>(config.webPort) : 80);
+  http.begin(webPort, *engine, *board, *canvas, mac.c_str(), config, network.apMode());
+  http.setCapabilitiesJson(std::make_shared<const std::string>(api::capabilitiesJson(
+      effects.names(), effects.paletteNames(), overlays.names(), audioRouter.caps(),
+      platform::buildFeatures())));
+  http.setOnConfigChanged([] {
+    // The panel size is fixed, so only mirror and rotate reach the board, and they apply live.
+    board->setMatrixLayout(config.matrixLayout());
+    engine->state().runtime().tempDecimals = config.tempDecimals;
+    logbuf::setVerbose(config.debugMode);
+    timeService.apply(config.tz, config.ntpServer);
+  });
+  http.setOnAssetsChanged([] {
+    pipeline->invalidateIcons();
+    render::clearPaletteCache();
+  });
+  periphery.setUid(mac.c_str());
 #if AWTRIX_PICO_UDP
   if (networkWasConnected) discovery.begin(network.hostname(), config.webPort);
 #endif
@@ -178,6 +209,7 @@ void setup() {
 void loop() {
   const int64_t nowMs = static_cast<int64_t>(time_us_64() / 1000);
   network.tick();
+  http.tick();
   const bool connected = network.isConnected();
   timeService.apply(config.tz, config.ntpServer, connected && !networkWasConnected);
 #if AWTRIX_PICO_UDP
@@ -196,6 +228,16 @@ void loop() {
   }
   if (nowMs < nextFrameMs) { delay(1); return; }
   nextFrameMs = nowMs + awtrix::kFramePeriodMs;
+  {
+    static uint16_t frames = 0;
+    static int64_t windowStart = 0;
+    ++frames;
+    if (nowMs - windowStart >= 1000) {
+      engine->state().runtime().fps = frames;
+      frames = 0;
+      windowStart = nowMs;
+    }
+  }
   audioRouter.tick(nowMs);
   engine->tick(nowMs);
   const bool wakeNotif = engine->hasNotification() && engine->notifications().current().wakeup;
