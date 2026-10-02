@@ -20,6 +20,9 @@ constexpr uint16_t kMqttBufferBytes = 8192;
 // PubSubClient blocks the whole loop while it waits for CONNACK, so keep it short.
 constexpr uint16_t kHandshakeSeconds = 2;
 
+// Long enough to ride out a short Wi-Fi stall (TCP retransmits catch up) instead of reconnecting.
+constexpr uint16_t kKeepAliveSeconds = 60;
+
 std::string endpointOf(const IPAddress& ip, uint16_t port) {
   return std::string(ip.toString().c_str()) + ":" + std::to_string(port);
 }
@@ -54,6 +57,7 @@ void MqttLink::begin(const DeviceConfig& cfg, const std::string& clientId,
     logf("mqtt: could not allocate a %u-byte packet buffer; large commands will be dropped",
          static_cast<unsigned>(kMqttBufferBytes));
   client_->setSocketTimeout(kHandshakeSeconds);
+  client_->setKeepAlive(kKeepAliveSeconds);
   logf("mqtt: broker %s:%u, prefix %s", host_.c_str(), port_, prefix_.c_str());
 }
 
