@@ -1,14 +1,22 @@
 #include "transport/http/HttpApiServer.h"
+#include "platform/BuildFeatures.h"
 
 #include <LittleFS.h>
+#if AWTRIX_FEATURE_BROWSER_OTA
 #include <Update.h>
+#endif
 #include <WiFi.h>
+#if !defined(AWTRIX_PLATFORM_RP2040)
 #include <dirent.h>
 #include <esp_heap_caps.h>
+#include "system/HeapCaps.h"
 // Included by name rather than left to the Arduino headers: the image marker below reads
 // CONFIG_SPIRAM_MODE_QUAD out of it, and an absent macro reads as octal - which is the wrong
 // answer to be arriving at by accident.
 #include <sdkconfig.h>
+#else
+#include <lwip/tcp.h>
+#endif
 
 #include <algorithm>
 
@@ -25,22 +33,27 @@
 #include "core/backup/RestoreApplier.h"
 #include "core/payload/PayloadParser.h"
 #include "core/render/Canvas.h"
-#include "core/script/ScriptConfig.h"
 #include "core/script/ScriptHeap.h"
+#if AWTRIX_FEATURE_SCRIPTING
+#include "core/script/ScriptConfig.h"
 #include "core/script/ScriptHost.h"
 #include "core/script/ScriptServices.h"
+#endif
 #include "hal/IBoard.h"
 #include "media/AssetFile.h"
 #include "persistence/DeviceConfig.h"
 #include "persistence/Filesystem.h"
-#include "persistence/FsRestoreSink.h"
+#include "persistence/LittleFsRestoreSink.h"
 #include "persistence/IconOriginsStore.h"
 #include "persistence/SystemConfigApply.h"
+#if !defined(AWTRIX_PLATFORM_RP2040)
 #include "persistence/VfsFile.h"
-#include "system/HeapCaps.h"
+#endif
 #include "system/HeapProbe.h"
+#include "transport/http/RequestHead.h"
 #include "transport/http/UpdateImage.h"
 #include "system/Log.h"
+#include "system/Watchdog.h"
 #include "transport/DeviceStateJson.h"
 #include "transport/http/WebUiAsset.h"
 
@@ -72,9 +85,172 @@ String storageTail() {
   return String("],\"usedBytes\":") + used + ",\"totalBytes\":" + total + "}";
 }
 
+#if defined(AWTRIX_PLATFORM_RP2040)
+// A connection whose request head is read off the socket ahead of WebServer's parser. The parser
+// then reads that head back from here, and the rest of the request from the socket. lwIP keeps
+// each TCP segment in its own buffer and WiFiClient::peekBytes() sees only the first, so a head
+// that spans segments could not be checked in place.
+class HeadClient : public WiFiClient {
+ public:
+  enum class Head { Waiting, Ready, TooLong };
+
+  HeadClient(const WiFiClient& accepted, char* buffer, size_t capacity)
+      : WiFiClient(accepted), buf_(buffer), cap_(capacity) {}
+
+  // Moves what has arrived into the buffer. Ready once the head is in, up to its blank line, and
+  // a body small enough to be read in one piece has arrived as well; TooLong if the buffer fills
+  // before the head ends.
+  Head gather() {
+    if (!headEnd_) {
+      const int more = WiFiClient::available();
+      if (more > 0 && len_ < cap_)
+        len_ += std::max(0, WiFiClient::read(reinterpret_cast<uint8_t*>(buf_ + len_),
+                                             std::min(cap_ - len_, static_cast<size_t>(more))));
+      headEnd_ = requesthead::end(buf_, len_, scanned_);
+      scanned_ = len_;
+      if (!headEnd_) return len_ == cap_ ? Head::TooLong : Head::Waiting;
+    }
+    const long body = requesthead::contentLength(buf_, headEnd_);
+    if (body <= 0 || body > kArenaBodyThresholdBytes) return Head::Ready;
+    const size_t have = len_ - headEnd_ + static_cast<size_t>(std::max(0, WiFiClient::available()));
+    return have >= static_cast<size_t>(body) ? Head::Ready : Head::Waiting;
+  }
+
+  int available() override { return static_cast<int>(pending()) + WiFiClient::available(); }
+  int read() override {
+    return pending() ? static_cast<uint8_t>(buf_[pos_++]) : WiFiClient::read();
+  }
+  int read(uint8_t* dst, size_t size) override {
+    const size_t n = std::min(size, pending());
+    if (!n) return WiFiClient::read(dst, size);
+    memcpy(dst, buf_ + pos_, n);
+    pos_ += n;
+    return static_cast<int>(n);
+  }
+  int peek() override { return pending() ? static_cast<uint8_t>(buf_[pos_]) : WiFiClient::peek(); }
+  size_t peekBytes(uint8_t* dst, size_t size) override {
+    const size_t n = std::min(size, pending());
+    if (!n) return WiFiClient::peekBytes(dst, size);
+    memcpy(dst, buf_ + pos_, n);
+    return n;
+  }
+
+ private:
+  size_t pending() const { return len_ - pos_; }
+
+  char* buf_;
+  size_t cap_;
+  size_t len_ = 0;
+  size_t pos_ = 0;
+  size_t scanned_ = 0;
+  size_t headEnd_ = 0;
+};
+#endif
+
 class RawWebServer : public WebServer {
  public:
   using WebServer::WebServer;
+#if defined(AWTRIX_PLATFORM_RP2040)
+  void setRawReadTimeout(unsigned long ms) { client().Stream::setTimeout(ms); }
+
+  // WebServer parses the request line and headers, and reads a small body, with blocking reads
+  // that wait up to 5 s per byte, so a client trickling them could hold loop() past the 8 s
+  // watchdog. The parser runs only once HeadClient holds the whole head, up to its blank line,
+  // and, for a body small enough to be read in one piece, the whole body has arrived too. A head
+  // longer than kHeadBytes is answered 431 and closed; a client that has not got that far within
+  // HTTP_MAX_DATA_WAIT is dropped, as a silent one is. Larger bodies arrive through the raw and
+  // upload callbacks, which feed the watchdog. WebServer would parse a request in the same pass
+  // that accepts it, before this check could run, so a connection is accepted here and handed to
+  // WebServer on a later pass. WebServer only ever sees HeadClients: it creates a client itself
+  // only on a pass that starts without one, and this override never lets it do that.
+  void handleClient() override {
+    if (_currentStatus == HC_NONE) {
+      WiFiClient accepted = getServer().accept();
+      if (!accepted) return;
+      delete _currentClient;
+      _currentClient = new HeadClient(accepted, head_, sizeof(head_));
+      _currentStatus = HC_WAIT_READ;
+      _statusChange = millis();
+      return;
+    }
+    if (_currentStatus == HC_WAIT_READ && _currentClient) {
+      switch (static_cast<HeadClient*>(_currentClient)->gather()) {
+        case HeadClient::Head::Ready:
+          break;
+        case HeadClient::Head::TooLong:
+          refuse(kHeadTooLong, sizeof(kHeadTooLong) - 1);
+          return;
+        case HeadClient::Head::Waiting:
+          // WebServer applies the same timeout to a client that has sent nothing yet.
+          if (!_currentClient->available()) break;
+          if (millis() - _statusChange > HTTP_MAX_DATA_WAIT) refuse(nullptr, 0);
+          return;
+      }
+    }
+    WebServer::handleClient();
+  }
+
+ protected:
+  // Every response byte, headers included, goes through these two. A plain write() keeps going
+  // for as long as a slow reader drains a little every few seconds, which can outlast the
+  // watchdog; write only what the send buffer has room for and feed the watchdog while waiting.
+  // A client that takes nothing for HTTP_MAX_SEND_WAIT is given up on and its connection closed.
+  size_t _currentClientWrite(const char* b, size_t l) override { return writeFed(b, l); }
+  size_t _currentClientWrite_P(PGM_P b, size_t l) override { return writeFed(b, l); }
+
+ private:
+  static constexpr size_t kHeadBytes = 2048;
+  static constexpr size_t kWriteSliceBytes = 1460; // one TCP segment
+  static constexpr char kHeadTooLong[] =
+      "HTTP/1.1 431 Request Header Fields Too Large\r\nConnection: close\r\n"
+      "Content-Length: 0\r\n\r\n";
+
+  // One request is handled at a time, so the connection being read owns this buffer.
+  char head_[kHeadBytes];
+
+  // Answers with reply, if any, and closes the connection. What the client has already sent is
+  // read and dropped first: closing with it unread would reset the connection and lose the reply.
+  // Released here as well, since its unread bytes would bring it straight back to gather().
+  void refuse(const char* reply, size_t length) {
+    uint8_t sink[256];
+    for (int left = _currentClient->available(); left > 0;) {
+      const int n = _currentClient->read(sink, std::min(sizeof(sink), static_cast<size_t>(left)));
+      if (n <= 0) break;
+      left -= n;
+    }
+    if (reply) writeFed(reply, length);
+    _currentClient->stop();
+    delete _currentClient;
+    _currentClient = nullptr;
+    _currentStatus = HC_NONE;
+  }
+
+  size_t writeFed(const char* b, size_t l) {
+    size_t done = 0;
+    unsigned long progress = millis();
+    while (done < l && _currentClient->connected()) {
+      watchdog::feed();
+      const int room = _currentClient->availableForWrite();
+      if (room > 0) {
+        const size_t n = _currentClient->write(
+            b + done, std::min({l - done, static_cast<size_t>(room), kWriteSliceBytes}));
+        if (n) {
+          done += n;
+          progress = millis();
+          continue;
+        }
+      }
+      if (millis() - progress > HTTP_MAX_SEND_WAIT) {
+        // Closed, not just left: a response goes out in many writes (a file 1 KB at a time), and
+        // each would otherwise wait out its own HTTP_MAX_SEND_WAIT. Once closed, they return at once.
+        _currentClient->stop();
+        break;
+      }
+      delay(1);
+    }
+    return done;
+  }
+#else
   void setRawReadTimeout(unsigned long ms) { _currentClient.Stream::setTimeout(ms); }
 
   // WebServer serves one client at a time. Browsers like to open a socket and send nothing, which
@@ -86,7 +262,28 @@ class RawWebServer : public WebServer {
     }
     WebServer::handleClient();
   }
+#endif
 };
+
+#if defined(AWTRIX_PLATFORM_RP2040)
+// arduino-pico's lwIP has five TCP pcbs, and ClientContext drops every accepted connection to
+// TCP_PRIO_MIN while the listener stays at TCP_PRIO_NORMAL. A SYN that finds the pool full then
+// makes lwIP abort the oldest accepted connection to make room, so a browser opening eight sockets
+// at once saw two or three of them reset mid-request. At its clients' priority the listener can no
+// longer evict them: the extra SYN is dropped, and the client's retransmit gets in once a request
+// has been answered.
+struct ListenPcb : WiFiServer {
+  static tcp_pcb* of(WiFiServer& server) { return server.*(&ListenPcb::_listen_pcb); }
+};
+
+// lwIP reports that dropped SYN as accept(NULL, ERR_MEM), and WiFiServer would wrap the NULL pcb in
+// a client and fault. Only real connections reach it.
+tcp_accept_fn serverAccept = nullptr;
+err_t acceptConnected(void* arg, tcp_pcb* pcb, err_t err) {
+  if (pcb == nullptr || err != ERR_OK) return ERR_MEM;
+  return serverAccept(arg, pcb, err);
+}
+#endif
 
 const char* methodName(HTTPMethod m) {
   switch (m) {
@@ -116,10 +313,18 @@ class HttpApiServer::BodyHandler : public RequestHandler {
   bool canRaw(String) override {
     return srv_.server_->clientContentLength() > kArenaBodyThresholdBytes;
   }
-  void raw(WebServer& server, String uri, HTTPRaw& raw) override {
+#if defined(AWTRIX_PLATFORM_RP2040)
+  // Pico's parser invokes the newer overloads; the base implementations do
+  // not forward to the legacy hooks, even though those remain in the API.
+  bool canHandle(HttpServerBase&, HTTPMethod m, String uri) override {
+    return canHandle(m, uri);
+  }
+  bool canRaw(HttpServerBase&, String uri) override { return canRaw(uri); }
+#endif
+  void raw(HttpServerBase& server, String uri, HTTPRaw& raw) override {
     srv_.collectBody(server, uri, raw);
   }
-  bool handle(WebServer&, HTTPMethod, String) override {
+  bool handle(HttpServerBase&, HTTPMethod, String) override {
     srv_.dispatch();
     return true;
   }
@@ -130,6 +335,7 @@ class HttpApiServer::BodyHandler : public RequestHandler {
 
 namespace {
 
+#if AWTRIX_FEATURE_BROWSER_OTA
 // ESP image header: byte 0 is the magic, bytes 12 and 13 hold the chip id, little endian. An app
 // image carries an esp_app_desc_t at offset 32; a usb-*.bin install image starts with the
 // bootloader, which has none - and on the ESP32, whose bootloader sits at 0x1000, with erased
@@ -194,6 +400,16 @@ const char* chipIdName(uint16_t id) {
   }
 }
 
+#endif
+
+std::size_t bodyCopyRoom() {
+#if defined(AWTRIX_PLATFORM_RP2040)
+  return rp2040.getFreeHeap();
+#else
+  return heap_caps_get_largest_free_block(scriptBufferHeapCaps());
+#endif
+}
+
 const char* mimeFor(const std::string& path) {
   const size_t dot = path.rfind('.');
   const std::string ext = (dot == std::string::npos) ? "" : path.substr(dot);
@@ -205,40 +421,7 @@ const char* mimeFor(const std::string& path) {
   return "application/octet-stream";
 }
 
-class LittleFsRestoreSink : public backup::FsRestoreSink {
- public:
-  using backup::FsRestoreSink::FsRestoreSink;
-  bool beginFile(const std::string& path, std::string& err) override {
-    const String p(path.c_str());
-    const int slash = p.lastIndexOf('/');
-    if (slash > 0) {
-      const String dir = p.substring(0, slash);
-      if (!LittleFS.exists(dir)) LittleFS.mkdir(dir);
-    }
-    file_ = LittleFS.open(p, "w");
-    curPath_ = path;
-    if (!file_) {
-      err = "could not open for writing";
-      return false;
-    }
-    return true;
-  }
-  bool writeFile(const uint8_t* data, std::size_t n) override {
-    return file_ && file_.write(data, n) == n;
-  }
-  bool endFile() override {
-    if (file_) file_.close();
-    return true;
-  }
-  void abortFile() override {
-    if (file_) file_.close();
-    if (!curPath_.empty()) LittleFS.remove(String(curPath_.c_str()));
-  }
-
- private:
-  File file_;
-  std::string curPath_;
-};
+using LittleFsRestoreSink = backup::LittleFsRestoreSink;
 }
 
 void HttpApiServer::begin(uint16_t port, CoreEngine& engine, IBoard& board, Canvas& screen,
@@ -252,7 +435,7 @@ void HttpApiServer::begin(uint16_t port, CoreEngine& engine, IBoard& board, Canv
   server_ = new RawWebServer(port);
   static const char* kCollectHeaders[] = {"If-None-Match", "Content-Type",
                                           api::kMethodOverrideHeader};
-  server_->collectHeaders(kCollectHeaders, 3);
+  server_->collectHeaders(static_cast<const char**>(kCollectHeaders), std::size_t{3});
   // Each pair is (completion handler, per-chunk upload handler). The upload handler runs many times
   // while the body streams in and cannot answer the client; only the completion handler can.
   server_->on(
@@ -271,11 +454,27 @@ void HttpApiServer::begin(uint16_t port, CoreEngine& engine, IBoard& board, Canv
   if (!bodyArena_.init(kMaxBodyBytes))
     logf("http: body arena allocation failed; body-carrying requests will be refused");
   server_->begin();
+#if defined(AWTRIX_PLATFORM_RP2040)
+  if (tcp_pcb* listener = ListenPcb::of(server_->getServer())) {
+    tcp_setprio(listener, TCP_PRIO_MIN);
+    serverAccept = reinterpret_cast<tcp_pcb_listen*>(listener)->accept;
+    tcp_accept(listener, acceptConnected);
+  }
+#endif
+}
+
+namespace {
+std::string uploadPartPath(const std::string& path) { return path + ".part"; }
 }
 
 // Runs once per chunk of the multipart body. Failures are only recorded in the upload* flags here;
 // handleFileUploadDone turns them into a status code afterwards.
 void HttpApiServer::handleFileUpload() {
+  // Every chunk arrives inside one loop() pass, refused uploads included (a disabled route still
+  // has to read the whole body before it can answer); a slow client must not trip the watchdog.
+  watchdog::feed();
+  if (featurePolicy(platform::buildFeatures(), std::string(server_->uri().c_str())) ==
+      DispatchResult::Unavailable) return;
   HTTPUpload& up = server_->upload();
   if (up.status == UPLOAD_FILE_START) {
     if (uploadFile_) uploadFile_.close();
@@ -308,7 +507,9 @@ void HttpApiServer::handleFileUpload() {
     uploadPath_ = fn.c_str();
     uploadContentOk_ = true;
     uploadContentChecked_ = false;
-    uploadFile_ = LittleFS.open(fn, "w");
+    // Written beside the target and renamed over it at the end, so a refused or broken upload
+    // leaves the file it would have replaced untouched (the simulator checks before it writes).
+    uploadFile_ = LittleFS.open(uploadPartPath(uploadPath_).c_str(), "w");
     uploadWriteOk_ = static_cast<bool>(uploadFile_);
   } else if (up.status == UPLOAD_FILE_WRITE) {
     // Sniff the first chunk only, which is enough to catch a file dropped into the wrong folder.
@@ -324,15 +525,25 @@ void HttpApiServer::handleFileUpload() {
     }
   } else if (up.status == UPLOAD_FILE_END) {
     if (uploadFile_) uploadFile_.close();
-    if ((!uploadContentOk_ || !uploadWriteOk_) && !uploadPath_.empty())
-      LittleFS.remove(uploadPath_.c_str());
+    if (uploadPath_.empty()) return;
+    const std::string part = uploadPartPath(uploadPath_);
+    // LittleFS rename replaces an existing target in one step, so the old file stays readable
+    // until the new one takes its place.
+    if (uploadContentOk_ && uploadWriteOk_)
+      uploadWriteOk_ = LittleFS.rename(part.c_str(), uploadPath_.c_str());
+    if (!uploadContentOk_ || !uploadWriteOk_) LittleFS.remove(part.c_str());
   } else if (up.status == UPLOAD_FILE_ABORTED) {
     if (uploadFile_) uploadFile_.close();
-    if (!uploadPath_.empty()) LittleFS.remove(uploadPath_.c_str());
+    if (!uploadPath_.empty()) LittleFS.remove(uploadPartPath(uploadPath_).c_str());
   }
 }
 
 void HttpApiServer::handleFileUploadDone() {
+  if (featurePolicy(platform::buildFeatures(), std::string(server_->uri().c_str())) ==
+      DispatchResult::Unavailable) {
+    sendResult(api::httpResponse({}, DispatchResult::Unavailable, {}));
+    return;
+  }
   addCorsHeaders(false);
   if (apMode_) {
     sendError(403, "forbidden", "file upload is disabled during provisioning");
@@ -368,6 +579,7 @@ void HttpApiServer::handleFileUploadDone() {
 // The backup zip is piped chunk by chunk through the reader and applier straight onto the
 // filesystem; there is nowhere near enough heap to hold the archive.
 void HttpApiServer::handleRestoreUpload() {
+  watchdog::feed(); // see handleFileUpload()
   HTTPUpload& up = server_->upload();
   if (up.status == UPLOAD_FILE_START) {
     restoreStarted_ = false;
@@ -421,7 +633,8 @@ void HttpApiServer::dropRawBody() {
 
 // Called by WebServer for every raw-body chunk. Script sources use a second arena that is
 // allocated at RAW_START and released again on completion, since it dwarfs the fixed body arena.
-void HttpApiServer::collectBody(WebServer& server, const String& uri, HTTPRaw& raw) {
+void HttpApiServer::collectBody(HttpServerBase& server, const String& uri, HTTPRaw& raw) {
+  watchdog::feed(); // a script source arrives inside one loop() pass too; see handleFileUpload()
   const std::string method = methodName(server.method());
   const std::string path = uri.c_str();
   const bool rawSource = api::isRawBodyWrite(method, path);
@@ -459,6 +672,7 @@ void HttpApiServer::collectBody(WebServer& server, const String& uri, HTTPRaw& r
 // across two chunks is still found. It stops at the first: a firmware image holds exactly one, and
 // an image from before the marker existed holds none - which is read as "says nothing" and let
 // through, so a downgrade to an older release still works.
+#if AWTRIX_FEATURE_BROWSER_OTA
 void HttpApiServer::scanImageMarker(const uint8_t* buf, size_t len) {
   for (size_t i = 0; i < len; ++i) {
     const char c = static_cast<char>(buf[i]);
@@ -485,6 +699,8 @@ void HttpApiServer::scanImageMarker(const uint8_t* buf, size_t len) {
 }
 
 void HttpApiServer::handleUpdateUpload() {
+  watchdog::feed(); // see handleFileUpload()
+  if (!platform::buildFeatures().browserOta) return;
   HTTPUpload& up = server_->upload();
   if (apMode_) return;
   if (up.status == UPLOAD_FILE_START) {
@@ -560,6 +776,10 @@ void HttpApiServer::handleUpdateUpload() {
 }
 
 void HttpApiServer::handleUpdateDone() {
+  if (!platform::buildFeatures().browserOta) {
+    sendResult(api::httpResponse({}, DispatchResult::Unavailable, {}));
+    return;
+  }
   addCorsHeaders(false);
   if (apMode_) {
     sendError(403, "forbidden", "firmware update is disabled during provisioning");
@@ -580,6 +800,15 @@ void HttpApiServer::handleUpdateDone() {
   sendJson(200, "{\"ok\":true}");
   engine_->execute(Command(CommandType::Reboot));
 }
+#else
+void HttpApiServer::handleUpdateUpload() {
+  watchdog::feed(); // the refused image is still read to the end; see handleFileUpload()
+}
+void HttpApiServer::handleUpdateDone() {
+  addCorsHeaders(false);
+  sendError(503, "unavailable", "browser update is unavailable; flash a UF2 over USB (BOOTSEL)");
+}
+#endif
 
 void HttpApiServer::tick() {
   if (server_) server_->handleClient();
@@ -660,6 +889,17 @@ void HttpApiServer::dispatch() {
   req.method = resolved.method;
   req.get = (req.method == "GET");
 
+  // Reject absent features before allocating bodies or serving transport-only routes.
+  if (req.path == "/update" && !platform::buildFeatures().browserOta) {
+    dropRawBody();
+    handleUpdateDone();
+    return;
+  }
+  if (featurePolicy(platform::buildFeatures(), req.path) == DispatchResult::Unavailable) {
+    dropRawBody();
+    sendResult(api::httpResponse({}, DispatchResult::Unavailable, {}));
+    return;
+  }
   if (takeBody(req)) return;
   if (rejectedByPolicy(req)) return;
 
@@ -729,7 +969,7 @@ bool HttpApiServer::takeBody(Request& req) {
       // Refuse instead of fragmenting: the copy needs one contiguous block, plus margin for
       // whatever parsing and dispatch will allocate on top of it.
       if (received.size() > 15 &&
-          heap_caps_get_largest_free_block(scriptBufferHeapCaps()) <
+          bodyCopyRoom() <
               received.size() + kBodyCopyMarginBytes) {
         arena.reset();
         if (rawSource) arena.release();
@@ -774,6 +1014,25 @@ bool HttpApiServer::rejectedByPolicy(const Request& req) {
     }
   }
   return false;
+}
+
+// streamFile() writes straight to the client, past the Pico's fed writes, so there a file goes out
+// through sendContent() in pieces instead. Other boards keep streamFile().
+namespace {
+void sendFile(WebServer& server, File& f, const char* type) {
+#if defined(AWTRIX_PLATFORM_RP2040)
+  server.setContentLength(f.size());
+  server.send(200, type, "");
+  char buf[1024];
+  while (server.client().connected()) {
+    const size_t n = f.read(reinterpret_cast<uint8_t*>(buf), sizeof(buf));
+    if (n == 0) break;
+    server.sendContent(buf, n);
+  }
+#else
+  server.streamFile(f, type);
+#endif
+}
 }
 
 // The web UI is a gzip blob in flash, sent verbatim without decompressing. The ETag never changes
@@ -825,7 +1084,7 @@ bool HttpApiServer::serveAsset(const Request& req) {
     server_->send(304, "text/plain", "");
     return true;
   }
-  server_->streamFile(f, mimeFor(req.path));
+  sendFile(*server_, f, mimeFor(req.path));
   f.close();
   return true;
 }
@@ -833,7 +1092,8 @@ bool HttpApiServer::serveAsset(const Request& req) {
 bool HttpApiServer::serveCommand(Request& req) {
   Command cmd;
   api::HttpResult immediate;
-  switch (api::routeHttp(req.method, req.path, std::move(req.body), cmd, immediate)) {
+  switch (api::routeHttp(req.method, req.path, std::move(req.body), cmd, immediate,
+                         platform::buildFeatures())) {
     case api::RouteOutcome::Respond:
       probe::report("req:route", 128);
       probe::begin();
@@ -915,6 +1175,7 @@ bool HttpApiServer::serveState(const Request& req) {
     sendJson(200, respBuf_);
     return true;
   }
+#if AWTRIX_FEATURE_SCRIPTING
   if (path == "/api/v1/scripts/shared") {
     if (!scripts_) {
       sendError(503, "unavailable", "scripting is not available");
@@ -953,6 +1214,7 @@ bool HttpApiServer::serveState(const Request& req) {
       return true;
     }
   }
+#endif
   return false;
 }
 
@@ -962,13 +1224,18 @@ bool HttpApiServer::serveDiagnostics(const Request& req) {
   // Scanning takes seconds and would block the loop, so the first call starts it and answers 202;
   // the caller polls until a result array comes back.
   if (req.path == "/api/v1/system/wifi-scan") {
+#if defined(AWTRIX_PLATFORM_RP2040)
+    // Unlike ESP32, Pico reports zero (not FAILED) before the first scan.
+    const int n = wifiScan_.poll(WiFi);
+#else
     const int n = WiFi.scanComplete();
     if (n == WIFI_SCAN_FAILED) {
       WiFi.scanNetworks(true);
       sendJson(202, "{\"scanning\":true}");
       return true;
     }
-    if (n == WIFI_SCAN_RUNNING) {
+#endif
+    if (n < 0) {
       sendJson(202, "{\"scanning\":true}");
       return true;
     }
@@ -979,17 +1246,24 @@ bool HttpApiServer::serveDiagnostics(const Request& req) {
     for (int i = 0; i < n; ++i) {
       if (i) out.put(',');
       out.put("{\"ssid\":");
-      out.putString(WiFi.SSID(i).c_str());
+      out.putString(String(WiFi.SSID(i)).c_str());
       out.put(",\"rssi\":");
       out.putInt(WiFi.RSSI(i));
       out.put(",\"enc\":");
+#if defined(AWTRIX_PLATFORM_RP2040)
+      out.put(WiFi.encryptionType(i) != ENC_TYPE_NONE ? "true" : "false");
+#else
       out.put(WiFi.encryptionType(i) != WIFI_AUTH_OPEN ? "true" : "false");
+#endif
       out.put('}');
     }
     out.put(']');
     out.flush();
     server_->sendContent("");
     WiFi.scanDelete();
+#if defined(AWTRIX_PLATFORM_RP2040)
+    wifiScan_.consumed();
+#endif
     return true;
   }
 
@@ -1050,6 +1324,29 @@ bool HttpApiServer::serveSounds(const Request& req) {
     server_->send(200, "application/json", "");
     server_->sendContent("{\"melodies\":[");
     bool first = true;
+#if defined(AWTRIX_PLATFORM_RP2040)
+    // arduino-pico has no VFS, so the directory is walked with the LittleFS File API.
+    File root = LittleFS.open("/MELODIES", "r");
+    if (root && root.isDirectory()) {
+      for (File file = root.openNextFile(); file; file = root.openNextFile()) {
+        if (file.isDirectory()) continue;
+        std::string leaf = file.name();
+        leaf = leaf.substr(leaf.find_last_of('/') + 1);
+        const std::string name = api::melodies::nameFromFile(leaf);
+        if (name.empty()) continue;
+        media::PodBuffer<uint8_t> raw;
+        std::string content;
+        if (media::readAsset("/MELODIES/" + leaf, raw))
+          content.assign(reinterpret_cast<const char*>(raw.data()), raw.size());
+        const std::string entry =
+            (first ? "" : ",") +
+            api::melodies::entryJson(name, content, static_cast<uint32_t>(content.size()));
+        server_->sendContent(entry.c_str());
+        first = false;
+      }
+      root.close();
+    }
+#else
     if (DIR* root = ::opendir(fs::vfsPath("/MELODIES").c_str())) {
       while (const dirent* e = ::readdir(root)) {
         const std::string name = api::melodies::nameFromFile(std::string(e->d_name));
@@ -1066,6 +1363,7 @@ bool HttpApiServer::serveSounds(const Request& req) {
       }
       ::closedir(root);
     }
+#endif
     server_->sendContent(storageTail());
     server_->sendContent("");
     return true;
@@ -1143,9 +1441,33 @@ void HttpApiServer::listDir(const char* dir) {
   server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server_->send(200, "application/json", "");
   server_->sendContent("{\"files\":[");
-  const std::string base = dir;
   std::string batch;
   batch.reserve(kListBatchBytes + kListEntryReserveBytes);
+#if defined(AWTRIX_PLATFORM_RP2040)
+  // arduino-pico has no VFS, so the directory is walked with the LittleFS File API.
+  File root = dir[0] == '/' ? LittleFS.open(dir, "r") : File();
+  if (root && root.isDirectory()) {
+    bool first = true;
+    for (File file = root.openNextFile(); file; file = root.openNextFile()) {
+      if (!first) batch += ',';
+      first = false;
+      api::JsonWriter ew(batch);
+      ew.beginObject();
+      std::string name = file.name();
+      name = name.substr(name.find_last_of('/') + 1);
+      ew.member("name", name);
+      const long size = file.isDirectory() ? 0 : file.size();
+      ew.member("size", static_cast<unsigned long>(size > 0 ? size : 0));
+      ew.endObject();
+      if (batch.size() >= kListBatchBytes) {
+        server_->sendContent(batch.c_str(), batch.size());
+        batch.clear();
+      }
+    }
+    root.close();
+  }
+#else
+  const std::string base = dir;
   if (DIR* root = dir[0] == '/' ? ::opendir(fs::vfsPath(base).c_str()) : nullptr) {
     bool first = true;
     while (const dirent* e = ::readdir(root)) {
@@ -1164,6 +1486,7 @@ void HttpApiServer::listDir(const char* dir) {
     }
     ::closedir(root);
   }
+#endif
   if (!batch.empty()) server_->sendContent(batch.c_str(), batch.size());
   server_->sendContent(storageTail());
   server_->sendContent("");

@@ -5,13 +5,15 @@
 #include "core/apps/builtin/BuiltinIcons.h"
 #include "core/apps/builtin/ContentFrame.h"
 #include "core/render/TextRenderer.h"
+#include "core/render/ContentBand.h"
 
 namespace awtrix {
 
 class TempApp : public IApp {
  public:
   const std::string& id() const override { return id_; }
-  void render(Canvas& c, const RenderCtx& ctx) override {
+  void render(Canvas& panel, const RenderCtx& ctx) override {
+    Canvas c = render::contentBand(panel);
     const Settings& s = *ctx.settings;
     const std::string str =
         formatTemperature(ctx.runtime->temperatureC, s.useCelsius, ctx.runtime->tempDecimals);

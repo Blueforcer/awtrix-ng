@@ -3,6 +3,7 @@
 #include <WiFi.h>
 
 #include "system/Log.h"
+#include "system/Watchdog.h"
 
 namespace awtrix {
 
@@ -18,6 +19,9 @@ constexpr uint16_t kMqttBufferBytes = 8192;
 
 // PubSubClient blocks the whole loop while it waits for CONNACK, so keep it short.
 constexpr uint16_t kHandshakeSeconds = 2;
+
+// Long enough to ride out a short Wi-Fi stall (TCP retransmits catch up) instead of reconnecting.
+constexpr uint16_t kKeepAliveSeconds = 60;
 
 std::string endpointOf(const IPAddress& ip, uint16_t port) {
   return std::string(ip.toString().c_str()) + ":" + std::to_string(port);
@@ -44,11 +48,16 @@ void MqttLink::begin(const DeviceConfig& cfg, const std::string& clientId,
 
   if (!enabled_) return;
 
+#if defined(AWTRIX_PLATFORM_RP2040)
+  // arduino-pico applies this millisecond timeout to TCP connect and write, not just reads.
+  wifi_.setTimeout(300);
+#endif
   client_ = new PubSubClient(wifi_);
   if (!client_->setBufferSize(kMqttBufferBytes))
     logf("mqtt: could not allocate a %u-byte packet buffer; large commands will be dropped",
          static_cast<unsigned>(kMqttBufferBytes));
   client_->setSocketTimeout(kHandshakeSeconds);
+  client_->setKeepAlive(kKeepAliveSeconds);
   logf("mqtt: broker %s:%u, prefix %s", host_.c_str(), port_, prefix_.c_str());
 }
 
@@ -142,6 +151,7 @@ bool MqttLink::tick(uint32_t nowMs) {
 // Registers a retained "offline" will, so the broker publishes it for us if the device drops off
 // without saying goodbye.
 bool MqttLink::connectNow() {
+  watchdog::feed();
   const std::string will = prefix_ + "/availability";
   return (user_.empty() && pass_.empty())
              ? client_->connect(clientId_.c_str(), will.c_str(), 0, true, "offline")

@@ -19,6 +19,8 @@ class PeripheryService {
  public:
   void begin(CoreEngine& engine, IBoard& board, const DeviceConfig& cfg);
   void setUid(const std::string& uid) { uid_ = uid; }
+  using ButtonPost = std::function<void(const std::string&, const char*, bool, const std::string&)>;
+  void setButtonPost(ButtonPost post) { buttonPost_ = std::move(post); }
   void setButtonHook(std::function<bool(int, bool)> hook) { buttonHook_ = std::move(hook); }
   void tick(int64_t nowMs);
 
@@ -30,6 +32,7 @@ class PeripheryService {
   const DeviceConfig* cfg_ = nullptr;
   std::function<bool(int, bool)> buttonHook_;
   std::string uid_;
+  ButtonPost buttonPost_;
   // raw_ is the pin as sampled, stable_ the debounced value, prev_ the debounced value from the
   // previous tick that edges are detected against.
   ButtonState prev_{};

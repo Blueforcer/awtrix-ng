@@ -16,6 +16,10 @@ no buzzer says so rather than playing something else. Which outputs your panel h
 {"audio":{"buzzer":true,"track":false,"mp3":true,"radio":true}}
 ```
 
+The Galactic Unicorn has one output: melodies play through its built-in speaker, which it reports
+as `buzzer`. It has no MP3, radio or DFPlayer, and its pins are fixed. See the
+[Galactic Unicorn guide](../advanced/galactic-unicorn.md).
+
 ## MP3s
 
 Only on boards with a speaker. Drag them onto the **MP3s** section of the web UI's Audio tab, the way icons are uploaded, or send one from the command line:
@@ -277,7 +281,7 @@ curl -X PATCH http://<awtrix-ip>/api/v1/settings \
 
 While muted, AWTRIX still accepts every sound command and still answers `200 {"ok":true}`. That includes a name that does not exist, which would otherwise answer `404` - so test your names with sound **on**. Use `{"scope":"stream"}` on `/audio/stop` to silence the radio as well.
 
-For genuine silence on the buzzer, set `pinBuzzer` to `-1` in the [pin map](../reference/gpio.md#the-pin-map). With no buzzer pin, nothing is ever played there.
+For genuine silence on the buzzer, set `pinBuzzer` to `-1` in the [pin map](../reference/gpio.md#the-pin-map). With no buzzer pin, nothing is ever played there. The Galactic Unicorn's pins are fixed, so there set `buzzerVolume` to `0` instead.
 
 ## Sound in notifications and apps
 

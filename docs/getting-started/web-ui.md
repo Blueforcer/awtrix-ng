@@ -246,7 +246,8 @@ radio track info live in `/api/v1/settings`, `dfplayer` in `/api/v1/system`. The
 between the two endpoints for you. There is one volume slider per output - buzzer, DFPlayer, MP3
 and radio - and each is shown only when the panel has that output, so a Ulanzi sees one slider
 rather than four. No radio track info without radio, and no sound switch on a device with no
-output at all. The DFPlayer toggle always stays - it is how a board gets one.
+output at all. The DFPlayer toggle stays on any board with configurable pins - it is how a board
+gets one.
 
 The MQTT section carries a live connection badge above its fields: whether the broker answered, the
 endpoint it connected to, and the reason if it did not.
@@ -324,6 +325,13 @@ ESP32 boards, where those wirings are real.
 
 Conflicting or impossible assignments are rejected on save, and GPIO changes apply after a reboot.
 
+On a board with fixed wiring (`gpio.fixed` in the capabilities, the Galactic Unicorn) the section
+lists the pins the board uses and the ones it reserves, with nothing to edit. The page also drops
+what the board cannot have: the DFPlayer toggle, the battery and I²C sensor settings, **LDR on
+GND**, and, on the Display page, the sensor colours. **Panel** keeps the height (one of the
+heights in `gpio.panel`) and the orientation, and the melody slider is called **Melody volume**,
+since the melodies play on the built-in speaker.
+
 Details and recovery: [GPIO & boards](../reference/gpio.md) -
 [Board presets](../reference/gpio.md#board-presets),
 [Validation rules](../reference/gpio.md#validation-rules),
@@ -333,7 +341,7 @@ Details and recovery: [GPIO & boards](../reference/gpio.md) -
 
 | Action | What happens |
 |---|---|
-| **Upload firmware (.bin)** | Uploads to `/update` with a live progress bar; AWTRIX reboots into the new firmware |
+| **Upload firmware (.bin)** | Uploads to `/update` with a live progress bar; AWTRIX reboots into the new firmware. A Galactic Unicorn shows how to flash its `.uf2` over USB instead |
 | **Reboot** | Two-step confirm, then `POST /api/v1/device/reboot`; the page reloads itself |
 | **Reset settings** | Two-step confirm, then `POST /api/v1/settings/reset` - display settings only, network survives |
 | **Factory reset** | Erases **everything** (Wi-Fi, files, settings). No two-step button: you must type the hostname |

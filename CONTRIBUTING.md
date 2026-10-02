@@ -40,12 +40,14 @@ pip install -U platformio
 Node 22+ is needed for a firmware build (the web UI is minified through `npx`
 before it is embedded) and for the web UI tests.
 
-## The four build targets
+## The build targets
 
 ```bash
 pio run  -e awtrix        # ESP32 firmware (stock pin defaults)
 pio run  -e awtrix_s3_octal     # ESP32-S3 firmware, octal PSRAM
 pio run  -e awtrix_s3_quad      # ESP32-S3 firmware, quad PSRAM
+pio run  -e galactic_unicorn    # Galactic Unicorn firmware, Pico W
+pio run  -e galactic_unicorn_2w # Galactic Unicorn firmware, Pico 2 W
 python scripts/test_native.py  # host unit tests for the portable core
 pio run  -e native_sim    # host simulator: full firmware + web UI, no hardware
 ```
@@ -63,14 +65,27 @@ Every push runs, and your PR needs all of it green:
 python scripts/test_native.py          # host unit tests
 pio run -e awtrix                      # both firmware images build
 pio run -e awtrix_s3_octal
+pio run -e galactic_unicorn            # both Pico UF2s build
+pio run -e galactic_unicorn_2w
 python tools/check_docs_sync.py        # docs match the firmware's real fields
 python tools/check_berry_api.py        # editor's Berry API table is current
 python tools/gen_agent_skill.py --check
 python tools/check_prelude_solidified.py
 python tools/check_font_sync.py
 python tools/check_partitions.py
+python tools/check_builtin_registration.py
+python test/test_partition_reservations.py
 mkdocs build --strict                  # docs build, no broken links or anchors
 cd webui/test && npm install && npm test
+```
+
+To run them all without installing a toolchain, use the CI image in
+`tools/container/`:
+
+```bash
+podman build -t awtrix-build tools/container
+podman run --rm -v "$PWD":/w:Z -v pio-home:/root/.platformio \
+    awtrix-build tools/container/ci-local.sh all
 ```
 
 ### Generated files you may have to regenerate

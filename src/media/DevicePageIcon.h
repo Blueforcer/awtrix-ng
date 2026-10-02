@@ -60,6 +60,7 @@ class DevicePageIcon : public IPageIcon {
         dst.setPixel(x + xOffset, y + yOffset, pixels_[static_cast<size_t>(y) * width_ + x]);
   }
   int width() const override { return width_; }
+  int height() const override { return height_; }
   std::unique_ptr<IPageIcon> create() const override {
     return std::unique_ptr<IPageIcon>(new (std::nothrow) DevicePageIcon());
   }

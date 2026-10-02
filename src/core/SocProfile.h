@@ -10,14 +10,6 @@
 #define AWTRIX_MATRIX_PINS_ESP32S3(X) \
   X(13) X(14) X(15) X(16) X(17) X(18) X(21) X(38) X(39) X(40) X(41) X(42) X(47)
 
-#if defined(AWTRIX_SOC_ESP32S3)
-#define AWTRIX_MATRIX_PIN_LIST(X) AWTRIX_MATRIX_PINS_ESP32S3(X)
-#define AWTRIX_MATRIX_FALLBACK_PIN 21
-#else
-#define AWTRIX_MATRIX_PIN_LIST(X) AWTRIX_MATRIX_PINS_ESP32(X)
-#define AWTRIX_MATRIX_FALLBACK_PIN 32
-#endif
-
 namespace awtrix {
 namespace pins {
 
@@ -99,6 +91,10 @@ struct SocProfile {
   RangeList rtc;
   PinList matrix;
   PinSet defaults;
+  bool fixedWiring = false;
+  // A panel built into the board: its width and the heights it can show. 0 means configurable.
+  int fixedPanelWidth = 0;
+  int fixedPanelHeights[2] = {0, 0};
 };
 
 namespace detail {
@@ -173,13 +169,26 @@ inline const SocProfile& esp32s3Profile() {
   return p;
 }
 
-inline const SocProfile& activeProfile() {
-#if defined(AWTRIX_SOC_ESP32S3)
-  return esp32s3Profile();
-#else
-  return esp32Profile();
-#endif
+// Galactic Unicorn wiring, shared by Pico W and Pico 2 W. The panel has no
+// single data-pin setting: -1 denotes its fixed multi-pin PIO interface. I2C is -1
+// as well: the Qw/ST connector is on GPIO 4/5, but these builds read no I2C sensor.
+// https://github.com/pimoroni/pimoroni-pico/blob/main/libraries/galactic_unicorn/galactic_unicorn.hpp
+inline const SocProfile& rp2040Profile() {
+  static constexpr PinRange adc[] = {{26, 28}};
+  static constexpr ReservedRange reserved[] = {
+      {13, 20, "the fixed panel interface"}, {23, 25, "the Pico wireless interface"},
+      {29, 29, "the Pico wireless interface"}};
+  static const SocProfile p = {
+      "rp2040", "Galactic Unicorn (Pico W / Pico 2 W)", 29,
+      {nullptr, 0}, {nullptr, 0}, {reserved, detail::countOf(reserved)},
+      {adc, detail::countOf(adc)}, {nullptr, 0}, {nullptr, 0}, {nullptr, 0},
+      PinSet{-1, 0, 1, 3, -1, 28, -1, -1, -1, -1, -1, false, 10, 11, 9, -1, 22},
+      true, 53, {8, 11}};
+  return p;
 }
+
+// Implemented by the platform; policy and reference profiles above are portable.
+const SocProfile& activeProfile();
 
 }
 }

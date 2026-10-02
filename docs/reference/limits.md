@@ -2,6 +2,23 @@
 
 Every cap AWTRIX enforces, and what it answers when you reach one.
 
+## Tall panels: content band and full canvas
+
+The panel height `H` is 8–16 pixels (default 8). On taller panels, body text,
+primary 8×8 icons and built-in apps keep their original eight-row layout in a
+vertically centred band starting at `floor((H - 8) / 2)`. At 53×11 the band is
+rows 1–8; at 32×8 nothing moves.
+
+Background colours, effects, overlays, transitions and charts use the full
+canvas, rows `0 .. H-1`. Progress stays on row `H-1` (row 10 at 53×11).
+GIF decoding uses the panel width and height as its size limits; images retain
+their own dimensions rather than being stretched. Full-screen images are not
+shifted into the text band.
+
+Draw commands, positioned icons and script drawing use absolute top-left canvas
+coordinates with no band offset. Scripts must query `width()` and `height()`;
+never assume an eight-row canvas.
+
 ## Requests
 
 | Limit | Value | At the edge |
@@ -93,8 +110,32 @@ Which formats are accepted, and how each one is drawn, is in
 | Limit | Value | At the edge |
 | --- | --- | --- |
 | Panel width | [`panelWidth × panels`](system.md#panel-and-orientation), default `32 × 1`, must come to 32–128 | outside the range: `422 validationFailed` on `panelWidth` |
-| Panel height | 8 pixels | fixed; not configurable |
+| Panel height | [`panelHeight`](system.md#panel-and-orientation), 8–16 pixels, default `8`; applies after reboot | outside the range: `422 validationFailed` on `panelHeight` |
 | GIF dimensions | up to the panel's width and height | resize larger GIFs before uploading; every animation frame must fit |
+
+## Galactic Unicorn (Pico W)
+
+The [Pico W and Pico 2 W builds](../advanced/galactic-unicorn.md) reserve **512 KiB
+LittleFS** on both 2 MB and 4 MB flash. Their fixed canvas is 53×11, or 53×8
+letterboxed compatibility mode; other heights fall back to 11 at boot.
+The generic 8–16 validation range does not resize the physical board.
+
+Both Pico builds run Berry scripts under the limits above, except where this table
+says otherwise. They have no MP3, radio, outbound TLS or browser OTA. RTTTL tones
+are supported using the ordinary melody limits. See the
+[board guide](../advanced/galactic-unicorn.md#scripting) for feature errors, UF2
+updates and sleep emulation.
+
+| Limit | Value | At the edge |
+| --- | --- | --- |
+| Shared script memory | 48 KB on the Pico W (RP2040); 96 KB on the Pico 2 W (RP2350) | **new** installs refused until it drops; nothing already installed is removed |
+| Largest script (Pico W) | about 7 KB of source, measured | install refused, `507` |
+| Memory in one piece (Pico W) | a failed install of a big script can fragment the heap | later installs refused, `507` - reboot |
+| Script HTTP and Modbus requests, and icons | not available on either Pico | `http.*` and `modbus` reads return `false`; script icons are not drawn |
+| Hung or faulted firmware | hardware watchdog, ~8 s | reboots itself; `/api/v1/device` then reports `resetReason: "watchdog"` |
+| Stalled HTTP client | a request must arrive within 5 s; a response the client stops taking for 5 s is abandoned | the connection is closed and the device carries on |
+| Request line and headers | 2 KB | a longer request is answered `431` and the connection is closed |
+| Deliberately slow upload | a body over 2 KB sent slower than about 180 bytes per second | can hold the loop past the watchdog, which restarts the Pico; ordinary slow networks are far faster |
 
 ## What is *not* limited
 

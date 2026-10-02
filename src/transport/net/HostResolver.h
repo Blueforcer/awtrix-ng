@@ -18,8 +18,8 @@ class IHostResolver {
  public:
   virtual ~IHostResolver() = default;
 
-  // Never blocks. Call it repeatedly with the same host until it returns Ready or Failed; a
-  // literal IPv4 address is answered on the spot.
+  // Poll until Ready or Failed. ESP32/simulator are asynchronous; Pico uses bounded calls
+  // (1 s per lookup, at most 2 s with the .local bare-label fallback). IPv4 is immediate.
   virtual ResolveState resolve(const std::string& host) = 0;
 
   virtual IPAddress address() const = 0;

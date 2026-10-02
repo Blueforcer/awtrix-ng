@@ -174,7 +174,7 @@ bool ScriptStore::readStore(const std::string& name, std::string& out) const {
 
 std::vector<std::string> ScriptStore::names() const {
   std::vector<std::string> names;
-  File dir = LittleFS.open(kDir);
+  File dir = LittleFS.open(kDir, "r");
   if (!dir || !dir.isDirectory()) return names;
   for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
     String fn = f.name();

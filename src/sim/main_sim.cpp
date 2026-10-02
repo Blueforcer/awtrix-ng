@@ -22,6 +22,7 @@
 #include <string>
 
 #include "AppConfig.h"
+#include "platform/BuildFeatures.h"
 #include "core/CoreEngine.h"
 #include "core/FrameClock.h"
 #include "core/StrCase.h"
@@ -314,10 +315,11 @@ int main(int argc, char** argv) {
   const std::string uid = "simulator";
   if (!g_http.begin(port, *g_engine, g_board, *g_canvas, uid, cfg, webuiFile)) return 1;
   g_http.setOnConfigChanged([] {
-    // A layout change only takes effect live while the width still matches: a different width would
+    // A layout change only takes effect live while the size still matches: a different size would
     // mean rebuilding the canvas, the power animator and the pipeline, so that waits for a restart.
     const MatrixLayout layout = g_cfg.matrixLayout();
-    if (layout.width() == g_board.matrixWidth()) g_board.setMatrixLayout(layout);
+    if (layout.width() == g_board.matrixWidth() && layout.height() == g_board.matrixHeight())
+      g_board.setMatrixLayout(layout);
     logbuf::setVerbose(g_cfg.debugMode);
   });
   {
@@ -328,7 +330,8 @@ int main(int argc, char** argv) {
   g_engine->state().emit(StateEvent::SettingsChanged);
 
     std::string caps = api::capabilitiesJson(
-        g_effects.names(), g_effects.paletteNames(), g_overlays.names(), g_audio.caps());
+        g_effects.names(), g_effects.paletteNames(), g_overlays.names(), g_audio.caps(),
+        platform::buildFeatures());
     g_http.setCapabilitiesJson(caps);
     g_mqtt.setCapabilitiesJson(std::make_shared<const std::string>(caps));
   }

@@ -2,6 +2,12 @@
 
 #include <FS.h>
 #include <WebServer.h>
+#if defined(AWTRIX_PLATFORM_RP2040)
+#include "platform/rp2040/WifiCompat.h"
+using HttpServerBase = HTTPServer;
+#else
+using HttpServerBase = WebServer;
+#endif
 
 #include <cstdint>
 #include <functional>
@@ -74,7 +80,7 @@ class HttpApiServer {
   void listDir(const char* dir);
 
   bool authOk();
-  void collectBody(WebServer& server, const String& uri, HTTPRaw& raw);
+  void collectBody(HttpServerBase& server, const String& uri, HTTPRaw& raw);
   void dropRawBody();
   void handleUpdateUpload();
   void scanImageMarker(const uint8_t* buf, size_t len);
@@ -132,6 +138,9 @@ class HttpApiServer {
   StoredScriptsFn storedScripts_;
   std::string respBuf_;
   bool apMode_ = false;
+#if defined(AWTRIX_PLATFORM_RP2040)
+  platform::pico::WifiScan wifiScan_;
+#endif
 };
 
 }

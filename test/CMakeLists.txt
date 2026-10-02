@@ -41,6 +41,7 @@ file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS
 )
 add_library(awtrix_core STATIC
   ${CORE_SOURCES}
+  "${AWTRIX_ROOT}/src/platform/SocProfile.cpp"
   "${AWTRIX_ROOT}/src/transport/ScriptMqttBridge.cpp"
 )
 target_compile_options(awtrix_core PRIVATE -O2)
@@ -77,6 +78,9 @@ foreach(TEST_DIR IN LISTS TEST_DIRS)
   target_compile_options("${TEST_NAME}" PRIVATE -O2)
   target_compile_definitions("${TEST_NAME}" PRIVATE PIO_UNIT_TESTING UNIT_TEST)
   target_link_libraries("${TEST_NAME}" PRIVATE awtrix_core unity)
+  if(EXISTS "${TEST_DIR}/compat")
+    target_include_directories("${TEST_NAME}" PRIVATE "${TEST_DIR}/compat")
+  endif()
 
   if(WIN32)
     target_link_libraries("${TEST_NAME}" PRIVATE ws2_32)

@@ -2,6 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#if defined(AWTRIX_PLATFORM_RP2040)
+#include <WiFiUdp.h>
+#endif
 
 namespace awtrix {
 
@@ -18,6 +21,9 @@ class UdpSocket {
   bool replyTo(uint16_t port, const void* data, std::size_t len);
 
  private:
+#if defined(AWTRIX_PLATFORM_RP2040)
+  WiFiUDP udp_;
+#endif
   int fd_ = -1;
   uint32_t peerAddr_ = 0;
   bool havePeer_ = false;

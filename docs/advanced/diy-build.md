@@ -169,7 +169,7 @@ Required blocks are the panel and its supply; everything to the left and below i
 <rect class="awx-box" x="660" y="200" width="220" height="100" rx="6"/>
 <text class="awx-t" x="770" y="238" text-anchor="middle">WS2812B panel</text>
 <text class="awx-s" x="770" y="258" text-anchor="middle">32 x 8 = 256 LEDs</text>
-<text class="awx-s" x="770" y="278" text-anchor="middle">height is always 8 px</text>
+<text class="awx-s" x="770" y="278" text-anchor="middle">height is 8–16 px</text>
 <path class="awx-sg" d="M560 330 H596"/>
 <rect class="awx-box" x="596" y="322" width="36" height="16" rx="2"/>
 <path class="awx-sg" d="M632 330 H648 V270 H660"/>
@@ -483,11 +483,12 @@ AWTRIX holds high from startup so the amplifier plays.
 
 ## 6. Describe the panel
 
-The pixel height is fixed at 8. Everything else about your matrix is configuration:
+The pixel height defaults to 8 and can be configured from 8 to 16. Describe your matrix with:
 
 | Key | Range | Default | Meaning |
 |---|---|---|---|
 | `panelWidth` | 1-128 | `32` | Width of one panel. |
+| `panelHeight` | 8-16 | `8` | Height of every panel; applies after reboot. |
 | `panels` | 1-128 | `1` | How many identical panels the cable runs through, left to right. `panelWidth x panels` must land in 32-128. |
 | `panelStart` | `topLeft` `topRight` `bottomLeft` `bottomRight` | `topLeft` | Corner the first LED sits in. |
 | `panelWiring` | `rows` `columns` | `rows` | Whether the strip runs along rows or down columns. |

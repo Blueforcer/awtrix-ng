@@ -40,14 +40,14 @@ AWTRIX draws **19 background effects**:
 | `TheaterChase` | Every third column lit, marching sideways (unlit pixels black) | yes |
 | `Fade` | Whole canvas pulsing one colour; stock look is a dark-blue breath | yes |
 | `MovingLine` | One full-height vertical line sweeping left → right | yes |
-| `BrickBreaker` | Three rows of bricks, white ball, grey paddle on the bottom row | **no** |
-| `PingPong` | A single pixel bouncing horizontally and vertically | **no** |
+| `BrickBreaker` | A brick-breaker game: 3-pixel bricks with 1-pixel gaps in 2 rows (3 rows from 11 panel rows up), one hue per row; the white ball knocks out one brick per hit and bounces at 45 degrees or shallow off a 3-pixel grey paddle that never misses. The wall refills when cleared | **no** |
+| `PingPong` | A rally: grey paddles on the left and right edges (3 pixels tall, 4 from 11 rows up) follow a green ball, which bounces off the top and bottom and returns at 45 degrees or shallow depending on where it meets the paddle | **no** |
 | `Radar` | Sweeping radius line from the centre; stock look is green | yes |
 | `Checkerboard` | 2×2-cell checkerboard, inverting every animation step | yes |
 | `Fireworks` | An expanding ring burst at a random position and colour every 20 steps | yes |
 | `PlasmaCloud` | Softer, slower plasma with a narrower hue band | yes |
 | `Ripple` | A single ring expanding from the centre, repeating | yes |
-| `Snake` | A 6-pixel snake advancing one pixel per frame, wrapping row by row | yes |
+| `Snake` | A snake game: the snake steers to a red food pixel, grows by one each time it eats and restarts at length 4 when stuck or 24 long. The palette colours the body head to tail (stock look: bright to dim green); the food stays red | yes |
 | `Pacifica` | Ocean waves; stock look is blue-teal | yes |
 | `Matrix` | Per-column falling green trails, bright-headed, with random phases and trail lengths | **no** |
 | `SwirlIn` | A 48-point spiral converging inward | yes |

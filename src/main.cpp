@@ -7,9 +7,9 @@
 #include <ctime>
 
 #include "AppConfig.h"
+#include "platform/BuildFeatures.h"
 #include "core/CoreEngine.h"
 #include "core/FrameClock.h"
-#include "core/StrCase.h"
 #include "core/api/CapabilitiesJson.h"
 #include "core/script/ScriptHeap.h"
 #include "core/apps/AppRegistry.h"
@@ -33,9 +33,7 @@
 #include "core/render/Canvas.h"
 #include "core/render/MatrixLayout.h"
 #include "core/render/ColorRamp.h"
-#include "core/render/Palette.h"
 #include "core/render/PowerAnimator.h"
-#include "core/render/PaletteFile.h"
 #include "core/render/PaletteStore.h"
 #include "core/render/ProvisioningScreen.h"
 #include "core/render/TextRenderer.h"
@@ -57,6 +55,7 @@
 #include "persistence/Filesystem.h"
 #include "persistence/LittleFsAssetProbe.h"
 #include "persistence/NvsSettings.h"
+#include "persistence/PaletteFiles.h"
 #include "persistence/ScriptStore.h"
 #include "system/BootAnimator.h"
 #include "system/DeviceServices.h"
@@ -66,6 +65,8 @@
 #include "system/Log.h"
 #include "system/MonotonicClock.h"
 #include "system/PeripheryService.h"
+#include "system/PeripheryHttp.h"
+#include "core/BuiltinCatalog.h"
 #include "system/ScriptHttpWorker.h"
 #include "transport/ScriptMqttBridge.h"
 #include "transport/http/HttpApiServer.h"
@@ -85,38 +86,9 @@ DeviceDisplay* g_display = nullptr;
 DeviceSystem* g_system = nullptr;
 CoreEngine* g_engine = nullptr;
 AppRegistry g_apps;
-TimeApp g_timeApp;
-DateApp g_dateApp;
-TempApp g_tempApp;
-HumidityApp g_humApp;
-BatteryApp g_batApp;
+BuiltinCatalog g_builtins;
 EffectRegistry g_effects;
-PlasmaEffect g_fxPlasma;
-TheaterChaseEffect g_fxTheaterChase;
-FadeEffect g_fxFade;
-MovingLineEffect g_fxMovingLine;
-BrickBreakerEffect g_fxBrick;
-PingPongEffect g_fxPingPong;
-RadarEffect g_fxRadar;
-CheckerboardEffect g_fxCheck;
-FireworksEffect g_fxFire;
-PlasmaCloudEffect g_fxPlasmaCloud;
-RippleEffect g_fxRipple;
-SnakeEffect g_fxSnake;
-PacificaEffect g_fxPacifica;
-MatrixEffect g_fxMatrix;
-SwirlInEffect g_fxSwirlIn;
-SwirlOutEffect g_fxSwirlOut;
-LookingEyesEffect g_fxEyes;
-TwinklingStarsEffect g_fxStars;
-ColorWavesEffect g_fxWaves;
 EffectRegistry g_overlays;
-RainOverlay g_ovRain;
-SnowOverlay g_ovSnow;
-DrizzleOverlay g_ovDrizzle;
-StormOverlay g_ovStorm;
-ThunderOverlay g_ovThunder;
-FrostOverlay g_ovFrost;
 NetworkService g_net;
 HttpApiServer g_http;
 std::unique_ptr<net::IHostResolver> g_hostResolver;
@@ -208,31 +180,7 @@ void setup() {
   // Filesystem first — config, palettes, icons and scripts all come off it.
   awtrix::fs::begin();
 
-  // LittleFS is case-sensitive, but a palette named in a script or over the API rarely matches
-  // the file's capitalisation, so fall back to a case-insensitive scan of the directory.
-  render::setPaletteLoader([](const std::string& name, render::Palette& out) {
-    if (name.find("..") != std::string::npos || name.find('/') != std::string::npos) return false;
-    File f = LittleFS.open((String("/PALETTES/") + name.c_str() + ".txt").c_str(), "r");
-    if (!f) {
-      File dir = LittleFS.open("/PALETTES");
-      for (File e = dir.openNextFile(); e; e = dir.openNextFile()) {
-        std::string leaf = e.name() ? e.name() : "";
-        const std::size_t slash = leaf.rfind('/');
-        if (slash != std::string::npos) leaf.erase(0, slash + 1);
-        if (leaf.size() <= 4 || !strcase::equalsIgnoreCase(leaf.substr(leaf.size() - 4), ".txt"))
-          continue;
-        if (!strcase::equalsIgnoreCase(leaf.substr(0, leaf.size() - 4), name)) continue;
-        f = LittleFS.open((String("/PALETTES/") + leaf.c_str()).c_str(), "r");
-        break;
-      }
-    }
-    if (!f) return false;
-    std::string text;
-    text.reserve(static_cast<std::size_t>(f.size()));
-    while (f.available()) text.push_back(static_cast<char>(f.read()));
-    f.close();
-    return render::parsePaletteFile(text, out);
-  });
+  palettefiles::install();
 
   // Config decides which board profile and which pins are active, so it has to be read before
   // any hardware is touched below.
@@ -290,36 +238,7 @@ void setup() {
 
   // Built-ins are registered up front; the script host later adds its apps and effects to these
   // same registries, which is why they outlive setup().
-  g_apps.add(&g_timeApp);
-  g_apps.add(&g_dateApp);
-  g_apps.add(&g_tempApp);
-  g_apps.add(&g_humApp);
-  g_apps.add(&g_batApp);
-  g_effects.add(&g_fxPlasma);
-  g_effects.add(&g_fxTheaterChase);
-  g_effects.add(&g_fxFade);
-  g_effects.add(&g_fxMovingLine);
-  g_effects.add(&g_fxBrick);
-  g_effects.add(&g_fxPingPong);
-  g_effects.add(&g_fxRadar);
-  g_effects.add(&g_fxCheck);
-  g_effects.add(&g_fxFire);
-  g_effects.add(&g_fxPlasmaCloud);
-  g_effects.add(&g_fxRipple);
-  g_effects.add(&g_fxSnake);
-  g_effects.add(&g_fxPacifica);
-  g_effects.add(&g_fxMatrix);
-  g_effects.add(&g_fxSwirlIn);
-  g_effects.add(&g_fxSwirlOut);
-  g_effects.add(&g_fxEyes);
-  g_effects.add(&g_fxStars);
-  g_effects.add(&g_fxWaves);
-  g_overlays.add(&g_ovRain);
-  g_overlays.add(&g_ovSnow);
-  g_overlays.add(&g_ovDrizzle);
-  g_overlays.add(&g_ovStorm);
-  g_overlays.add(&g_ovThunder);
-  g_overlays.add(&g_ovFrost);
+  g_builtins.addTo(g_apps, g_effects, g_overlays);
 
   g_engine->setOverlayRegistry(&g_overlays);
   g_engine->setEffectRegistry(&g_effects);
@@ -381,10 +300,11 @@ void setup() {
       g_net.apMode() ? 80 : (cfg.webPort > 0 ? static_cast<uint16_t>(cfg.webPort) : 80);
   g_http.begin(webPort, *g_engine, *g_board, *g_canvas, uid, cfg, g_net.apMode());
   // Re-applies everything that can change without a restart. A different panel count would need
-  // a differently sized canvas and LED buffer, so only same-width layouts are taken live.
+  // a differently sized canvas and LED buffer, so only same-size layouts are taken live.
   g_http.setOnConfigChanged([] {
     const MatrixLayout layout = g_cfg.matrixLayout();
-    if (layout.width() == g_board->matrixWidth()) g_board->setMatrixLayout(layout);
+    if (layout.width() == g_board->matrixWidth() && layout.height() == g_board->matrixHeight())
+      g_board->setMatrixLayout(layout);
     g_engine->state().runtime().tempDecimals = g_cfg.tempDecimals;
     logbuf::setVerbose(g_cfg.debugMode);
     g_mqtt.applyHaConfig(g_cfg);
@@ -406,11 +326,13 @@ void setup() {
     // Pushed once the sinks are all attached, so the PCM gains are not left at their defaults.
     g_engine->state().emit(StateEvent::SettingsChanged);
     auto caps = std::make_shared<const std::string>(api::capabilitiesJson(
-        g_effects.names(), g_effects.paletteNames(), g_overlays.names(), g_audio.caps()));
+        g_effects.names(), g_effects.paletteNames(), g_overlays.names(), g_audio.caps(),
+        platform::buildFeatures()));
     g_http.setCapabilitiesJson(caps);
     g_mqtt.setCapabilitiesJson(std::move(caps));
   }
   g_periphery.begin(*g_engine, *g_board, cfg);
+  g_periphery.setButtonPost(postButton);
   g_periphery.setUid(uid);
   g_hostResolver = net::makeHostResolver();
   g_mqtt.begin(*g_engine, *g_board, cfg, uid, uid,

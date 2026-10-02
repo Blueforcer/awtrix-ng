@@ -76,6 +76,7 @@ struct FakeIcon : IPageIcon {
       for (int x = 0; x < w; ++x) dst.setPixel(x + xOffset, y + yOffset, color);
   }
   int width() const override { return w; }
+  int height() const override { return 8; }
   std::unique_ptr<IPageIcon> create() const override {
     if (!factoryOk || clears < factoryMinClears) return nullptr;
     auto child = std::make_unique<FakeIcon>();
@@ -1288,8 +1289,50 @@ static void test_a_pushed_icon_carries_the_whole_gap_off_the_panel() {
   TEST_ASSERT_EQUAL_INT(-11, furthest);
 }
 
+// Compare every pixel with the same page on an eight-row panel. Guard words
+// around the external canvas catch writes beyond the physical framebuffer.
+static void checkTallPage(bool notification, const char* font) {
+  Rig shortRig(53, 8), tallRig(53, 11);
+  std::vector<uint32_t> guarded(53 * 11 + 2, 0xDEADBEEFu);
+  Canvas tall(53, 11, guarded.data() + 1);
+  const std::string payload = std::string("{\"text\":\"") +
+      (notification ? "AAAAAAAAAAAAAAAAAAAAAAAAAAAA" : "A") +
+      "\",\"icon\":\"1\",\"font\":\"" + font + "\"}";
+  for (Rig* r : {&shortRig, &tallRig}) {
+    r->engine.execute(cmd(notification ? CommandType::Notify : CommandType::SetPushedApp,
+                          notification ? "" : "band", payload));
+    if (!notification) r->engine.execute(switchFast("band"));
+    r->engine.tick(0);
+  }
+  float initial = 0;
+  for (int t : {0, 500, 2000}) {
+    shortRig.pipe->renderFrame(shortRig.canvas, t);
+    tallRig.pipe->renderFrame(tall, t);
+    if (t == 0) initial = tallRig.pipe->textX();
+    for (int y = 0; y < 11; ++y)
+      for (int x = 0; x < 53; ++x)
+        TEST_ASSERT_EQUAL_HEX32(y >= 1 && y < 9 ? shortRig.canvas.getPixel(x, y - 1) : 0,
+                                tall.getPixel(x, y));
+    TEST_ASSERT_EQUAL_HEX32(0xDEADBEEFu, guarded.front());
+    TEST_ASSERT_EQUAL_HEX32(0xDEADBEEFu, guarded.back());
+    TEST_ASSERT_EQUAL_HEX32(0xABCDEFu, tall.getPixel(0, 1));
+  }
+  if (notification) TEST_ASSERT_TRUE(tallRig.pipe->textX() < initial);
+}
+
+static void test_tall_text_and_icon_band() {
+  checkTallPage(false, "small");
+  checkTallPage(false, "large");
+}
+static void test_tall_scrolling_notification_band() {
+  checkTallPage(true, "small");
+  checkTallPage(true, "large");
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_tall_text_and_icon_band);
+  RUN_TEST(test_tall_scrolling_notification_band);
   RUN_TEST(test_icon_gap_sets_where_static_text_starts);
   RUN_TEST(test_scrolling_text_never_enters_a_wider_icon_gap);
   RUN_TEST(test_a_wide_icon_reserves_its_own_width_plus_the_gap);

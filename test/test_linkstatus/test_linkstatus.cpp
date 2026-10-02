@@ -212,6 +212,63 @@ static void test_wifi_renders_the_same_shape_as_mqtt() {
       render(joined()).c_str());
 }
 
+// The Pico's first join after an unclean reset: the AP breaks off the key exchange, CYW43 says
+// BADAUTH, the retry joins. Right password, so no badCredentials - not now, not after the join.
+static void test_one_auth_failure_that_a_retry_recovers_is_not_bad_credentials() {
+  LinkStatus s;
+  AuthFailureGate gate;
+  gate.noteJoin(WifiAssoc::Idle);
+  applyWifiAssoc(s, gate.filter(WifiAssoc::AuthFailed), true, "home", "");
+  TEST_ASSERT_EQUAL(LinkPhase::Offline, s.phase);
+  TEST_ASSERT_EQUAL(LinkError::None, s.error);
+  gate.noteJoin(WifiAssoc::AuthFailed);
+  applyWifiAssoc(s, gate.filter(WifiAssoc::Joining), true, "home", "");
+  applyWifiAssoc(s, gate.filter(WifiAssoc::Connected), true, "home", "192.168.1.7");
+  TEST_ASSERT_EQUAL(LinkPhase::Connected, s.phase);
+  TEST_ASSERT_EQUAL(LinkError::None, s.lastError);
+}
+
+static void test_auth_failures_on_two_joins_in_a_row_are_bad_credentials() {
+  LinkStatus s;
+  AuthFailureGate gate;
+  gate.noteJoin(WifiAssoc::Idle);
+  applyWifiAssoc(s, gate.filter(WifiAssoc::AuthFailed), true, "home", "");
+  gate.noteJoin(WifiAssoc::AuthFailed);
+  applyWifiAssoc(s, gate.filter(WifiAssoc::AuthFailed), true, "home", "");
+  TEST_ASSERT_EQUAL(LinkError::BadCredentials, s.error);
+  TEST_ASSERT_EQUAL(LinkError::BadCredentials, s.lastError);
+  // And it stays that way while the radio keeps refusing.
+  gate.noteJoin(WifiAssoc::AuthFailed);
+  applyWifiAssoc(s, gate.filter(WifiAssoc::AuthFailed), true, "home", "");
+  TEST_ASSERT_EQUAL(LinkError::BadCredentials, s.error);
+}
+
+// A link that dropped keeps "lost" as its last error when the rejoin needed a second try.
+static void test_a_rejoin_that_needed_a_retry_keeps_lost_as_the_last_error() {
+  LinkStatus s = joined();
+  AuthFailureGate gate;
+  applyWifiAssoc(s, gate.filter(WifiAssoc::Disconnected), true, "home", "");
+  gate.noteJoin(WifiAssoc::Disconnected);
+  applyWifiAssoc(s, gate.filter(WifiAssoc::AuthFailed), true, "home", "");
+  gate.noteJoin(WifiAssoc::AuthFailed);
+  applyWifiAssoc(s, gate.filter(WifiAssoc::Connected), true, "home", "192.168.1.7");
+  TEST_ASSERT_EQUAL(LinkError::Lost, s.lastError);
+}
+
+// Only failures on consecutive joins count: a join that got as far as connecting resets the run.
+static void test_a_connection_between_two_auth_failures_resets_the_count() {
+  LinkStatus s;
+  AuthFailureGate gate;
+  gate.noteJoin(WifiAssoc::Idle);
+  applyWifiAssoc(s, gate.filter(WifiAssoc::AuthFailed), true, "home", "");
+  gate.noteJoin(WifiAssoc::AuthFailed);
+  applyWifiAssoc(s, gate.filter(WifiAssoc::Connected), true, "home", "192.168.1.7");
+  applyWifiAssoc(s, gate.filter(WifiAssoc::Disconnected), true, "home", "");
+  gate.noteJoin(WifiAssoc::Disconnected);
+  applyWifiAssoc(s, gate.filter(WifiAssoc::AuthFailed), true, "home", "");
+  TEST_ASSERT_EQUAL(LinkError::Lost, s.lastError);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_every_phase_has_a_stable_name);
@@ -235,5 +292,9 @@ int main(int, char**) {
   RUN_TEST(test_the_reason_for_an_outage_survives_the_reconnect);
   RUN_TEST(test_a_link_that_never_failed_has_no_last_error);
   RUN_TEST(test_wifi_renders_the_same_shape_as_mqtt);
+  RUN_TEST(test_one_auth_failure_that_a_retry_recovers_is_not_bad_credentials);
+  RUN_TEST(test_auth_failures_on_two_joins_in_a_row_are_bad_credentials);
+  RUN_TEST(test_a_rejoin_that_needed_a_retry_keeps_lost_as_the_last_error);
+  RUN_TEST(test_a_connection_between_two_auth_failures_resets_the_count);
   return UNITY_END();
 }

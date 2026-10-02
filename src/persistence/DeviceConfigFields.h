@@ -40,6 +40,7 @@
   X(ldrOnGround, "ldrgnd", 0)         \
   X(brightnessSmoothing, "brismooth", 0) \
   X(panelWidth, "pw", 0)              \
+  X(panelHeight, "pheight", 0)        \
   X(panels, "pnc", 0)                 \
   X(panelStart, "pstart", 0)          \
   X(panelWiring, "pwire", 0)          \

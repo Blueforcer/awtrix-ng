@@ -147,7 +147,8 @@ Neither is the panel's own `gamma` setting, which is colour correction for the L
 pin - it is not a build option. It has to be a pin that can still measure a voltage while Wi-Fi
 is on (GPIO 32–39 on ESP32, GPIO 1–10 on ESP32-S3); anything else is rejected. A change applies
 after a reboot. See [GPIO & boards › The pin map](../reference/gpio.md#the-pin-map) and
-[the ADC1 rule](../reference/gpio.md#5-adc1-requirement).
+[the ADC1 rule](../reference/gpio.md#5-adc1-requirement). The Galactic Unicorn's light sensor is
+fixed on GPIO 28; see [Fixed-wiring Galactic Unicorn](../reference/gpio.md#fixed-wiring-galactic-unicorn).
 
 ## Temperature, humidity & pressure
 

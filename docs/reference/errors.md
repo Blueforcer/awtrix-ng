@@ -95,6 +95,7 @@ apps and notifications fit - are collected in [Limits](limits.md).
 | 405 | no | AWTRIX never acts on it. |
 | 415 | no | Wrong `Content-Type` on a `PUT`/`PATCH`, rejected before the body is parsed; or an upload whose content does not match the folder, rejected on its first chunk. |
 | 422 | **no** | Validation is validate-then-apply: the first offending key aborts the whole request. A `PATCH` is all-or-nothing. |
+| 431 | no | Galactic Unicorn only: the request line and headers are longer than 2 KB. No body is sent, and the connection is closed. |
 | 500 | maybe | The command ran and reported failure. |
 | 503 | no | `GET /api/v1/apps/script/{name}` on a build without the scripting platform. |
 | 507 | no | A store or queue was full; the write was rejected and nothing was stored. |
@@ -389,6 +390,7 @@ changes nothing and `field` names the offending key:
 | `lowBatteryThreshold` | 0–100 |
 | `minBrightness`, `maxBrightness` | 0–255 |
 | `panelWidth` | 1–128 |
+| `panelHeight` | 8–16 |
 | `panels` | 1–128 |
 | `tempOffset` | −20–20 |
 | `humOffset` | −50–50 |
@@ -458,6 +460,7 @@ The status is **400**, and there is **no `field`** - the offending pin's name is
 | `pinBattery: must be an ADC1 pin (GPIO 32-39, usable while WiFi is on)` | ADC2 is unusable while WiFi is on. |
 | `pinLdr: must be an ADC1 pin (GPIO 32-39, usable while WiFi is on)` | Same. |
 | `duplicate pin <n> (<pinA>, <pinB>)` | Two enabled functions claim the same GPIO. When one of them is `pinMatrix` the message goes on to name the fix - see [No duplicates](gpio.md#6-no-duplicates). |
+| `Galactic Unicorn (Pico W / Pico 2 W): pin assignments are fixed` | Any pin change, or enabling the DFPlayer, on the Galactic Unicorn, whose wiring is part of the board. |
 
 Each message is built from the running chip's rules, so the numbers above are the ESP32's and an
 ESP32-S3 answers with its own. The per-chip values are in

@@ -123,5 +123,8 @@ nav:
       - Troubleshooting: troubleshooting/troubleshooting.md
       - FAQ: troubleshooting/faq.md
   - Advanced:
+      - Galactic Unicorn: advanced/galactic-unicorn.md
+      - Galactic Unicorn driver: advanced/galactic-unicorn-display.md
+      - Pico persistence: advanced/pico-persistence.md
       - Simulator: advanced/simulator.md
       - Building from source: advanced/building.md

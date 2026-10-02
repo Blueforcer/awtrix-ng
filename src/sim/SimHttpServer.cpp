@@ -16,6 +16,7 @@
 #include "core/CoreEngine.h"
 #include "core/SocProfile.h"
 #include "core/api/ApiRouter.h"
+#include "platform/BuildFeatures.h"
 #include "core/api/JsonCoerce.h"
 #include "core/api/JsonStream.h"
 #include "core/api/JsonWriter.h"
@@ -487,6 +488,15 @@ void SimHttpServer::Impl::handleSim(const httplib::Request& req, const std::stri
 }
 
 void SimHttpServer::Impl::route(const httplib::Request& req, httplib::Response& res) {
+  // The device's cap on a request body (HttpApiServer kMaxBodyBytes); uploads and script source
+  // are streamed there, so they are exempt here too.
+  constexpr std::size_t kMaxBodyBytes = 8192;
+  if (req.body.size() > kMaxBodyBytes && !req.is_multipart_form_data() &&
+      !api::isRawBodyWrite(req.method, req.path)) {
+    const std::string msg = "body exceeds " + std::to_string(kMaxBodyBytes) + " bytes";
+    sendError(res, 413, "payloadTooLarge", msg.c_str());
+    return;
+  }
   const std::string& path = req.path;
   const api::MethodResolution resolved = api::resolveHttpMethod(
       req.method, path,
@@ -586,7 +596,8 @@ bool SimHttpServer::Impl::serveCommand(const httplib::Request& req, const std::s
                                        httplib::Response& res) {
   Command cmd;
   api::HttpResult immediate;
-  switch (api::routeHttp(method, req.path, std::string(req.body), cmd, immediate)) {
+  switch (api::routeHttp(method, req.path, std::string(req.body), cmd, immediate,
+                         platform::buildFeatures())) {
     case api::RouteOutcome::Respond:
       sendJson(res, immediate.status, immediate.body);
       return true;

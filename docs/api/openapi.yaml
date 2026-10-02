@@ -98,6 +98,9 @@ paths:
     post:
       tags: [device]
       summary: Deep-sleep for a duration
+      description: >-
+        On the Galactic Unicorn the sleep is emulated: the CPU stays powered, and the timer or the
+        Sleep key (GPIO27) ends it.
       requestBody:
         required: true
         content:
@@ -131,6 +134,11 @@ paths:
         any failure aborts the flash and frees the slot. On success the device
         answers `200 {"ok":true}` and then reboots into the new image. Rejected
         with `403 forbidden` while the device is in AP/provisioning mode.
+
+        A build without browser update answers `503 unavailable` instead, like
+        every feature it leaves out: the Pico (Galactic Unicorn) builds take a
+        UF2 over USB in BOOTSEL mode. The desktop simulator has no firmware to
+        replace and answers `501 notSupported`.
       requestBody:
         required: true
         content:
@@ -147,6 +155,20 @@ paths:
           description: >
             Flash failed - image too large for the OTA slot, short write, or a
             bad image.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "501":
+          description: >
+            `notSupported` - the desktop simulator, which has no firmware to
+            update.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: >
+            `unavailable` - a build without browser update (the Pico builds):
+            flash a UF2 over USB (BOOTSEL) instead.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -1341,6 +1363,12 @@ paths:
                       interpolates between palette entries.
                   transitions: { type: array, items: { type: string } }
                   overlays: { type: array, items: { type: string } }
+                  scripting:
+                    type: boolean
+                    description: Berry scripting is compiled in; false only on builds made with AWTRIX_FEATURE_SCRIPTING=0.
+                  scriptUpdates:
+                    type: boolean
+                    description: Script source updates are supported; follows scripting.
                   audio:
                     type: object
                     description: What this panel can play. All four false means it makes no sound.
@@ -1365,8 +1393,13 @@ paths:
                       32-39; an ESP32-S3 has 0-48, no input-only pins at all and
                       ADC1 on 1-10. Ranges are inclusive `[lo, hi]` pairs.
                     properties:
-                      soc: { type: string, enum: [esp32, esp32s3] }
+                      soc: { type: string, enum: [esp32, esp32s3, rp2040] }
                       label: { type: string, description: "Display name of the chip, e.g. ESP32-S3" }
+                      fixed:
+                        type: boolean
+                        description: >
+                          True when the pins are part of the board (the Galactic
+                          Unicorn): a pin map other than `defaults` is refused.
                       max: { type: integer, description: highest GPIO number that exists }
                       missing:
                         type: array
@@ -1425,6 +1458,15 @@ paths:
                           The pin map a factory-fresh device of this chip starts
                           with, and the one it falls back to when the stored map
                           fails validation.
+                      panel:
+                        type: object
+                        description: >
+                          Only on a board with a built-in panel (the Galactic
+                          Unicorn: width 53, heights 8 and 11). `panelWidth` must
+                          be `width`, `panels` 1 and `panelHeight` one of `heights`.
+                        properties:
+                          width: { type: integer }
+                          heights: { type: array, items: { type: integer } }
 
   /api/v1/system:
     get:
@@ -1474,6 +1516,7 @@ paths:
         | `lowBatteryThreshold` | 0..100 |
         | `minBrightness`, `maxBrightness` | 0..255 |
         | `panelWidth` | 1..128 |
+        | `panelHeight` | 8..16 |
         | `panels` | 1..128 |
         | `tempOffset` | -20..20 |
         | `humOffset` | -50..50 |
@@ -2325,6 +2368,15 @@ components:
             Width of one panel in pixels. panelWidth x panels must come to
             between 32 and 128, or the write is rejected with 422 on
             panelWidth. A change of the total width applies after a reboot.
+        panelHeight:
+          type: integer
+          default: 8
+          minimum: 8
+          maximum: 16
+          description: >
+            Height of every panel in pixels. Applies after a reboot. The Galactic
+            Unicorn takes only 11 or 8, and refuses any change to its width,
+            panel count or wiring keys with 422.
         panels:
           type: integer
           default: 1
@@ -2513,15 +2565,17 @@ components:
           description: >
             The chip this firmware image was built for. Decides which GPIOs
             exist and which of them can do what - the full rules are under
-            `gpio` in `/api/v1/capabilities`.
-          enum: [esp32, esp32s3]
+            `gpio` in `/api/v1/capabilities`. Both Galactic Unicorn builds report
+            rp2040.
+          enum: [esp32, esp32s3, rp2040]
         updateImage:
           type: string
-          enum: [firmware-awtrix-ng.bin, firmware-awtrix-ng-s3-octal.bin, firmware-awtrix-ng-s3-quad.bin, ""]
+          enum: [firmware-awtrix-ng.bin, firmware-awtrix-ng-s3-octal.bin, firmware-awtrix-ng-s3-quad.bin, firmware-galactic-unicorn.uf2, firmware-galactic-unicorn-2w.uf2, ""]
           description: >
             The release file this device updates from - the one `POST /update`
-            accepts. The web UI uses it to offer the right download. Empty in
-            the simulator.
+            accepts. The web UI uses it to offer the right download. A Pico
+            reports its `.uf2`, which is flashed over USB in BOOTSEL mode, not
+            through `POST /update`. Empty in the simulator.
         ipAddress: { type: string }
         hostname:
           type: string
@@ -2549,7 +2603,9 @@ components:
             always ≤ freeHeapBytes. The script install and TLS-fetch guards refuse
             on this number, not on total free: a compile or an mbedtls handshake
             needs its buffers in one piece. The gap to freeHeapBytes is
-            fragmentation.
+            fragmentation. On the Pico it is the free block at the top of the
+            heap (its allocator cannot list the holes further down), so the true
+            largest block can only be larger.
         psramTotalBytes:
           type: integer
           description: |
@@ -2567,17 +2623,18 @@ components:
             off: installed scripts stay listed and editable, none of them runs.
         scriptHeapPool:
           type: string
-          enum: [internal, psram]
+          enum: [internal, psram, unavailable]
           description: >
             Which pool the Berry VM allocates from. A board with usable PSRAM
             puts the script heap there, which is why such a device installs far
-            more scripts than the internal figure alone would suggest.
+            more scripts than the internal figure alone would suggest. A build
+            without scripting reports `unavailable`, with a budget of 0.
         scriptHeapBudgetBytes:
           type: integer
           description: >
             How large the shared Berry heap may grow before further installs are
-            refused. 98304 on internal RAM; roughly half of free PSRAM where the
-            script heap lives there.
+            refused. 98304 on internal RAM (49152 on the Pico W); roughly half of
+            free PSRAM where the script heap lives there.
         fps: { type: integer, description: measured render-loop rate }
         brightness: { type: integer, description: effective brightness after auto-brightness }
         lightLevel:

@@ -37,7 +37,7 @@ curl -i -X POST http://<awtrix-ip>/api/v1/device
 
 ## Response shape
 
-Keys are emitted in a fixed order. 21 fields are always present; up to 11 more appear only when the
+Keys are emitted in a fixed order. The fields below are always present; up to 11 more appear only when the
 hardware supports them.
 
 ```json
@@ -109,15 +109,15 @@ hardware supports them.
 
 ## Always-present fields
 
-These 23 keys are in every response, on every board, in every state.
+These keys are in every response, on every board, in every state.
 
 | Key | Type | Range / format | Units | Meaning |
 | --- | --- | --- | --- | --- |
 | `version` | string | - | - | Running firmware version. Same value as `GET /api/v1/version`. |
 | `uid` | string | 12 lowercase hex chars | - | Device identity: the WiFi MAC address, lowercased, colons stripped. Stable across reboots and reflashes. Also the default MQTT topic prefix and MQTT client id. |
 | `boardType` | string | constant `"awtrixng"` | - | A fixed constant in the device firmware - it does **not** vary with your GPIO configuration. The simulator reports `"simulator"` instead. |
-| `soc` | string | `esp32`, `esp32s3` | - | The chip this image was built for. Branch on this only to tell the two firmware images apart; for pin rules read `gpio` in `GET /api/v1/capabilities`. |
-| `updateImage` | string | `firmware-awtrix-ng.bin`, `firmware-awtrix-ng-s3-octal.bin`, `firmware-awtrix-ng-s3-quad.bin` | - | The release file this device updates from - the one `POST /update` accepts. The web UI uses it to offer the right download. Empty in the simulator. |
+| `soc` | string | `esp32`, `esp32s3`, `rp2040` | - | The image's GPIO profile. Both Pico W and Pico 2 W currently report `rp2040`; distinguish their images with `updateImage`, and read pin rules from `gpio` in `GET /api/v1/capabilities`. |
+| `updateImage` | string | ESP32 `.bin` or Pico `.uf2` filename | - | `firmware-awtrix-ng.bin`, `firmware-awtrix-ng-s3-octal.bin`, `firmware-awtrix-ng-s3-quad.bin`, `firmware-galactic-unicorn.uf2` or `firmware-galactic-unicorn-2w.uf2`. Pico images require USB BOOTSEL; `POST /update` does not accept them. Empty in the simulator. |
 | `ipAddress` | string | dotted quad | - | The station-mode IP address. In AP (provisioning) mode this is not the address you reached AWTRIX on. |
 | `hostname` | string | 1 … 32 chars | - | The name AWTRIX answers to on the network and publishes over mDNS. Read the configured value from `GET /api/v1/system`; that one is empty when the name is derived from the MAC (`awtrixng-` plus the last six hex digits of `uid`), which is why the two fields disagree on a device that was never named by hand. |
 | `wifiRssi` | integer | typically −30 (excellent) to −90 (unusable) | dBm | Current signal strength of the station connection. |
@@ -125,9 +125,9 @@ These 23 keys are in every response, on every board, in every state.
 | `resetReason` | string | `poweron`, `external`, `software`, `panic`, `interruptWatchdog`, `taskWatchdog`, `watchdog`, `deepSleep`, `brownout`, `sdio`, `unknown` | - | Why AWTRIX last came up. Constant for the whole session. |
 | `freeHeapBytes` | integer | 0 … | bytes | Free internal heap right now. Useful as a leak canary; it fluctuates constantly with rendering and networking. |
 | `minFreeHeapBytes` | integer | 0 … | bytes | The **low-water mark**: the least free heap seen since boot. Unlike `freeHeapBytes` it only ever falls, so it survives the spike you were not polling during. A value creeping towards zero is a leak; a stable one is not. Resets on reboot. |
-| `largestFreeBlockBytes` | integer | 0 … | bytes | The largest single **contiguous** block free right now, in the same internal pool as `freeHeapBytes`. Always ≤ `freeHeapBytes`, and the gap between them is fragmentation. Installing a script or opening an HTTPS stream needs its memory in one piece, so plenty of total free spread over small blocks is still refused. Watch this, not `freeHeapBytes`, to understand a "not enough memory" refusal. |
+| `largestFreeBlockBytes` | integer | 0 … | bytes | The largest single **contiguous** block free right now, in the same internal pool as `freeHeapBytes`. Always ≤ `freeHeapBytes`, and the gap between them is fragmentation. Installing a script or opening an HTTPS stream needs its memory in one piece, so plenty of total free spread over small blocks is still refused. Watch this, not `freeHeapBytes`, to understand a "not enough memory" refusal. On the Pico it is the free block at the top of the heap: its allocator cannot list the holes further down, so the true largest block can only be larger. |
 | `scriptingRunning` | boolean | - | - | Whether scripts are running at all. `false` when [`scriptingEnabled`](system.md#miscellaneous) is off - installed scripts stay listed and editable, but none of them executes. |
-| `scriptHeapPool` | string | `internal`, `psram` | - | Which pool the Berry VM allocates from. Where PSRAM is usable the script heap lives there, so installing a script barely moves `freeHeapBytes`. |
+| `scriptHeapPool` | string | `internal`, `psram`, `unavailable` | - | Which pool the Berry VM allocates from; `unavailable`, with a budget of 0, in a build without scripting. Where PSRAM is usable the script heap lives there, so installing a script barely moves `freeHeapBytes`. |
 | `scriptHeapBudgetBytes` | integer | 0 … | bytes | How large the shared Berry heap may grow before further installs are refused. `98304` on internal RAM; on PSRAM about half the free pool, so roughly 4 MB on an 8 MB module. Read it back rather than assuming. |
 | `fps` | integer | 0 … | frames/second | **Measured** render rate, not a target: the frames actually shown, recounted once per second. Expect it to move around. |
 | `brightness` | integer | 0 … 255 | - | The **effective** panel brightness currently driving the LEDs, not an echo of `settings.brightness`. With `autoBrightness` off it is `settings.brightness` clamped to 0…255 and the two agree. With `autoBrightness` on it is derived from `lightLevel` along the gamma curve and mapped into the `minBrightness`…`maxBrightness` window, and `settings.brightness` is ignored. Mirrored as `brightness` in `GET /api/v1/display`; read `GET /api/v1/settings` for the configured value. |
@@ -137,6 +137,18 @@ These 23 keys are in every response, on every board, in every state.
 | `messageCount` | integer | 0 … | count | Inbound **MQTT** command messages since boot - anything arriving under the topic prefix of your AWTRIX, including a script's own subscription if that topic sits under the prefix. The `/result` messages AWTRIX publishes back are not counted, and HTTP requests are never counted. Resets to 0 on reboot. |
 | `wifi` | object | - | - | Whether AWTRIX is on your network, and if not, why. See [Connection status](#connection-status). |
 | `mqtt` | object | - | - | Whether AWTRIX is talking to your broker, and if not, why. See [Connection status](#connection-status). |
+
+## Pico state notes
+
+Pico W and Pico 2 W keep `boardType: "awtrixng"`. Neither has PSRAM, and the
+Unicorn has no battery telemetry by default. `minFreeHeapBytes` is sampled when
+device state is requested, not an allocator-wide minimum. `largestFreeBlockBytes`
+estimates the free top-of-heap block; it cannot enumerate holes below it.
+`scriptHeapBudgetBytes` is `49152` on the Pico W and `98304` on the Pico 2 W.
+Builds without scripting report `scriptingRunning: false`, `scriptHeapPool:
+"unavailable"` and `scriptHeapBudgetBytes: 0` regardless of the stored toggle.
+Emulated timed-sleep wake reports `software`, not `deepSleep`. See the
+[board guide](../advanced/galactic-unicorn.md) for hardware verification scope.
 
 ## PSRAM fields (conditional)
 
@@ -275,7 +287,7 @@ tab. AWTRIX also shows an outage on the panel itself - see [Connection dots](#co
 | `retryInMs` | integer | Milliseconds until the next attempt. `0` while connected, and while an attempt is running. | Same. |
 | `connects` | integer | Successful connections since boot. A number that keeps climbing is a link that keeps dropping - for `wifi`, usually a router or a range problem. | Same. |
 | `error` | string / null | Why it is not up **right now**. `null` when it is. | Same. |
-| `lastError` | string / null | The last reason this link went down, **kept after it recovers**. `null` until something goes wrong. | Same. |
+| `lastError` | string / null | The last reason this link went down, **kept after it recovers**. `null` until something goes wrong. `badCredentials` means the network refused the password on two joins in a row: the Pico's radio reports an AP that breaks off one join mid key exchange the same way, and the next join then connects. | Same. |
 
 !!! note "Why `wifi` has a `lastError`"
     While WiFi is down nothing can reach this API to ask why - the panel's red dot is the only

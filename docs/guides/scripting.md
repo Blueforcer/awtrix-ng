@@ -96,6 +96,12 @@ next to your script; fix the line it names and save again. The full story is und
     broker - point the simulator at one with `mqttHost` (see
     [the simulator's MQTT note](../advanced/simulator.md#mqtt)).
 
+!!! note "On the Galactic Unicorn"
+    Scripts run on the Pico W and Pico 2 W, with less memory for them: see
+    [Limits › Galactic Unicorn](../reference/limits.md#galactic-unicorn-pico-w). The Pico has no
+    outbound HTTP for scripts yet, so `http.*` calls and Modbus reads return `false`, and script
+    icons (`icon()`) are not drawn.
+
 ---
 
 ## Everything a script can do, on one screen
@@ -477,14 +483,20 @@ The short examples in this section show a single method for brevity - read them 
 
 ### Panel and drawing
 
-The panel is a grid eight pixels high and - on a Ulanzi and most others - thirty-two
-wide. **`x` runs from `0` at the left to `width() - 1`, `y` runs 0–7 from the
+Script coordinates are absolute on the full canvas, with `(0,0)` at the panel's
+top-left. Scripts are not shifted into the centred eight-row body-text band.
+Always query `height()` (the runtime panel height, e.g. 11 on a 53×11 panel)
+and `width()` rather than assuming 8 rows or 32 columns. Charts scale to all
+`height()` rows; `progress()` draws on `height()-1`.
+
+The panel is a grid, normally eight pixels high and thirty-two wide on a Ulanzi.
+**`x` runs from `0` at the left to `width() - 1`, `y` runs `0 .. height()-1` from the
 top** - so `(0, 0)` is the top-left corner and a *larger* `y` is *lower* on the
 panel. Anything you draw off the edge is simply clipped, never an error.
 
 Ask `width()` rather than writing `32`: someone running two or four panels in a
 row has 64 or 128 columns, and an app that measures fills them instead of
-huddling in the first quarter. The height is always 8.
+huddling in the first quarter. The height is configurable from 8 to 16 (default 8).
 
 Both answer while a frame is being drawn, which is where layout belongs anyway -
 in `setup()`, before there is a frame, they say `0`.
@@ -499,7 +511,7 @@ build the same number from plain channel values.
 | Call | Does | Example |
 |---|---|---|
 | `width()` | panel width in pixels - 32 as a rule, more on a chained panel | `var w = width()` |
-| `height()` | panel height in pixels (always 8) | `var h = height()` |
+| `height()` | panel height in pixels (8–16, default 8) | `var h = height()` |
 | `clear(color?)` | fill the frame; black when omitted | `clear()` |
 | `pixel(x, y, color)` | one pixel | `pixel(0, 0, 0xFF0000)` |
 | `line(x0, y0, x1, y1, color)` | a line | `line(0, 0, width() - 1, 7, 0x00FF00)` |

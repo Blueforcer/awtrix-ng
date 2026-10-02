@@ -28,7 +28,8 @@ Every coordinate on this page refers to the same grid:
 
 - **x** runs `0` … *panel width* − 1 left to right (`31` on the default 32-wide panel; wider on
   multi-panel setups, see [Panel and orientation](../reference/system.md#panel-and-orientation)),
-  **y** runs `0` … `7` top to bottom. `(0,0)` is top-left.
+  **y** runs `0` … *panel height* − 1 top to bottom (`7` on an eight-row panel).
+  `(0,0)` is top-left. The examples below use the default 32×8 panel.
 - Off-canvas pixels are dropped, never wrapped to the other side. You can safely draw a circle that
   hangs off the edge.
 - Colors accept `"#RRGGBB"`, `"RRGGBB"`, `"RGB"` shorthand, `[r,g,b]`, `["HSV",h,s,v]`, or a packed
@@ -40,6 +41,10 @@ An `icon` takes the leftmost 9 pixels and pushes the charts across - see
 ---
 
 ## Draw a progress bar
+
+Charts and drawing use the full panel height, not the centred eight-row text
+band. Progress stays on the bottom row (`height-1`, row 10 at 53×11). Draw-command
+coordinates are absolute from the panel's top-left, without a band offset.
 
 `progress` is a percentage. It paints the **bottom row only**.
 

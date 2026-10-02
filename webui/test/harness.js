@@ -61,6 +61,9 @@ function makeStore() {
             audio: { buzzer: true, track: false, mp3: true, radio: true } },
     settings: { soundEnabled: true, buzzerVolume: 80, dfplayerVolume: 80, mp3Volume: 70,
                 radioVolume: 60, radioMeta: true },
+    // What GET /api/v1/system and GET /api/v1/display answer.
+    system: { hostname: 'awtrix-ng', scriptingEnabled: true },
+    display: { power: true },
     // dir -> Map(name -> size), the file API's flash view.
     files: { '/ICONS': new Map(), '/MP3': new Map() },
     melodies: [], // [{name, rtttl, valid, notes, durationMs, bytes}]
@@ -162,7 +165,8 @@ function mockFetch(store, netlog, win) {
     if (p === '/api/v1/device') return resp(store.device);
     if (p === '/api/v1/capabilities')
       return store.caps ? resp(store.caps) : resp({ error: { message: 'offline' } }, false, 503);
-    if (p === '/api/v1/system') return resp({ hostname: 'awtrix-ng' });
+    if (p === '/api/v1/system') return resp(store.system);
+    if (p === '/api/v1/display' && method === 'GET') return resp(store.display);
     if (p === '/api/v1/settings' && method === 'GET') return resp(store.settings);
     if (p === '/api/v1/settings' && method === 'PATCH') {
       store.settingsPatch = JSON.parse(opts.body || '{}');
@@ -295,18 +299,33 @@ function mockFetch(store, netlog, win) {
   };
 }
 
+// Holds the chosen API answers back by `delays[path]` ms, so a test can watch a
+// page that is already drawn when its data arrives.
+const delayed = (fetchImpl, delays) => window => {
+  const fetch = fetchImpl(window);
+  if (!delays) return fetch;
+  return (url, opts) => {
+    const ms = delays[new URL(url, 'http://localhost').pathname];
+    return ms ? new Promise(r => setTimeout(() => r(fetch(url, opts)), ms)) : fetch(url, opts);
+  };
+};
+
 async function boot(opts) {
   const store = makeStore();
   // The boot IIFE fetches capabilities immediately, so a test that wants
   // different caps has to hand them in before the page comes up.
   if (opts && 'caps' in opts) store.caps = opts.caps;
+  if (opts && opts.device) Object.assign(store.device, opts.device);
+  if (opts && opts.system) Object.assign(store.system, opts.system);
+  if (opts && opts.settings) Object.assign(store.settings, opts.settings);
   const netlog = [];
   const dom = new JSDOM(loadHtml(), {
     runScripts: 'dangerously',
     pretendToBeVisual: true,
-    url: 'http://localhost/',
+    // opts.url opens the page straight on a route, the way a bookmark does.
+    url: (opts && opts.url) || 'http://localhost/',
     virtualConsole: makeVirtualConsole(),
-    beforeParse: installGlobals(window => mockFetch(store, netlog, window)),
+    beforeParse: installGlobals(delayed(window => mockFetch(store, netlog, window), opts && opts.delays)),
   });
   await flush(60); // boot render() + device/capabilities/system fetches
   return { dom, window: dom.window, store, netlog };

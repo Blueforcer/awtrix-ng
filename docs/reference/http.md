@@ -165,7 +165,7 @@ Device state and statistics. `200`, or `401` when a login is enabled and the req
 | `version` | string | - | firmware version, e.g. `1.0.12` |
 | `uid` | string | - | device unique id |
 | `boardType` | string | - | fixed constant `"awtrixng"` in the device firmware - does not vary with the wiring; the simulator reports a different value, see [Device state](device.md) |
-| `soc` | string | - | chip this image was built for: `esp32` or `esp32s3`. Pin rules live under `gpio` in `/api/v1/capabilities` |
+| `soc` | string | - | chip this image was built for: `esp32`, `esp32s3`, or `rp2040` for both Galactic Unicorn builds. Pin rules live under `gpio` in `/api/v1/capabilities` |
 | `ipAddress` | string | - | current station IP |
 | `hostname` | string | - | name AWTRIX answers to, mDNS included; derived from the MAC when unset in `/api/v1/system` - see [Device state](device.md) |
 | `wifiRssi` | integer | dBm | |
@@ -177,7 +177,7 @@ Device state and statistics. `200`, or `401` when a login is enabled and the req
 | `psramTotalBytes` | integer | bytes | external PSRAM; absent on boards without it |
 | `psramFreeBytes` | integer | bytes | free PSRAM; never add it to `freeHeapBytes` - see [Device state](device.md) |
 | `scriptingRunning` | boolean | - | whether scripts run at all; `false` while `scriptingEnabled` is off |
-| `scriptHeapPool` | string | - | pool the Berry VM allocates from: `internal` or `psram` |
+| `scriptHeapPool` | string | - | pool the Berry VM allocates from: `internal` or `psram`; `unavailable` in a build without scripting |
 | `scriptHeapBudgetBytes` | integer | bytes | ceiling on the shared Berry heap before installs are refused |
 | `fps` | integer | frames/s | measured render-loop rate |
 | `brightness` | integer | 0–255 | **effective** brightness after auto-brightness, not the setting |
@@ -251,7 +251,8 @@ curl -X POST http://<awtrix-ip>/api/v1/device/reboot
 
 ### POST /api/v1/device/sleep
 
-Deep-sleep for a duration, then wake and boot normally.
+Deep-sleep for a duration, then wake and boot normally. The Galactic Unicorn has no deep sleep and
+emulates it; see the end of this section.
 
 | Key | Type | Range | Default | Units | Required |
 |---|---|---|---|---|---|
@@ -269,6 +270,12 @@ The panel is cleared before AWTRIX sleeps.
 Pressing the select button ends the sleep early - but only if `pinBtnSelect` sits on one of the
 chip's `rtc` pins, see [`gpio` in capabilities](#gpio-what-the-chip-can-do). On any other pin
 AWTRIX comes back when `durationMs` runs out and not before.
+
+On the Galactic Unicorn (Pico W and Pico 2 W) the sleep is emulated. The panel blanks and request
+handling pauses, but the CPU and RAM stay powered, so it saves little power. The timer or a new
+press of the **Sleep** key (GPIO27) ends it. The select button does not, and the `rtc` list in
+`gpio` is empty. Wake restarts AWTRIX, and `resetReason` then reads `software`. See
+[Galactic Unicorn driver → Time, reset and sleep](../advanced/galactic-unicorn-display.md#time-reset-and-sleep).
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/device/sleep \
@@ -1479,10 +1486,11 @@ System › Audio.
 The pin fields under [`/api/v1/system`](#get-apiv1system) are validated against the chip the
 firmware was built for, and the rules differ sharply between them: an ESP32 has GPIO 0–39 with
 34–39 input-only and ADC1 on 32–39, an ESP32-S3 has 0–48 with no input-only pins at all and ADC1
-on 1–10. Read them here instead of hardcoding a table per chip.
+on 1–10. Read them here instead of hardcoding a table per chip. The Galactic Unicorn's pins are
+fixed; see [Galactic Unicorn build capabilities](#galactic-unicorn-build-capabilities).
 
 ```json
-"gpio":{"soc":"esp32s3","label":"ESP32-S3","max":48,
+"gpio":{"soc":"esp32s3","label":"ESP32-S3","fixed":false,"max":48,
         "missing":[[22,25]],"inputOnly":[],
         "reserved":[{"lo":19,"hi":20,"why":"the USB-JTAG interface"},
                     {"lo":26,"hi":37,"why":"the SPI flash and PSRAM"},
@@ -1495,15 +1503,17 @@ on 1–10. Read them here instead of hardcoding a table per chip.
 | Key | Meaning |
 |---|---|
 | `soc`, `label` | chip id and display name; same value as `soc` in the device state |
+| `fixed` | `true` when the pins are part of the board, as on the Galactic Unicorn: a pin map other than `defaults` is refused, and the web UI shows the pins instead of offering them. `false` on the ESP32 chips |
 | `max` | highest GPIO number that exists |
 | `missing` | inclusive ranges inside `0…max` the package does not bond out - rejected |
 | `inputOnly` | cannot drive an output, so they are refused for the matrix, buttons, buzzer, I²C and DFPlayer TX. Empty on the ESP32-S3 |
 | `reserved` | taken by the flash, PSRAM, USB or the console. Each carries `why`, which is also what the rejection message says |
 | `adc1` | the only pins accepted for `pinBattery` and `pinLdr` - ADC2 stops working while WiFi is on |
 | `strapping` | boot-mode pins. Reported as a caution, **never rejected**: the ESP32 defaults already use one of them (the buzzer, GPIO 15) |
-| `rtc` | pins the RTC domain keeps powered during deep sleep. Only a `pinBtnSelect` inside this set can end a [`POST /api/v1/device/sleep`](#post-apiv1devicesleep) early; anything else is accepted and simply cannot wake AWTRIX |
+| `rtc` | pins the RTC domain keeps powered during deep sleep. Only a `pinBtnSelect` inside this set can end a [`POST /api/v1/device/sleep`](#post-apiv1devicesleep) early; anything else is accepted and simply cannot wake AWTRIX. Empty on the Galactic Unicorn, whose Sleep key (GPIO27) wakes it instead |
 | `matrix` | the only values `pinMatrix` accepts - fixed by the firmware image, not a preference |
 | `defaults` | the pin map a factory-fresh device of this chip starts with, and the one it falls back to if the stored map fails validation |
+| `panel` | only on a board with a built-in panel: its `width` and the `heights` it can run at, `{"width":53,"heights":[8,11]}` on the Galactic Unicorn. `panelWidth` must be `width`, `panels` must be `1` and `panelHeight` one of `heights` |
 
 `effects` and `overlays` come out ASCII-sorted; `transitions` has its own fixed order. Effect,
 overlay, palette and transition names are all matched **case-insensitively** - `"matrix"`,
@@ -1627,6 +1637,7 @@ Behaviour to know:
 | `brightnessSmoothing` | long | `10000` | ms the panel takes to follow an ambient-light change (0–60000); `0` = instantly |
 | `lowBatteryThreshold` | integer | `0` | 0–100 %; below it `GET /api/v1/device` reports `lowBattery: true`. `0` = off |
 | `panelWidth` | integer | `32` | 1–128; `panelWidth × panels` must come to 32–128 |
+| `panelHeight` | integer | `8` | 8–16; applies after a reboot |
 | `panels` | integer | `1` | 1–128; how many panels the strip runs through |
 | `panelStart` | string | `"topLeft"` | `topLeft` · `topRight` · `bottomLeft` · `bottomRight` |
 | `panelWiring` | string | `"rows"` | `rows` · `columns` |
@@ -1801,6 +1812,13 @@ The multipart **field name is irrelevant** - any file part is accepted.
 | 415 | `unsupportedMediaType` - the content does not match the target folder: `/ICONS` needs GIF or JPEG magic bytes, `/MELODIES` must parse as RTTTL text, `/PALETTES` must be plain `RRGGBB`-per-line text, `/MP3` needs MP3 magic bytes (an ID3 tag or a frame sync) |
 | 500 | `internalError` - the write failed (storage full); nothing is left behind |
 
+A refused or failed upload never touches a file of the same name that is already there: the
+new content is kept aside until it has all arrived and passed the check, and only then replaces
+the old file. Until then both copies are on flash, so replacing a file needs room for the new one
+as well; without it the upload fails with `500` and the old file stays. If power is lost
+mid-upload, the partial copy can be left beside the target as `<name>.part`; remove it with
+[`DELETE /api/v1/files`](#delete-apiv1files).
+
 PNG is served correctly once on AWTRIX, but it is not accepted by the `/ICONS` upload check -
 only GIF and JPEG pass.
 
@@ -1847,6 +1865,8 @@ network, and what the web UI uses. Auth is re-checked inside the upload handler.
 | 401 | auth failed |
 | 403 | `forbidden` - firmware upload is disabled in AP/provisioning mode |
 | 500 | `internalError`, `firmware update failed (bad image or storage full)` - the OTA slot could not be written |
+| 501 | `notSupported` - the desktop simulator, which has no firmware to update |
+| 503 | `unavailable` - a build without browser update, like the Pico (Galactic Unicorn) builds; flash a UF2 over USB (BOOTSEL) instead |
 
 The image is size-checked against the free firmware slot before any byte is written, and a refused
 image never replaces the running one: AWTRIX switches slots only after a whole image has arrived
@@ -1896,6 +1916,10 @@ A restore can partially succeed, so this route answers its own JSON shape instea
 of each kind were actually applied (`wifi`, `system`, `settings`, `appLoop`, `radioStations`,
 `icons`, `melodies`, `palettes`, `MP3s`, `scripts`, plus `skipped` for rejected entries), and a `warnings` array with one
 string per skipped or rejected entry.
+
+On the Galactic Unicorn, `config/system.json` restores everything except the pins and the panel
+size and wiring, which belong to the board: a backup from a board wired differently still restores
+the rest.
 
 Config changes that only take effect at boot - new Wi-Fi credentials, `config/system.json` - need
 a reboot to apply; [`POST /api/v1/device/reboot`](#post-apiv1devicereboot) is allowed in AP mode
@@ -2059,3 +2083,32 @@ Anything not matched above answers **404** `notFound` with message `unknown rout
 | POST | `/api/v1/restore` | [backup ZIP; available in AP mode](#post-apiv1restore) |
 | GET | `/`, `/index.html`, `/fullscreen` | [web UI](#get) |
 | GET | `/ICONS/*`, `/MELODIES/*`, `/PALETTES/*`, `/MP3/*`, `/SCRIPTS/*`, `/apploop.json` | [static assets](#web-ui-and-static-assets) |
+
+## Galactic Unicorn build capabilities
+
+`GET /api/v1/capabilities` includes `scripting` (true on the ESP32, simulator and
+Pico builds unless built with `AWTRIX_FEATURE_SCRIPTING=0`). `scriptUpdates` follows that flag.
+The `audio` flags come from registered sound sinks, not just build support:
+Pico reports `buzzer` true once its I²S tone sink starts, and track, mp3 and
+radio false.
+
+Pico's MP3 routes, radio station routes, MP3/radio play commands and browser
+`/update` return HTTP 503 with the existing `unavailable` error. MQTT audio commands return `ok:false` with the same
+error code (MQTT has no HTTP status). There are no MQTT script-upload commands.
+Outbound TLS is absent: radio is disabled entirely, and scripts run but their
+`http.*` requests and Modbus reads return `false`. The portable policy also rejects explicit HTTPS stream
+play requests when TLS alone is disabled. Local file storage and icon-origin
+metadata are not outbound requests and remain independent of TLS support.
+
+`gpio.soc` is `rp2040` for both Unicorn variants, `gpio.label` identifies the
+board and `gpio.fixed` is `true`. All pin assignments are fixed: buttons A/B/C map
+to left/select/right (0/1/3), LDR is 28, I2S data/BCLK/LRCLK is 9/10/11, amplifier
+enable is 22. Battery, I2C, piezo buzzer and DFPlayer pins are -1: these builds
+read no I2C sensor, although the Qw/ST connector is wired to GPIO 4/5. `pinMatrix: -1` and an
+empty `gpio.matrix` list denote a fixed PIO panel, not a disabled display; panel
+pins 13-20 are reserved, never user-routable. Any change to the default pin set
+(including enabling DFPlayer) is refused. Existing ESP32 pin rules are unchanged.
+
+The panel is part of the board too: `gpio.panel` gives its width and the heights it
+can run at. At boot, a pin map or panel size stored by another build is replaced by
+the board's own, so it cannot make every later `PUT /api/v1/system` fail.

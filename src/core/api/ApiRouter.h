@@ -3,6 +3,7 @@
 #include <string>
 
 #include "core/Command.h"
+#include "core/FeatureSet.h"
 
 namespace awtrix {
 namespace api {
@@ -21,7 +22,8 @@ enum class RouteOutcome : uint8_t {
 };
 
 RouteOutcome routeHttp(const std::string& method, const std::string& path,
-                       std::string&& body, Command& cmd, HttpResult& immediate);
+                       std::string&& body, Command& cmd, HttpResult& immediate,
+                       const FeatureSet& features = {});
 
 inline constexpr const char* kMethodOverrideHeader = "X-HTTP-Method-Override";
 
@@ -40,7 +42,8 @@ std::string configAppName(const std::string& path);
 bool isRawBodyWrite(const std::string& method, const std::string& path);
 
 RouteOutcome routeMqtt(const std::string& suffix, const std::string& payload,
-                       Command& cmd, std::string& resultPayload);
+                       Command& cmd, std::string& resultPayload,
+                       const FeatureSet& features = {});
 
 bool isResultEcho(const std::string& suffix);
 

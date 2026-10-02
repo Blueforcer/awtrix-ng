@@ -44,6 +44,7 @@ struct DeviceConfig {
   bool ldrOnGround = false;
   long brightnessSmoothing = 10000;
   int panelWidth = 32;
+  int panelHeight = 8;
   int panels = 1;
   PanelStart panelStart = PanelStart::TopLeft;
   Wiring panelWiring = Wiring::Rows;
@@ -87,6 +88,7 @@ struct DeviceConfig {
   MatrixLayout matrixLayout() const {
     MatrixLayout l;
     l.panelWidth = panelWidth;
+    l.panelHeight = panelHeight;
     l.panels = panels;
     l.panelStart = panelStart;
     l.panelWiring = panelWiring;
@@ -110,6 +112,16 @@ struct DeviceConfig {
     p.i2sMclk = pinI2sMclk; p.ampEnable = pinAmpEnable;
     p.dfplayerEnabled = dfplayer;
     return p;
+  }
+  void setPinSet(const pins::PinSet& p) {
+    pinMatrix = p.matrix;
+    pinBtnLeft = p.btnLeft; pinBtnSelect = p.btnSelect; pinBtnRight = p.btnRight;
+    pinBattery = p.battery; pinLdr = p.ldr; pinBuzzer = p.buzzer;
+    pinI2cSda = p.i2cSda; pinI2cScl = p.i2cScl;
+    pinDfRx = p.dfRx; pinDfTx = p.dfTx;
+    pinI2sBclk = p.i2sBclk; pinI2sLrclk = p.i2sLrclk; pinI2sDout = p.i2sDout;
+    pinI2sMclk = p.i2sMclk; pinAmpEnable = p.ampEnable;
+    dfplayer = p.dfplayerEnabled;
   }
   bool validatePins(std::string& err) const { return pins::validate(pinSet(), err); }
 };

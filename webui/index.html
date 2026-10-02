@@ -1076,6 +1076,9 @@ const I18N={en:{
   pnBadWidth:'The total width must be between 32 and 128.',
   grpHw:'Brightness & sensors',grpHwH:'Auto-brightness limits and sensor calibration.',
   grpGpio:'GPIO',grpGpioH:'Which pin does what. Applies after a reboot.',
+  grpGpioFixedH:'Wired on the board, so they cannot be changed.',
+  grpPanelFixedH:'Built into the board: only the height and the orientation can change.',
+  pinReserved:'Reserved',
   preset:'Preset wiring',presetH:'Fills the fields with a known board’s wiring.',
   presetUlanzi:'Ulanzi TC001',presetAwtrix2:'AWTRIX 2 mainboard',
   presetApplied:'Preset filled in - check the fields and save',
@@ -1264,6 +1267,9 @@ const I18N={en:{
   pnBadWidth:'Die Gesamtbreite muss zwischen 32 und 128 liegen.',
   grpHw:'Helligkeit & Sensoren',grpHwH:'Grenzen der Auto-Helligkeit und Sensor-Kalibrierung.',
   grpGpio:'GPIO',grpGpioH:'Welcher Pin was macht. Wirkt nach einem Neustart.',
+  grpGpioFixedH:'Auf dem Board verdrahtet, daher nicht änderbar.',
+  grpPanelFixedH:'Fest im Board verbaut: nur Höhe und Ausrichtung lassen sich ändern.',
+  pinReserved:'Reserviert',
   preset:'Vorlage',presetH:'Füllt die Felder mit der Belegung eines bekannten Boards.',
   presetUlanzi:'Ulanzi TC001',presetAwtrix2:'AWTRIX-2-Mainboard',
   presetApplied:'Vorlage eingetragen - Felder prüfen und speichern',
@@ -1526,6 +1532,7 @@ const SYSF={
    {derive:v=>({tz:TZRULE.get(v)||'UTC0'})}),
  tz:F('hidden','text','Timezone rule|Zeitzonen-Regel',''),
  panelWidth:F('panel','number','Panel width|Panel-Breite','Pixels across one panel.|Pixel in der Breite eines Panels.',{min:1,max:128,unit:'px'}),
+ panelHeight:F('panel','number','Panel height|Panel-Höhe','Pixels high; requires a reboot.|Pixel in der Höhe; Neustart erforderlich.',{min:8,max:16,unit:'px'}),
  panels:F('panel','number','Panels|Panels','How many panels are chained.|Wie viele Panels verkettet sind.',{min:1,max:128}),
  panelStart:F('panel','select','First LED|Erste LED','Corner the data cable arrives at.|Ecke, an der das Datenkabel ankommt.',{opt:[
    ['topLeft','Top left|Oben links'],['topRight','Top right|Oben rechts'],
@@ -1588,12 +1595,16 @@ const SOUND_KEYS=Object.keys(SYSF).filter(k=>SYSF[k].api==='settings');
 const S={transitions:[],stats:null,ap:false,sysHost:'',sysUid:'',gpio:null,aud:null,
   scriptsOff:null};
 function readAudioCaps(caps){
+  S.scripting=caps.scripting!==false;
   const a=caps.audio||{};
   S.aud={buzzer:a.buzzer===true,track:a.track===true,mp3:a.mp3===true,radio:a.radio===true};
+  if(caps.gpio){S.gpio=caps.gpio;applyGpioCaps(S.gpio);}
 }
 // Unknown counts as present, so nothing is hidden before the capabilities have arrived.
 const hasSink=(...k)=>!S.aud||k.some(x=>S.aud[x]);
 const anyAudioCap=()=>hasSink('buzzer','track','mp3','radio');
+const hasScripting=()=>S.scripting!==false;
+const unavailableNote=()=>tt('Not available on this board.|Auf diesem Board nicht verfügbar.');
 async function scriptsOff(){
   if(S.scriptsOff===null){
     try{S.scriptsOff=(await api('/api/v1/device',{timeout:4000})).data.scriptingRunning===false;}
@@ -1622,11 +1633,34 @@ function applyGpioCaps(c){
   opts('pinDfRx',usable,true);
   const i2s=dflt.pinI2sBclk>=0?'gpio':'hidden';
   ['pinI2sBclk','pinI2sLrclk','pinI2sDout','pinI2sMclk','pinAmpEnable'].forEach(k=>{SYSF[k].g=i2s;});
+  if(c.fixed)applyFixedBoard(c);
+}
+// A board with fixed wiring shows its pins instead of offering them, and drops the settings of
+// hardware it does not have: nothing can be wired to it later.
+function applyFixedBoard(c){
+  const dflt=c.defaults||{};
+  const hide=keys=>keys.forEach(k=>{(SYSF[k]||FIELDS[k]).g='hidden';});
+  PINKEYS.forEach(k=>{SYSF[k].w='fixed';SYSF[k].g=dflt[k]>=0?'gpio':'hidden';});
+  SYSF.pinI2sBclk.h='The built-in speaker amplifier, bit clock.|Verstärker des eingebauten Lautsprechers, Bittakt.';
+  SYSF.pinI2sLrclk.h='Same amplifier, word select.|Selber Verstärker, Wortauswahl.';
+  SYSF.pinI2sDout.h='Same amplifier, data.|Selber Verstärker, Daten.';
+  hide(['ldrOnGround']);
+  if(dflt.pinDfRx<0)hide(['dfplayer']);
+  if(dflt.pinBattery<0)hide(['batteryDividerRatio','lowBatteryThreshold','batteryColor']);
+  if(dflt.pinI2cSda<0)hide(['tempOffset','humOffset','tempDecimals','temperatureColor','humidityColor']);
+  if(dflt.pinBuzzer<0&&dflt.pinI2sDout>=0){
+    SYSF.buzzerVolume.l='Melody volume|Melodie-Lautstärke';
+    SYSF.buzzerVolume.h='RTTTL melodies, on the built-in speaker.|RTTTL-Melodien über den eingebauten Lautsprecher.';
+  }
+  if(!c.panel)return;
+  SYSF.panelWidth.w=SYSF.panels.w='fixed';
+  hide(['panelStart','panelWiring','panelColorOrder','panelSerpentine','panelChainReverse','panelChainSerpentine']);
+  Object.assign(SYSF.panelHeight,{w:'select',opt:c.panel.heights.map(h=>[h,h+' px'])});
 }
 const PINKEYS=['pinMatrix','pinBtnLeft','pinBtnSelect','pinBtnRight','pinBattery','pinLdr',
   'pinBuzzer','pinI2cSda','pinI2cScl','pinDfRx','pinDfTx','pinI2sBclk','pinI2sLrclk','pinI2sDout',
   'pinI2sMclk','pinAmpEnable'];
-const REBOOT_KEYS=new Set(['wifiSsid','wifiPass','netStatic','ip','gateway','subnet','dns1','dns2',
+const REBOOT_KEYS=new Set(['panelHeight','wifiSsid','wifiPass','netStatic','ip','gateway','subnet','dns1','dns2',
   'wifiConnectTimeout','hostname','webPort','mqttEnabled','mqttHost','mqttPort','mqttUser',
   'mqttPass','mqttPrefix','statsInterval','dfplayer','scriptingEnabled'].concat(PINKEYS));
 function paintPinUse(fields){
@@ -1655,8 +1689,9 @@ function paintPanelSize(fields,out){
   const pw=Number(fields.panelWidth.get()),n=Number(fields.panels.get()),w=pw*n;
   const bad=(w<32||w>128)?t('pnBadWidth'):'';
   out.className='badge '+(bad?'bad':'good');
-  out.replaceChildren(bad||w+' × 8 = '+(w*8)+' '+t('pnLeds')+' · '+
-    (n>1?n+' '+t('pnPanelsOf')+' '+pw+' × 8':t('pnOne')));
+  const h=Number(fields.panelHeight.get());
+  out.replaceChildren(bad||w+' × '+h+' = '+(w*h)+' '+t('pnLeds')+' · '+
+    (n>1?n+' '+t('pnPanelsOf')+' '+pw+' × '+h:t('pnOne')));
 }
 let gen=0;
 function poller(fn,ms){
@@ -1691,7 +1726,7 @@ function currentRoute(){
 function nav(){
   const cur=currentRoute();
   const tabs=S.ap?TABS.filter(([r])=>r==='system')
-    :TABS.filter(([r])=>r!=='audio'||anyAudioCap());
+    :TABS.filter(([r])=>(r!=='audio'||anyAudioCap())&&(r!=='scripts'||hasScripting()));
   $('#nav').setAttribute('aria-label',t('mainnav'));
   $('#nav').replaceChildren(...tabs.map(([r,k])=>el('a',{href:'#/'+r,class:cur===r?'on':'','aria-current':cur===r?'page':null},t(k))));
 }
@@ -1860,6 +1895,11 @@ const WIDGETS={
     ctl.append(el('div',{class:'tzctl'},el('div',{class:'tzrow'},detect,sel),prev));
     return{input:sel,get:()=>cur,
       set:v=>{cur=TZRULE.has(v)?v:'UTC';sel.value=cur;preview();}};
+  },
+  // Shown, never edited: get() hands back the value it was given, so the field is never dirty.
+  fixed(ctl,def,value){
+    ctl.append(el('span',{class:'mono'},(def.fmt?def.fmt(value):String(value))+(def.unit?' '+def.unit:'')));
+    return{input:null,get:()=>value,set:()=>{}};
   },
   raw(ctl,def,value,onInput){
     const input=el('input',{type:'text',value:typeof value==='string'?value:JSON.stringify(value)});
@@ -2846,7 +2886,16 @@ async function prepareHubScriptUpdate(previous,release,readSource=hubScriptRelea
 }
 // HUB SCRIPT UPDATES END
 
-function viewScripts(view){
+async function viewScripts(view){
+  const generation=gen;
+  if(S.scripting===undefined){
+    try{readAudioCaps((await api('/api/v1/capabilities')).data||{});nav();}
+    catch(e){view.append(el('div',{class:'card wide'},t('neterr')));return;}
+    if(generation!==gen)return;
+  }
+  if(!hasScripting()){
+    view.append(el('div',{class:'card wide'},t('grpScript')+': '+unavailableNote()));return;
+  }
   const ed=mkCodeEditor();
   const nameIn=el('input',{type:'text',placeholder:t('name'),maxlength:'32',spellcheck:'false',
     pattern:'[A-Za-z0-9_-]{1,32}'});
@@ -3467,12 +3516,7 @@ async function viewSystem(view){
   catch(e){view.append(el('div',{class:'card wide'},t('neterr')));return;}
   if(!S.sysHost){try{setStats((await api('/api/v1/device',{timeout:4000})).data);}catch(e){}}
   if(!S.gpio||!S.aud){
-    try{
-      const caps=(await api('/api/v1/capabilities')).data||{};
-      readAudioCaps(caps);
-      S.gpio=caps.gpio||null;
-    }catch(e){}
-    if(S.gpio)applyGpioCaps(S.gpio);
+    try{readAudioCaps((await api('/api/v1/capabilities')).data||{});}catch(e){}
   }
   if(!S.ap){
     try{
@@ -3487,9 +3531,12 @@ async function viewSystem(view){
     SYSF.radioVolume.g=g(hasSink('radio'));
     SYSF.radioMeta.g=g(hasSink('radio'));
     SYSF.soundEnabled.g=g(hasSink('buzzer','track','mp3'));
+    if(!hasSink('radio'))SYSF.soundEnabled.h='Master switch for one-shot sounds.|Hauptschalter für Einzelklänge.';
   }
   ['wifiPass','mqttPass','authPass'].forEach(k=>{if(!(k in data))data[k]='';});
+  SYSF.scriptingEnabled.g=hasScripting()?'script':'hidden';
   (S.ap?provisioningPage:systemPage)(view,data);
+  if(!S.ap&&!hasScripting())view.append(el('div',{class:'card wide'},t('grpScript')+': '+unavailableNote()));
 }
 function systemSettingsPage(view,data){
   const rbBtn=el('button',{class:'pri'},t('rebootnow'));
@@ -3527,7 +3574,10 @@ function systemPage(view,data){
   if(TZRULE.get(data.tzName)!==data.tz)
     data.tzName=TZFIRST.get(data.tz)||'UTC';
   const page=systemSettingsPage(view,data);
-  const sysFields=renderSettingsInto(page,data,SYSF,SYS_GROUPS);
+  const fixed=!!(S.gpio&&S.gpio.fixed);
+  const groups=!fixed?SYS_GROUPS:SYS_GROUPS.map(g=>g[0]==='gpio'?['gpio','grpGpio','grpGpioFixedH']
+    :g[0]==='panel'&&S.gpio.panel?['panel','grpPanel','grpPanelFixedH']:g);
+  const sysFields=renderSettingsInto(page,data,SYSF,groups);
   advancedSection(page,data,SYSF);
   if(sysFields.hostname&&S.sysHost)
     sysFields.hostname.row.querySelector('input').placeholder=S.sysHost;
@@ -3569,10 +3619,16 @@ function systemPage(view,data){
     gpioSec.querySelector('.rows').prepend(
       actionRow(t('preset'),t('presetH'),[presetBtn(t('presetUlanzi'),'ulanzi'),presetBtn(t('presetAwtrix2'),'awtrix2')]));
   }
+  const fixedRows=fixed?page.panel.querySelector('#sec-gpio .rows'):null;
+  if(fixedRows&&(S.gpio.reserved||[]).length){
+    const why=new Map();
+    S.gpio.reserved.forEach(r=>why.set(r.why,(why.get(r.why)||[]).concat(r.lo===r.hi?r.lo:r.lo+'–'+r.hi)));
+    fixedRows.append(actionRow(t('pinReserved'),[...why].map(([w,p])=>'GPIO '+p.join(', ')+': '+w).join(' · '),[]));
+  }
   if(S.gpio){
     page.onUpdate.push(()=>paintPinUse(sysFields));
     const sel=sysFields.pinBtnSelect;
-    if(sel&&S.gpio.rtc){
+    if(sel&&S.gpio.rtc&&!fixed){
       const note=el('div',{class:'help'});
       sel.row.querySelector('.lab').append(note);
       page.onUpdate.push(()=>paintWakePin(sysFields,note));
@@ -3682,9 +3738,14 @@ function updAvailable(c){
   const run=S.stats&&S.stats.version;
   return c&&c.usable&&run&&verNewer(c.version,run)?c:null;
 }
+// Only the ESP32 images install from the browser. A board that reports another image (a Pico's
+// .uf2) is flashed over USB, so it gets neither the install action nor the upload control.
+const OTA_IMAGES=['firmware-awtrix-ng.bin','firmware-awtrix-ng-s3-octal.bin','firmware-awtrix-ng-s3-quad.bin'];
+// Unknown (no device facts yet, or the simulator's empty name) counts as capable, as with the capabilities.
+const browserUpdate=()=>{const img=S.stats&&S.stats.updateImage;return !img||OTA_IMAGES.includes(img);};
 async function downloadFirmware(release,onProgress){
   const image=S.stats&&S.stats.updateImage;
-  if(!['firmware-awtrix-ng.bin','firmware-awtrix-ng-s3-octal.bin','firmware-awtrix-ng-s3-quad.bin'].includes(image))throw new Error(t('updnotready'));
+  if(!OTA_IMAGES.includes(image))throw new Error(t('updnotready'));
   const options={credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(120000)};
   const response=await fetch(OTA_BASE+'index.json',options);
   if(!response.ok)throw new Error(t('updnotready'));
@@ -3727,7 +3788,10 @@ function updateRow(install){
       const img=S.stats&&S.stats.updateImage;
       if(avail){
         status.textContent=t('updnew').replace('{v}',avail.version)+(avail.published?' ('+avail.published+')':'');
-        if(img&&avail.assets[img]){available=avail;installBtn.disabled=false;}
+        if(img&&avail.assets[img]){
+          if(browserUpdate()){available=avail;installBtn.disabled=false;}
+          else status.textContent+=' – '+tt('install its .uf2 over USB.|die .uf2 über USB installieren.');
+        }
         notes.hidden=!avail.notes;
         if(!notes.hidden)notes.href=avail.notes;
       }else{
@@ -3793,7 +3857,8 @@ function maintenanceSection(page){
   });
   page.section('maint',t('maint'),t('mainthelp'),[
     updateRow(installFirmware),
-    actionRow(t('fwfile'),null,[fwBtn,fwIn]),
+    browserUpdate()?actionRow(t('fwfile'),null,[fwBtn,fwIn])
+      :actionRow(tt('Install firmware|Firmware installieren'),tt('This board updates over USB: hold BOOTSEL while plugging it in, then copy the .uf2 onto the drive that appears.|Dieses Board wird über USB aktualisiert: beim Einstecken BOOTSEL gedrückt halten, dann die .uf2 auf das erscheinende Laufwerk kopieren.'),[]),
     fwStatus,fw.row,
     actionRow(t('reboot'),null,[rebootBtn]),
     actionRow(t('resetset'),t('resetsetH'),[resetBtn]),
@@ -4861,6 +4926,9 @@ async function viewAudio(view){
   const{section,panel}=sectionShell(view);
   const muted=el('div',{class:'ghelp',style:'display:none;color:var(--warn)'},t('melomuted'));
   panel.prepend(muted);
+  const missing=['mp3','radio'].filter(k=>!hasSink(k));
+  if(missing.length)panel.prepend(el('div',{class:'ghelp'},
+    missing.map(k=>k==='mp3'?'MP3':t('radioTab')).join(', ')+': '+unavailableNote()));
 
   // Each section carries the volume of the output it belongs to, so a level is set where the
   // sound is, not two tabs away. No help line here - the section heading already says which
@@ -5462,7 +5530,7 @@ new ResizeObserver(setChromeH).observe(topbar);
     const caps=(await api('/api/v1/capabilities')).data||{};
     if(!S.transitions.length)S.transitions=caps.transitions||[];
     readAudioCaps(caps);
-    if(!anyAudioCap())nav();
+    nav();
   }catch(e){}
 })();
 }

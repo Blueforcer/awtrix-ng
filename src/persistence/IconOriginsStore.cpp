@@ -2,7 +2,9 @@
 
 #include <LittleFS.h>
 
+#if !defined(AWTRIX_PLATFORM_RP2040)
 #include "persistence/VfsFile.h"
+#endif
 
 namespace awtrix::iconorigins {
 namespace {
@@ -29,7 +31,14 @@ class LittleFsOrigins : public Backend {
     return false;
   }
   bool iconExists(const std::string& name) override {
+#if defined(AWTRIX_PLATFORM_RP2040)
+    // arduino-pico has no VFS to stat through.
+    if (!validName(name)) return false;
+    File f = LittleFS.open(("/ICONS/" + name).c_str(), "r");
+    return f && !f.isDirectory();
+#else
     return validName(name) && fs::isFile("/ICONS/" + name);
+#endif
   }
 };
 }

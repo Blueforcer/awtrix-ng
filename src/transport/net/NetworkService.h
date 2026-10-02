@@ -28,6 +28,7 @@ class NetworkService {
 
  private:
   void retryJoinFromAp();
+  void startAp(const char* why);
   void roamIfWeak(unsigned long nowMs);
   void publishStatus();
 
@@ -38,6 +39,8 @@ class NetworkService {
   unsigned long lastApRetryMs_ = 0;
   unsigned long lastRoamMs_ = 0;
   int weakChecks_ = 0;
+  bool apPaused_ = false;  // RP2040: provisioning AP down for a station-only join window
+  bool restartPending_ = false;  // RP2040: the reboot after a join from the AP is deferred
   const DeviceConfig* cfg_ = nullptr;
   std::function<void()> onJoinedFromAp_;
   DNSServer dns_;

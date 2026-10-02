@@ -11,7 +11,7 @@ or skip the middleman entirely and **run your app on the device itself.**
 
 [![CI](https://github.com/Blueforcer/awtrix-ng/actions/workflows/ci.yml/badge.svg)](https://github.com/Blueforcer/awtrix-ng/actions/workflows/ci.yml)
 [![Docs](https://github.com/Blueforcer/awtrix-ng/actions/workflows/docs.yml/badge.svg)](https://github.com/Blueforcer/awtrix-ng/actions/workflows/docs.yml)
-![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20ESP32--S3-blue)
+![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20ESP32--S3%20%7C%20RP2040%20%7C%20RP2350-blue)
 [![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-lightgrey)](LICENSE.md)
 
 📖 **[Documentation](https://blueforcer.github.io/awtrix-ng/)** &nbsp;·&nbsp;
@@ -100,8 +100,11 @@ animations in the browser, and you can share anything you make back to the galle
 
 ## 🧩 Hardware & source
 
-Any 32(-128)×8 WS2812-style panel: a commercial clock, an AWTRIX 2 conversion or your own build - same
-image, pins set in the web UI. ESP32 and ESP32-S3.
+Any 32–128 × 8–16 WS2812-style panel: a commercial clock, an AWTRIX 2 conversion or your own build - same
+image, pins set in the web UI. ESP32 and ESP32-S3. Also supports the fixed 53×11
+[Pimoroni Galactic Unicorn](docs/advanced/galactic-unicorn.md): Pico W (RP2040,
+hardware-verified) and Pico 2 W (RP2350, compile-only). Pico images use USB UF2
+updates; optional features follow the device's capabilities.
 
 ```bash
 pio run  -e awtrix        # build + flash

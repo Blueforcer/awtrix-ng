@@ -81,7 +81,8 @@ curl -X PUT http://<awtrix-ip>/api/v1/system \
 
 Each field's accepted range is the "Range" column of its own table below. Every `pin*` field takes
 `-1` (disabled) or a GPIO within the chip's range - 0–39 on the ESP32, 0–48 (22–25 do not exist) on
-the ESP32-S3; see [GPIO & boards](gpio.md).
+the ESP32-S3; see [GPIO & boards](gpio.md). On the Galactic Unicorn every pin is fixed, and a change
+is refused; see [Galactic Unicorn build capabilities](http.md#galactic-unicorn-build-capabilities).
 
 Integer fields also reject a non-integer (`{"mqttPort":"eighty"}` and `{"tempDecimals":1.5}`
 both fail with `422`); the float fields accept any number in range.
@@ -312,11 +313,12 @@ See [Brightness & sensors](../guides/brightness.md).
 
 Your matrix is described as **panels**: how wide one panel is, how many of them the data cable
 runs through, where that cable enters, and how the strip is laid out inside a panel. The total
-width follows from the first two - `panelWidth × panels` - and the height is always 8 pixels.
+width follows from `panelWidth × panels`; `panelHeight` sets the height (8–16 pixels, default 8).
 
 | Key | Type | Range | Default | Effect | Reboot |
 |---|---|---|---|---|---|
 | `panelWidth` | int | 1–128 | `32` | Width of one panel in pixels. | yes, if the total width changes |
+| `panelHeight` | int | 8–16 | `8` | Height of every panel in pixels. | yes |
 | `panels` | int | 1–128 | `1` | How many identical panels the strip runs through, left to right. `panelWidth × panels` must come to 32–128, or the write is `422 validationFailed` on `panelWidth`. | yes, if the total width changes |
 | `panelStart` | enum | `topLeft` `topRight` `bottomLeft` `bottomRight` | `topLeft` | The corner the first LED sits in. Names are case-insensitive; anything else is `422`. | no |
 | `panelWiring` | enum | `rows` `columns` | `rows` | Whether the strip runs along the rows or down the columns inside a panel. | no |
@@ -336,8 +338,13 @@ Only `rotate` moves the buttons; a `panelStart` of `bottomRight` is a statement 
 not about the image. On a single-panel device the two chain keys cannot change anything.
 
 Wiring is re-applied on the next frame, so you can try a setting and look at the panel. The one
-exception is the total width, which is fixed at boot: a change to `panelWidth × panels` needs
+exception is the canvas size, which is fixed at boot: a change to `panelWidth × panels` or `panelHeight` needs
 `POST /api/v1/device/reboot`.
+
+The Galactic Unicorn's panel is built in: `panelWidth` is `53`, `panels` is `1`, and `panelHeight`
+is `11` or `8` (default `11`). Any other value, or a change to `panelStart`, `panelWiring`,
+`panelSerpentine`, `panelColorOrder` or the chain keys, is refused with `422 validationFailed`
+naming the field. `mirror` and `rotate` work as on any panel.
 
 ### The wirings people actually have
 

@@ -10,6 +10,7 @@
 #include "core/apps/builtin/ContentFrame.h"
 #include "core/apps/builtin/WeekdayBar.h"
 #include "core/render/TextRenderer.h"
+#include "core/render/ContentBand.h"
 
 namespace awtrix {
 
@@ -41,7 +42,8 @@ class TimeApp : public IApp {
  public:
   const std::string& id() const override { return id_; }
 
-  void render(Canvas& c, const RenderCtx& ctx) override {
+  void render(Canvas& panel, const RenderCtx& ctx) override {
+    Canvas c = render::contentBand(panel);
     const Settings& s = *ctx.settings;
     // timeMode: 0 plain, 1-4 add the calendar box (2 and 4 move the weekday bar to the top),
     // 5 big clock, 6 binary.
