@@ -8,7 +8,7 @@ You need PlatformIO, Python 3 and Node.js. The host tests additionally need CMak
 3.20+, Ninja and GCC. Node is used only by the pre-build step that embeds the
 [web UI](#the-embedded-web-ui), but a firmware build stops without it.
 
-To run the `pio` cli you to [install it first](https://docs.platformio.org/en/latest/core/installation/index.html).
+To run the `pio` cli you need to [install it first](https://docs.platformio.org/en/latest/core/installation/index.html).
 
 ```bash
 pio run  -e awtrix            # ESP32 firmware (the default environment)
