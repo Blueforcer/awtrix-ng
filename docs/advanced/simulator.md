@@ -10,8 +10,10 @@ notifications, or preview the web UI, without touching hardware.
 
 ## Build and run
 
+To run the `pio` cli you need to [install it first](https://docs.platformio.org/en/latest/core/installation/index.html).
+
 ```bash
-pio run -e native_sim
+pio run -e native_sim                # Building native_sim
 .pio/build/native_sim/program        # Linux/macOS
 .pio\build\native_sim\program.exe    # Windows
 # then open http://localhost:8080
