@@ -102,8 +102,8 @@ animations in the browser, and you can share anything you make back to the galle
 
 Any 32–128 × 8–16 WS2812-style panel: a commercial clock, an AWTRIX 2 conversion or your own build - same
 image, pins set in the web UI. ESP32 and ESP32-S3. Also supports the fixed 53×11
-[Pimoroni Galactic Unicorn](docs/advanced/galactic-unicorn.md): Pico W (RP2040,
-hardware-verified) and Pico 2 W (RP2350, compile-only). Pico images use USB UF2
+[Pimoroni Galactic Unicorn](docs/advanced/galactic-unicorn.md) with a Pico W
+(RP2040) or Pico 2 W (RP2350), both hardware-verified. Pico images use USB UF2
 updates; optional features follow the device's capabilities.
 
 ```bash

@@ -7,7 +7,7 @@ image for the microcontroller actually fitted to your board:
 | Hardware | PlatformIO environment | USB image | Verification |
 | --- | --- | --- | --- |
 | Pico W, RP2040, 264 KB SRAM, 2 MB flash | `galactic_unicorn` | `firmware-galactic-unicorn.uf2` | Hardware-verified on a real Galactic Unicorn |
-| Pico 2 W, RP2350, 520 KB SRAM, 4 MB flash | `galactic_unicorn_2w` | `firmware-galactic-unicorn-2w.uf2` | Compile-only; untested on hardware |
+| Pico 2 W, RP2350, 520 KB SRAM, 4 MB flash | `galactic_unicorn_2w` | `firmware-galactic-unicorn-2w.uf2` | Hardware-verified on a real Galactic Unicorn (see [scope](#verification-scope)) |
 
 Both reserve **512 KiB for LittleFS**, separate from the application. The
 PlatformIO build's reported RAM denominator excludes memory reserved by the
@@ -97,16 +97,19 @@ the display, so the budget depends on the chip:
 | | Pico W (RP2040) | Pico 2 W (RP2350) |
 | --- | --- | --- |
 | Script heap budget (`scriptHeapBudgetBytes`) | 48 KB | 96 KB, as on the ESP32 |
-| Interpreter cost with no script installed | about 19 KB of free heap | not measured on hardware |
-| Largest script that installs | about 7 KB of source | not measured on hardware |
+| Interpreter cost with no script installed | about 19 KB of free heap | about 17 KB of free heap |
+| Largest script that installs | about 7 KB of source | about 28 KB of source |
+
+Both columns were measured on a real Galactic Unicorn. On the Pico 2 W a bigger
+script fails with `out of memory` while plenty of heap is still free: the 96 KB
+budget is the limit there, not the memory Wi-Fi needs.
 
 On the Pico W a failed install of a large script can leave the heap fragmented,
 so later installs are refused with `507` even though enough memory is free in
 total. Reboot to recover. Script `http.*` requests, and Modbus reads, which go
 through the same request path, return `false`, and script icons are not drawn on
 either board; timers, drawing, storage, buttons, sound and MQTT
-work as on the ESP32. The Pico 2 W is verified by build, host tests and the
-simulator only.
+work as on the ESP32.
 
 If a script takes the device down on every boot, hold **A and C** together for
 three seconds while powering on. The panel shows `NOSCR` and the Unicorn starts
@@ -167,9 +170,14 @@ Verified on **Pico W** hardware: display/light sensor/fps, HTTP
 smoke testing (`tools/pico/smoke.sh`, no failures), 80 concurrent requests, watchdog recovery,
 MQTT and real Home Assistant discovery (21 entities), Matrix light control,
 notifications, A/B/C events, brightness, volume, Sleep, and hearing the `alert`
-melody. The button **webhook** remains host/simulator-tested only. The Pico 2 W
-has **no hardware verification**. Firmware compilation and host tests cannot
-establish physical timing or audio quality on that board.
+melody. The button **webhook** remains host/simulator-tested only.
+
+Verified on **Pico 2 W** hardware: display at 42 fps, `mirror` and `rotate`,
+notifications, light sensor, Wi-Fi join, mDNS and NTP, HTTP smoke testing (every
+API check passes; the 80-request burst depends on the Wi-Fi link), watchdog
+recovery (`resetReason: "watchdog"`), settings kept across application UF2
+updates, and the scripting figures above. MQTT, Home Assistant, the buttons and
+hearing a melody are not yet checked on that board.
 
 See [driver details](galactic-unicorn-display.md) and
 [LittleFS persistence](pico-persistence.md) for implementation constraints.

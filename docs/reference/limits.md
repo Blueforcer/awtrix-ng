@@ -129,7 +129,7 @@ updates and sleep emulation.
 | Limit | Value | At the edge |
 | --- | --- | --- |
 | Shared script memory | 48 KB on the Pico W (RP2040); 96 KB on the Pico 2 W (RP2350) | **new** installs refused until it drops; nothing already installed is removed |
-| Largest script (Pico W) | about 7 KB of source, measured | install refused, `507` |
+| Largest script | about 7 KB of source on the Pico W, about 28 KB on the Pico 2 W, measured | stored but not run, `out of memory`; far larger sources are refused with `507` |
 | Memory in one piece (Pico W) | a failed install of a big script can fragment the heap | later installs refused, `507` - reboot |
 | Script HTTP and Modbus requests, and icons | not available on either Pico | `http.*` and `modbus` reads return `false`; script icons are not drawn |
 | Hung or faulted firmware | hardware watchdog, ~8 s | reboots itself; `/api/v1/device` then reports `resetReason: "watchdog"` |
