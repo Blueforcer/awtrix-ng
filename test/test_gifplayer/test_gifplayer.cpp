@@ -69,6 +69,7 @@ namespace {
 
 const unsigned char* s_asset = nullptr;
 unsigned int s_assetLen = 0;
+int s_readAssetCalls = 0;
 
 void useAsset(const unsigned char* data, unsigned int len) {
   s_asset = data;
@@ -79,8 +80,9 @@ void useAsset(const unsigned char* data, unsigned int len) {
 
 namespace awtrix {
 namespace media {
-bool readAsset(const std::string& path, PodBuffer<uint8_t>& out, bool* outOfMemory) {
+bool readAsset(std::string_view path, PodBuffer<uint8_t>& out, bool* outOfMemory) {
   (void)path;
+  ++s_readAssetCalls;
   if (outOfMemory) *outOfMemory = false;
   if (!s_asset) return false;
   if (!out.resize(s_assetLen)) {
@@ -98,6 +100,7 @@ void setUp() {
   s_failExactBytes = s_allocationCount = s_largestAllocation = 0;
   s_sweepNth = s_sweepCount = 0;
   s_sweepMin = 2048;
+  s_readAssetCalls = 0;
 }
 void tearDown() {
   s_failBigAllocs = s_trackAllocations = false;
@@ -264,17 +267,58 @@ void test_asset_buffer_oom_is_reported_and_recovers_on_reopen() {
   TEST_ASSERT_EQUAL_HEX32(0xff0000, c.getPixel(7, 7));
 }
 
-void test_inline_base64_gif() {
+std::string dataUri(const char* type, const unsigned char* bytes, unsigned int length) {
+  std::string b64(encode_base64_length(length), '\0');
+  encode_base64(bytes, length, reinterpret_cast<unsigned char*>(&b64[0]));
+  return std::string("data:image/") + type + ";base64," + b64;
+}
+
+void test_data_uri_gif_plays_without_touching_the_filesystem() {
+  useAsset(nullptr, 0);
+  GifPlayer gif;
+  TEST_ASSERT_TRUE(openOk(gif, dataUri("gif", kGif8x8TwoFrames, kGif8x8TwoFrames_len)));
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+  Canvas c(8, 8);
+  gif.render(c, 0);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(0, 0));
+}
+
+void test_short_data_uri_gif_opens() {
+  const std::string payload = "R0lGODlhCAAIAPAAAAAAAP///yH5BAkIAAAALAAAAAAIAAgAAAIHDI6py+3fCgA7";
+  TEST_ASSERT_TRUE(payload.size() <= 64);
+  useAsset(kGif8x8TwoFrames, kGif8x8TwoFrames_len);
+  GifPlayer gif;
+  TEST_ASSERT_TRUE(openOk(gif, "data:image/gif;base64," + payload));
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+  TEST_ASSERT_EQUAL_INT(8, gif.width());
+  TEST_ASSERT_EQUAL_INT(8, gif.height());
+}
+
+void test_jpeg_data_uri_is_left_to_the_jpeg_decoder() {
+  useAsset(kGif8x8TwoFrames, kGif8x8TwoFrames_len);
+  GifPlayer gif;
+  TEST_ASSERT_TRUE(gif.open(dataUri("jpeg", kGif8x8TwoFrames, kGif8x8TwoFrames_len), 32, 8) ==
+                   OpenResult::kMissing);
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+  TEST_ASSERT_FALSE(gif.active());
+}
+
+void test_gif_data_uri_with_other_bytes_is_missing() {
+  const unsigned char jpeg[] = {0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46};
+  GifPlayer gif;
+  TEST_ASSERT_TRUE(gif.open(dataUri("gif", jpeg, sizeof(jpeg)), 32, 8) == OpenResult::kMissing);
+  TEST_ASSERT_FALSE(gif.active());
+}
+
+void test_raw_base64_is_neither_decoded_nor_looked_up() {
   std::string b64(encode_base64_length(kGif8x8TwoFrames_len), '\0');
   encode_base64(kGif8x8TwoFrames, kGif8x8TwoFrames_len,
                 reinterpret_cast<unsigned char*>(&b64[0]));
   TEST_ASSERT_TRUE(b64.size() > 64);
-  useAsset(nullptr, 0);
+  useAsset(kGif8x8TwoFrames, kGif8x8TwoFrames_len);
   GifPlayer gif;
-  TEST_ASSERT_TRUE(openOk(gif, b64));
-  Canvas c(8, 8);
-  gif.render(c, 0);
-  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(0, 0));
+  TEST_ASSERT_TRUE(gif.open(b64, 32, 8) == OpenResult::kMissing);
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
 }
 
 void test_transparent_static_renders_black() {
@@ -479,12 +523,13 @@ void test_small_gif_allocations_do_not_grow_with_panel() {
   }
 }
 
-void test_dynamic_scratch_oom_is_reported_and_recoverable() {
+void test_decode_buffer_oom_is_reported_and_recoverable() {
   const auto asset = sizedGif(51, 16);
   useAsset(asset.data(), asset.size());
   GifPlayer gif;
+  // The LZW workspace, then the cache holding both frames.
   for (std::size_t failingBytes : {std::size_t{51 * 16 * 5},
-                                   51 * 16 * sizeof(uint32_t)}) {
+                                   2 * 51 * 16 * sizeof(uint32_t)}) {
     s_failExactBytes = failingBytes;
     const auto result = gif.open("wide", 51, 16);
     s_failExactBytes = 0;
@@ -614,6 +659,36 @@ void test_streaming_initial_frame_transfer_continues_animation_without_copying()
   TEST_ASSERT_EQUAL_HEX32(0x00ff00, pixels[0]);
   TEST_ASSERT_EQUAL_HEX32(0x00ff00, pixels[63]);
   gif.render(c, 5500);
+  TEST_ASSERT_EQUAL_HEX32(0xff0000, pixels[63]);
+}
+
+void test_take_frame_hands_over_still_streaming_and_cached_animations() {
+  awtrix::media::PodBuffer<uint32_t> pixels;
+  const auto still = sizedGif(8, 8, false);
+  useAsset(still.data(), still.size());
+  GifPlayer a;
+  TEST_ASSERT_TRUE(a.open("x", 8, 8, false, 1) == OpenResult::kGood);
+  TEST_ASSERT_TRUE(a.takeFrame(pixels) == GifPlayer::Frame::kStill);
+  TEST_ASSERT_FALSE(a.active());
+  TEST_ASSERT_EQUAL_UINT32(64, pixels.size());
+  TEST_ASSERT_EQUAL_HEX32(0xff0000, pixels[63]);
+
+  useAsset(kGif8x8TwoFrames, kGif8x8TwoFrames_len);
+  GifPlayer b;
+  TEST_ASSERT_TRUE(b.open("x", 8, 8, false, 1) == OpenResult::kGood);
+  TEST_ASSERT_TRUE(b.takeFrame(pixels) == GifPlayer::Frame::kPlaying);
+  TEST_ASSERT_TRUE(b.active());
+  TEST_ASSERT_EQUAL_HEX32(0xff0000, pixels[63]);
+
+  GifPlayer c;
+  TEST_ASSERT_TRUE(c.open("x", 8, 8) == OpenResult::kGood);
+  TEST_ASSERT_TRUE(pixels.resize(1));
+  pixels[0] = 0x123456;
+  TEST_ASSERT_TRUE(c.takeFrame(pixels) == GifPlayer::Frame::kPlaying);
+  TEST_ASSERT_EQUAL_UINT32(64, pixels.size());
+  for (std::size_t i = 0; i < pixels.size(); ++i) TEST_ASSERT_EQUAL_HEX32(0, pixels[i]);
+  Canvas canvas(8, 8, pixels.data());
+  c.render(canvas, 0);
   TEST_ASSERT_EQUAL_HEX32(0xff0000, pixels[63]);
 }
 
@@ -752,6 +827,151 @@ void test_frame_cache_growth_stays_within_budget_at_51x16() {
   TEST_ASSERT_EQUAL_HEX32(0xff0000, c.getPixel(50, 15));
 }
 
+void test_static_and_first_only_loads_hand_over_one_frame() {
+  for (int width : {8, 32, 128}) {
+    const int height = width == 128 ? 32 : 8;
+    for (bool firstOnly : {false, true}) {
+      const auto asset = sizedGif(width, height, firstOnly);
+      useAsset(asset.data(), asset.size());
+      GifPlayer gif;
+      TEST_ASSERT_TRUE(gif.open("x", width, height, firstOnly, 1) == OpenResult::kGood);
+      Canvas canvas(width, height);
+      gif.render(canvas, 0);
+      TEST_ASSERT_EQUAL_HEX32(0xff0000, canvas.getPixel(width - 1, height - 1));
+      gif.render(canvas, 10000);
+      TEST_ASSERT_EQUAL_HEX32(0xff0000, canvas.getPixel(width - 1, height - 1));
+      awtrix::media::PodBuffer<uint32_t> pixels;
+      TEST_ASSERT_TRUE(gif.takeStaticFrame(pixels));
+      TEST_ASSERT_EQUAL_size_t(static_cast<std::size_t>(width) * height, pixels.size());
+    }
+  }
+}
+
+void test_single_frame_keeps_its_delay_before_trailing_extensions() {
+  for (int delayCs : {0, 65535}) {
+    auto asset = sizedGif(8, 8, false);
+    asset[29] = static_cast<uint8_t>(delayCs);
+    asset[30] = static_cast<uint8_t>(delayCs >> 8);
+    asset.insert(asset.end() - 1, {0x21, 0xfe, 3, 'a', 'b', 'c', 0});
+    useAsset(asset.data(), asset.size());
+    GifPlayer gif;
+    TEST_ASSERT_TRUE(gif.open("x", 8, 8, false, 1) == OpenResult::kGood);
+    Canvas canvas(8, 8);
+    gif.render(canvas, 0);
+    TEST_ASSERT_EQUAL_HEX32(0xff0000, canvas.getPixel(7, 7));
+    const int delayMs = delayCs ? delayCs * 10 : 100;
+    canvas.clear(0x123456);
+    gif.render(canvas, delayMs - 1);
+    TEST_ASSERT_EQUAL_HEX32(0x123456, canvas.getPixel(7, 7));
+    gif.render(canvas, delayMs);
+    TEST_ASSERT_EQUAL_HEX32(0xff0000, canvas.getPixel(7, 7));
+  }
+}
+
+void test_incomplete_tail_keeps_the_existing_cached_first_frame() {
+  const std::array<std::vector<uint8_t>, 4> tails = {{
+      {}, {0x2c, 0, 0, 0}, {0x21, 0xfe, 5, 'a', 0x3b}, {0x42, 0x3b}}};
+  for (const auto& tail : tails) {
+    auto asset = sizedGif(8, 8, false);
+    asset.pop_back();
+    asset.insert(asset.end(), tail.begin(), tail.end());
+    useAsset(asset.data(), asset.size());
+    GifPlayer gif;
+    TEST_ASSERT_TRUE(gif.open("x", 8, 8, false, 1) == OpenResult::kGood);
+    awtrix::media::PodBuffer<uint32_t> pixels;
+    TEST_ASSERT_TRUE(gif.takeStaticFrame(pixels));
+    TEST_ASSERT_EQUAL_HEX32(0xff0000, pixels[63]);
+  }
+  auto truncated = sizedGif(8, 8, false);
+  truncated.resize(35);
+  useAsset(truncated.data(), truncated.size());
+  GifPlayer gif;
+  TEST_ASSERT_TRUE(gif.open("x", 8, 8, false, 1) == OpenResult::kMissing);
+  TEST_ASSERT_FALSE(gif.active());
+}
+
+void test_undecodable_later_frame_leaves_the_frames_before_it() {
+  auto asset = sizedGif(8, 8);
+  // The second image's first 3-bit code is 7, undefined before any dictionary entry.
+  asset[45 + sizedGif(8, 8, false).size() - 26] |= 7;
+  useAsset(asset.data(), asset.size());
+  GifPlayer gif;
+  TEST_ASSERT_TRUE(gif.open("x", 8, 8) == OpenResult::kGood);
+  awtrix::media::PodBuffer<uint32_t> pixels;
+  TEST_ASSERT_TRUE(gif.takeStaticFrame(pixels));
+  TEST_ASSERT_EQUAL_size_t(64, pixels.size());
+  TEST_ASSERT_EQUAL_HEX32(0xff0000, pixels[63]);
+}
+
+void test_single_frame_allocation_failures_report_oom_and_recover() {
+  for (bool firstOnly : {false, true}) {
+    for (bool restorePrevious : {false, true}) {
+      auto asset = sizedGif(32, 8, firstOnly);
+      if (restorePrevious) asset[28] = 3 << 2;
+      useAsset(asset.data(), asset.size());
+      bool failed = false;
+      for (int nth = 1; nth <= 16; ++nth) {
+        GifPlayer gif;
+        s_sweepMin = 1;
+        s_sweepCount = 0;
+        s_sweepNth = nth;
+        const auto result = gif.open("x", 32, 8, firstOnly, 1);
+        s_sweepNth = 0;
+        if (result == OpenResult::kOom) {
+          failed = true;
+          TEST_ASSERT_FALSE(gif.active());
+        } else {
+          TEST_ASSERT_TRUE(result == OpenResult::kGood);
+        }
+        TEST_ASSERT_TRUE(gif.open("x", 32, 8, firstOnly, 1) == OpenResult::kGood);
+        Canvas canvas(32, 8);
+        gif.render(canvas, 0);
+        TEST_ASSERT_EQUAL_HEX32(0xff0000, canvas.getPixel(31, 7));
+      }
+      TEST_ASSERT_TRUE(failed);
+    }
+  }
+}
+
+// Red, then a transparent frame that keeps it, green with restore-to-previous, a transparent frame
+// that restores red and disposes to background, and a transparent frame over that black.
+std::vector<uint8_t> disposalSequenceGif() {
+  const auto pair = sizedGif(8, 8);
+  const std::size_t frameBytes = sizedGif(8, 8, false).size() - 26;
+  const struct {
+    int colour;
+    int disposal;
+    bool transparent;
+  } frames[] = {{1, 1, false}, {1, 1, true}, {2, 3, false}, {1, 2, true}, {1, 1, true}};
+  std::vector<uint8_t> gif(pair.begin(), pair.begin() + 25);
+  for (const auto& f : frames) {
+    const std::size_t at = gif.size();
+    const auto source = pair.begin() + 25 + (f.colour - 1) * frameBytes;
+    gif.insert(gif.end(), source, source + frameBytes);
+    gif[at + 3] = static_cast<uint8_t>((f.disposal << 2) | (f.transparent ? 1 : 0));
+    gif[at + 6] = static_cast<uint8_t>(f.colour);
+  }
+  gif.push_back(0x3b);
+  return gif;
+}
+
+void test_cached_and_streamed_frames_agree_for_every_disposal() {
+  const auto asset = disposalSequenceGif();
+  useAsset(asset.data(), asset.size());
+  const uint32_t expected[] = {0xff0000, 0xff0000, 0x00ff00, 0xff0000, 0x000000, 0xff0000};
+  for (int residentFrames : {0, 1}) {
+    GifPlayer gif;
+    TEST_ASSERT_TRUE(gif.open("x", 8, 8, false, residentFrames) == OpenResult::kGood);
+    Canvas canvas(8, 8);
+    canvas.clear(0x123456);
+    for (int frame = 0; frame < 6; ++frame) {
+      gif.render(canvas, frame * 100);
+      TEST_ASSERT_EQUAL_HEX32(expected[frame], canvas.getPixel(0, 0));
+      TEST_ASSERT_EQUAL_HEX32(expected[frame], canvas.getPixel(7, 7));
+    }
+  }
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_two_frame_playback_and_loop);
@@ -765,7 +985,11 @@ int main(int, char**) {
   RUN_TEST(test_non_gif_rejected);
   RUN_TEST(test_missing_asset_rejected);
   RUN_TEST(test_asset_buffer_oom_is_reported_and_recovers_on_reopen);
-  RUN_TEST(test_inline_base64_gif);
+  RUN_TEST(test_data_uri_gif_plays_without_touching_the_filesystem);
+  RUN_TEST(test_short_data_uri_gif_opens);
+  RUN_TEST(test_jpeg_data_uri_is_left_to_the_jpeg_decoder);
+  RUN_TEST(test_gif_data_uri_with_other_bytes_is_missing);
+  RUN_TEST(test_raw_base64_is_neither_decoded_nor_looked_up);
   RUN_TEST(test_transparent_static_renders_black);
   RUN_TEST(test_transparent_animation_keeps_previous_frame);
   RUN_TEST(test_transparent_streaming_first_frame_is_black);
@@ -779,13 +1003,14 @@ int main(int, char**) {
   RUN_TEST(test_gif_frames_larger_than_panel_are_rejected);
   RUN_TEST(test_large_first_frame_only_does_not_animate);
   RUN_TEST(test_small_gif_allocations_do_not_grow_with_panel);
-  RUN_TEST(test_dynamic_scratch_oom_is_reported_and_recoverable);
+  RUN_TEST(test_decode_buffer_oom_is_reported_and_recoverable);
   RUN_TEST(test_maximum_gif_delay_is_identical_cached_and_streamed);
   RUN_TEST(test_zero_gif_delay_keeps_100ms_default_in_both_modes);
   RUN_TEST(test_streaming_preflight_reports_first_frame_decode_oom);
   RUN_TEST(test_streaming_preflight_keeps_only_initial_pixels_and_shared_scratch);
   RUN_TEST(test_streaming_preflight_rejects_invalid_first_lzw_frame);
   RUN_TEST(test_streaming_initial_frame_transfer_continues_animation_without_copying);
+  RUN_TEST(test_take_frame_hands_over_still_streaming_and_cached_animations);
   RUN_TEST(test_initial_frame_transfer_rejects_cached_images_without_changing_output);
   RUN_TEST(test_five_streaming_players_allocate_nothing_after_warmup);
   RUN_TEST(test_streaming_oom_keeps_last_frame_and_retries_pending_frame);
@@ -793,5 +1018,11 @@ int main(int, char**) {
   RUN_TEST(test_single_frame_beyond_the_cache_budget_is_still_a_static_image);
   RUN_TEST(test_static_transfer_rejects_animation_without_modifying_output);
   RUN_TEST(test_frame_cache_growth_stays_within_budget_at_51x16);
+  RUN_TEST(test_static_and_first_only_loads_hand_over_one_frame);
+  RUN_TEST(test_single_frame_keeps_its_delay_before_trailing_extensions);
+  RUN_TEST(test_incomplete_tail_keeps_the_existing_cached_first_frame);
+  RUN_TEST(test_undecodable_later_frame_leaves_the_frames_before_it);
+  RUN_TEST(test_single_frame_allocation_failures_report_oom_and_recover);
+  RUN_TEST(test_cached_and_streamed_frames_agree_for_every_disposal);
   return UNITY_END();
 }

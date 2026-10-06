@@ -1,537 +1,724 @@
-# Web UI tour
+# The web UI
 
-AWTRIX serves its own control panel. Point a browser at it and you get a live picture of the
-matrix, every setting it has, an editor for melodies, and a file manager for icons
-and palettes - no app, no cloud, no internet connection.
+AWTRIX has its own web UI. Open it in a browser to see the display live, change every
+setting, manage apps, scripts, icons, <!-- only esp32 -->melodies<!-- /only --><!-- only esp32-s3 tc002 -->sounds<!-- /only --> and palettes, and update the firmware. It needs no app
+and no cloud account.
 
-Open it at the AWTRIX hostname:
+## Open the web UI
 
-```
-http://awtrixng-a1b2c3.local/
-```
+1. Make sure your phone or computer is on the same network as AWTRIX.
+2. Open the AWTRIX hostname in a browser, for example:
 
-…or at its IP address if `.local` names do not resolve on your network - see
-[Finding AWTRIX](discovery.md). The page is a single HTML file stored on AWTRIX itself, so
-it works fully offline - including in provisioning mode, before it has ever seen your Wi-Fi.
+    ```
+    http://awtrixng-a1b2c3.local/
+    ```
+
+3. If the `.local` name does not open, use the IP address instead. See
+   [Find your clock](discovery.md).
+
+The page is stored on AWTRIX itself, so it works without an internet connection. Only a few extras
+load from the internet: the icon editor, the AWTRIX Hub links and the firmware update check.
+
+## The header
+
+The buttons at the top right:
+
+| Button | What it does |
+|---|---|
+| **Ko-fi cup** | Opens the project's Ko-fi page |
+| **Shop** | Opens the [AWTRIX Hub](../guides/hub.md) |
+| **Book** | Opens this documentation |
+| **Sun / moon** | Switches between light and dark theme |
 
 ## The tabs
 
-The navigation bar carries ten tabs (a bottom bar on phones, a top row on desktop). Each is a URL
-hash, so you can bookmark or link any of them directly:
+On a phone the tabs sit in a bar at the bottom, on a computer in a row at the top. Each tab has its
+own address, so you can bookmark it:
 
-| Tab | URL | What it is for |
+| Tab | Address | What you do there |
 |---|---|---|
-| **Dashboard** | `#/` | Live matrix preview, power/brightness, vitals |
-| **Apps** | `#/apps` | Reorder, switch off and delete apps |
-| **Scripts** | `#/scripts` | Write, install and debug Berry apps |
-| **Icons** | `#/icons` | Manage, upload, preview and edit icon files |
-| **Icon Editor** | `#/editor` | Draw 8×8/32×8 icons in an embedded editor and save them to AWTRIX |
-| **Audio** | `#/audio` | MP3s, melodies and internet radio |
-| **Palettes** | `#/palettes` | Build colour ramps for effects, text and charts |
-| **Display** | `#/display` | Everything about what the matrix shows |
-| **System** | `#/system` | Wi-Fi, MQTT, time, hardware, GPIO, maintenance |
+| **Dashboard** | `#/` | Watch the display live, switch it on and off, set the brightness |
+| **Apps** | `#/apps` | Choose which apps show, in which order |
+| **Scripts** | `#/scripts` | Write, install and update Berry apps |
+| **Icons** | `#/icons` | Add, show, edit and delete icons |
+| **Icon Editor** | `#/editor` | Draw icons and animations |
+| **Audio** | `#/audio` | The volume mixer<!-- only esp32-s3 tc002 -->, MP3 files, internet radio<!-- /only --> and melodies |
+| **Palettes** | `#/palettes` | Make color ramps for effects, text and charts |
+| **Display** | `#/display` | Everything about what the display shows |
+| **System** | `#/system` | Wi-Fi, MQTT, time, hardware, updates, backup |
 | **Log** | `#/log` | Live device log |
 
-The old `#/sounds` and `#/radio` bookmarks still work - they land on the Audio tab.
+The web UI shows only what your device can do.<!-- only esp32 esp32-s3 --> For example, the **Audio** tab is missing on a
+device with neither a buzzer nor a speaker.<!-- /only -->
 
 ## Dashboard
 
-The Dashboard is an instrument panel: what AWTRIX is showing, how it is doing, and the controls
-that act on it - in that order.
-
 ### Live preview
 
-The hero card is a canvas showing every LED, polled from `GET /api/v1/display/screen` four times a
-second. Each LED is drawn as a square with a one-pixel gap, so you read it as a matrix rather than a
-photo. Polling pauses while the tab is hidden.
+The large picture at the top shows every LED of your display, updated four times a second. The
+same picture on its own is at `http://<awtrix-ip>/fullscreen`. You can put it in a Home Assistant
+dashboard or any other web page.
 
-You can fetch the same frame yourself:
+### Controls under the preview
 
-```bash
-curl http://<awtrix-ip>/api/v1/display/screen
-```
+| Control | What it does |
+|---|---|
+| **Power** | Switches the display on and off |
+| **Brightness** | Sets the brightness, 0–255 |
+<!-- only esp32 esp32-s3 -->
+| **Auto brightness** | Lets the light sensor set the brightness. The manual slider is locked while it is on. Only on a device with a light sensor |
+<!-- /only -->
+| **◀ / ▶** | Previous / next app |
+| **⏸ / ▶** | Stops the automatic app change, or starts it again. The same switch as **Auto rotation** under [Display](#display) |
+| **Bell** | Closes the notification that is shown now |
+| **↓** | Saves the current picture as a PNG |
+| **●** | Records an animated GIF. Press again to stop and save |
+| **1:1** | Saves PNG and GIF at one pixel per LED, for sharing in the AWTRIX Hub |
 
-See [HTTP API → Display](../reference/http.md#display) for the response shape.
+### Save a screenshot or GIF
 
-`http://<awtrix-ip>/fullscreen` serves the same preview on its own, without the rest of the page -
-embed it in a Home Assistant dashboard or any other iframe.
+1. Press **↓** for a still picture, or **●** to start a recording. The button turns red while it
+   records.
+2. Press **●** again to stop. A recording also stops by itself after 240 frames or 10 seconds.
+3. The file lands in your browser's download folder, named `awtrix-<timestamp>`.
 
-### Screenshot and GIF
+Without **1:1**, each LED is drawn as a large block with a thin dark gap, so the picture looks like
+the real display. <!-- only esp32 esp32-s3 -->A 32×8 display gives a 3200×800 PNG and a 640×160 GIF. Larger displays are
+enlarged less.<!-- /only --><!-- only tc002 -->The 52×16 display gives a 5200×1600 PNG and a GIF of up to 1040×320.<!-- /only --> The GIF plays back at the speed it was recorded. Every PNG and GIF is small enough to
+use as a cover or gallery picture in the [AWTRIX Hub](https://awtrix.de).
 
-The two buttons on the right of the docked controls export what the preview shows. **↓** saves the
-current frame as a PNG. **●** starts a recording - the button turns red, the preview polls up to 25
-times a second, and pressing it again writes an animated GIF of everything since. Both files land in
-your browser's download folder, named `awtrix-<timestamp>`. Both draw an LED as a block with the same
-dark grid line the preview uses, blown up so the file is usable on a desktop: a 32×8 panel becomes a
-3200×800 PNG, and 640×160 for the GIF, which pays for the size on every frame. Each GIF frame is held
-for as long as it took to fetch the next one, so it plays back at the speed it was recorded. A
-recording stops on its own after 300 frames - twelve seconds at the full rate, longer if AWTRIX
-answers slower. Every frame is a request, so a recording costs the device a few frames per second of
-its own render rate; nothing else about it involves the device.
+While it records, the display may run a few frames per second slower.
 
-### Docked controls
+### Status tiles
 
-Directly under the canvas, acting on what you just saw:
+Tiles show how the device is doing. A tile appears only when the device has that sensor.
 
-| Control | What it does | API call |
+| Tile | Shows | Color |
 |---|---|---|
-| **Power** switch | Turns the LED matrix on and off | `PATCH /api/v1/display` `{"power":true}` |
-| **Brightness** slider | 0–255, sent 300 ms after you stop dragging | `PATCH /api/v1/settings` `{"brightness":120}` |
-| **Auto brightness** switch | Lets the ambient light sensor control brightness and disables the manual slider | `PATCH /api/v1/settings` `{"autoBrightness":true}` |
-| **◀ / ▶** | Previous / next app in the rotation | `POST /api/v1/apps/previous` · `/next` |
-| **Bell** | Dismisses the notification currently on screen | `DELETE /api/v1/notifications/active` |
-| **↓** | Saves the preview as a PNG | - |
-| **●** | Records the preview as an animated GIF | - |
+| **Battery** | Charge in %, voltage below | green from 40 %, amber from 20 %, red below |
+| **Wi-Fi** | Signal in dBm, and in words: *excellent / good / fair / weak* | green from −65 dBm, amber from −75 dBm, red below |
+<!-- only esp32 esp32-s3 -->
+| **Light level** | Ambient light, raw sensor value below | always blue |
+| **Temperature** | Temperature | always blue |
+| **Humidity** | Humidity | always blue |
+<!-- /only -->
+| **FPS** | Frames per second, out of 42 | green from 40, amber from 32, red below |
 
-While auto brightness is on, the ambient light sensor owns the brightness value and the manual
-slider is disabled. The same switch also remains under **Display → Brightness**.
+Below the tiles: firmware version (with a note when an update is available), hostname, IP address,
+MAC address, uptime, free memory, <!-- only esp32-s3 -->PSRAM (`none` on a board without it), <!-- /only -->and the app shown now.
 
-### Vitals
-
-A grid of tiles, each turning a raw number into a verdict. A tile is omitted, not blanked, when the
-board does not report its value - a build with no battery simply has no battery tile.
-
-| Tile | Shown when the device reports | Sub-line | Colour |
-|---|---|---|---|
-| **Battery** | `batteryPercent` | voltage, 2 decimals | green ≥ 40 %, amber ≥ 20 %, red below |
-| **WiFi** | `wifiRssi` (always) | signal in words | green ≥ −65 dBm, amber ≥ −75 dBm, red below |
-| **Light** | `lightLevel` | raw sensor reading | always blue - a measurement, not a verdict |
-| **Temperature** | `temperature` | - | always blue |
-| **Humidity** | `humidity` | - | always blue |
-| **FPS** | `fps` | `/ 42` | green ≥ 40, amber ≥ 32, red below |
-
-Colour is never the only signal: the WiFi tile also spells its verdict out - *excellent / good /
-fair / weak*. Temperature has no bar, because it has no natural 0–100 scale.
-
-What each number measures, and its caveats, is in
-[Device state](../reference/device.md#always-present-fields).
-
-Below the tiles, a metadata line: version, IP address, uptime, free RAM, PSRAM (on boards that
-have it), current app.
+What each value means: [Device state](../reference/device.md#always-present-fields).
 
 ## Apps
 
-The top card, **App rotation**, *is* the loop - the list you see is exactly what AWTRIX will
-rotate through after you save. Drag a row by its ⠿ grip to reorder it; it works with the mouse and
-with a finger.
+The Apps tab decides what AWTRIX shows and in which order. Every change is saved at once. The
+message that confirms it has an **Undo** button for a few seconds.
 
-Everything else a row can do sits behind its **⋯** menu:
+Each group shows its number of apps next to its title. Every group except **On the display** starts
+folded away. Tap its title to open it.
 
-| Menu entry | Effect |
+### The groups
+
+| Group | What is in it |
 |---|---|
-| **Show now** | Show this app right now (`PUT /api/v1/apps/active`) |
-| **Duplicate** | The app appears twice per cycle |
-| **Settings** | Scripts and modules that declare settings: opens them under the row |
-| **Edit** | Scripts and modules: opens the source in the [Scripts](#scripts) tab |
-| **Deactivate** / **Activate** | Switches the app off or back on |
-| **Delete** | Removes it, two-step confirm |
+| **On the display** | The apps shown one after another, in this order |
+| **In the device menu** | [Scripts started from the menu](../guides/scripting/several-apps.md#start-from-the-device-menu), such as games. They never join the rotation |
+| **In the background** | [Scripts that run but never show](../guides/scripting/several-apps.md#running-without-ever-being-shown), for example one that only sends notifications |
+| **Switched off** | Apps that do not run |
+| **Shared settings** | [Settings several scripts use together](../guides/scripting/several-apps.md#settings-several-apps-share) |
 
-There are two ways to be rid of an app, and they mean different things. **Deactivate** switches it
-off and keeps it: it stays on the list, in its place, ready to come back. **Delete** removes it
-outright - out of AWTRIX and off the list. Deleting takes effect at once; taking the name off the
-list is written when you hit **Save**.
+A group without apps is not shown, except **On the display**.
 
-That is also how you get rid of a name you mistyped. A pushed app you stop sending stays on the list
-marked *no data*, keeping its place for the next push, and there is nothing left to delete -
-**Delete** takes the name off the list all the same.
+### Change the order
 
-A chip on the row says where an app came from: *pushed* for one sent in over the API, *script* for a
-Berry app running on AWTRIX. Built-in apps carry no chip and offer no **Delete**, only
-**Deactivate**. A script is deleted from the Scripts tab, next to the editor that wrote it.
+Drag a row by its **⠿** grip. This works with a mouse and with a finger. **Move up** and **Move
+down** in the row's **⋯** menu do the same one step at a time.
 
-While a settings panel is open, the row's **⋯** turns into **✕** to close it again.
+### What a row can do
 
-The last card, **Modules**, lists the Berry files other scripts
-[import](../guides/scripting.md#sharing-code-between-scripts) instead of running in their own right.
-It shows the ones there is something to do about: a module with
-[settings several apps share](../guides/scripting.md#settings-several-apps-share), which gets the
-same **Settings** entry an app does, and any module stuck on an error. Plain library code stays out
-of the way - the Scripts tab lists every module. A module never draws, so its **⋯** menu holds only
-**Settings** and **Edit**. The card is hidden while there is nothing to show.
+| Control | What it does |
+|---|---|
+| **Show** | Shows this app on the display right away |
+| **▶ Start** | Starts a script from the device menu. Hold the middle button on the clock to end it |
+| **⚙** | Opens the app's or module's settings under the row. Press it again to close them |
+| Switch | Switches the app off or on. An app switched on again goes back to the end of the display, or to the background |
 
-Reordering, duplicating and switching apps on or off reach AWTRIX only when you hit **Save** in the
-sticky bar, which sends the whole list at once:
+The **⋯** menu holds the rest:
 
-```bash
-curl -X PUT http://<awtrix-ip>/api/v1/apps/order \
-  -H 'Content-Type: application/json' \
-  -d '{"order":["Time","Date","Temperature"],"disabled":["Humidity","Battery"]}'
-```
+| Menu entry | What it does |
+|---|---|
+| **Move up** / **Move down** | Moves the app one place |
+| **Duplicate** | Shows the app twice per round |
+| **Edit** | Scripts only: opens the code in the [Scripts](#scripts) tab |
+| **Install icons** | Scripts that name icons: installs them from the AWTRIX Hub |
+| **Delete** | Pushed apps and apps marked *no data*: removes them. Press twice to confirm |
 
-The **Background** card appears when a
-[headless script](../guides/scripting.md#running-without-ever-being-shown) is running. Those scripts
-work without ever being drawn - an MQTT listener that only raises notifications, say - so they have
-no place in the rotation and no order to sit in.
+Built-in apps cannot be deleted, only switched off. Scripts are deleted in the [Scripts](#scripts)
+tab.
 
-The **Disabled** card holds everything switched off. Nothing there runs, whatever it is made of.
-Bring any of it back with **+ Activate**: an ordinary app returns to the rotation, a headless script
-to the Background card. New apps arrive switched on.
+Under the name, a row says what kind of app it is: *Built-in*, *Script* or *Pushed* (over HTTP or
+MQTT). Labels next to the name point out something to know. Tap one for a short explanation:
 
-Endpoint details: [HTTP API → Apps](../reference/http.md#apps).
+| Label | Meaning |
+|---|---|
+| *error* | The script stopped with an error. Tap it to read the message |
+| *does not fit* | The script needs hardware this device does not have |
+| *no data* | The app is on and keeps its place, but nothing has sent it data yet |
+| *skipped* | The script skipped this round. It stays in the rotation |
+| *running* | A script from the device menu runs on the clock right now |
+
+If scripts are switched off under **System → Scripting**, a banner says so at the top.
+
+The same order can be set over the API: [HTTP API → Apps](../reference/http.md#apps).
 
 ## Scripts
 
-An editor for Berry apps: a file tree of what is installed on the left - **Scripts** first, then
-**Modules** - and the source on the right, with syntax highlighting, API completion (**Ctrl-.**) and the compiler's error
-marked on the offending line. **Ctrl-S** saves and installs in one step. A status bar under the
-editor shows the caret position and how many of the allowed bytes you have used.
+An editor for Berry apps. On the left, a list of what is installed: **Scripts** first, then
+**Modules**. On the right, the code with color highlighting.
 
-The buttons above the editor:
+### Write and install a script
 
-| Button | Effect |
+1. Press **+** next to **Scripts** to start from a template. (**+** next to **Modules** starts a
+   [module](../guides/scripting/several-apps.md#sharing-code-between-scripts).)
+2. Type a name in the name field and write your code.
+3. Press **Save** or **Ctrl-S**. This installs the script and starts it.
+4. Press **Show on the clock** to switch the display to your script.
+
+If the script has an error, the line is marked in the editor. The bar under the editor shows the
+cursor position and how much of the allowed size you have used.
+
+**Code** and **Data** above the editor switch between the script and the values it saved, as JSON.
+Saving changed values restarts the script. See [Storage](../guides/scripting/storage.md).
+
+### Buttons and keys
+
+| Button / key | What it does |
 |---|---|
-| **+** | New app from a template - the **+** on the Modules section starts a [module](../guides/scripting.md#sharing-code-between-scripts) instead |
-| **Import** | Load a `.ax` file from your computer into the editor |
-| **Export** | Save what is in the editor as a `.ax` file |
-| **Show on AWTRIX** | Switch the panel to the script you are editing, so you can watch a change land |
-| **Save** | Install the buffer under the name in the name field |
+| **+** | New script (or module) from a template |
+| **Import** | Loads a `.ax` file from your computer into the editor |
+| **Export** | Saves the editor content as a `.ax` file |
+| **Show on the clock** | Shows the script you are editing on the display |
+| **Save** / **Ctrl-S** | Installs the script under the name in the name field |
+| **Ctrl-.** | Lists the functions you can use |
+| **Ctrl-/** | Comments a line in or out |
 
-An unsaved buffer survives a detour through another tab, and switching files with unsaved work
-prompts rather than discarding it. To rename, edit the name and save: AWTRIX stores the new name
-and removes the old one.
+Unsaved work stays in the editor when you visit another tab. If you open another file, the editor
+asks first.
 
-Below the file tree sits **Shared**: every value the installed scripts have published to each other
-through [`shared.set()`](../guides/scripting.md#talking-to-other-apps), refreshed every three
-seconds. Each row is `owner.key`, its current value, and how long ago it was written - the age turns
-amber past five minutes. It is read-only, and nothing in it survives a reboot.
+**Rename a script:** change the name and save. AWTRIX keeps the new name and removes the old
+one.<!-- only esp32-s3 tc002 --> The script's sounds move along.<!-- /only -->
 
-The language, the callbacks and worked examples are in [AWTRIX scripting](../guides/scripting.md).
+### Scripts that need more than your device has
+
+A script can say what it needs, for example a gamepad or a certain display size (see
+[`@needs` and `@display`](../guides/scripting/sharing.md#what-your-script-asks-of-the-clock)). If your device
+does not have it, saving or importing tells you what is missing, for example *Not for this clock:
+needs a gamepad.* You can choose **Save anyway**, **Import anyway** or
+**Cancel**.
+
+<!-- only esp32-s3 tc002 -->
+### Sounds of a script
+
+On a <!-- only esp32-s3 -->clock that plays MP3s<!-- /only --><!-- only tc002 -->clock<!-- /only -->, the editor bar has a note button. It shows how many sounds the script
+has and opens them in the [Audio](#mp3s) tab, where you add, play and delete them. Modules have no
+sounds of their own.
+
+**Delete a script** with the bin next to it. Press twice to confirm. A script with sounds asks
+instead: **Delete with sounds**, **Keep sounds** or **Cancel**. Kept sounds stay in the Audio tab,
+marked *script removed*, until you delete them there. A script installed again under the same name uses
+them.
+
+<!-- /only -->
+### Scripts from the AWTRIX Hub
+
+- **Check for updates** checks every script you installed from the Hub and marks those with a newer
+  version. See [Hub script updates](../guides/hub-script-updates.md).
+- **Scripts for this device** opens the Hub with the scripts this AWTRIX can run.
+
+### Shared values
+
+The **Shared** list below the files shows the values scripts publish to each other with
+[`shared.set()`](../guides/scripting/several-apps.md#talking-to-other-apps). Tap **Shared** to open it.
+Each row shows `owner.key` and the value. A value written more than five minutes ago turns amber.
+Point at a row to see how long ago it was written. The list updates every three seconds, is
+read-only, and is empty again after a reboot.
+
+How to write scripts: [Scripting guide](../guides/scripting/index.md).
+
+## Icons
+
+The header shows how much storage is used. The bar turns red above 90 %. The tab has two parts:
+
+| Part | What it holds |
+|---|---|
+| **On the clock** | Every icon on the device, with the count. **Search installed icons** filters them |
+| **Add** | Upload an icon, find one in the AWTRIX Hub, or draw one |
+
+### Add an icon
+
+- **Add icon:** drop `.gif`, `.png`, `.jpg` or `.jpeg` files on the upload area, or click it to
+  choose. Each file gets its own progress line.
+- **Icons for this device:** opens the [AWTRIX Hub](https://awtrix.de/icons) with icons that fit
+  your display. Pick one and press **Send to AWTRIX**. Your browser copies the file to the clock
+  over your local network.
+- **Create an icon:** opens the [Icon Editor](#icon-editor).
+
+PNG and JPG files are turned into GIF while they upload. That looks sharper on the display and
+uses less space. So `smiley.png` becomes `smiley.gif` and replaces an older `smiley.jpg`. Animated
+GIFs stay animated. Keep icons within your display's width and height. 8×8 is the usual size for a
+still icon. A GIF as wide as the display can fill the background behind the text. See
+[Payload → Icon](../reference/payload.md#icon).
+
+### Use and manage an icon
+
+**Show on the clock** shows the icon on the display for three seconds. The **⋯** menu on a tile:
+
+| Menu entry | What it does |
+|---|---|
+| **Edit** | Opens the icon in the Icon Editor |
+| **Publish to Hub** | Shares the icon in the AWTRIX Hub. For a Hub icon you changed: **Share as a new icon** |
+| **View on Hub** | Hub icons only: opens its Hub page |
+| **Rename** | Gives the icon a new name. Apps and scripts that use the old name need the new one |
+| **Download icon** | Saves the file to your computer |
+| **Delete** | Deletes the icon. Press twice to confirm |
+
+Icons from the Hub carry a **Hub** badge. One you changed says *Changed on the clock*.
+
+Publishing needs a Hub connection key. Create one in
+[your Hub account](https://awtrix.de/account/settings) and save it under
+**System → AWTRIX Hub**. The key stays in this browser. It is not stored on the clock.
+
+More: [Icons](../guides/icons.md).
+
+## Icon Editor
+
+A pixel editor to draw icons and animations and save them straight to AWTRIX.
+
+1. Open the **Icon Editor** tab, or choose **Edit** on an icon in the [Icons](#icons) tab.
+2. Choose a size: 8×8, 32×8, <!-- only tc002 -->16×16, <!-- /only -->the whole display, or your own size up to the
+   display size.
+3. Draw, give the icon a name and save. It appears in the Icons tab.
+
+The **Live** switch shows your drawing on the real display while you work.
+
+The editor loads from the internet. Without internet the tab says the editor could not load. The
+rest of the web UI keeps working.
+
+More: [Icon editor](../guides/icon-editor.md).
+
+## Audio
+
+<!-- only esp32 -->
+Everything that makes sound: the **Mixer** and the **Melodies**.
+
+In the list, **▶** plays a melody on AWTRIX and turns into **■** while it plays. **■** stops it.
+The bin deletes the melody. Press twice to confirm.
+<!-- /only -->
+<!-- only esp32-s3 -->
+Everything that makes sound: the **Mixer**, then **MP3s**, **Radio** and **Melodies**. You only
+see the sections your board can use. MP3s and radio need PSRAM and an I²S amplifier. Melodies
+need a buzzer.
+<!-- /only -->
+<!-- only tc002 -->
+Everything that makes sound: the **Mixer**, then **MP3s**, **Radio** and **Melodies**.
+<!-- /only -->
+<!-- only esp32-s3 tc002 -->
+
+<!-- only esp32-s3 -->While the clock plays MP3s or radio, a<!-- /only --><!-- only tc002 -->A<!-- /only --> bar at the top shows what is playing now: the sound's name, or the
+station and song title. **■** stops it.
+
+In all three lists, **▶** plays the entry on AWTRIX and turns into **■** while it plays. **■** on
+an MP3 or a melody stops that sound, and the radio keeps playing. **■** on a station stops the
+radio, and other sounds keep playing. The bin deletes the entry. Press twice to confirm.
+<!-- /only -->
+
+### Mixer
+
+How loud the clock plays. Each slider goes from 0 to 100 and applies at once:
+
+| Slider | Setting | Volume of |
+|---|---|---|
+| **Master** | `volume` | the whole clock. The other <!-- only esp32 -->two<!-- /only --><!-- only esp32-s3 tc002 -->three<!-- /only --> are shares of it |
+<!-- only esp32-s3 -->
+| **Radio** | `radioVolume` | internet radio. Only on a board that plays radio |
+<!-- /only -->
+<!-- only tc002 -->
+| **Radio** | `radioVolume` | internet radio |
+<!-- /only -->
+| **Apps** | `appVolume` | everything a script plays |
+| **Alerts** | `alertVolume` | notification sounds and the sounds you play from outside |
+
+With **Master** at 50 and **Alerts** at 60, a notification plays at 30.<!-- only tc002 --> The knob moves
+**Master** too.<!-- /only -->
+
+More: [Volume](../guides/sounds.md#volume).
+
+<!-- only esp32-s3 tc002 -->
+### MP3s
+
+Your own MP3 files, for notifications and scripts.<!-- only esp32-s3 --> Only on a board that plays MP3s.<!-- /only -->
+
+1. Drag MP3 files onto **⬆ Upload**, or click it to choose.
+2. Use the file name without `.mp3` elsewhere: `ding.mp3` plays with `"sound":"ding"` in a
+   notification.
+
+File names may only use letters, digits, `_` and `-`. A file called `My Song (2024).mp3` is
+refused. Rename it first. An MP3 cannot have the name of a melody either. The line below the
+button shows how many sounds you have, their size and the free storage. **Search sounds** filters
+the list.
+
+| Button | What it does |
+|---|---|
+| **▶** | Plays the MP3 **on AWTRIX** |
+| **🎧** | Plays it **in your browser** |
+| **Bin** | Deletes it |
+
+An MP3 pauses internet radio. The radio comes back by itself afterwards.
+
+**Sounds of scripts.** Below your own files, every script with
+[its own sounds](../guides/scripting/sound.md#sounds-for-your-script) has a closed group, for example
+`AWTRIX GP · 21 · 1.4 MB` (name, number of sounds, size). Open it to play, delete or upload sounds
+for that script. Before deleting, it says whose sound it is: *Sure? Used by AWTRIX GP*.
+
+To open the tab with one script's group open, use `#/audio/<script>`, for example
+`http://<awtrix-ip>/#/audio/awtrix-gp`.
+
+More: [Sound](../guides/sounds.md).
+
+### Radio
+
+Your internet radio stations.<!-- only esp32-s3 --> Only on a board that can play a stream.<!-- /only -->
+
+1. Press **+ Add station**.
+2. Enter a name and the stream URL. **▶** in the form tries the URL before you keep it.
+3. Press **Save** or `Enter`. **Cancel** or `Esc` closes the form without a change.
+
+The URL must start with `http://` or `https://`, and each name can be used only once. Otherwise a
+message appears under the fields and **Save** stays off. In the list, point at a row to see the full
+URL. The pencil edits a station.
+
+More: [Internet radio](../guides/radio.md).
+
+<!-- /only -->
+### Melodies
+
+Short ringtones in RTTTL format, for notifications and scripts.<!-- only esp32 esp32-s3 --> Only on a board with a buzzer.<!-- /only --> Each
+row shows the number of notes and the length, for example `10 notes · 2.3 s`. A melody with an
+error is still listed, marked **Invalid melody**, so you can fix it.
+
+| Button | What it does |
+|---|---|
+| **▶** | Plays it **on AWTRIX** |
+| **🎧** | Plays it **in your browser** |
+| **Pencil** | Opens it for editing |
+| **Bin** | Deletes it |
+
+**Add a melody:**
+
+1. Press **+ New melody**.
+2. **Name:** 1–24 characters of `A-Z`, `a-z`, `0-9`, `_`, `-`. This is the name you use in
+   `"sound":"<name>"`.<!-- only esp32-s3 tc002 --> It cannot be the name of an MP3.<!-- /only -->
+3. **RTTTL:** only the part after the name, for example `d=4,o=5,b=100:e,c`.
+4. Press **Save** or `Enter`.
+
+The melody is checked while you type. If it has an error, the line below names it, for example
+`'h' is not a note`. **🎧** and **▶** in the form play what is in the fields now, so you can listen
+before you save. 🎧 plays in your browser, so you hear it even with the clock's volume at 0.
+
+If you paste a complete melody such as `jackpot:d=8,o=5,b=120:16c,16e,16g,c6` into the RTTTL field,
+the name moves to the name field by itself. To rename a melody, change the name and save.
+
+More: [Sound](../guides/sounds.md) · [HTTP API → Audio](../reference/http.md#audio).
+
+## Palettes
+
+A list of every palette AWTRIX knows, each shown as the color ramp it paints, and an editor next
+to it. You can make your own palettes and change or restore the eight built-in ones.
+
+How to use it: [Palette editor](../guides/palette-editor.md) · built-in palettes:
+[Visuals → Palettes](../reference/visuals.md#palettes).
 
 ## Display
 
-Everything about what the matrix shows, in seven sections with a sticky subnav: **Brightness**,
-**Colour**, **App rotation**, **Clock & date**, **Text**, **Weather overlay**, **Sensors**.
+Settings for what the display shows, in five sections: **Brightness**, **Color**,
+**App rotation**, **Text** and **Weather overlay**. The section list stays at the top while you
+scroll. Clock, date and sensor settings are under **Apps → ⚙** on the app's row.
 
-Every field row shows a plain-language label *and* the API key it maps to, in small mono type - so
-you can read the form and write the curl.
+### Save your changes
 
-Only changed fields are sent. One sticky save bar at the bottom counts your unsaved changes;
-**Save** collects only the dirty fields, **Discard** reverts them. The page never blindly re-writes
-every setting.
+1. Change as many settings as you like. The bar at the bottom counts your unsaved changes.
+2. Press **Save** to send only what you changed, or **Discard** to undo.
 
-**Display on**, **Overlay** and the overlay speed are runtime state and go to
-`PATCH /api/v1/display`; everything else on this tab goes to `PATCH /api/v1/settings`.
+If AWTRIX refuses a value, nothing from that save is applied, and a message names the setting.
 
-**Black means "inherit".** For the nullable colour fields (`timeColor`, `dateColor`,
-`temperatureColor`, `humidityColor`, `batteryColor`) the colour picker cannot show "nothing", so
-`#000000` stands in for `null` - meaning *use the global text colour*. For `colorCorrection` and
-`colorTint`, `#FFFFFF` stands in for `null` - meaning *off*. The UI converts back to `null` when it
-saves. The API tracks the `null` state separately from the colour value, so to set one of these to
-true black, PATCH it directly:
+### Black and white in color fields
 
-```bash
-curl -X PATCH http://<awtrix-ip>/api/v1/settings \
-  -H 'Content-Type: application/json' \
-  -d '{"timeColor":"#000000"}'
-```
+For the clock, date, temperature, humidity and battery colors, open **Apps → ⚙**. Switch
+**Global text color** on to inherit the text color, or off to choose a color of the app's own,
+including black.
 
-Exhaustive tables - every key, type, range, default and unit:
+Under **Display → Color**, **white** means *off* for **Color correction** and **Color tint**.
+
+Every setting with its range and default:
 
 - [Settings → Brightness](../reference/settings.md#brightness)
 - [Settings → App rotation](../reference/settings.md#app-rotation)
 - [Settings → Clock app](../reference/settings.md#clock-app), [Clock text](../reference/settings.md#clock-text), [Date text](../reference/settings.md#date-text), [Weekday bar](../reference/settings.md#weekday-bar)
 - [Settings → Global text](../reference/settings.md#global-text)
 - [Settings → Sensor apps](../reference/settings.md#sensor-apps)
-- [Settings → Panel](../reference/settings.md#panel) - the **Colour** section: saturation, gamma, correction, tint
+- [Settings → Color](../reference/settings.md#panel): saturation, gamma, correction, tint
 - [Visuals → Weather overlays](../reference/visuals.md#weather-overlays) · [Transitions](../reference/visuals.md#transitions)
 
 ## System
 
-Eleven sections: **WiFi**, **Web server**, **MQTT**, **Time**, **Panel**,
-**Brightness & sensors**, **GPIO**, **Buttons**, **Audio**, **Scripting**, **Misc** -
-plus maintenance and backup.
+<!-- only esp32 esp32-s3 -->
+Device settings in these sections: **Wi-Fi**, **Web server**, **MQTT**, **Time**, **Panel**,
+**Brightness & sensors**, **GPIO**, **Buttons**, **Audio**, **Scripting**, **Mirroring**, **Misc**, then
+**AWTRIX Hub**, **Maintenance** and **Backup & restore**. Sections your board cannot use are hidden.
+<!-- /only -->
+<!-- only tc002 -->
+Device settings in these sections: **Wi-Fi**, **Web server**, **MQTT**, **Time**, **Panel**,
+**Brightness & sensors**, **Buttons**, **Audio**, **Scripting**, **Mirroring**, **Misc**, then
+**AWTRIX Hub**, **Gamepad**, **Home Assistant Voice**, **iPhone**, **Maintenance** and
+**Backup & restore**.
+<!-- /only -->
 
-**Audio** is the one section that spans both APIs: the sound switch, the four volumes and the
-radio track info live in `/api/v1/settings`, `dfplayer` in `/api/v1/system`. The page splits a save
-between the two endpoints for you. There is one volume slider per output - buzzer, DFPlayer, MP3
-and radio - and each is shown only when the panel has that output, so a Ulanzi sees one slider
-rather than four. No radio track info without radio, and no sound switch on a device with no
-output at all. The DFPlayer toggle always stays - it is how a board gets one.
-
-The MQTT section carries a live connection badge above its fields: whether the broker answered, the
-endpoint it connected to, and the reason if it did not.
-
-When a save touched `/api/v1/system`, an amber banner appears: **a reboot is required to apply the
-new configuration**, with a **Reboot now** button. Changing only the sound settings applies at once
-and raises no banner.
-
-An **Advanced** section appears only when AWTRIX reports a field this page has no widget for -
-after a firmware update that added one, for instance. The value is offered raw, under its own name,
-so a new setting is never unreachable. A UI in step with its firmware shows no Advanced section at
-all.
-
-Field tables: [System configuration](../reference/system.md) -
+All fields are in [System configuration](../reference/system.md):
 [Wi-Fi](../reference/system.md#wi-fi),
 [MQTT and Home Assistant](../reference/system.md#mqtt-and-home-assistant),
 [Time](../reference/system.md#time),
 [Identity, web server and authentication](../reference/system.md#identity-web-server-and-authentication),
-[Panel and orientation](../reference/system.md#panel-and-orientation),
+<!-- only esp32 esp32-s3 -->
 [Sensor calibration](../reference/system.md#sensor-calibration),
 [Auto-brightness](../reference/system.md#auto-brightness),
+<!-- /only -->
 [Buttons](../reference/system.md#buttons),
-[Sound hardware](../reference/system.md#sound-hardware) · [Settings → Sound](../reference/settings.md#sound),
+<!-- only esp32 esp32-s3 -->
+[Sound hardware](../reference/system.md#sound-hardware),
+<!-- /only -->
+[Settings → Sound](../reference/settings.md#sound),
 [Miscellaneous](../reference/system.md#miscellaneous).
+
+Save works as on the Display tab. When a change needs a restart, an amber banner says *Saved.
+Reboot to apply.* Its **Reboot now** button restarts the clock. Sound settings apply at once.
+
+### Wi-Fi {#wifi}
+
+The **Scan** button next to the network name searches for networks and lists them by signal
+strength. 🔒 marks networks with a password.
 
 ### Passwords
 
-`GET /api/v1/system` never returns passwords, so the Wi-Fi, MQTT and auth password fields always
-render empty with a placeholder: *(unchanged - leave empty to keep)*. An untouched password field is
-never dirty and never sent - leaving it blank keeps the stored value.
+Password fields always look empty, with *(unchanged)* in them. Leave a field empty to keep the
+saved password. Type a new one to change it.
 
-The one exception is a backup download, which asks for `GET /api/v1/system?secrets=1` so the real
-passwords go into the file. In provisioning mode the `secrets` parameter is ignored - the request
-succeeds, but the passwords are left out - because that access point is open.
+### MQTT
 
-### Panel setup
+A badge at the top shows the connection: whether the broker answered, the address it connected to,
+or why it failed (for example *Wrong login* or *Host not found*).
 
-**Panel** describes your matrix as panels rather than as a preset: how wide one panel is, how many
-of them the cable runs through, which corner the first LED sits in, whether the strip runs along
-rows or columns, and whether every second run comes back the other way. A read-only **Matrix size**
-line above the fields does the sum while you type - `32 × 8 = 256 LEDs` - and turns red if the
-total width leaves the 32-128 range AWTRIX accepts, so an invalid combination is never
-sent.
+### Time
 
-The built-in apps are drawn for a 32-pixel panel and that layout is centred on anything wider, so a
-64 or 128 pixel matrix shows the same clock, date and sensor faces with empty space either side
-rather than a picture stuck to the left edge.
+**Use my zone** takes the time zone your browser is set to.
 
-**Mirror** and **Rotate 180°** sit at the bottom of the same section, because they are about the
-picture rather than the cable: **Mirror** flips it left to right, **Rotate 180°** turns it upside
-down and swaps the left and right buttons, which is what an upside-down panel needs.
+### Panel
 
-Every field except the total width takes effect on the next frame, so you can flip **Serpentine**
-and watch the panel to see whether that was the problem. Field table:
-[Panel and orientation](../reference/system.md#panel-and-orientation).
+<!-- only tc002 -->
+The display is fixed at 52×16, so this section only shows the size.
 
-### Wi-Fi scan
+<!-- /only -->
+<!-- only esp32 esp32-s3 -->
+Describe your LED panels:
 
-The **Scan** button next to the SSID field asks AWTRIX to survey the air
-(`GET /api/v1/system/wifi-scan`). The scan is asynchronous - the UI polls until it completes, then
-fills a dropdown sorted by signal strength, with a 🔒 on encrypted networks.
+- how wide one panel is and how many panels the cable runs through,
+- which corner the first LED is in,
+- whether the LEDs run along rows or columns,
+- whether every second row runs back the other way (**Serpentine**).
+
+The **Display size** line adds it up while you type, for example `32 × 8 = 256 LEDs`. It turns red
+if the total width is outside 32–128. Such a value is not saved.
+
+**Mirror** flips the picture left to right. **Rotate 180°** turns it upside down and swaps the
+left and right buttons. Use it when the display hangs upside down.
+
+Everything except the total width takes effect right away, so you can flip **Serpentine** and watch
+the display.
+
+The built-in apps are drawn for 32 pixels width. On a wider display they are centered.
+
+All fields: [Panel and orientation](../reference/system.md#panel-and-orientation).
+<!-- /only -->
+
+### Brightness & sensors
+
+<!-- only esp32 esp32-s3 -->
+Minimum and maximum brightness, light sensor factor and gamma, **LDR on GND** and brightness
+smoothing, shown only on a board with a light sensor. Below them: battery divider, low-battery
+threshold, and temperature and humidity offset and decimals.
 
 ### GPIO
 
-A full pin map - matrix data, three buttons, battery ADC, light sensor ADC, buzzer, I²C bus,
-DFPlayer serial and the three I²S pins for an external audio DAC. Defaults are the stock pin map
-for the compiled chip.
+Which pin does what: **LED data**, three buttons, battery, light sensor, buzzer, I²C<!-- only esp32 --> and
+DFPlayer.<!-- /only --><!-- only esp32-s3 -->, DFPlayer and the three I²S pins for an audio amplifier.<!-- /only --> `-1` means "not connected". **LED data** is a list of
+the pins that can drive LEDs.
 
-**Matrix data** is a dropdown, not a free number: only pins with a compiled-in LED driver are
-offered. The others are plain numbers where `-1` means "not connected".
+<!-- only esp32 -->
+**Preset wiring** fills in the wiring of a **Ulanzi TC001** or an **AWTRIX 2 mainboard**. It does
+not save. Check the fields, then press **Save**.
+<!-- /only -->
+Wrong or conflicting pins are refused when you save. GPIO changes apply after a reboot.
 
-Two **Preset wiring** buttons (Ulanzi TC001, AWTRIX 2 mainboard) fill the fields *without* saving -
-the fields stay marked dirty so you review the map before it reaches AWTRIX. They appear on
-ESP32 boards, where those wirings are real.
-
-Conflicting or impossible assignments are rejected on save, and GPIO changes apply after a reboot.
-
-Details and recovery: [GPIO & boards](../reference/gpio.md) -
-[Board presets](../reference/gpio.md#board-presets),
-[Validation rules](../reference/gpio.md#validation-rules),
+More: [GPIO & boards](../reference/gpio.md) ·
+<!-- only esp32 -->
+[Board presets](../reference/gpio.md#board-presets) ·
+<!-- /only -->
+[Validation rules](../reference/gpio.md#validation-rules) ·
 [Recovery from a bad map](../reference/gpio.md#recovery-from-a-bad-map).
+<!-- /only -->
+<!-- only tc002 -->
+The clock has no light sensor, so this section holds only the low-battery threshold.
+<!-- /only -->
+
+### Audio
+
+The sound hardware. The volumes are on the [Audio tab](#mixer).
+
+<!-- only esp32 esp32-s3 -->
+- **DFPlayer** adds a DFPlayer module on the DFPlayer pins. It shows once both DFPlayer pins are
+  set under [GPIO](#gpio).
+<!-- /only -->
+<!-- only tc002 -->
+- **Boot sound** turns the sound at power-on on or off.
+- **Music source** picks what music visualizers and `music.pitch()` react to: what the speaker
+  plays, the microphone, or automatic.
+<!-- /only -->
+
+### AWTRIX Hub
+
+Paste your Hub connection key here to download icons and script updates from the
+[AWTRIX Hub](https://awtrix.de) and to share icons. **Open Hub account** takes you to the page where
+you copy the key. The key is saved only in this browser. In another browser, enter it again.
+**Remove key** deletes it.
+
+<!-- only tc002 -->
+### Gamepad
+
+Shows the two gamepads, whether they are connected, and their player numbers.
+**Pair** adds a gamepad. Each **Forget** removes only its own gamepad. The player number goes by
+first input and can differ from the row number. While a phone is a gamepad, a **Phone** row shows
+which player it plays. See [Gamepad](../guides/gamepad.md).
+
+### Home Assistant Voice
+
+Enter the Home Assistant address, an access token and the Assist pipeline, then press
+**Save and connect**. The **Voice** switch turns it on and off at once. A badge shows the connection
+or, in plain words, why it fails. See [Home Assistant Voice](../guides/voice.md).
+
+### iPhone
+
+**iPhone link** switches the connection on and off. **Connection** shows the iPhone
+and whether it is connected. **Forget iPhone** removes the remembered iPhone. The apps, music and
+covers are chosen in the [AWTRIX NG app](../guides/app.md). See [iPhone](../guides/iphone.md).
+
+<!-- /only -->
+### Advanced
+
+This section appears only when the firmware has a setting the page has no field for. You can change
+the raw value there.
 
 ### Maintenance
 
 | Action | What happens |
 |---|---|
-| **Upload firmware (.bin)** | Uploads to `/update` with a live progress bar; AWTRIX reboots into the new firmware |
-| **Reboot** | Two-step confirm, then `POST /api/v1/device/reboot`; the page reloads itself |
-| **Reset settings** | Two-step confirm, then `POST /api/v1/settings/reset` - display settings only, network survives |
-| **Factory reset** | Erases **everything** (Wi-Fi, files, settings). No two-step button: you must type the hostname |
+| **Firmware update** | **Check for updates** asks GitHub for the newest release. If there is one, **Download & install** loads and installs it. The document icon opens the release notes |
+<!-- only esp32 esp32-s3 -->
+| **Upload firmware (.bin)** | Installs a firmware file from your computer, with a progress bar. AWTRIX restarts with the new firmware |
+<!-- /only -->
+<!-- only tc002 -->
+| **Upload firmware (.awup)** | Installs an `.awup` update package from your computer, with a progress bar. AWTRIX restarts with the new firmware. See [Updating firmware](../guides/updating.md) |
+<!-- /only -->
+| **Reboot** | Restarts AWTRIX. Press twice to confirm |
+| **Reset settings** | Sets all [settings](../reference/settings.md) back to their defaults: the Display tab, volumes, which apps rotate and the rest. Wi-Fi, MQTT, hardware settings and files stay. Press twice to confirm |
+| **Factory reset** | Erases **everything**: Wi-Fi, files, settings. Type the hostname, then press **Erase everything** |
 
-!!! danger "Factory reset is not undoable"
-    Typing the hostname *is* the confirmation. It erases stored Wi-Fi credentials, every uploaded
-    file and all settings, and drops AWTRIX back into provisioning mode.
+!!! danger "A factory reset cannot be undone"
+    It erases the Wi-Fi login, every uploaded file and all settings. AWTRIX then starts in setup
+    mode again.
 
-See [Persistence and resets](../reference/system.md#persistence-and-resets) and
-[Firmware upload](../reference/http.md#firmware-upload).
+More: [Updating firmware](../guides/updating.md) ·
+[Persistence and resets](../reference/system.md#persistence-and-resets).
 
 ### Backup and restore
 
-**Create backup** downloads a `.zip` of whatever you tick: Wi-Fi, settings, icons, melodies,
-palettes, MP3s, scripts, app order. Melodies and MP3s are only offered on a device that has the
-hardware for them. The file is assembled in your browser, so nothing is stored on AWTRIX and
-nothing leaves your network.
+**Create a backup:**
 
-**Restore backup** takes a `.zip` back. Anything that could not be applied is reported as a warning,
-and if the restore touched Wi-Fi, system config, settings or the app loop you are offered a reboot.
+<!-- only esp32 -->
+1. Tick what to include: Wi-Fi, Settings, Icons, Melodies, Palettes, Scripts, App order.
+   Melodies are only offered where the board has a buzzer.
+<!-- /only -->
+<!-- only esp32-s3 -->
+1. Tick what to include: Wi-Fi, Settings, Icons, Melodies, Palettes, MP3s, Scripts, App order.
+   Melodies and MP3s are only offered where the board can play them. Scripts include their sounds.
+<!-- /only -->
+<!-- only tc002 -->
+1. Tick what to include: Wi-Fi, Settings, Icons, Melodies, Palettes, MP3s, Scripts, App order.
+   Scripts include their sounds.
+<!-- /only -->
+2. Press **Download backup**. Your browser saves a `.zip` file.
 
-If you include **Wi-Fi** or **settings**, the file holds your Wi-Fi, MQTT and web-login passwords in
-plain form. Keep it where you would keep the passwords themselves.
+The file is built in your browser. Nothing is stored on AWTRIX or sent anywhere else.
 
-## Icons
+!!! warning "Keep the backup safe"
+    With **Wi-Fi** or **Settings** ticked, the file contains your Wi-Fi, MQTT and web login
+    passwords in plain text.
 
-Two tabs, and a storage bar in the header (used / total, turning red past 90 % full):
-
-| Tab | What it holds |
-|---|---|
-| **On AWTRIX** | every icon on the clock, with the count in the tab label |
-| **Add** | upload an icon, open the Hub gallery or create one in the editor |
-
-**On AWTRIX** opens first. **Show on display** puts an icon on the panel for three seconds. The
-**⋯** menu opens the other actions: edit it, publish it to the Hub, reload a linked Hub icon,
-download the file or delete it after a second click to confirm.
-
-**Add** takes `.png`, `.jpg`, `.jpeg` and `.gif`, 8×8 for a static icon. PNG and JPG are turned into
-a GIF as they upload - sharper on the panel and smaller on AWTRIX - so `smiley.png` becomes
-`smiley.gif`, replacing an older `smiley.jpg` if you had one. Animated GIFs stay animated, and a
-full-width animated GIF can cover your display behind the text. Keep the GIF within your
-display's width and height; see [Payload → Icon](../reference/payload.md#icon).
-
-Files upload one at a time, each with its own progress line.
-
-You can do the same from a shell:
-
-```bash
-curl -X POST 'http://<awtrix-ip>/api/v1/files?dir=/ICONS' \
-  -F 'file=@smiley.jpg'
-```
-
-**Open icon gallery** takes you to the [AWTRIX Hub](https://awtrix.de/icons). Choose an icon there
-and use **Send to your AWTRIX** on its detail page. Your browser transfers the file directly to the
-display on your local network; AWTRIX itself does not contact the Hub.
-
-**Publish to Hub** in a tile's menu sends an icon to the community collection. Publishing, reloading
-a linked icon and installing a script's declared icons require a Hub connection key. Create one in
-[your Hub account](https://awtrix.de/account/settings) and save it under **System → AWTRIX Hub**.
-The key stays in this browser and is not stored on the display.
-
-More: [HTTP API → Files](../reference/http.md#files) · [Payload → Icon](../reference/payload.md#icon).
-
-## Icon Editor
-
-A pixel editor for drawing 8×8 or 32×8 icons and saving them straight to AWTRIX - the visual
-alternative to uploading a finished file. Draw, give the icon a name, and save; it appears in the
-[Icons](#icons) tab, ready to use. Press the pencil on any icon tile to open it here and edit it.
-A **Live** toggle mirrors the drawing onto the real matrix while you edit.
-
-The editor itself (powered by the open-source [Piskel](https://github.com/piskelapp/piskel)) is
-loaded into the tab from the internet. Without internet access the tab reports that the editor did
-not load; everything else in the web UI is served by AWTRIX and keeps working.
-
-More: [Guides → Icon editor](../guides/icon-editor.md).
-
-## Audio
-
-Everything that makes noise, in one tab with three sections: **MP3s**, **Radio** and
-**Melodies**. Sections only appear when the device can use them - one without a speaker shows just
-the melodies, and one with the buzzer pin unset drops the melodies. A device with neither a buzzer nor
-a speaker has no Audio tab at all. When sound is switched off in the settings, a line at the top of
-the tab says so.
-
-Each section starts with the volume of the output it belongs to - the MP3 section sets `mp3Volume`,
-the radio section `radioVolume`, the melody section `buzzerVolume`. They are the same four sliders
-as under [System › Audio](#system), so a level can be set where the sound is.
-
-### MP3s
-
-Your own MP3 files, managed like icons: drag them onto the upload zone or click it to choose, and
-each one appears as a row with its size. Only on a device with a speaker.
-
-| Button | What it does |
-|---|---|
-| **🎧** | Plays the MP3 **in your browser** |
-| **▶** | Plays it **on AWTRIX** - the row is marked while it plays |
-| **Bin** | Deletes it (two-step confirm) |
-
-The file name without `.mp3` is the name you use elsewhere: `ding.mp3` plays as `sound:"ding"` in a
-notification. Names may only use letters, digits, `_` and `-`, so a file called `My Song (2024).mp3`
-is refused - rename it before uploading. An MP3 interrupts a running radio stream, which comes back
-by itself afterwards. More: [Sound](../guides/sounds.md).
-
-**■ Stop** at the top right of the tab silences everything at once - the browser preview, an MP3 and
-the radio.
-
-### Radio
-
-One list of internet radio stations, each a name and a stream URL. Every row has three buttons:
-**▶** starts the station, **💾** saves that row, and the bin removes it.
-A row you have edited plays the URL you typed, so a station can be tried before it is kept. What is
-playing, and the track title when the station sends one, stands to the right of the buttons.
-
-The section is only there on a device that can play a stream. Wiring, station formats and limits:
-[Internet radio](../guides/radio.md).
-
-### Melodies
-
-An editor, not a file list. One row per melody stored on AWTRIX, each one editable in place. **+ New melody** adds an empty row. Only on a device with a buzzer pin set.
-
-| Field or button | What it does |
-|---|---|
-| **Name** | The melody's address - what `sound:"<name>"` in a notification refers to. 1–24 characters of `A-Z`, `a-z`, `0-9`, `_`, `-` |
-| **RTTTL** | Only the part *after* the name: `d=4,o=5,b=100:e,c`. AWTRIX puts the name back on when it saves |
-| **🎧** | Plays it **in your browser** |
-| **▶** | Plays it **on AWTRIX** |
-| **💾** | Saves that one row. Lights up once the row is changed and valid |
-| **Bin** | Deletes it (two-step confirm) |
-
-The melody is checked while you type. A row that does not parse is outlined, and the line beneath it
-names the problem - `'h' is not a note` - instead of just calling it invalid. When it does parse,
-that same line reads `2 notes · 2.4 s`.
-
-Both play buttons send **what is in the fields right now**, so you can hear an edit before you commit
-it. Since 🎧 never leaves the browser, you can write a melody with AWTRIX muted or out of earshot.
-
-Drop a complete three-part string - `jackpot:d=8,o=5,b=120:16c,16e,16g,c6` - into the RTTTL field
-and it is split for you: the name goes to the name field, the rest stays put.
-
-**Renaming** is just editing the name and saving; AWTRIX stores the new file and removes the old.
-
-A melody that does not parse is still shown, with the parser's complaint, so you can fix it.
-
-More: [Sound](../guides/sounds.md) · [HTTP API → Audio](../reference/http.md#audio).
-
-## Palettes
-
-Every palette AWTRIX knows, each drawn as the ramp it really paints, beside one editor. A palette
-is 1 to 16 colour **stops** - two of them are a gradient - and the eight built-ins can be replaced and
-restored from here.
-
-Walkthrough: [Palette editor](../guides/palette-editor.md) · reference:
-[Visuals → Palettes](../reference/visuals.md#palettes).
+**Restore a backup:** press **Choose backup…** and pick the `.zip`. Anything that could not be
+restored is reported as a warning. If the backup changed Wi-Fi, system settings, settings or the
+app order, you are offered a reboot.
 
 ## Log
 
-The AWTRIX log, polled once a second while the tab is visible. Only new lines are fetched
-(`GET /api/v1/logs?after=<n>`), so it is cheap to leave open.
+The device log, updated every second while the tab is open.
 
-**Auto-scroll** is a switch, but it also follows you: scroll up and it pauses, scroll back to the
-bottom and it resumes. **Copy** puts the whole buffer on your clipboard - handy for bug reports.
-**Clear** empties your browser's copy only; the ring buffer on AWTRIX is untouched.
+- **Auto-scroll** follows new lines. Scroll up and it pauses. Scroll back to the bottom and it
+  continues.
+- **Copy** puts the whole log on your clipboard, for example for a bug report.
+- **Clear** empties the list in your browser only.
 
-Verbose logging lives in **System → Misc → Debug mode**.
+For more detail in the log, switch on **System → Misc → Debug mode**.
 
-## Provisioning mode
+## Setup mode
 
-Fresh out of the box - or after a factory reset - AWTRIX opens its own access point instead of
-joining a network. Connect to it and the setup page opens by itself: it answers your
-platform's connectivity check (iOS, Android and Windows all probe a known URL) with a redirect to its
-own address.
+A new AWTRIX, or one after a factory reset, opens its own Wi-Fi network, the setup hotspot.
+Connect to it and the setup page opens by itself.
 
-The UI detects this and collapses to the one page that can do anything here: **System**, carrying a
-blue banner - *Provisioning mode: connect AWTRIX to your WiFi below.* - the Wi-Fi settings, a
-**Reboot** that applies them, and **Restore** for putting a backup back after a wipe.
-The other tabs are hidden, because the API refuses every write behind them until AWTRIX is on a
-network.
+The web UI then shows only the **System** tab, with a blue banner: *Setup mode: connect
+the clock to your Wi-Fi below.* You get:
 
-Save your credentials, then reboot. AWTRIX leaves the access point and comes back on your
-network.
+1. the clock's MAC address, then your Wi-Fi name and password, plus an optional clock name,
+2. **Reboot**: AWTRIX restarts and joins your network,
+3. **Restore**: load a backup, Wi-Fi included, after a reset.
 
-A configured username and password are enforced on the access point exactly as they are on your
-network. See [Authentication](../reference/http.md#authentication).
+The other tabs come back once AWTRIX is on your network. If you set a web login, it is also needed
+on the setup hotspot. See [Authentication](../reference/http.md#authentication).
 
-## Conventions this UI follows
+If the Wi-Fi sign-in window on your phone cannot upload the backup file, open the setup page
+address it shows in a normal browser. Logs, scripts, file lists and other settings are unavailable
+on the setup hotspot. See the complete
+[setup-mode policy](../reference/errors.md#provisioning-lockdown-403).
 
-The web UI is a thin client over `/api/v1`, and it inherits the API's conventions wholesale:
+## When it goes wrong
 
-- Every field row prints its **API key** next to the label - the form maps 1:1 to the reference docs.
-- Errors appear as toasts carrying the API's own message and offending field, straight out of the
-  `{"error":{"code","message","field"}}` body. See [Errors](../reference/errors.md).
-- Settings are validated as a set: a rejected `PATCH /api/v1/settings` applies **nothing**.
-- Destructive actions never use a browser `confirm()` - they arm on first click and act on the
-  second, within a three-second window.
+- **A message pops up at the bottom.** It is AWTRIX's own error message and names the field that
+  caused it. See [Errors](../reference/errors.md).
+- **"Clock not reachable".** The page cannot reach AWTRIX. Check that it is on and on the same
+  network, then reload.
+- **A button says "Sure?"** Delete, reset and reboot buttons need a second press within three
+  seconds. If you wait, the button goes back to normal and nothing happens.
+- **The Icon Editor does not load.** It needs internet access.
 
 ## Related
 
-- [HTTP API v1](../reference/http.md) - every route, with curl
+- [HTTP API](../reference/http.md) - every route, with curl
 - [MQTT topics](../reference/mqtt.md) - the same commands over a broker
-- [App & notification payload](../reference/payload.md) - what you can put on the screen
+- [App & notification payload](../reference/payload.md) - what you can put on the display

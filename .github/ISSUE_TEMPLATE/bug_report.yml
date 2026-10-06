@@ -48,7 +48,6 @@ body:
         - AWTRIX 2 mainboard conversion
         - DIY ESP32 panel
         - DIY ESP32-S3 panel
-        - Host simulator (native_sim)
     validations:
       required: true
 

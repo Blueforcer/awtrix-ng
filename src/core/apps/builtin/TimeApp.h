@@ -80,8 +80,8 @@ class TimeApp : public IApp {
 
     const float lvl = separatorLevel(s.timeSeparatorMode, ctx.second, ctx.nowMs);
     const int x = textX + (textArea - runsW) / 2;
-    const bool barBottom = s.weekdayBar.show && !wdTop;
-    const int baseline = (box && !barBottom) ? 7 : 6;
+    const bool barOnTop = s.weekdayBar.show && wdTop;
+    const int baseline = barOnTop ? 7 : 6;
     drawRuns(c, *ctx.font, x < textX ? textX : x, baseline, runs, col, lvl);
 
     if (s.weekdayBar.show) {

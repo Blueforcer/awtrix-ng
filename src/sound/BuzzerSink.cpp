@@ -29,15 +29,20 @@ void BuzzerSink::begin() {
   if (pin_ < 0) return;
   // LEDC channel 0, and LOW as the idle level because the buzzer on these boards is active high.
   player_ = new MelodyPlayer(static_cast<unsigned char>(pin_), 0, LOW);
-  setVolume(volume_);
+  applyVolume();
 }
 
-void BuzzerSink::setVolume(uint8_t percent) {
-  volume_ = percent > 100 ? 100 : percent;
-  if (player_) player_->setVolume(map(volume_, 0, 100, 0, 255));
+// The player reads its volume on every note, so a change reaches a melody that is playing.
+void BuzzerSink::setVolumes(const sound::Volumes& volumes) {
+  volumes_ = volumes;
+  applyVolume();
 }
 
-bool BuzzerSink::playMelodyFile(const std::string& name) {
+void BuzzerSink::applyVolume() {
+  if (player_) player_->setVolume(map(volumes_.of(group_), 0, 100, 0, 255));
+}
+
+bool BuzzerSink::playMelodyFile(const std::string& name, sound::Group group) {
   if (!player_) return false;
   // A melody "file" is an RTTTL one-liner in /MELODIES/<name>.txt, the same syntax playRtttl takes.
   const String path = String("/MELODIES/") + name.c_str() + ".txt";
@@ -48,13 +53,15 @@ bool BuzzerSink::playMelodyFile(const std::string& name) {
   while (f.available()) content.push_back(static_cast<char>(f.read()));
   f.close();
 
-  return playRtttl(content);
+  return playRtttl(content, group);
 }
 
-bool BuzzerSink::playRtttl(const std::string& melody) {
+bool BuzzerSink::playRtttl(const std::string& melody, sound::Group group) {
   if (!player_) return false;
   const rtttl::Parse p = rtttl::parse(melody);
   if (!p.ok) return false;
+  group_ = group;
+  applyVolume();
   Melody m = toMelody(p);
   player_->playAsync(m);
   return true;

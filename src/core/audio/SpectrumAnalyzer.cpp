@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <new>
 
 namespace awtrix {
@@ -75,23 +76,35 @@ bool SpectrumAnalyzer::analyze(const int16_t* pcm, int samples, int channels, in
   const float* sinTab = cosTab + kN / 2;
 
   const int used = std::min(samples, kN);
+  float mean = 0.f;
+  if (scaling_ == Scaling::Fixed) {
+    for (int n = 0; n < used; ++n) {
+      mean += channels == 2 ? (pcm[n * 2] + pcm[n * 2 + 1]) * 0.5f : pcm[n];
+    }
+    mean /= used;
+  }
   double sumSq = 0;
+  float windowPower = 0.f;
   for (int n = 0; n < used; ++n) {
     float x = pcm[n * channels];
     if (channels == 2) x = (x + pcm[n * 2 + 1]) * 0.5f;
-    x *= 1.f / 32768.f;
+    x = (x - mean) * (1.f / 32768.f);
     sumSq += static_cast<double>(x) * x;
     re[n] = x * window[n];
     im[n] = 0.f;
+    windowPower += window[n] * window[n];
   }
   for (int n = used; n < kN; ++n) re[n] = im[n] = 0.f;
 
   const float levelDb = 20.f * std::log10(static_cast<float>(std::sqrt(sumSq / used)) + 1e-9f);
   const float secs = static_cast<float>(samples) / sampleRateHz;
-  ++frames_;
+  // The warm-up and refractory counters saturate.
+  if (frames_ <= kBeatWarmupFrames) ++frames_;
+  const int elapsedSinceBeat = static_cast<int>(std::min<int64_t>(
+      std::numeric_limits<int>::max(), static_cast<int64_t>(samplesSinceBeat_) + samples));
   if (levelDb < kSilenceDb) {
     out = FrameStats{};
-    samplesSinceBeat_ += samples;
+    samplesSinceBeat_ = elapsedSinceBeat;
     ref_ = std::max(kAgcFloorDb, ref_ - kAgcDecayDbPerSec * secs);
     levelRef_ = std::max(kLevelFloorDb, levelRef_ - kAgcDecayDbPerSec * secs);
     return true;
@@ -108,20 +121,28 @@ bool SpectrumAnalyzer::analyze(const int16_t* pcm, int samples, int channels, in
     bandDb[i] = toDb(energy);
     frameMax = std::max(frameMax, bandDb[i]);
   }
-  ref_ = std::max(frameMax, std::max(kAgcFloorDb, ref_ - kAgcDecayDbPerSec * secs));
-  for (int i = 0; i < kBandCount; ++i) out.bands[i] = scale(bandDb[i], ref_, kRangeDb);
+  const bool fixed = scaling_ == Scaling::Fixed;
+  // Parseval normalization for the one-sided, windowed spectrum. No frame-dependent gain.
+  ref_ = fixed ? kFixedUpperDb + toDb(kN * windowPower * 0.5f)
+               : std::max(frameMax, std::max(kAgcFloorDb, ref_ - kAgcDecayDbPerSec * secs));
+  const float range = fixed ? kFixedRangeDb : kRangeDb;
+  for (int i = 0; i < kBandCount; ++i) out.bands[i] = scale(bandDb[i], ref_, range);
 
-  levelRef_ = std::max(levelDb, std::max(kLevelFloorDb, levelRef_ - kAgcDecayDbPerSec * secs));
-  levelMin_ = std::min(levelDb, levelMin_ + kAgcDecayDbPerSec * secs);
-  const float span = std::min(kLevelRangeDb, std::max(kLevelMinRangeDb, levelRef_ - levelMin_));
-  out.level = scale(levelDb, levelRef_, span);
+  if (fixed) {
+    out.level = scale(levelDb, kFixedUpperDb, kFixedRangeDb);
+  } else {
+    levelRef_ = std::max(levelDb, std::max(kLevelFloorDb, levelRef_ - kAgcDecayDbPerSec * secs));
+    levelMin_ = std::min(levelDb, levelMin_ + kAgcDecayDbPerSec * secs);
+    const float span = std::min(kLevelRangeDb, std::max(kLevelMinRangeDb, levelRef_ - levelMin_));
+    out.level = scale(levelDb, levelRef_, span);
+  }
 
   float bass = 0.f;
   for (int k = bassLo_; k < bassHi_; ++k) bass += re[k];
   const bool warm = frames_ > kBeatWarmupFrames;
   const bool rested = samplesSinceBeat_ >= sampleRateHz * kBeatRefractoryMs / 1000;
-  out.beat = warm && rested && bass > kBeatRatio * bassAvg_ && toDb(bass) > ref_ - kRangeDb;
-  samplesSinceBeat_ = out.beat ? 0 : samplesSinceBeat_ + samples;
+  out.beat = warm && rested && bass > kBeatRatio * bassAvg_ && toDb(bass) > ref_ - range;
+  samplesSinceBeat_ = out.beat ? 0 : elapsedSinceBeat;
   // The average adopts the reading outright while warming up, so a steady tone never starts as a beat.
   const float alpha = warm ? std::min(1.f, secs * 1000.f / kBeatAvgMs) : 1.f;
   bassAvg_ += (bass - bassAvg_) * alpha;

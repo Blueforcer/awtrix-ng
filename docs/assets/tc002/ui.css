@@ -1,0 +1,57 @@
+#tc002-installer {
+  --tc-ink: var(--md-default-fg-color, #252928);
+  --tc-muted: var(--md-default-fg-color--light, #59625f);
+  --tc-line: var(--md-default-fg-color--lightest, #dce3df);
+  --tc-green: #237b57;
+  --tc-surface: var(--md-default-bg-color, #fff);
+  color: var(--tc-ink);
+  border: 1px solid var(--tc-line);
+  border-radius: 14px;
+  overflow: hidden;
+  margin: 1.5rem 0;
+  font-size: .8rem;
+}
+#tc002-installer [hidden] { display: none !important; }
+#tc002-installer .tc002-heading { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: 1.5rem; }
+#tc002-installer .tc002-eyebrow { margin: 0 0 .6rem; color: var(--tc-green); font: 600 .6rem/1.3 ui-monospace, monospace; letter-spacing: .1em; }
+#tc002-installer h2 { margin: 0 0 .5rem; font-weight: 600; font-size: 1.5rem; letter-spacing: -.035em; }
+#tc002-installer .tc002-heading p:last-child { margin: 0; color: var(--tc-muted); max-width: 24em; }
+#tc002-installer .tc002-matrix { flex: 0 0 6.5rem; aspect-ratio: 52/16; padding: .5rem; display: grid; place-items: center; border: 5px solid #2b302e; border-radius: 8px; background: radial-gradient(circle, #263831 1px, transparent 1.5px) 0 0 / 5px 5px, #111b16; box-shadow: 0 3px 0 #151a18; }
+#tc002-installer .tc002-matrix span { color: #a0ecc1; font: 700 .75rem/1 ui-monospace, monospace; letter-spacing: .14em; text-shadow: 0 0 7px #5cbc9266; }
+#tc002-installer .tc002-steps { display: grid; grid-template-columns: repeat(4, 1fr); padding: 0 1.5rem; margin: 0; list-style: none; counter-reset: install-step; border-block: 1px solid var(--tc-line); }
+#tc002-installer .tc002-steps li { counter-increment: install-step; display: flex; gap: .45rem; align-items: center; margin: 0; padding: .8rem .3rem .8rem 0; font-size: .63rem; color: var(--tc-muted); border-bottom: 2px solid transparent; }
+#tc002-installer .tc002-steps li::before { content: counter(install-step, decimal-leading-zero); font-family: ui-monospace, monospace; opacity: .65; }
+#tc002-installer .tc002-steps li[aria-current] { color: var(--tc-ink); border-bottom-color: var(--tc-green); font-weight: 600; }
+#tc002-installer .tc002-steps li.is-complete { color: var(--tc-green); }
+#tc002-installer .tc002-body { padding: 1.2rem 1.5rem 1.5rem; }
+#tc002-installer .tc002-body > p { margin: .7rem 0; }
+#tc002-installer .tc002-release { font-size: .7rem; color: var(--tc-muted); }
+#tc002-installer .tc002-status { font-weight: 600; }
+#tc002-installer .tc002-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.1rem 0 .65rem; }
+#tc002-installer button { background: var(--tc-green); color: #fff; border: 1px solid var(--tc-green); border-radius: 6px; padding: .65rem 1rem; font: inherit; font-weight: 600; cursor: pointer; transition: background .15s; }
+#tc002-installer button:hover:not(:disabled) { background: #195b40; }
+#tc002-installer button:disabled { cursor: not-allowed; opacity: .45; }
+#tc002-installer button.tc002-secondary { background: transparent; color: var(--tc-ink); border-color: var(--tc-line); }
+#tc002-installer :is(button, input, summary, a):focus-visible { outline: 3px solid #8bc6ae; outline-offset: 3px; }
+#tc002-installer .tc002-caption { color: var(--tc-muted); font-size: .65rem; line-height: 1.6; }
+#tc002-installer progress { width: 100%; height: 6px; accent-color: var(--tc-green); }
+#tc002-installer .tc002-error, #tc002-installer .tc002-recovery { border-left: 3px solid #ba6536; background: #ba653611; padding: .7rem .85rem; margin: .8rem 0; overflow-wrap: anywhere; }
+#tc002-installer details { border: 0; border-top: 1px solid var(--tc-line); box-shadow: none; margin: 1.2rem 0 0; padding: .8rem 0 0; }
+#tc002-installer summary { color: var(--tc-muted); background: transparent; padding: .25rem 0; cursor: pointer; font-size: .7rem; font-weight: 500; }
+#tc002-installer summary::before, #tc002-installer summary::after { display: none; }
+#tc002-installer label { display: block; margin: .8rem 0; font-size: .7rem; }
+#tc002-installer input:not([type=checkbox]) { display: block; width: 100%; max-width: 24rem; margin-top: .3rem; border: 1px solid var(--tc-line); border-radius: 5px; background: var(--tc-surface); color: var(--tc-ink); padding: .6rem; font: inherit; }
+#tc002-installer input[type=file] { padding: .5rem; }
+#tc002-installer input[type=checkbox] { margin-right: .35rem; accent-color: var(--tc-green); }
+#tc002-installer .tc002-success h3 { font-size: 1.1rem; font-weight: 600; }
+#tc002-installer .tc002-success ol { padding-left: 1rem; }
+#tc002-installer .tc002-success li { margin-bottom: .6rem; }
+#tc002-installer .tc002-success a { color: var(--tc-green); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 600px) {
+  #tc002-installer .tc002-heading, #tc002-installer .tc002-body { padding: 1rem; }
+  #tc002-installer .tc002-matrix { display: none; }
+  #tc002-installer .tc002-steps { padding: 0 1rem; grid-template-columns: repeat(2, 1fr); }
+  #tc002-installer .tc002-steps li { font-size: .65rem; }
+  #tc002-installer .tc002-actions button { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { #tc002-installer button { transition: none; } }

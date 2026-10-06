@@ -14,11 +14,11 @@ void ScrollBank::clear() {
   clock_ = 0;
 }
 
-// Finds the slot already scrolling at this y, or takes over the least recently used one. A
-// recycled slot is reset, so text that moves to a new y restarts rather than jumping.
-ScrollBank::Line& ScrollBank::lineFor(int y) {
+// Finds the slot already scrolling in this strip, or takes over the least recently used one. A
+// recycled slot is reset, so text that moves to a new strip restarts rather than jumping.
+ScrollBank::Line& ScrollBank::lineFor(int x, int y, int width) {
   for (Line& line : lines_) {
-    if (line.active && line.y == y) {
+    if (line.active && line.x == x && line.y == y && line.width == width) {
       line.used = ++clock_;
       return line;
     }
@@ -34,7 +34,9 @@ ScrollBank::Line& ScrollBank::lineFor(int y) {
   }
 
   *pick = Line{};
+  pick->x = x;
   pick->y = y;
+  pick->width = width;
   pick->active = true;
   pick->used = ++clock_;
   return *pick;
@@ -42,7 +44,7 @@ ScrollBank::Line& ScrollBank::lineFor(int y) {
 
 int ScrollBank::draw(Canvas& canvas, const GfxFont& font, const std::string& text,
                      const ScrollRun& run, const ScrollDefaults& defaults, int64_t nowMs) {
-  Line& line = lineFor(run.y);
+  Line& line = lineFor(run.x, run.y, run.width);
 
   render::ScrollLayout layout;
   layout.text = text::measure(font, text);
@@ -69,8 +71,8 @@ int ScrollBank::draw(Canvas& canvas, const GfxFont& font, const std::string& tex
 
   text::TextPaint paint;
   paint.flat = run.color;
-  paint.glyphColors = run.glyphColors;
-  paint.glyphCount = run.glyphCount;
+  paint.runs = run.runs;
+  paint.runCount = run.runCount;
   canvas.setClipX(run.x, run.x + run.width - 1);
   render::drawScrollRun(canvas, font, x, run.y, text, layout.text.advance, paint, &resolved);
   canvas.clearClipX();

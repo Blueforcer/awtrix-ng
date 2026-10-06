@@ -108,7 +108,7 @@ void test_sounds_accept_mp3_and_reject_the_rest() {
   TEST_ASSERT_FALSE(assets::contentLooksValid(assets::AssetKind::Mp3, text, sizeof(text)));
   TEST_ASSERT_FALSE(assets::contentLooksValid(assets::AssetKind::Mp3, shortId3, sizeof(shortId3)));
   TEST_ASSERT_FALSE(assets::contentLooksValid(assets::AssetKind::Mp3, id3, 0));
-  TEST_ASSERT_EQUAL_STRING("MP3 (MPEG-1 Layer III)",
+  TEST_ASSERT_EQUAL_STRING("MP3",
                            assets::acceptedFormats(assets::AssetKind::Mp3));
 }
 
@@ -138,7 +138,9 @@ void test_text_folders_accept_text_and_reject_binary() {
   const unsigned char palette[] = {'F', 'F', '0', '0', '0', '0', 0x0D, 0x0A};
   const unsigned char gif[] = {'G', 'I', 'F', '8', '9', 'a'};
   const unsigned char withNul[] = {'a', 0x00, 'b'};
+  const unsigned char words[] = {'h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd'};
   TEST_ASSERT_TRUE(assets::contentLooksValid(assets::AssetKind::Palette, palette, sizeof(palette)));
+  TEST_ASSERT_FALSE(assets::contentLooksValid(assets::AssetKind::Palette, words, sizeof(words)));
   TEST_ASSERT_FALSE(assets::contentLooksValid(assets::AssetKind::Melody, gif, sizeof(gif)));
   TEST_ASSERT_FALSE(assets::contentLooksValid(assets::AssetKind::Palette, withNul, sizeof(withNul)));
 }

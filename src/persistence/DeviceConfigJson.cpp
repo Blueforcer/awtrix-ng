@@ -3,68 +3,17 @@
 
 #include "core/api/JsonCoerce.h"
 #include "persistence/DeviceConfig.h"
-#include "persistence/DeviceConfigFields.h"
+#include "persistence/DeviceConfigRows.h"
 
 namespace awtrix {
 
-namespace {
-
-enum class Kind : uint8_t { Str, Bool, Int, Long, U16, U8, Float, Start, Wire, ColorOrder };
-
-// One table row per config field: the JSON name, how to convert it, and a pointer-to-member.
-// The union keeps the table constexpr, so it lives in flash rather than costing RAM at boot.
-struct Row {
-  const char* key;
-  Kind kind;
-  bool secret;
-  union {
-    std::string DeviceConfig::*s;
-    bool DeviceConfig::*b;
-    int DeviceConfig::*i;
-    long DeviceConfig::*l;
-    uint16_t DeviceConfig::*u16;
-    uint8_t DeviceConfig::*u8;
-    float DeviceConfig::*f;
-    PanelStart DeviceConfig::*ps;
-    Wiring DeviceConfig::*wi;
-    PanelColorOrder DeviceConfig::*co;
-  };
-
-  constexpr Row(const char* k, bool sec, std::string DeviceConfig::*m)
-      : key(k), kind(Kind::Str), secret(sec), s(m) {}
-  constexpr Row(const char* k, bool sec, bool DeviceConfig::*m)
-      : key(k), kind(Kind::Bool), secret(sec), b(m) {}
-  constexpr Row(const char* k, bool sec, int DeviceConfig::*m)
-      : key(k), kind(Kind::Int), secret(sec), i(m) {}
-  constexpr Row(const char* k, bool sec, long DeviceConfig::*m)
-      : key(k), kind(Kind::Long), secret(sec), l(m) {}
-  constexpr Row(const char* k, bool sec, uint16_t DeviceConfig::*m)
-      : key(k), kind(Kind::U16), secret(sec), u16(m) {}
-  constexpr Row(const char* k, bool sec, uint8_t DeviceConfig::*m)
-      : key(k), kind(Kind::U8), secret(sec), u8(m) {}
-  constexpr Row(const char* k, bool sec, float DeviceConfig::*m)
-      : key(k), kind(Kind::Float), secret(sec), f(m) {}
-  constexpr Row(const char* k, bool sec, PanelStart DeviceConfig::*m)
-      : key(k), kind(Kind::Start), secret(sec), ps(m) {}
-  constexpr Row(const char* k, bool sec, Wiring DeviceConfig::*m)
-      : key(k), kind(Kind::Wire), secret(sec), wi(m) {}
-  constexpr Row(const char* k, bool sec, PanelColorOrder DeviceConfig::*m)
-      : key(k), kind(Kind::ColorOrder), secret(sec), co(m) {}
-};
-
-// The API key is the stringified member name, not the short NVS key — the wire format stays
-// readable while flash keeps the abbreviations.
-constexpr Row kRows[] = {
-#define X(m, key, secret) Row(#m, (secret) != 0, &DeviceConfig::m),
-    AWTRIX_CFG_FIELDS(X)
-#undef X
-};
-
-}
+using configfields::Kind;
+using configfields::Row;
+using configfields::kRows;
 
 void DeviceConfig::write(api::JsonWriter& w, bool withSecrets) const {
   for (const Row& r : kRows) {
-    if (!withSecrets && r.secret) continue;
+    if ((!withSecrets && r.secret) || !offers(r.need)) continue;
     switch (r.kind) {
       case Kind::Str: w.member(r.key, this->*r.s); break;
       case Kind::Bool: w.member(r.key, this->*r.b); break;
@@ -95,13 +44,15 @@ void DeviceConfig::write(api::JsonWriter& w, bool withSecrets) const {
 }
 
 // Merges the members present in the object into this config and returns how many were applied.
-// Unknown keys are skipped; the caller decides whether zero applied fields is an error.
+// Unknown keys and fields the platform does not offer are skipped; the caller decides whether
+// zero applied fields is an error.
 int DeviceConfig::applyRead(api::JsonReader r) {
   if (!r.isObject() || !r.enterObject()) return 0;
   int n = 0;
   while (r.nextMember()) {
     for (const Row& row : kRows) {
       if (!r.keyEquals(row.key)) continue;
+      if (!offers(row.need)) break;
       switch (row.kind) {
         case Kind::Str: {
           std::string v;

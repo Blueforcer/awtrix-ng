@@ -67,19 +67,19 @@ std::string entryJson(const std::string& name, const std::string& content, uint3
 PutResult prepareWrite(const std::string& name, const std::string& body) {
   if (!rtttl::validName(name))
     return reject(422, "validationFailed",
-                  "melody name must be 1 to 24 characters of A-Z, a-z, 0-9, _ or -", "name");
+                  "invalid name", "name");
 
   if (!isWellFormed(body))
-    return reject(400, "invalidJson", "request body is not valid JSON", "rtttl");
+    return reject(400, "invalidJson", "invalid JSON", "rtttl");
 
   std::string in;
   if (!memberValue(JsonReader(body), "rtttl").appendString(in))
-    return reject(422, "validationFailed", "\"rtttl\" is required and must be a string", "rtttl");
+    return reject(422, "validationFailed", "must be a string", "rtttl");
 
   std::string titled;
   if (!rtttl::retitle(in, name, titled))
     return reject(422, "validationFailed",
-                  "a melody is \"defaults:notes\", for example \"d=4,o=5,b=120:c,e,g\"", "rtttl");
+                  "expected name:defaults:notes", "rtttl");
 
   const rtttl::Parse p = rtttl::parse(titled);
   if (!p.ok) return reject(422, "validationFailed", p.describe(), "rtttl");

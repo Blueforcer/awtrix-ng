@@ -27,6 +27,19 @@ uint32_t decodeOne(const std::string& s) {
   return text::nextCodepoint(s, i);
 }
 
+void test_utf8_clipping_preserves_complete_sequences() {
+  const std::string input = "A\xc3\xa4\xe2\x82\xac\xf0\x9f\x98\x80" "B";
+  TEST_ASSERT_EQUAL_UINT(5, text::codepoints(input));
+  const std::size_t byteSizes[] = {0, 1, 1, 3, 3, 3, 6, 6, 6, 6, 10, 11};
+  for (std::size_t limit = 0; limit < sizeof byteSizes / sizeof *byteSizes; ++limit)
+    TEST_ASSERT_EQUAL_UINT(byteSizes[limit], text::clipBytes(input, limit).size());
+  const std::size_t points[] = {0, 1, 3, 6, 10, 11};
+  for (std::size_t limit = 0; limit < sizeof points / sizeof *points; ++limit)
+    TEST_ASSERT_EQUAL_UINT(points[limit], text::clipCodepoints(input, limit).size());
+  TEST_ASSERT_EQUAL_UINT(1, text::clipBytes("A\xf0\x9f", 100).size());
+  TEST_ASSERT_EQUAL_UINT(0, text::codepoints(""));
+}
+
 void test_decoder_reads_each_sequence_length() {
   TEST_ASSERT_EQUAL_UINT32('A', decodeOne("A"));
   TEST_ASSERT_EQUAL_UINT32(0x00E4, decodeOne("\xC3\xA4"));
@@ -114,6 +127,15 @@ void test_uppercase_special_cases() {
   TEST_ASSERT_EQUAL_STRING("I", text::toUpperUtf8("\xC4\xB1").c_str());
 }
 
+void test_uppercase_folds_vietnamese() {
+  TEST_ASSERT_EQUAL_STRING("\xE1\xBA\xA4", text::toUpperUtf8("\xE1\xBA\xA5").c_str());
+  TEST_ASSERT_EQUAL_STRING("\xE1\xBB\xB8", text::toUpperUtf8("\xE1\xBB\xB9").c_str());
+  TEST_ASSERT_EQUAL_STRING("\xE1\xBA\xA0", text::toUpperUtf8("\xE1\xBA\xA0").c_str());
+  TEST_ASSERT_EQUAL_STRING("\xC6\xA0", text::toUpperUtf8("\xC6\xA1").c_str());
+  TEST_ASSERT_EQUAL_STRING("\xC6\xAF", text::toUpperUtf8("\xC6\xB0").c_str());
+  TEST_ASSERT_EQUAL_STRING("\xC4\x90", text::toUpperUtf8("\xC4\x91").c_str());
+}
+
 void test_uppercase_passes_broken_input_through() {
   TEST_ASSERT_EQUAL_STRING("A\xC3Z", text::toUpperUtf8("a\xC3z").c_str());
 }
@@ -131,6 +153,7 @@ void tearDown() {}
 
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_utf8_clipping_preserves_complete_sequences);
   RUN_TEST(test_decoder_reads_each_sequence_length);
   RUN_TEST(test_decoder_rejects_what_is_not_utf8);
   RUN_TEST(test_decoder_always_advances);
@@ -141,6 +164,7 @@ int main(int, char**) {
   RUN_TEST(test_iterator_substitutes_the_placeholder);
   RUN_TEST(test_uppercase_reaches_past_ascii);
   RUN_TEST(test_uppercase_special_cases);
+  RUN_TEST(test_uppercase_folds_vietnamese);
   RUN_TEST(test_uppercase_passes_broken_input_through);
   RUN_TEST(test_stream_bytes_pick_an_encoding);
   UNITY_END();

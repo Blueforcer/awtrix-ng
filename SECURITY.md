@@ -18,10 +18,11 @@ window before disclosing publicly.
 
 ## Supported versions
 
-Only the latest release is supported. AWTRIX NG is pre-1.0; fixes land on `main`
-and ship in the next tag rather than as backports.
+Only the latest release is supported, on ESP32 and TC002 alike; fixes land on
+`main` and ship in the next tag rather than as backports. There is currently no
+qualified public TC002 system image.
 
-## Threat model — read this before deploying
+## ESP32 threat model — read this before deploying
 
 AWTRIX NG is designed for a **trusted home LAN**. Understanding what that means
 is more useful than any list of patched CVEs.
@@ -73,3 +74,45 @@ an endpoint or the log.
 the API being open by default, the absence of TLS, the open provisioning AP, and
 unsigned OTA images. Arguments for changing those are very welcome — as a
 regular issue or pull request.
+
+## Ulanzi TC002
+
+The TC002 follows the ESP32 model above: plain HTTP on port 80 of your LAN, the API open until
+you turn on the Basic login, Berry scripts trusted. What differs:
+
+- **Bluetooth LE is script-controlled.** Trusted Berry scripts can scan, connect,
+  advertise and serve GATT data when BLE is available. A server characteristic
+  with the `e` property requires an encrypted link for reads, writes, subscriptions
+  and notification delivery. Pairing has no passkey-confirmation UI and does not
+  guarantee the identity of the peer. Bond keys are stored in private files and
+  replaced atomically. Only run scripts whose Bluetooth behavior you trust.
+- **Updates trust the chosen source.** `POST /update` accepts unsigned `.awup` packages.
+  SHA-256 checks detect damaged metadata and payloads; they do not authenticate the publisher.
+  The clock checks the TC002 target and remembers the newest accepted release, so an older
+  package is refused. Only install firmware from a source you trust.
+  A release that does not keep running and get back onto the Wi-Fi within minutes is replaced by
+  the factory release kept in the application partition.
+- **Wi-Fi is set over USB.** There is no provisioning access point, and the passphrase is not
+  stored: the supervisor keeps only the key derived from it.
+- **USB access is root access.** The manufacturer's system gives `adb` root; ADB over Wi-Fi is
+  off unless a developer flag file is placed over USB. AWTRIX NG itself runs as root.
+- **The manufacturer's cloud is gone.** Its login is removed from the clock, and the Ulanzi app
+  runs only when the knob is held at power-on.
+- **The kernel and boot chain are the manufacturer's.** Security fixes in them are out of reach
+  until AWTRIX NG has its own kernel and root filesystem.
+
+**In scope** on the TC002, besides the ESP32 list: bypassing package integrity, device checks
+or the accepted release counter; getting past the
+factory fallback; reaching the Wi-Fi key over the network. **Out of scope:** anything that needs
+physical USB access, and the ESP32 exclusions above.
+
+## Headless Linux
+
+`awtrix-linux` without `--board tc002` is a development target. By default it listens on loopback
+only and does not authenticate local processes. Its `--hardened` mode requires HTTPS and a locally
+provisioned administrator credential, rejects root execution and protects every route; its MQTT
+path requires an explicit CA and broker credentials. Setup and limits are described in
+[Linux administration](docs/developers/linux/security.md) and
+[service isolation](docs/developers/linux/service.md). An authentication bypass, a
+certificate-verification bypass, a leaked administration secret or an escape from the documented
+service isolation is in scope for that mode.

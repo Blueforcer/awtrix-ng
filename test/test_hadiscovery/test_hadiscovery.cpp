@@ -10,6 +10,8 @@
 #include "core/api/JsonReader.h"
 #include "core/mqtt/ByteSink.h"
 #include "core/mqtt/HaDiscovery.h"
+#include "platform/linux/mqtt/KnobEntities.h"
+#include "core/net/DeviceUrl.h"
 
 using awtrix::ha::CountingSink;
 using awtrix::ha::DiscoveryContext;
@@ -78,6 +80,17 @@ void test_emits_device_block_from_context() {
   TEST_ASSERT_EQUAL_STRING("1.2.3", str(dev, "sw").c_str());
 }
 
+void test_device_links_to_the_web_ui_when_the_address_is_known() {
+  DiscoveryContext ctx = baseContext();
+  TEST_ASSERT_TRUE(absent(at(parsed(emitToString(ctx)), "dev"), "cu"));
+  ctx.url = awtrix::net::deviceUrl("192.168.1.20", 80);
+  TEST_ASSERT_EQUAL_STRING("http://192.168.1.20",
+                           str(at(parsed(emitToString(ctx)), "dev"), "cu").c_str());
+  ctx.url = awtrix::net::deviceUrl("192.168.1.20", 8080);
+  TEST_ASSERT_EQUAL_STRING("http://192.168.1.20:8080",
+                           str(at(parsed(emitToString(ctx)), "dev"), "cu").c_str());
+}
+
 void test_escapes_quotes_and_backslashes_in_hostname() {
   DiscoveryContext ctx = baseContext();
   ctx.hostname = "aw\"trix\\living";
@@ -111,13 +124,16 @@ void test_discovery_topic_is_device_scoped() {
 }
 
 void test_counting_pass_length_matches_the_streaming_pass() {
-  for (unsigned mask = 0; mask < 32; ++mask) {
+  for (unsigned mask = 0; mask < 256; ++mask) {
     DiscoveryContext ctx = baseContext();
     ctx.hasBattery = (mask & 1) != 0;
     ctx.hasTemperature = (mask & 2) != 0;
     ctx.hasHumidity = (mask & 4) != 0;
     ctx.hasPressure = (mask & 8) != 0;
     ctx.hasLightSensor = (mask & 16) != 0;
+    if (mask & 32) ctx.setPlatformEntities(awtrix::ha::kKnobEntities, 2);
+    ctx.hasSound = (mask & 64) != 0;
+    ctx.hasRadio = (mask & 128) != 0;
 
     CountingSink counting;
     emit(ctx, counting);
@@ -150,8 +166,8 @@ struct Expected {
 
 const Expected kAlwaysPresent[] = {
     {"mat", "light"},          {"ind1", "light"},        {"ind2", "light"},
-    {"ind3", "light"},         {"brimode", "select"},    {"transeff", "select"},
-    {"trans", "switch"},       {"next", "button"},       {"prev", "button"},
+    {"ind3", "light"},         {"transeff", "select"},   {"trans", "switch"},
+    {"next", "button"},        {"prev", "button"},
     {"dismiss", "button"},     {"app", "sensor"},
     {"ver", "sensor"},         {"ip", "sensor"},         {"prefix", "sensor"},
     {"rssi", "sensor"},        {"uptime", "sensor"},     {"ram", "sensor"},
@@ -165,6 +181,7 @@ void test_emits_the_full_entity_set_with_correct_platforms() {
   ctx.hasHumidity = true;
   ctx.hasPressure = true;
   ctx.hasLightSensor = true;
+  ctx.setPlatformEntities(awtrix::ha::kKnobEntities, 2);
   const std::string json = emitToString(ctx);
 
   const JsonReader doc = parsed(json);
@@ -178,13 +195,15 @@ void test_emits_the_full_entity_set_with_correct_platforms() {
   }
   const Expected kGated[] = {{"temp", "sensor"},  {"hum", "sensor"}, {"press", "sensor"},
                              {"bat", "sensor"},   {"batv", "sensor"},
-                             {"lowbat", "binary_sensor"}, {"light", "sensor"}};
+                             {"lowbat", "binary_sensor"}, {"light", "sensor"},
+                             {"brimode", "select"}, {"btnk", "binary_sensor"},
+                             {"knob", "event"}};
   for (const Expected& e : kGated) {
     const JsonReader c = at(cmps, e.key);
     TEST_ASSERT_TRUE_MESSAGE(c.isObject(), e.key);
     TEST_ASSERT_EQUAL_STRING_MESSAGE(e.platform, str(c, "p").c_str(), e.key);
   }
-  TEST_ASSERT_EQUAL_size_t(27, memberCount(cmps));
+  TEST_ASSERT_EQUAL_size_t(29, memberCount(cmps));
 }
 
 void test_absent_hardware_omits_its_entities() {
@@ -200,7 +219,10 @@ void test_absent_hardware_omits_its_entities() {
   TEST_ASSERT_TRUE(absent(cmps, "batv"));
   TEST_ASSERT_TRUE(absent(cmps, "lowbat"));
   TEST_ASSERT_TRUE(absent(cmps, "light"));
-  TEST_ASSERT_EQUAL_size_t(20, memberCount(cmps));
+  TEST_ASSERT_TRUE(absent(cmps, "brimode"));
+  TEST_ASSERT_TRUE(absent(cmps, "btnk"));
+  TEST_ASSERT_TRUE(absent(cmps, "knob"));
+  TEST_ASSERT_EQUAL_size_t(19, memberCount(cmps));
 }
 
 void test_transition_options_follow_the_firmware_list() {
@@ -228,6 +250,9 @@ void test_every_command_topic_is_routable() {
   ctx.hasHumidity = true;
   ctx.hasPressure = true;
   ctx.hasLightSensor = true;
+  ctx.setPlatformEntities(awtrix::ha::kKnobEntities, 2);
+  ctx.hasSound = true;
+  ctx.hasRadio = true;
   const std::string json = emitToString(ctx);
 
   const JsonReader doc = parsed(json);
@@ -242,8 +267,9 @@ void test_every_command_topic_is_routable() {
       const std::string suffix = topic.substr(2);
 
       awtrix::Command cmd;
+      std::string payload = "{}";
       std::string result;
-      const awtrix::api::RouteOutcome outcome = awtrix::api::routeMqtt(suffix, "{}", cmd, result);
+      const awtrix::api::RouteOutcome outcome = awtrix::api::routeMqtt(suffix, payload, cmd, result);
       TEST_ASSERT_TRUE_MESSAGE(outcome != awtrix::api::RouteOutcome::NoMatch, suffix.c_str());
       ++checked;
     }
@@ -258,6 +284,9 @@ void test_state_topics_are_ones_the_firmware_already_publishes() {
   ctx.hasHumidity = true;
   ctx.hasPressure = true;
   ctx.hasLightSensor = true;
+  ctx.setPlatformEntities(awtrix::ha::kKnobEntities, 2);
+  ctx.hasSound = true;
+  ctx.hasRadio = true;
   const std::string json = emitToString(ctx);
 
   const JsonReader doc = parsed(json);
@@ -265,7 +294,7 @@ void test_state_topics_are_ones_the_firmware_already_publishes() {
   static const char* kKnown[] = {
       "~/state/device",        "~/state/settings",       "~/state/apps/active",
       "~/state/buttons/left",  "~/state/buttons/select", "~/state/buttons/right",
-      "~/state/prefix",
+      "~/state/prefix",        "~/state/buttons/knob",   "~/event/knob",
   };
   static const char* kStateKeys[] = {"stat_t", "bri_stat_t", "rgb_stat_t"};
   forEachMember(at(doc, "cmps"), [&](const std::string&, JsonReader comp) {
@@ -302,6 +331,9 @@ void test_every_component_carries_the_topic_base() {
   ctx.hasHumidity = true;
   ctx.hasPressure = true;
   ctx.hasLightSensor = true;
+  ctx.setPlatformEntities(awtrix::ha::kKnobEntities, 2);
+  ctx.hasSound = true;
+  ctx.hasRadio = true;
   const std::string json = emitToString(ctx);
 
   const JsonReader doc = parsed(json);
@@ -318,6 +350,9 @@ void test_unique_ids_are_distinct() {
   ctx.hasHumidity = true;
   ctx.hasPressure = true;
   ctx.hasLightSensor = true;
+  ctx.setPlatformEntities(awtrix::ha::kKnobEntities, 2);
+  ctx.hasSound = true;
+  ctx.hasRadio = true;
   const std::string json = emitToString(ctx);
 
   const JsonReader doc = parsed(json);
@@ -327,9 +362,97 @@ void test_unique_ids_are_distinct() {
     ids.push_back(str(comp, "uniq_id"));
   });
 
-  TEST_ASSERT_EQUAL_size_t(27, ids.size());
+  TEST_ASSERT_EQUAL_size_t(34, ids.size());
   std::sort(ids.begin(), ids.end());
   TEST_ASSERT_TRUE(std::adjacent_find(ids.begin(), ids.end()) == ids.end());
+}
+
+// The mixer shows up only on a clock that makes sound; radio volume only with a radio.
+void test_volume_entities_follow_the_sound_outputs() {
+  DiscoveryContext ctx = baseContext();
+  const std::string none = emitToString(ctx);
+  TEST_ASSERT_TRUE(none.find("\"Volume\"") == std::string::npos);
+  TEST_ASSERT_TRUE(none.find("\"Stop sound\"") == std::string::npos);
+  ctx.hasSound = true;
+  const std::string sound = emitToString(ctx);
+  TEST_ASSERT_TRUE(sound.find("\"p\":\"number\",\"name\":\"Volume\"") != std::string::npos);
+  TEST_ASSERT_TRUE(sound.find("\"App volume\"") != std::string::npos);
+  TEST_ASSERT_TRUE(sound.find("\"Alert volume\"") != std::string::npos);
+  TEST_ASSERT_TRUE(sound.find("\"Stop sound\"") != std::string::npos);
+  TEST_ASSERT_TRUE(sound.find("\"Radio volume\"") == std::string::npos);
+  ctx.hasRadio = true;
+  TEST_ASSERT_TRUE(emitToString(ctx).find("\"Radio volume\"") != std::string::npos);
+  ctx.hasSound = false;
+  TEST_ASSERT_TRUE(emitToString(ctx).find("\"Radio volume\"") == std::string::npos);
+}
+
+// Each volume writes and reads the settings key of the same name.
+void test_volume_entities_use_the_settings_keys() {
+  DiscoveryContext ctx = baseContext();
+  ctx.hasSound = ctx.hasRadio = true;
+  const JsonReader cmps = at(parsed(emitToString(ctx)), "cmps");
+  const struct {
+    const char* entity;
+    const char* key;
+  } kVolumes[] = {{"vol", "volume"}, {"radvol", "radioVolume"}, {"appvol", "appVolume"},
+                  {"alrtvol", "alertVolume"}};
+  for (const auto& v : kVolumes) {
+    const JsonReader c = at(cmps, v.entity);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("~/cmd/settings", str(c, "cmd_t").c_str(), v.entity);
+    const std::string tpl = str(c, "cmd_tpl");
+    TEST_ASSERT_TRUE_MESSAGE(tpl.find(std::string("{\"") + v.key + "\":") == 0, v.entity);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE((std::string("{{ value_json.") + v.key + " }}").c_str(),
+                                     str(c, "val_tpl").c_str(), v.entity);
+  }
+  const JsonReader stop = at(cmps, "stopsnd");
+  TEST_ASSERT_EQUAL_STRING("~/cmd/audio/stop", str(stop, "cmd_t").c_str());
+  TEST_ASSERT_EQUAL_STRING("{}", str(stop, "pl_prs").c_str());
+}
+
+void test_platform_entities_follow_the_shared_ones() {
+  static const awtrix::ha::Entity kExtra[] = {
+      {"extra1", R"J("p":"button","name":"Extra one","cmd_t":"~/cmd/extra/one")J"},
+      {"extra2", R"J("p":"button","name":"Extra two","cmd_t":"~/cmd/extra/two")J"}};
+  DiscoveryContext ctx = baseContext();
+  ctx.platformEntities = kExtra;
+  ctx.platformEntityCount = 2;
+  const std::string json = emitToString(ctx);
+
+  const JsonReader cmps = at(parsed(json), "cmps");
+  TEST_ASSERT_EQUAL_size_t(21, memberCount(cmps));
+  for (const auto& e : kExtra) {
+    const JsonReader c = at(cmps, e.key);
+    TEST_ASSERT_TRUE_MESSAGE(c.isObject(), e.key);
+    TEST_ASSERT_EQUAL_STRING("awtrix_b3c4d5", str(c, "~").c_str());
+    TEST_ASSERT_EQUAL_STRING((std::string("a4cf12b3c4d5_") + e.key).c_str(), str(c, "uniq_id").c_str());
+  }
+  TEST_ASSERT_EQUAL_STRING("~/cmd/extra/two", str(at(cmps, "extra2"), "cmd_t").c_str());
+
+  CountingSink counting;
+  emit(ctx, counting);
+  TEST_ASSERT_EQUAL_size_t(json.size(), counting.n);
+}
+
+void test_knob_turn_event_names_both_directions() {
+  DiscoveryContext ctx = baseContext();
+  ctx.setPlatformEntities(awtrix::ha::kKnobEntities, 2);
+  const std::string json = emitToString(ctx);
+
+  const JsonReader knob = at(at(parsed(json), "cmps"), "knob");
+  JsonReader types = at(knob, "evt_typ");
+  TEST_ASSERT_TRUE(types.enterArray());
+  std::vector<std::string> names;
+  while (types.nextElement()) {
+    std::string name;
+    types.appendString(name);
+    names.push_back(name);
+    TEST_ASSERT_TRUE(types.skipValue());
+  }
+  TEST_ASSERT_EQUAL_size_t(2, names.size());
+  const std::string tpl = str(knob, "val_tpl");
+  for (const std::string& name : names)
+    TEST_ASSERT_TRUE_MESSAGE(tpl.find("'" + name + "'") != std::string::npos, name.c_str());
+  TEST_ASSERT_TRUE(tpl.find("value_json.turn") != std::string::npos);
 }
 
 }
@@ -340,6 +463,7 @@ void tearDown() {}
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_emits_device_block_from_context);
+  RUN_TEST(test_device_links_to_the_web_ui_when_the_address_is_known);
   RUN_TEST(test_escapes_quotes_and_backslashes_in_hostname);
   RUN_TEST(test_declares_base_topic_availability_and_origin);
   RUN_TEST(test_discovery_topic_is_device_scoped);
@@ -353,6 +477,10 @@ int main(int, char**) {
   RUN_TEST(test_indicator_off_payload_is_a_command_the_firmware_accepts);
   RUN_TEST(test_every_component_carries_the_topic_base);
   RUN_TEST(test_unique_ids_are_distinct);
+  RUN_TEST(test_knob_turn_event_names_both_directions);
+  RUN_TEST(test_volume_entities_follow_the_sound_outputs);
+  RUN_TEST(test_volume_entities_use_the_settings_keys);
+  RUN_TEST(test_platform_entities_follow_the_shared_ones);
   UNITY_END();
   return 0;
 }

@@ -9,7 +9,7 @@ namespace awtrix {
 namespace net {
 
 // The radio's association state, reduced to what the status mapping cares about. NetworkService
-// folds the ESP32 wl_status_t values onto these; tests and the simulator supply them directly.
+// folds the ESP32 wl_status_t values onto these; Linux and the tests supply them directly.
 enum class WifiAssoc : uint8_t {
   Idle,
   Joining,

@@ -8,11 +8,10 @@
 namespace awtrix {
 namespace weekdaybar {
 
-namespace {
+const char* const kDayNames[7] = {"sunday",   "monday", "tuesday", "wednesday",
+                                  "thursday", "friday", "saturday"};
 
-// The position in this array is the bit position in weekendMask, so it has to start at Sunday.
-const char* const kDayNames[] = {"sunday",   "monday", "tuesday", "wednesday",
-                                 "thursday", "friday", "saturday"};
+namespace {
 
 bool dayIndex(const char* name, int& index) {
   if (!name) return false;
@@ -46,7 +45,7 @@ bool readColorField(api::JsonReader r, uint32_t& dst, const char* field, Error& 
 }
 
 bool readWeekendDays(api::JsonReader r, uint8_t& dst, Error& err) {
-  const Error bad{"weekdayBar.weekendDays", "must be an array of weekday names"};
+  const Error bad{"weekdayBar.weekendDays", "must be weekday names"};
   if (!r.isArray() || !r.enterArray()) {
     err = bad;
     return false;

@@ -49,6 +49,13 @@ assuming a memory budget. `freeHeapBytes` reports free internal RAM; optional
 
 ## 3. Write the app
 
+Know the clock first. Read `boardType` and `soc` from `/api/v1/device` and the
+panel size and feature flags from `/api/v1/capabilities`; without a device,
+ask which clock it is (TC001 or another ESP32, ESP32-S3, or TC002) and, for a
+self-built one, its panel size. Use only what that clock has - section 2.1 of
+the reference. A TC002 script (52×16, speaker, `gamepad`, `layout`, ...) does
+not run on the other clocks.
+
 Follow `references/awtrix-api.md`. Ask at most three questions, all at once, and
 only about things you cannot default (which city, which topic, which icon ID).
 Never ask the user to paste an API key into chat - leave a marked placeholder
@@ -124,6 +131,11 @@ and its own `rotation.show()` returns false. Verify it in `GET /api/v1/apps` -
 `enabled` true, `headless` true, `error` null - and then on what it actually
 does: the notification it raises, the `shared` key it fills, the line it logs.
 
+**An `@ondemand` script does not run until it is started.** The same `PUT
+/api/v1/apps/active` starts it fresh and keeps it on the panel, so its screen reads
+back without pinning again; another `apps/active`, `next` or `previous` ends it.
+`GET /api/v1/apps` marks it `ondemand`, with `inLoop` true only while it runs.
+
 ## 6. When there is no device
 
 Hand over the complete file plus these steps, in the user's language:
@@ -132,12 +144,13 @@ Hand over the complete file plus these steps, in the user's language:
    `http://awtrixng-xxxxxx.local`.
 2. **Scripts** tab, create a script, name it with letters, digits, `_` or `-`.
 3. Paste, press **Save**.
-4. It joins the rotation a moment later.
+4. It joins the rotation a moment later. An `# @ondemand` script waits instead: hold
+   the middle button on the clock, choose **Scripts**, then the script.
 5. If the panel shows `ERR:` in red, the message stands next to the script in
    that tab - ask them to copy it back.
 6. If you gave the app `# @config` settings, tell them where they are: **Apps**
    tab, the gear on that app's row. If you put them on a shared module, the gear
-   is on the module's row in the **Modules** card on the same tab.
+   is on the module's row under **Shared settings** on the same tab.
 
 ## 7. Rules
 

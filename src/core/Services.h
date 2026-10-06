@@ -19,9 +19,17 @@ class IAppService {
                                       DispatchDetail& detail) = 0;
   virtual void deletePushedApp(const std::string& name) = 0;
   virtual bool setAppOrder(const std::string& json) = 0;
-  virtual bool switchApp(const std::string& nameOrJson) = 0;
+  virtual void setAppEnabled(const std::string& name, bool enabled) = 0;
+  virtual DispatchResult switchApp(const std::string& nameOrJson, DispatchDetail& detail) = 0;
   virtual void nextApp() = 0;
   virtual void previousApp() = 0;
+  virtual DispatchResult setBuiltinAppConfig(const std::string& name, const std::string& json,
+                                             DispatchDetail& detail) {
+    (void)name;
+    (void)json;
+    (void)detail;
+    return DispatchResult::NotFound;
+  }
 };
 
 class INotifyService {
@@ -69,14 +77,21 @@ class IScriptService {
                                       DispatchDetail& detail) {
     (void)name;
     (void)json;
-    detail.message = "enable scripting before updating a script";
+    detail.message = "scripting is off";
     return DispatchResult::Unavailable;
   }
   virtual DispatchResult setScriptConfig(const std::string& name, const std::string& json,
                                          DispatchDetail& detail) {
     (void)name;
     (void)json;
-    detail.message = "scripting is disabled (scriptingEnabled is off)";
+    detail.message = "scripting is off";
+    return DispatchResult::Unavailable;
+  }
+  virtual DispatchResult setScriptData(const std::string& name, const std::string& json,
+                                       DispatchDetail& detail) {
+    (void)name;
+    (void)json;
+    detail.message = "scripting is off";
     return DispatchResult::Unavailable;
   }
   // These four are polled by CoreEngine every tick for the app on screen, so keep them cheap. The
@@ -98,6 +113,21 @@ class IScriptService {
     return false;
   }
   virtual void setRunningScripts(const std::vector<std::string>& running) { (void)running; }
+
+  // @ondemand scripts: installed, but outside the rotation and without an instance until the
+  // device menu (or the API) starts one; unloading drops that instance again.
+  virtual bool scriptIsOnDemand(const std::string& name) {
+    (void)name;
+    return false;
+  }
+  virtual DispatchResult launchScript(const std::string& name, DispatchDetail& detail) {
+    (void)name;
+    detail.message = "scripting is off";
+    return DispatchResult::Unavailable;
+  }
+  virtual void unloadScript(const std::string& name) { (void)name; }
+  // How the device menu names a script: its @name, or the file name without one.
+  virtual std::string scriptTitle(const std::string& name) { return name; }
 };
 
 // Handed to the dispatcher for the duration of one command. The references are always live; the

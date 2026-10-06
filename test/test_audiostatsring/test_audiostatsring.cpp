@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <cstdint>
+#include <thread>
 
 #include "core/audio/AudioStatsRing.h"
 
@@ -110,8 +111,53 @@ void test_interest_expires() {
   TEST_ASSERT_FALSE(r.wanted(late + StatsRing::kInterestMs + 1));
 }
 
+// The 32-bit deadline must not come back to life once the clock has moved half its range on: not
+// before anyone ever asked, and not long after the last request ran out.
+void test_interest_survives_the_32_bit_wrap() {
+  StatsRing never;
+  TEST_ASSERT_FALSE(never.wanted((1LL << 31) + 5));
+  TEST_ASSERT_FALSE(never.wanted((1LL << 32) - 5));
+
+  StatsRing once;
+  once.markInterest(1000);
+  TEST_ASSERT_TRUE(once.wanted(1500));
+  TEST_ASSERT_FALSE(once.wanted(1000 + StatsRing::kInterestMs));
+  TEST_ASSERT_FALSE(once.wanted(1000 + (1LL << 31) + 100));
+  TEST_ASSERT_FALSE(once.wanted(1000 + (1LL << 32) - 100));
+}
+
+void test_stamped_values_survive_overwrite_and_parallel_publication() {
+  struct Value { uint32_t index, inverse; };
+  StampedRing<Value, 8> ring;
+  Value value{7, 9};
+  int64_t at = 42;
+  for (uint32_t id = 0; id < 8; ++id) TEST_ASSERT_FALSE(ring.read(id, at, value));
+  TEST_ASSERT_FALSE(ring.read(UINT32_MAX, at, value));
+  TEST_ASSERT_EQUAL_INT64(42, at);
+  TEST_ASSERT_EQUAL_UINT32(7, value.index);
+  for (uint32_t i = 1; i <= 9; ++i) ring.publish({i, ~i}, i * 1000LL);
+  TEST_ASSERT_FALSE(ring.read(1, at, value));
+  TEST_ASSERT_TRUE(ring.read(ring.head(), at, value));
+  TEST_ASSERT_EQUAL_INT64(9000, at);
+  std::atomic<bool> finished{false};
+  std::thread writer([&] {
+    for (uint32_t i = 10; i < 50000; ++i) ring.publish({i, ~i}, i * 1000LL);
+    finished.store(true, std::memory_order_release);
+  });
+  bool consistent = true;
+  do {
+    if (ring.read(ring.head(), at, value))
+      consistent = consistent && value.inverse == ~value.index && at == value.index * 1000LL;
+  } while (!finished.load(std::memory_order_acquire));
+  writer.join();
+  TEST_ASSERT_TRUE(consistent);
+  TEST_ASSERT_TRUE(ring.read(ring.head(), at, value));
+  TEST_ASSERT_EQUAL_UINT32(49999, value.index);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_stamped_values_survive_overwrite_and_parallel_publication);
   RUN_TEST(test_empty_ring_is_inactive);
   RUN_TEST(test_future_slot_waits);
   RUN_TEST(test_picks_the_newest_audible_slot);
@@ -121,5 +167,6 @@ int main(int, char**) {
   RUN_TEST(test_beat_in_a_not_yet_audible_slot_waits);
   RUN_TEST(test_wraps_after_eight);
   RUN_TEST(test_interest_expires);
+  RUN_TEST(test_interest_survives_the_32_bit_wrap);
   return UNITY_END();
 }

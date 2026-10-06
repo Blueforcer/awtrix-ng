@@ -194,6 +194,9 @@ static int i_close(bvm *vm)
     be_return_nil(vm);
 }
 
+/* AWTRIX: upstream compiles i_savecode unconditionally; with the saver off
+ * be_bytecode_save_to_fs does not exist, and an -O0 build fails to link. */
+#if BE_USE_BYTECODE_SAVER
 static int i_savecode(bvm *vm)
 {
     int argc = be_top(vm);
@@ -213,6 +216,7 @@ static int i_savecode(bvm *vm)
     }
     be_return_nil(vm);
 }
+#endif
 
 #if !BE_USE_PRECOMPILED_OBJECT
 static int m_open(bvm *vm)

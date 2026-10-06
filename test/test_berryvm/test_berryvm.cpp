@@ -10,7 +10,7 @@
 #include "berry.h"
 
 #include "core/script/BerryVM.h"
-#include "core/script/ScriptHeapTesting.h"
+#include "platform/linux/host/HostScriptHeap.h"
 
 extern "C" void be_gc_collect(bvm* vm);
 
@@ -172,6 +172,41 @@ static void test_vm_syntax_error_captured() {
   TEST_ASSERT_TRUE(vm.lastError().size() > 0);
 }
 
+static void test_vm_integer_format_modes_fit_the_buffer() {
+  const char* conversions[] = {"d", "i", "o", "u", "x", "X"};
+  const char* expected[] = {"42", "42", "52", "42", "2a", "2A"};
+  for (std::size_t i = 0; i < sizeof(conversions) / sizeof(conversions[0]); ++i) {
+    for (std::size_t flags : {0u, 26u, 27u, 28u, 29u, 30u, 60u}) {
+      script::BerryVM vm;
+      const std::string source = "import string def probe() return string.format('%" +
+          std::string(flags, '0') + conversions[i] + "', 42) end";
+      TEST_ASSERT_TRUE_MESSAGE(vm.load(source), vm.lastError().c_str());
+      std::string out;
+      if (flags < 29) {
+        TEST_ASSERT_TRUE_MESSAGE(vm.callString("probe", out), vm.lastError().c_str());
+        TEST_ASSERT_EQUAL_STRING(expected[i], out.c_str());
+      } else {
+        TEST_ASSERT_FALSE(vm.callString("probe", out));
+        TEST_ASSERT_EQUAL_STRING("value_error: format specifier too long", vm.lastError().c_str());
+      }
+    }
+  }
+
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(vm.load(
+      "import string def probe() return string.format('%+06d %.3i %#06x %.2f %s', "
+      "42, 7, 42, 3.5, 'ok') end"));
+  std::string out;
+  TEST_ASSERT_TRUE_MESSAGE(vm.callString("probe", out), vm.lastError().c_str());
+  TEST_ASSERT_EQUAL_STRING("+00042 007 0x002a 3.50 ok", out.c_str());
+}
+
+static void test_vm_string_escape_at_eof_is_a_syntax_error() {
+  script::BerryVM vm;
+  TEST_ASSERT_FALSE(vm.load("var text = 'unfinished\\"));
+  TEST_ASSERT_TRUE(vm.lastError().find("unfinished string") != std::string::npos);
+}
+
 static void test_vm_runtime_error_captured() {
   script::BerryVM vm;
   TEST_ASSERT_TRUE(vm.load("def draw() var f = nil f() end"));
@@ -203,6 +238,39 @@ static void test_vm_budget_resets_between_calls() {
   TEST_ASSERT_TRUE(vm.call("work"));
   TEST_ASSERT_TRUE(vm.call("work"));
   TEST_ASSERT_EQUAL_STRING("", vm.lastError().c_str());
+}
+
+static constexpr long kTc002InstructionLimit = 2000000;
+
+static void test_vm_platform_budget_allows_longer_finite_calls() {
+  const char* source = "def work() var i = 0 while i < 100000 i += 1 end return str(i) end";
+  script::BerryVM ordinary;
+  script::BerryVM raised(kTc002InstructionLimit);
+  TEST_ASSERT_TRUE(ordinary.load(source));
+  TEST_ASSERT_TRUE(raised.load(source));
+  TEST_ASSERT_FALSE(ordinary.call("work"));
+  TEST_ASSERT_TRUE(ordinary.lastError().find("instruction") != std::string::npos);
+  std::string out;
+  TEST_ASSERT_TRUE(raised.callString("work", out));
+  TEST_ASSERT_EQUAL_STRING("100000", out.c_str());
+  TEST_ASSERT_TRUE(raised.callString("work", out));
+  TEST_ASSERT_EQUAL_STRING("100000", out.c_str());
+  // Alternating VMs must keep each one's limit, despite the shared heartbeat hook.
+  TEST_ASSERT_FALSE(ordinary.call("work"));
+}
+
+static void test_vm_raised_budget_still_hard_aborts_and_resets() {
+  script::BerryVM vm(kTc002InstructionLimit);
+  TEST_ASSERT_TRUE(vm.load(
+      "def spin() while true try while true end except .. end end end\n"
+      "def work() var i = 0 while i < 100000 i += 1 end return str(i) end"));
+  TEST_ASSERT_FALSE(vm.call("spin"));
+  TEST_ASSERT_TRUE(vm.lastError().find("instruction") != std::string::npos);
+  std::string out;
+  TEST_ASSERT_TRUE(vm.callString("work", out));
+  TEST_ASSERT_EQUAL_STRING("100000", out.c_str());
+  TEST_ASSERT_TRUE(vm.callString("work", out));
+  TEST_ASSERT_EQUAL_STRING("100000", out.c_str());
 }
 
 static void test_vm_instruction_limit_survives_try_except() {
@@ -629,6 +697,133 @@ static void test_vm_failed_stack_shrink_preserves_the_completed_call() {
   TEST_ASSERT_TRUE(vm.call("deep"));
 }
 
+static void expect_probe(script::BerryVM& vm, const char* probe, const char* expected) {
+  std::string out;
+  TEST_ASSERT_TRUE_MESSAGE(vm.callString(probe, out), vm.lastError().c_str());
+  TEST_ASSERT_EQUAL_STRING_MESSAGE(expected, out.c_str(), probe);
+}
+
+// berry-lang/berry#549
+static void test_vm_short_circuit_result_stays_in_its_register() {
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE_MESSAGE(vm.load(
+      "def args(a, b, c) return [a, b, c] end\n"
+      "def same(p, q) return (p && q) == q end\n"
+      "class Probe\n"
+      "  var r, d, l\n"
+      "  def init() self.d = {true: 'T', false: 'F'} self.l = [10] end\n"
+      "  def args(a, b, c) return [a, b, c] end\n"
+      "  def or_arg(x, y, d) return self.args(x || y, d, 7) end\n"
+      "  def member_arg(y, d) return self.args(self.r != nil || y, d, 7) end\n"
+      "  def key(p, q) return self.d[p && q] end\n"
+      "  def compound(p, q) try self.l[0] += (p && q) except .. as e, m return m end end\n"
+      "end\n"
+      "def or_arg() var x = true, y = false, d = 0.5 return args(x || y, d, 7) end\n"
+      "def and_arg() var x = true, y = false, d = 0.5 return args(x && y, d, 7) end\n"
+      "def not_arg() var x = true, y = false, d = 0.5 return args(!(x || y), d, 7) end\n"
+      "def eq_arg() var x = true, y = false, d = 0.5 return args((x || y) == x, d, 7) end\n"
+      "def method_arg() return Probe().or_arg(true, false, 0.5) end\n"
+      "def member_arg() return Probe().member_arg(false, 0.5) end\n"
+      "def left_operand() return same(3, 2) end\n"
+      "def index_key() return Probe().key(0, 1) end\n"
+      "def compound_rhs() return Probe().compound(0, 1) end\n"), vm.lastError().c_str());
+  expect_probe(vm, "or_arg", "[true, 0.5, 7]");
+  expect_probe(vm, "and_arg", "[false, 0.5, 7]");
+  expect_probe(vm, "not_arg", "[false, 0.5, 7]");
+  expect_probe(vm, "eq_arg", "[true, 0.5, 7]");
+  expect_probe(vm, "method_arg", "[true, 0.5, 7]");
+  expect_probe(vm, "member_arg", "[false, 0.5, 7]");
+  expect_probe(vm, "left_operand", "false");
+  expect_probe(vm, "index_key", "F");
+  std::string out;
+  TEST_ASSERT_TRUE_MESSAGE(vm.callString("compound_rhs", out), vm.lastError().c_str());
+  TEST_ASSERT_TRUE_MESSAGE(out.find("'bool'") != std::string::npos, out.c_str());
+}
+
+// berry-lang/berry#551
+static void test_vm_assignment_to_nested_index_keeps_locals() {
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE_MESSAGE(vm.load(
+      "class Keep\n"
+      "  var m\n"
+      "  def init() self.m = [0, 0, 0, 0, 0] end\n"
+      "  def run()\n"
+      "    var a = 10\n"
+      "    var b = 20\n"
+      "    self.m[self.m[4]] = 1\n"
+      "    var c = self.m[0] + 1\n"
+      "    return [a, b, c]\n"
+      "  end\n"
+      "end\n"
+      "def nested_key() return Keep().run() end\n"), vm.lastError().c_str());
+  expect_probe(vm, "nested_key", "[10, 20, 2]");
+}
+
+// berry-lang/berry#553, first part
+static void test_vm_walrus_into_a_local_keeps_call_arguments_in_place() {
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE_MESSAGE(vm.load(
+      "class Walrus\n"
+      "  var l\n"
+      "  def init() self.l = [10, 11, 12, 13, 14] end\n"
+      "  def args(a, b) return [a, b] end\n"
+      "  def run() var p = 0 return self.args(p := self.l[3], 4) end\n"
+      "  def computed() var p = 0, i = 1 return self.args(p := self.l[i + 2], 4) end\n"
+      "  def fresh() n := self.l[3] return [n, self.l[0]] end\n"
+      "end\n"
+      "def walrus_arg() return Walrus().run() end\n"
+      "def walrus_computed() return Walrus().computed() end\n"
+      "def walrus_new_local() return Walrus().fresh() end\n"), vm.lastError().c_str());
+  expect_probe(vm, "walrus_arg", "[13, 4]");
+  expect_probe(vm, "walrus_computed", "[13, 4]");
+  expect_probe(vm, "walrus_new_local", "[13, 10]");
+}
+
+// berry-lang/berry#553, second part
+static void test_vm_walrus_refuses_a_new_local_over_a_temporary() {
+  script::BerryVM vm;
+  TEST_ASSERT_FALSE(vm.load("def t(a) var r = a * 2 + (n := a + 1) return [r, n] end"));
+  TEST_ASSERT_TRUE_MESSAGE(vm.lastError().find("declare it with 'var' first") != std::string::npos,
+                           vm.lastError().c_str());
+  TEST_ASSERT_TRUE_MESSAGE(vm.load("def probe() if (m := 10 + 1) > 0 return m end end"),
+                           vm.lastError().c_str());
+  expect_probe(vm, "probe", "11");
+}
+
+static void expect_load_error(const std::string& source, const char* needle) {
+  script::BerryVM vm;
+  TEST_ASSERT_FALSE_MESSAGE(vm.load(source), needle);
+  TEST_ASSERT_TRUE_MESSAGE(vm.lastError().find(needle) != std::string::npos, vm.lastError().c_str());
+}
+
+// berry-lang/berry#546
+static void test_vm_compiler_refuses_hostile_source() {
+  expect_load_error(std::string(100, '(') + "1" + std::string(100, ')'), "too deeply nested");
+  std::string deepIf;
+  for (int i = 0; i < 100; ++i) deepIf += "if 1 ";
+  for (int i = 0; i < 100; ++i) deepIf += "end ";
+  expect_load_error(deepIf, "too deeply nested");
+  std::string longJump = "def big(x) if x ";
+  for (int i = 0; i < 140000; ++i) longJump += "x += 1 ";
+  longJump += "end return x end";
+  expect_load_error(longJump, "jump too far");
+
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE_MESSAGE(vm.load("def probe() return (((((((((1 + 2))))))))) end"), vm.lastError().c_str());
+  expect_probe(vm, "probe", "3");
+}
+
+// berry-lang/berry#546
+static void test_vm_bytes_offsets_beyond_int_range_stay_inside() {
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE_MESSAGE(vm.load(
+      "def get_far() return bytes('01020304').get(0x7FFFFFFF, 2) end\n"
+      "def set_far() var b = bytes('01020304') b.set(0x7FFFFFFF, 0x1234, 2) return b.tohex() end\n"),
+      vm.lastError().c_str());
+  expect_probe(vm, "get_far", "0");
+  expect_probe(vm, "set_far", "01020304");
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_berry_runs_arithmetic);
@@ -641,10 +836,14 @@ int main(int, char**) {
   RUN_TEST(test_vm_nil_shadowed_builtins_have_no_back_door);
   RUN_TEST(test_vm_load_and_call);
   RUN_TEST(test_vm_syntax_error_captured);
+  RUN_TEST(test_vm_integer_format_modes_fit_the_buffer);
+  RUN_TEST(test_vm_string_escape_at_eof_is_a_syntax_error);
   RUN_TEST(test_vm_runtime_error_captured);
   RUN_TEST(test_vm_undeclared_global_is_a_compile_error);
   RUN_TEST(test_vm_infinite_loop_hits_instruction_limit);
   RUN_TEST(test_vm_budget_resets_between_calls);
+  RUN_TEST(test_vm_platform_budget_allows_longer_finite_calls);
+  RUN_TEST(test_vm_raised_budget_still_hard_aborts_and_resets);
   RUN_TEST(test_vm_instruction_limit_survives_try_except);
   RUN_TEST(test_vm_stays_usable_after_hard_abort);
   RUN_TEST(test_vm_instruction_limit_applies_to_load);
@@ -669,5 +868,11 @@ int main(int, char**) {
   RUN_TEST(test_vm_repeated_late_constants_do_not_duplicate_values);
   RUN_TEST(test_vm_stack_reclamation_survives_exceptions_and_hard_abort);
   RUN_TEST(test_vm_failed_stack_shrink_preserves_the_completed_call);
+  RUN_TEST(test_vm_short_circuit_result_stays_in_its_register);
+  RUN_TEST(test_vm_assignment_to_nested_index_keeps_locals);
+  RUN_TEST(test_vm_walrus_into_a_local_keeps_call_arguments_in_place);
+  RUN_TEST(test_vm_walrus_refuses_a_new_local_over_a_temporary);
+  RUN_TEST(test_vm_compiler_refuses_hostile_source);
+  RUN_TEST(test_vm_bytes_offsets_beyond_int_range_stay_inside);
   return UNITY_END();
 }

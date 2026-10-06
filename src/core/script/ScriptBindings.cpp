@@ -47,7 +47,7 @@ struct Ctx {
   std::string storeFlush;
   std::string storeOwner;
   bool storeDirty = false;
-  const GfxFont* font = nullptr;
+  const FontEntry* font = nullptr;
   ScrollBank* scroll = nullptr;
   IScriptIconSet* icons = nullptr;
 };
@@ -129,7 +129,7 @@ std::vector<int> argIntList(bvm* vm, int i) {
 }
 
 std::string g_textRun;
-std::vector<uint32_t> g_textRunColors;
+std::vector<text::TextRun> g_textRuns;
 
 bool isTextArg(bvm* vm, int i) {
   if (be_top(vm) < i) return false;
@@ -163,19 +163,19 @@ bool readTextFragment(bvm* vm, int idx, std::string& out, uint32_t& color) {
     be_pushint(vm, 1);
     be_getindex(vm, raw);
     if (be_isint(vm, -1))
-      color = static_cast<uint32_t>(be_toint(vm, -1));
+      color = static_cast<uint32_t>(be_toint(vm, -1)) & 0xFFFFFFu;
     else if (be_isreal(vm, -1))
-      color = static_cast<uint32_t>(be_toreal(vm, -1));
+      color = static_cast<uint32_t>(be_toreal(vm, -1)) & 0xFFFFFFu;
     be_pop(vm, 2);
   }
   be_pop(vm, 1);
   return got;
 }
 
-bool readTextArg(bvm* vm, int i, const GfxFont& font, uint32_t flat, std::string& out,
-                 std::vector<uint32_t>* glyphColors) {
+// A list of parts becomes one coloured run per part; a part without a colour keeps the flat one.
+bool readTextArg(bvm* vm, int i, std::string& out, std::vector<text::TextRun>* runs) {
   out.clear();
-  if (glyphColors) glyphColors->clear();
+  if (runs) runs->clear();
   if (be_top(vm) < i) return false;
   if (be_isstring(vm, i)) {
     out = be_tostring(vm, i);
@@ -188,11 +188,11 @@ bool readTextArg(bvm* vm, int i, const GfxFont& font, uint32_t flat, std::string
     be_pushint(vm, k);
     be_getindex(vm, raw);
     std::string part;
-    uint32_t color = flat;
+    uint32_t color = text::kFlatColor;
     const bool got = readTextFragment(vm, -1, part, color);
     be_pop(vm, 2);
     if (!got || part.empty()) continue;
-    if (glyphColors) glyphColors->insert(glyphColors->end(), text::glyphCount(font, part), color);
+    if (runs) runs->push_back({static_cast<uint32_t>(part.size()), color});
     out += part;
   }
   be_pop(vm, 1);
@@ -308,34 +308,38 @@ EffectSettings argEffectSettings(bvm* vm, int i) {
 
 int64_t nowMs() { return (g_svc && g_svc->monotonicMs) ? g_svc->monotonicMs() : 0; }
 
-int64_t scriptFrame() { return nowMs() / 24; }
-
 bool canDraw(bvm* vm, int argc) { return g_ctx.canvas != nullptr && be_top(vm) >= argc; }
 
 uint32_t deviceTextColor() {
-  const Settings* s = (g_svc && g_svc->settings) ? g_svc->settings() : nullptr;
+  const Settings* s = (g_svc && g_svc->application) ? g_svc->application->settings() : nullptr;
   return s ? s->textColor : 0xFFFFFFu;
 }
 
-const GfxFont* activeFont() {
-  if (g_ctx.font) return g_ctx.font;
-  if (g_ctx.rctx && g_ctx.rctx->font) return g_ctx.rctx->font;
-  return g_svc ? g_svc->fonts[0] : nullptr;
+const FontCatalog* fonts() {
+  if (g_ctx.rctx && g_ctx.rctx->fonts) return g_ctx.rctx->fonts;
+  return g_svc ? g_svc->fonts : nullptr;
 }
 
-const GfxFont* fontSlot(int slot) {
-  if (slot < 0 || slot >= kFontCount) return nullptr;
-  if (g_ctx.rctx && g_ctx.rctx->fonts[slot]) return g_ctx.rctx->fonts[slot];
-  return g_svc ? g_svc->fonts[slot] : nullptr;
+const FontEntry* activeEntry() {
+  if (g_ctx.font) return g_ctx.font;
+  const FontCatalog* catalog = fonts();
+  return catalog ? &catalog->small() : nullptr;
+}
+
+const GfxFont* activeFont() {
+  if (g_ctx.font) return g_ctx.font->font;
+  if (g_ctx.rctx && g_ctx.rctx->font) return g_ctx.rctx->font;
+  const FontCatalog* catalog = fonts();
+  return catalog ? catalog->small().font : nullptr;
 }
 
 // Selects the font for the rest of this VM entry only -- BindingScope resets it, so a draw()
 // that switches to "large" starts the next frame back on the rotation's font.
 int b_font(bvm* vm) {
   if (be_top(vm) < 1 || !be_isstring(vm, 1)) be_return_nil(vm);
-  const std::string name = be_tostring(vm, 1);
-  const int slot = name == "large" ? 1 : (name == "small" ? 0 : -1);
-  if (const GfxFont* f = fontSlot(slot)) g_ctx.font = f;
+  const FontCatalog* catalog = fonts();
+  if (const FontEntry* entry = catalog ? catalog->find(be_tostring(vm, 1)) : nullptr)
+    g_ctx.font = entry;
   be_return_nil(vm);
 }
 
@@ -408,11 +412,9 @@ int b_text(bvm* vm) {
   if (canDraw(vm, 3) && font && isTextArg(vm, 3)) {
     text::TextPaint paint;
     paint.flat = argColorOr(vm, 4, deviceTextColor());
-    if (readTextArg(vm, 3, *font, paint.flat, g_textRun, &g_textRunColors)) {
-      if (!g_textRunColors.empty()) {
-        paint.glyphColors = g_textRunColors.data();
-        paint.glyphCount = g_textRunColors.size();
-      }
+    if (readTextArg(vm, 3, g_textRun, &g_textRuns)) {
+      paint.runs = g_textRuns.data();
+      paint.runCount = g_textRuns.size();
       adv = text::drawRun(*g_ctx.canvas, *font, argInt(vm, 1), argInt(vm, 2), g_textRun, paint);
     }
   }
@@ -427,7 +429,7 @@ int b_text_width(bvm* vm) {
     be_return(vm);
   }
   int w = 0;
-  if (readTextArg(vm, 1, *font, 0u, g_textRun, nullptr)) w = text::width(*font, g_textRun);
+  if (readTextArg(vm, 1, g_textRun, nullptr)) w = text::width(*font, g_textRun);
   be_pushint(vm, w);
   be_return(vm);
 }
@@ -439,7 +441,7 @@ int b_text_ink_width(bvm* vm) {
     be_return(vm);
   }
   int w = 0;
-  if (readTextArg(vm, 1, *font, 0u, g_textRun, nullptr))
+  if (readTextArg(vm, 1, g_textRun, nullptr))
     w = text::measure(*font, g_textRun).inkWidth();
   be_pushint(vm, w);
   be_return(vm);
@@ -550,7 +552,7 @@ ScrollSpec argScrollSpec(bvm* vm, int i, int& repeat) {
 // baseline, or an explicit x/y/width box. Returns how many times the text has scrolled past.
 int b_scroll_text(bvm* vm) {
   const GfxFont* font = activeFont();
-  const Settings* settings = (g_svc && g_svc->settings) ? g_svc->settings() : nullptr;
+  const Settings* settings = (g_svc && g_svc->application) ? g_svc->application->settings() : nullptr;
   const ScrollDefaults defaults = settings ? settings->scrollDefaults : ScrollDefaults{};
   const int argc = be_top(vm);
   int cycles = 0;
@@ -560,7 +562,8 @@ int b_scroll_text(bvm* vm) {
   if (g_ctx.canvas && g_ctx.scroll && font) {
     if (isTextArg(vm, 1)) {
       textArg = 1;
-      run.y = render::kTextBaseline;
+      const FontEntry* entry = activeEntry();
+      run.y = entry ? pageBaseline(*entry) : render::kTextBaseline;
       run.width = g_ctx.canvas->width();
       run.color = argColorOr(vm, 2, deviceTextColor());
       run.spec = argScrollSpec(vm, 3, run.repeat);
@@ -575,11 +578,9 @@ int b_scroll_text(bvm* vm) {
   }
 
   if (textArg && run.width > 0 &&
-      readTextArg(vm, textArg, *font, run.color, g_textRun, &g_textRunColors)) {
-    if (!g_textRunColors.empty()) {
-      run.glyphColors = g_textRunColors.data();
-      run.glyphCount = g_textRunColors.size();
-    }
+      readTextArg(vm, textArg, g_textRun, &g_textRuns)) {
+    run.runs = g_textRuns.data();
+    run.runCount = g_textRuns.size();
     cycles = g_ctx.scroll->draw(*g_ctx.canvas, *font, g_textRun, run, defaults, nowMs());
   }
   be_pushint(vm, cycles);
@@ -630,7 +631,7 @@ int b_overlay(bvm* vm) { return b_render_from(vm, g_svc ? g_svc->overlays : null
 
 const RuntimeState* runtime() {
   if (g_ctx.rctx && g_ctx.rctx->runtime) return g_ctx.rctx->runtime;
-  return (g_svc && g_svc->runtime) ? g_svc->runtime() : nullptr;
+  return (g_svc && g_svc->application) ? g_svc->application->runtime() : nullptr;
 }
 
 void pushSensor(bvm* vm, bool present, float value) {
@@ -682,8 +683,8 @@ int b_display_is_on(bvm* vm) {
 }
 
 int b_display_power(bvm* vm) {
-  const bool ok = g_svc && g_svc->setDisplayPower && be_top(vm) >= 1 && be_isbool(vm, 1) &&
-                  g_svc->setDisplayPower(be_tobool(vm, 1) != 0);
+  const bool ok = g_svc && g_svc->application && be_top(vm) >= 1 && be_isbool(vm, 1) &&
+                  g_svc->application->setDisplayPower(be_tobool(vm, 1) != 0);
   be_pushbool(vm, ok);
   be_return(vm);
 }
@@ -950,8 +951,8 @@ int b_re_search(bvm* vm) {
 
 int b_settings_get(bvm* vm) {
   SettingValue v;
-  if (g_svc && g_svc->settings && be_top(vm) >= 1 && be_isstring(vm, 1)) {
-    if (const Settings* s = g_svc->settings()) v = s->read(be_tostring(vm, 1));
+  if (g_svc && g_svc->application && be_top(vm) >= 1 && be_isstring(vm, 1)) {
+    if (const Settings* s = g_svc->application->settings()) v = s->read(be_tostring(vm, 1));
   }
   switch (v.type) {
     case SettingValue::Type::Bool: be_pushbool(vm, v.b); break;
@@ -1001,7 +1002,7 @@ bool encodeSetting(bvm* vm, int i, const char* key, std::string& json) {
 // PATCH /api/v1/settings takes, so validation and range rules stay in one place.
 int b_settings_set(bvm* vm) {
   bool ok = false;
-  const Settings* s = (g_svc && g_svc->settings) ? g_svc->settings() : nullptr;
+  const Settings* s = (g_svc && g_svc->application) ? g_svc->application->settings() : nullptr;
   const char* key = (s && be_top(vm) >= 2 && be_isstring(vm, 1))
                         ? Settings::canonicalKey(be_tostring(vm, 1))
                         : nullptr;
@@ -1010,7 +1011,7 @@ int b_settings_set(bvm* vm) {
     SettingsError err;
     if (Settings::validateRead(api::JsonReader(json), err)) {
       ok = settingUnchanged(s->read(key), vm, 2) ||
-           (g_svc->setSettings && g_svc->setSettings(json));
+           (g_svc->application && g_svc->application->setSettings(json));
     }
   }
   be_pushbool(vm, ok);
@@ -1020,7 +1021,7 @@ int b_settings_set(bvm* vm) {
 int b_apply_case(bvm* vm) {
   if (be_top(vm) < 1 || !be_isstring(vm, 1)) be_return_nil(vm);
   const std::string in = be_tostring(vm, 1);
-  const Settings* s = (g_svc && g_svc->settings) ? g_svc->settings() : nullptr;
+  const Settings* s = (g_svc && g_svc->application) ? g_svc->application->settings() : nullptr;
   if (!s || !s->uppercase) {
     be_pushstring(vm, in.c_str());
     be_return(vm);
@@ -1029,28 +1030,35 @@ int b_apply_case(bvm* vm) {
   be_return(vm);
 }
 
+// Actions: 0 play, 1 effect, 2 stop, 3 stop the music. The caller is named from the scope, so a
+// script only ever reaches its own sounds. A mistake comes back as its reason, a string, and the
+// prelude raises it at the script's own line.
 int b_sound(bvm* vm) {
-  bool ok = false;
-  if (g_svc && g_svc->sound && be_top(vm) >= 1) {
+  int answer = 0;
+  std::string error;
+  if (g_svc && g_svc->application && be_top(vm) >= 1) {
     const int action = argInt(vm, 1);
-    std::string payload;
-    if (be_top(vm) >= 2 && be_isstring(vm, 2)) payload = be_tostring(vm, 2);
+    std::string json;
+    if (be_top(vm) >= 2 && be_isstring(vm, 2)) json = be_tostring(vm, 2);
     if (action >= static_cast<int>(SoundAction::Play) &&
-        action <= static_cast<int>(SoundAction::Stop))
-      ok = g_svc->sound(static_cast<SoundAction>(action), payload);
+        action <= static_cast<int>(SoundAction::StopMusic))
+      answer = g_svc->application->sound(static_cast<SoundAction>(action), json, g_ctx.name, error);
   }
-  be_pushbool(vm, ok);
+  if (answer < 0)
+    be_pushstring(vm, error.c_str());
+  else
+    be_pushbool(vm, answer > 0);
   be_return(vm);
 }
 
 // A bitmask, not a map: building one here would need object plumbing the prelude does in a line.
-int b_sound_sinks(bvm* vm) {
-  be_pushint(vm, g_svc && g_svc->soundSinks ? g_svc->soundSinks() : 0);
+int b_sound_caps(bvm* vm) {
+  be_pushint(vm, g_svc && g_svc->application ? g_svc->application->soundCaps() : 0);
   be_return(vm);
 }
 
 int b_sound_playing(bvm* vm) {
-  const bool playing = g_svc && g_svc->soundPlaying && g_svc->soundPlaying();
+  const bool playing = g_svc && g_svc->application && g_svc->application->soundPlaying();
   be_pushbool(vm, playing);
   be_return(vm);
 }
@@ -1112,41 +1120,60 @@ int b_music_beat(bvm* vm) {
 // Playback, not data freshness: should_show() is asked only at rotation time, and it must be able
 // to say yes before any frame has been analysed.
 int b_music_playing(bvm* vm) {
-  bool fresh;
-  audioStats(fresh);
   const RuntimeState* rt = runtime();
-  be_pushbool(vm, rt && (rt->radioPlaying || rt->mp3Playing));
+  const bool other = g_svc && g_svc->application && g_svc->application->audioPlaying();
+  be_pushbool(vm, (rt && rt->radioPlaying) || other);
+  be_return(vm);
+}
+
+// Empty while no station plays: the last station and title stay in RuntimeState after a stop.
+int b_music_station(bvm* vm) {
+  const RuntimeState* rt = runtime();
+  be_pushstring(vm, rt && rt->radioPlaying ? rt->radioStation.c_str() : "");
+  be_return(vm);
+}
+
+int b_music_title(bvm* vm) {
+  const RuntimeState* rt = runtime();
+  be_pushstring(vm, rt && rt->radioPlaying ? rt->radioTitle.c_str() : "");
   be_return(vm);
 }
 
 int b_notify(bvm* vm) {
   bool ok = false;
-  if (g_svc && g_svc->notify && be_top(vm) >= 1 && be_isstring(vm, 1))
-    ok = g_svc->notify(be_tostring(vm, 1));
+  if (g_svc && g_svc->application && be_top(vm) >= 1 && be_isstring(vm, 1))
+    ok = g_svc->application->notify(be_tostring(vm, 1), g_ctx.name);
   be_pushbool(vm, ok);
   be_return(vm);
 }
 
 int b_rotation_next(bvm* vm) {
-  if (g_svc && g_svc->rotateNext) g_svc->rotateNext();
+  if (g_svc && g_svc->application) g_svc->application->rotateNext();
   be_return_nil(vm);
 }
 
 int b_rotation_prev(bvm* vm) {
-  if (g_svc && g_svc->rotatePrevious) g_svc->rotatePrevious();
+  if (g_svc && g_svc->application) g_svc->application->rotatePrevious();
   be_return_nil(vm);
 }
 
 int b_rotation_show(bvm* vm) {
   bool ok = false;
-  if (g_svc && g_svc->showApp && !g_ctx.name.empty()) ok = g_svc->showApp(g_ctx.name);
+  if (g_svc && g_svc->application && !g_ctx.name.empty()) ok = g_svc->application->showApp(g_ctx.name);
+  be_pushbool(vm, ok);
+  be_return(vm);
+}
+
+int b_rotation_close(bvm* vm) {
+  bool ok = false;
+  if (g_svc && g_svc->application && !g_ctx.name.empty()) ok = g_svc->application->closeSession(g_ctx.name);
   be_pushbool(vm, ok);
   be_return(vm);
 }
 
 int b_rotation_hold(bvm* vm) {
-  if (g_svc && g_svc->holdRotation && be_top(vm) >= 1)
-    g_svc->holdRotation(be_tobool(vm, 1) != 0);
+  if (g_svc && g_svc->application && be_top(vm) >= 1)
+    g_svc->application->holdRotation(be_tobool(vm, 1) != 0);
   be_return_nil(vm);
 }
 
@@ -1215,6 +1242,7 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "hsv", b_hsv);                      // hsv(h, s, v)
   be_regfunc(b, "ramp_text", b_ramp_text);          // ramp_text(x, y, str, palette, span?, speed?)
   be_regfunc(b, "scroll_text", b_scroll_text);      // scroll_text(txt, color?, opts?)
+                                                    // scroll_text(x, y, w, txt, color, opts?)
   be_regfunc(b, "progress", b_progress);            // progress(pct, paint?, bg?, x0?)
   be_regfunc(b, "bar_chart", b_bar_chart);          // bar_chart(list, paint?, autoscale?, x0?)
   be_regfunc(b, "line_chart", b_line_chart);        // line_chart(list, paint?, autoscale?, x0?)
@@ -1249,14 +1277,17 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "_native_apply_case", b_apply_case);
   be_regfunc(b, "_native_sound", b_sound);
   be_regfunc(b, "_native_sound_playing", b_sound_playing);
-  be_regfunc(b, "_native_sound_sinks", b_sound_sinks);
+  be_regfunc(b, "_native_sound_caps", b_sound_caps);
   be_regfunc(b, "_native_music_bands", b_music_bands);
   be_regfunc(b, "_native_music_level", b_music_level);
   be_regfunc(b, "_native_music_beat", b_music_beat);
   be_regfunc(b, "_native_music_playing", b_music_playing);
+  be_regfunc(b, "_native_music_station", b_music_station);
+  be_regfunc(b, "_native_music_title", b_music_title);
   be_regfunc(b, "_native_rotation_next", b_rotation_next);
   be_regfunc(b, "_native_rotation_prev", b_rotation_prev);
   be_regfunc(b, "_native_rotation_show", b_rotation_show);
+  be_regfunc(b, "_native_rotation_close", b_rotation_close);
   be_regfunc(b, "_native_temperature", b_temperature);
   be_regfunc(b, "_native_humidity", b_humidity);
   be_regfunc(b, "_native_pressure", b_pressure);
@@ -1320,5 +1351,7 @@ BindingScope::StoreFlush BindingScope::takeStoreFlush() {
 }
 
 const std::string& BindingScope::currentScript() { return g_ctx.name; }
+Canvas* BindingScope::currentCanvas() { return g_ctx.canvas; }
+const RenderCtx* BindingScope::currentContext() { return g_ctx.rctx; }
 
 }

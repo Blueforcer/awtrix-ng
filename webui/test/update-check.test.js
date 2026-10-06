@@ -100,7 +100,7 @@ async function testRateLimitHasSpecificNotification(){
     ? {ok:false,status:403,headers:{get:()=> '0'}} : previous(url,opts);
   await goto(ctx.window,'#/system');
   ctx.window.document.querySelector('button[aria-label="Check for updates"]').click();await flush(60);
-  assert(ctx.window.document.querySelector('.toast.err')?.textContent.includes('anonymous requests'),'rate limit is explained without blaming connectivity');
+  assert(ctx.window.document.querySelector('.toast.err')?.textContent.includes('Too many update checks'),'rate limit is explained without blaming connectivity');
   assert(status(ctx.window).textContent==='Version 1.1.1','rate limit leaves a neutral version row');
   ctx.window.close();
 }
@@ -118,8 +118,12 @@ async function testOfflineSkipsTheCheck() {
 }
 
 async function firmwareCase(change={},xhrStatus=200){
-  const ctx=await openSystem({latest:release('v1.1.2')});
+  const imageName=change.tc002?'awtrix-ng-tc002.awup':'firmware-awtrix-ng.bin';
+  const latest=release('v1.1.2');
+  if(change.tc002)latest.assets.push({name:imageName,browser_download_url:'https://github.com/Blueforcer/awtrix-ng/releases/download/v1.1.2/'+imageName});
+  const ctx=await openSystem({latest,device:{updateImage:imageName}});
   const bytes=new Uint8Array(512);bytes[0]=0xe9;bytes[100]=42;
+  if(change.tc002)bytes.set(Buffer.from(change.magic||'AWUPD003'));
   const image=ctx.store.device.updateImage;
   const asset={size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};
   const manifest={version:'v1.1.2',assets:{[image]:asset}};
@@ -164,6 +168,18 @@ async function testBrowserFirmwareInstall(){
   ctx.window.close();
 }
 
+async function testTc002FirmwareInstall(){
+  const ctx=await firmwareCase({tc002:true});
+  assert(ctx.fetched[1].url.endsWith('/v1.1.2/awtrix-ng-tc002.awup'),'TC002 downloads its matching package');
+  assert(ctx.uploads.length===1&&ctx.uploads[0].files[0].name==='awtrix-ng-tc002.awup','keyless TC002 package is uploaded');
+  ctx.window.close();
+  for(const change of [{tc002:true,magic:'AWUPD001'},{tc002:true,magic:'AWUPD002'},{tc002:true,hash:true}]){
+    const rejected=await firmwareCase(change);
+    assert(rejected.uploads.length===0,'legacy or damaged TC002 package is not uploaded');
+    rejected.window.close();
+  }
+}
+
 async function testBadFirmwareNeverUploads(){
   for(const change of [{version:'v1.1.1'},{hash:true},{size:511},{truncated:true},{network:true}]){
     const ctx=await firmwareCase(change);
@@ -194,6 +210,7 @@ async function testNoAutomaticCheckAfterNavigation(){
 async function main() {
   await testNoAutomaticCheckAfterNavigation();
   await testBrowserFirmwareInstall();
+  await testTc002FirmwareInstall();
   await testBadFirmwareNeverUploads();
   await testRejectedFirmwareAllowsRetry();
   await testNewerReleaseOffersTheMatchingFile();

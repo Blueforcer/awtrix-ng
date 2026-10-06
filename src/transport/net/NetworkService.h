@@ -13,12 +13,10 @@ namespace awtrix {
 
 class NetworkService {
  public:
-  // status is written on every association change and outlives this service; the caller owns it.
-  // Passing it before begin() means the boot join is recorded too.
-  void setStatus(net::LinkStatus* status) { status_ = status; }
-  void begin(const DeviceConfig& cfg, bool forceAp = false,
+  // Records boot and association changes in the caller-owned status, which outlives this service.
+  void begin(const DeviceConfig& cfg, net::LinkStatus& status, bool forceAp = false,
              const std::function<void()>& onWait = nullptr);
-  void tick();
+  void tick(uint32_t nowMs);
 
   void setOnJoinedFromAp(std::function<void()> fn) { onJoinedFromAp_ = std::move(fn); }
   bool isConnected() const;
@@ -27,7 +25,7 @@ class NetworkService {
   const std::string& hostname() const { return hostname_; }
 
  private:
-  void retryJoinFromAp();
+  void retryJoinFromAp(uint32_t nowMs);
   void roamIfWeak(unsigned long nowMs);
   void publishStatus();
 

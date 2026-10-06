@@ -9,7 +9,8 @@ namespace net {
 
 // Loops one position past the end and treats that as a trailing '.', so the last octet needs no
 // special case after the loop.
-inline bool parseIpv4(const std::string& s, uint8_t out[4]) {
+inline bool parseIpv4(const std::string& s, uint32_t& out) {
+  uint32_t address = 0;
   int part = 0;
   int value = -1;
   for (std::size_t i = 0; i <= s.size(); ++i) {
@@ -19,13 +20,16 @@ inline bool parseIpv4(const std::string& s, uint8_t out[4]) {
       if (value > 255) return false;
     } else if (c == '.') {
       if (value < 0 || part > 3) return false;
-      out[part++] = static_cast<uint8_t>(value);
+      address = (address << 8) | static_cast<uint8_t>(value);
+      ++part;
       value = -1;
     } else {
       return false;
     }
   }
-  return part == 4;
+  if (part != 4) return false;
+  out = address;
+  return true;
 }
 
 inline bool isMdnsName(const std::string& host) {

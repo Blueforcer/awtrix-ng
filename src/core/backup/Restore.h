@@ -25,7 +25,7 @@ class RestoreSink {
 
   // Optional metadata introduced after backup format 1. Apply after icon files.
   virtual bool applyIconOrigins(const std::string&, std::string& err) {
-    err = "icon origins are not supported by this restore target";
+    err = "icon origins unsupported";
     return false;
   }
 

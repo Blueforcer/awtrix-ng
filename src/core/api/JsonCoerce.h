@@ -32,6 +32,10 @@ inline bool coerceBool(JsonReader r) {
   return !r.isNull() && r.type() != JsonReader::Type::Invalid;
 }
 
+// A member's lenient truthiness, matching coerceBool; missing members are false.
+inline bool memberFlag(JsonReader obj, const char* name) { return coerceBool(memberValue(obj, name)); }
+inline bool memberFlag(std::string_view obj, const char* name) { return memberFlag(JsonReader(obj), name); }
+
 inline bool coerceNumber(JsonReader r, double& out) {
   bool b = false;
   if (r.asBool(b)) {

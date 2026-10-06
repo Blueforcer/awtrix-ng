@@ -26,19 +26,10 @@ const { boot, goto, flush, stubXhr } = require('./harness');
   assert.equal(request.options.cache, 'no-store');
   assert.ok(!request.url.includes('valid-test-key'));
 
-  const file = (await window.iconInventory()).find(item => item.name === 'sun.gif');
-  store.iconBytes.sun = 'GIF89a-sun-updated';
-  await window.reloadHubIcon(file);
-  assert.equal(uploads.length, 2);
-  assert.equal(store.iconDownloadRequests.at(-1).options.headers.Authorization, 'Bearer valid-test-key');
-
   store.requiredIconToken = 'replacement-key';
   await assert.rejects(window.idbFetch('sun'), {code: 'hubAuthentication'});
-  assert.equal(uploads.length, 2);
-  window.localStorage.removeItem('awtrixHubToken');
+  assert.equal(uploads.length, 1);
   const before = store.iconDownloadRequests.length;
-  await assert.rejects(window.reloadHubIcon(file), {code: 'hubAuthentication'});
-  assert.equal(store.iconDownloadRequests.length, before);
   window.localStorage.awtrixHubToken = 'replacement-key';
   await assert.rejects(window.hubDownloadFile('https://other.example/icons/sun.gif'), /different Hub/);
   await assert.rejects(window.hubDownloadFile('http://awtrix.de/icons/sun.gif'), /different Hub/);
@@ -62,10 +53,10 @@ const { boot, goto, flush, stubXhr } = require('./harness');
   input.dispatchEvent(new window.Event('change', {bubbles: true}));
   assert.equal(input.value, '');
   const message = [...window.document.querySelectorAll('.toast')].at(-1).textContent;
-  assert.match(message, /could not be saved/);
+  assert.match(message, /Could not save the key/);
   assert.doesNotMatch(message, /Hub key saved/);
 
-  console.log('icons-auth: previews, token download/reload, revocation, script blocking and host isolation passed');
+  console.log('icons-auth: previews, token download, revocation, script blocking and host isolation passed');
   window.close();
   process.exit(0);
 })().catch(error => { console.error(error); process.exit(1); });

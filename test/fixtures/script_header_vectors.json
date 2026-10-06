@@ -1,0 +1,222 @@
+{
+  "about": "Shared test vectors for the script header. The firmware (src/core/script/ScriptMeta.h), the web UI and the AWTRIX Hub each parse the header and each test against this file. vocabulary lists the capability names @needs is checked against on a device; each is a boolean in GET /api/v1/capabilities.",
+  "vocabulary": [
+    "audio.effect",
+    "audio.mp3",
+    "audio.radio",
+    "audio.rtttl",
+    "audio.song",
+    "audio.speech",
+    "audio.track",
+    "ble",
+    "crypto",
+    "gamepad",
+    "layout",
+    "microphone",
+    "oauth",
+    "sensors.light",
+    "tcp"
+  ],
+  "cases": [
+    {
+      "name": "needs and display",
+      "source": "# @name Racer\n# @needs gamepad, audio.effect\n# @display 52x16\nimport gamepad\n",
+      "needs": ["gamepad", "audio.effect"],
+      "display": [52, 16],
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "no header at all",
+      "source": "def draw() end\n",
+      "needs": [],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "tags and tokens are case-insensitive, tokens come out lowercase",
+      "source": "# @NEEDS GamePad Audio.Effect\n# @Display 64X16\n",
+      "needs": ["gamepad", "audio.effect"],
+      "display": [64, 16],
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "commas, spaces and tabs separate; repeats count once; lines add up",
+      "source": "# @needs gamepad,,ble\tgamepad\n# @needs sensors.light\n",
+      "needs": ["gamepad", "ble", "sensors.light"],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "a malformed name is dropped, the rest of the line stays",
+      "source": "# @needs gamepad audio..effect 9lives audio.effect. -ble audio.mp3\n",
+      "needs": ["gamepad", "audio.mp3"],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "an @oauth line needs oauth, once, in header order",
+      "source": "# @needs gamepad\n# @oauth authorize=https://a.example/auth token=https://a.example/token api=a.example\n# @needs oauth ble\n",
+      "needs": ["gamepad", "oauth", "ble"],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "an empty @oauth line needs nothing",
+      "source": "# @oauth\n",
+      "needs": [],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "an unknown but well-formed name is kept; a device without it reports it missing",
+      "source": "# @needs hologram\n",
+      "needs": ["hologram"],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "at most eight names",
+      "source": "# @needs a1 a2 a3 a4 a5 a6 a7 a8 a9\n",
+      "needs": ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "a name longer than 32 characters is dropped",
+      "source": "# @needs abcdefghijklmnopqrstuvwxyzabcdefg gamepad\n",
+      "needs": ["gamepad"],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "an empty needs line adds nothing",
+      "source": "# @needs\n# @needs   \n",
+      "needs": [],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "a # in a needs line starts a comment",
+      "source": "# @needs gamepad # for steering\n# @needs audio.effect, ble# layered sound\n# @needs # nothing but a comment\n",
+      "needs": ["gamepad", "audio.effect", "ble"],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "a # in a display line starts a comment",
+      "source": "# @display 64x16 # wider than it has to be\n# @display 52 x 16# the TC002 panel\n# @display # not decided\n",
+      "needs": [],
+      "display": [52, 16],
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "display allows spaces around the x",
+      "source": "# @display 52 x 16\n",
+      "needs": [],
+      "display": [52, 16],
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "unusable display values are ignored",
+      "source": "# @display 0x16\n# @display 52x\n# @display 52x16x2\n# @display -52x16\n# @display 1000x8\n# @display wide\n",
+      "needs": [],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "the last usable display line wins",
+      "source": "# @display 32x8\n# @display 52x16\n# @display nonsense\n",
+      "needs": [],
+      "display": [52, 16],
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "the header ends at the first line of code",
+      "source": "# @needs ble\nimport ble\n# @needs gamepad\n# @display 52x16\n",
+      "needs": ["ble"],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "blank lines, plain comments and CRLF do not end the header",
+      "source": "\r\n# Weather for AWTRIX\r\n#\r\n# @needs audio.mp3\r\n\r\n# @display 32x8\r\nprint(1)\r\n",
+      "needs": ["audio.mp3"],
+      "display": [32, 8],
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "icons: separators, repeats, malformed and overlong names",
+      "source": "# @icons sun, rain  sun bad!name\n# @icons abcdefghijklmnopqrstuvwxyzabcdefg snow_2 fog-1\n",
+      "needs": [],
+      "display": null,
+      "icons": ["sun", "rain", "snow_2", "fog-1"],
+      "requires": []
+    },
+    {
+      "name": "requires: optional Hub id, one entry per line, repeats and bad lines dropped",
+      "source": "# @requires Weather abc123DEF456\n# @requires Gamepad\n# @requires Weather\n# @requires bad!name\n# @requires Radio tooShort\n",
+      "needs": [],
+      "display": null,
+      "icons": [],
+      "requires": [
+        {"name": "Weather", "hub": "abc123DEF456"},
+        {"name": "Gamepad", "hub": null}
+      ]
+    },
+    {
+      "name": "a # in an icons line starts a comment",
+      "source": "# @icons sun # weather\n# @icons rain,snow# the rest\n# @icons # none yet\n",
+      "needs": [],
+      "display": null,
+      "icons": ["sun", "rain", "snow"],
+      "requires": []
+    },
+    {
+      "name": "a # in a requires line starts a comment",
+      "source": "# @requires Weather abc123def456 # forecast\n# @requires fmt # number helpers\n# @requires Pad#controller\n# @requires # nothing\n",
+      "needs": [],
+      "display": null,
+      "icons": [],
+      "requires": [
+        {"name": "Weather", "hub": "abc123def456"},
+        {"name": "fmt", "hub": null},
+        {"name": "Pad", "hub": null}
+      ]
+    },
+    {
+      "name": "requires: at most eight entries",
+      "source": "# @requires r1\n# @requires r2\n# @requires r3\n# @requires r4\n# @requires r5\n# @requires r6\n# @requires r7\n# @requires r8\n# @requires r9\n",
+      "needs": [],
+      "display": null,
+      "icons": [],
+      "requires": [
+        {"name": "r1", "hub": null},
+        {"name": "r2", "hub": null},
+        {"name": "r3", "hub": null},
+        {"name": "r4", "hub": null},
+        {"name": "r5", "hub": null},
+        {"name": "r6", "hub": null},
+        {"name": "r7", "hub": null},
+        {"name": "r8", "hub": null}
+      ]
+    }
+  ]
+}

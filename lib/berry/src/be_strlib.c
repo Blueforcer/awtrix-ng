@@ -728,10 +728,13 @@ static const char* get_mode(const char *str, char *buf, size_t buf_len)
     return p;
 }
 
-static void mode_fixlen(char *mode, const char *lenmode)
+static void mode_fixlen(bvm *vm, char *mode, size_t capacity, const char *lenmode)
 {
     size_t l = strlen(mode), lm = strlen(lenmode);
     char spec = mode[l - 1];
+    if (l + lm >= capacity) {
+        be_raise(vm, "value_error", "format specifier too long");
+    }
     strcpy(mode + l - 1, lenmode);
     mode[l + lm - 1] = spec;
     mode[l + lm] = '\0';
@@ -818,7 +821,7 @@ int be_str_format(bvm *vm)
                     ** padding -- and `%u` on a negative one reads as 32-bit
                     ** rather than 64-bit unsigned. See scripts/newlib_nano.py. */
                     if (val >= (bint)LONG_MIN && val <= (bint)LONG_MAX) {
-                        mode_fixlen(mode, "l");
+                        mode_fixlen(vm, mode, sizeof(mode), "l");
                         snprintf(buf, sizeof(buf), mode, (long)val);
                     } else {
                         base = *p == 'o' ? 8 : (*p == 'x' || *p == 'X') ? 16 : 10;

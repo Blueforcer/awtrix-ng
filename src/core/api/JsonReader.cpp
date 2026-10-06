@@ -41,7 +41,7 @@ double scalePow10(double v, int exponent) {
   return v;
 }
 
-void appendUtf8(std::string& out, uint32_t cp) {
+template <typename Output> void appendUtf8(Output& out, uint32_t cp) {
   if (cp < 0x80) {
     out += static_cast<char>(cp);
   } else if (cp < 0x800) {
@@ -185,7 +185,7 @@ std::string_view JsonReader::rawString() const {
   if (type() != Type::String) return {};
   const char* q = p_ + 1;
   while (q < end_ && *q != '"') {
-    if (*q == '\\') return {};
+    if (*q == '\\' || static_cast<unsigned char>(*q) < 0x20) return {};
     ++q;
   }
   if (q >= end_) return {};
@@ -196,7 +196,7 @@ bool JsonReader::stringView(std::string_view& out) const {
   if (type() != Type::String) return false;
   const char* q = p_ + 1;
   while (q < end_ && *q != '"') {
-    if (*q == '\\') return false;
+    if (*q == '\\' || static_cast<unsigned char>(*q) < 0x20) return false;
     ++q;
   }
   if (q >= end_) return false;
@@ -204,10 +204,11 @@ bool JsonReader::stringView(std::string_view& out) const {
   return true;
 }
 
-bool JsonReader::appendString(std::string& out) const {
-  if (type() != Type::String) return false;
+namespace {
+template <typename Output> bool decodeString(const char* p_, const char* end_, Output& out) {
   const char* q = p_ + 1;
   while (q < end_ && *q != '"') {
+    if (static_cast<unsigned char>(*q) < 0x20) return false;
     if (*q != '\\') {
       out += *q++;
       continue;
@@ -256,6 +257,27 @@ bool JsonReader::appendString(std::string& out) const {
   return q < end_;
 }
 
+struct StringBuffer {
+  char* data;
+  std::size_t capacity, size = 0;
+  bool valid = true;
+  void operator+=(char value) {
+    if (size >= capacity) { valid = false; return; }
+    if (data) data[size] = value;
+    ++size;
+  }
+};
+}
+bool JsonReader::appendString(std::string& out) const {
+  return type() == Type::String && decodeString(p_, end_, out);
+}
+bool JsonReader::copyString(char* out, std::size_t capacity, std::size_t& written) const {
+  StringBuffer buffer{out, capacity};
+  const bool result = type() == Type::String && decodeString(p_, end_, buffer) && buffer.valid;
+  written = buffer.size;
+  return result;
+}
+
 bool JsonReader::keyEquals(const char* name) const {
   if (!name) return false;
   return key_ == std::string_view(name);
@@ -265,8 +287,20 @@ bool JsonReader::skipString() {
   if (p_ >= end_ || *p_ != '"') return false;
   ++p_;
   while (p_ < end_) {
+    if (static_cast<unsigned char>(*p_) < 0x20) return false;
     if (*p_ == '\\') {
-      p_ += 2;
+      ++p_;
+      if (p_ >= end_) return false;
+      switch (*p_++) {
+        case '"': case '\\': case '/': case 'b': case 'f': case 'n': case 'r': case 't':
+          break;
+        case 'u':
+          if (end_ - p_ < 4) return false;
+          for (int i = 0; i < 4; ++i)
+            if (hexVal(*p_++) < 0) return false;
+          break;
+        default: return false;
+      }
       continue;
     }
     if (*p_ == '"') {
@@ -279,9 +313,27 @@ bool JsonReader::skipString() {
 }
 
 bool JsonReader::skipNumber() {
-  const char* e = valueEnd();
-  if (e == p_) return false;
-  p_ = e;
+  const char* q = p_;
+  if (q < end_ && *q == '-') ++q;
+  if (q >= end_ || !isDigit(*q)) return false;
+  if (*q == '0') {
+    ++q;
+    if (q < end_ && isDigit(*q)) return false;
+  } else {
+    while (q < end_ && isDigit(*q)) ++q;
+  }
+  if (q < end_ && *q == '.') {
+    ++q;
+    if (q >= end_ || !isDigit(*q)) return false;
+    while (q < end_ && isDigit(*q)) ++q;
+  }
+  if (q < end_ && (*q == 'e' || *q == 'E')) {
+    ++q;
+    if (q < end_ && (*q == '-' || *q == '+')) ++q;
+    if (q >= end_ || !isDigit(*q)) return false;
+    while (q < end_ && isDigit(*q)) ++q;
+  }
+  p_ = q;
   return true;
 }
 
@@ -400,7 +452,8 @@ bool JsonReader::nextElement() {
     skipSpace();
   }
   first_ = false;
-  return p_ < end_;
+  if (p_ >= end_) return ok_ = false;
+  return true;
 }
 
 std::string_view JsonReader::valueText() const {
@@ -429,6 +482,12 @@ bool isWellFormed(std::string_view text) {
   return probe.skipValue() && probe.atEnd();
 }
 
+bool isEmptyObject(std::string_view text) {
+  JsonReader r{text};
+  if (r.atEnd()) return true;
+  return r.enterObject() && !r.nextMember() && r.ok() && r.atEnd();
+}
+
 bool readMembers(std::string_view text, const Member* members, std::size_t count) {
   if (!isWellFormed(text)) return false;
   JsonReader r{text};
@@ -442,6 +501,24 @@ bool readMembers(std::string_view text, const Member* members, std::size_t count
     if (!r.skipValue()) return false;
   }
   return r.ok();
+}
+
+bool JsonReader::asUnsigned(std::uint64_t& out) const {
+  if (!isNumber()) return false;
+  const std::string_view text = valueText();
+  if (text.empty() || text.size() > 20 || (text.size() > 1 && text.front() == '0')) return false;
+  const char* stop = p_ + text.size();
+  if (stop < end_ && *stop != ',' && *stop != ']' && *stop != '}' &&
+      *stop != ' ' && *stop != '\t' && *stop != '\n' && *stop != '\r') return false;
+  std::uint64_t value = 0;
+  for (const char c : text) {
+    if (!isDigit(c)) return false;
+    const auto digit = static_cast<std::uint64_t>(c - '0');
+    if (value > (UINT64_MAX - digit) / 10) return false;
+    value = value * 10 + digit;
+  }
+  out = value;
+  return true;
 }
 
 }

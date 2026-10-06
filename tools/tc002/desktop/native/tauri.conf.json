@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AWTRIX NG TC002 Installer",
+  "version": "0.1.0",
+  "identifier": "de.blueforcer.awtrix.tc002-installer",
+  "mainBinaryName": "awtrix-tc002-installer",
+  "build": {
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{
+      "label": "main",
+      "create": false,
+      "title": "AWTRIX NG · TC002 Installer",
+      "url": "ui/index.html",
+      "width": 560,
+      "height": 480,
+      "minWidth": 480,
+      "minHeight": 400,
+      "center": true
+    }],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'",
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [],
+    "category": "Utility",
+    "shortDescription": "Install AWTRIX NG on a Ulanzi TC002 over USB",
+    "license": "PolyForm-Noncommercial-1.0.0",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "linux": {
+      "deb": {
+        "files": { "/usr/lib/udev/rules.d/70-awtrix-tc002.rules": "resources/linux/70-awtrix-tc002.rules" },
+        "postInstallScript": "resources/linux/udev-reload.sh",
+        "postRemoveScript": "resources/linux/udev-reload.sh"
+      },
+      "rpm": {
+        "files": { "/usr/lib/udev/rules.d/70-awtrix-tc002.rules": "resources/linux/70-awtrix-tc002.rules" },
+        "postInstallScript": "resources/linux/udev-reload.sh",
+        "postRemoveScript": "resources/linux/udev-reload.sh"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "13.5",
+      "signingIdentity": "-"
+    }
+  }
+}

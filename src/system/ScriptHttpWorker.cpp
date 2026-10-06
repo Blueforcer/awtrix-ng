@@ -75,14 +75,20 @@ void ScriptHttpWorker::begin(ResultFn onResult) {
 // later through the result callback. False means it was not even accepted.
 bool ScriptHttpWorker::request(const script::HttpRequest& req) {
   if (!started_) return false;
-  if (!WiFi.isConnected()) return false;
+  if (!WiFi.isConnected()) {
+    if (script::modbus::isUrl(req.url)) logf("modbus: offline");
+    return false;
+  }
   if (script::modbus::isUrl(req.url)) {
     script::modbus::Read read;
     if (req.method != "GET" || !script::modbus::parse(req.url, read)) return false;
   } else if (req.url.rfind("http://", 0) != 0 && req.url.rfind("https://", 0) != 0) return false;
   if (req.method.empty()) return false;
 
-  if (pending_.load(std::memory_order_relaxed) >= kQueueCap) return false;
+  if (pending_.load(std::memory_order_relaxed) >= kQueueCap) {
+    if (script::modbus::isUrl(req.url)) logf("modbus: queue full");
+    return false;
+  }
 
   script::HttpRequest queued = req;
   if (queued.maxBytes == 0) queued.maxBytes = script::kMaxHttpBody;

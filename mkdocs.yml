@@ -1,5 +1,5 @@
 site_name: AWTRIX NG
-site_description: LED matrix clock firmware for the Ulanzi TC001 - user documentation
+site_description: AWTRIX NG for ESP32, Ulanzi TC001 and Ulanzi TC002 - user documentation
 site_url: https://blueforcer.github.io/awtrix-ng/
 repo_url: https://github.com/Blueforcer/awtrix-ng
 repo_name: Blueforcer/awtrix-ng
@@ -14,14 +14,30 @@ docs_dir: docs
 exclude_docs: |
   examples/berry-app-system-prompt.md
   assets/flow-converter/package.json
+  assets/tc002/package.json
+
+
+not_in_nav: |
+  assets/tc002/image/NOTICE.md
+  assets/tc002/image/licenses/*.md
+
+# Every page is in the navigation; with --strict a page left out of it fails the build.
+validation:
+  nav:
+    omitted_files: warn
 
 theme:
   name: material
+  custom_dir: overrides
+  font:
+    text: Archivo
+    code: IBM Plex Mono
   logo: assets/logo.svg
   favicon: assets/favicon.ico
   features:
     - navigation.sections
     - navigation.top
+    - navigation.footer
     - navigation.instant
     - search.highlight
     - content.code.copy
@@ -29,17 +45,33 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: black
-      accent: red
+      primary: custom
+      accent: custom
       toggle: { icon: material/weather-night, name: Dark mode }
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: black
-      accent: red
+      primary: custom
+      accent: custom
       toggle: { icon: material/weather-sunny, name: Light mode }
 
+extra:
+  kofi: https://ko-fi.com/blueforcer
+
 extra_css:
+  - assets/theme.css
   - assets/flow-converter/converter.css
+  - assets/tc002/ui.css
+  - assets/nav.css
+  - assets/buy.css
+  - assets/home.css
+
+extra_javascript:
+  - assets/variant.js
+  - assets/home.js
+  - assets/scripting-anchors.js
+
+hooks:
+  - tools/docs/variants.py
 
 plugins:
   - search
@@ -57,71 +89,130 @@ markdown_extensions:
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.superfences
   - pymdownx.tabbed: { alternate_style: true }
+  - pymdownx.tasklist: { custom_checkbox: true }
   - pymdownx.highlight: { anchor_linenums: true }
   - pymdownx.inlinehilite
-  - pymdownx.snippets: { base_path: [docs], check_paths: true }
+  - pymdownx.snippets: { base_path: [docs, .], check_paths: true }
 
 nav:
   - Home: index.md
   - Getting started:
-      - Flashing: getting-started/flashing.md
-      - First boot: getting-started/first-boot.md
-      - Finding AWTRIX: getting-started/discovery.md
-      - Web UI tour: getting-started/web-ui.md
-      - Build your own AWTRIX: advanced/diy-build.md
-      - Migrating from AWTRIX 3: guides/migrating-from-awtrix3.md
-  - Guides:
-      - Put content on the panel:
-          - Your first notification: guides/notifications.md
-          - Pushed apps: guides/pushed-apps.md
-          - Text & colors: guides/text.md
-          - Icons & assets: guides/icons.md
-          - Charts & drawing: guides/graphics.md
-          - Effects & overlays: guides/effects.md
-      - Run your own app:
-          - App scripting: guides/scripting.md
-          - Build an app with AI: guides/ai-prompt.md
-      - Learn by building:
-          - 1. Draw something: tutorials/first-draw.md
-          - 2. Give it a memory: tutorials/state-and-time.md
-          - 3. Feed it real data: tutorials/real-data.md
-          - "Recipe: Countdown": tutorials/recipe-countdown.md
-          - "Recipe: MQTT status": tutorials/recipe-mqtt-status.md
-          - "Recipe: Sensor chart": tutorials/recipe-sensor-chart.md
-          - "Recipe: Headless doorbell": tutorials/recipe-doorbell.md
-          - Going easy on memory: tutorials/going-easy-on-memory.md
-      - Web UI editors:
-          - Icon editor: guides/icon-editor.md
-          - Palette editor: guides/palette-editor.md
-      - Sound:
-          - Sound: guides/sounds.md  # MP3 files, RTTTL melodies, DFPlayer tracks
-          - Internet radio: guides/radio.md
-      - Integrations:
-          - Home Assistant: guides/home-assistant.md
-          - MQTT automation: guides/mqtt.md
-          - Art-Net: guides/artnet.md
-      - Living with the device:
-          - Brightness & sensors: guides/brightness.md
-          - Power & battery: guides/power.md
-          - Updating firmware: guides/updating.md
+      - Get a clock: getting-started/buy.md
+      - Build your own clock:
+          - DIY build: advanced/diy-build.md
+          - GPIO & boards: reference/gpio.md
+      - Install AWTRIX NG: getting-started/flashing.md
+      - Install AWTRIX NG: getting-started/tc002.md
+      - Connect to Wi-Fi: getting-started/first-boot.md
+      - Find your clock: getting-started/discovery.md
+      - The web UI: getting-started/web-ui.md
+      - AWTRIX Hub: guides/hub.md
+      - AWTRIX NG app: guides/app.md
+      - Coming from AWTRIX 3: guides/migrating-from-awtrix3.md
+  - Using your clock:
+      - "Buttons<!-- only tc002 -->, knob<!-- /only --> & clock": guides/device-controls.md
+      - "Brightness<!-- only esp32 esp32-s3 --> & sensors<!-- /only -->": guides/brightness.md
+      - Sound: guides/sounds.md
+      - Internet radio: guides/radio.md
+      - Power & battery: guides/power.md
+      - Gamepad: guides/gamepad.md
+      - iPhone: guides/iphone.md
+      - Updating firmware: guides/updating.md
+      - Updating Hub scripts: guides/hub-script-updates.md
+      - Signing in to services: guides/sign-in.md
+      - Reset & recovery: guides/reset-recovery.md
+  - Show your own content:
+      - How the display works: guides/display.md
+      - Your first notification: guides/notifications.md
+      - Pushed apps: guides/pushed-apps.md
+      - Text & colors: guides/text.md
+      - Icons: guides/icons.md
+      - Icon editor: guides/icon-editor.md
+      - Charts & drawing: guides/graphics.md
+      - Effects & overlays: guides/effects.md
+      - Palette editor: guides/palette-editor.md
+      - Layouts: guides/layouts.md
+  - Smart home:
+      - Home Assistant: guides/home-assistant.md
+      - Home Assistant Voice: guides/voice.md
+      - MQTT: guides/mqtt.md
+      - Art-Net: guides/artnet.md
+      - Mirroring: guides/mirroring.md
+  - Write your own apps:
+      - Scripting guide:
+          - Basics: guides/scripting/index.md
+          - Drawing: guides/scripting/drawing.md
+          - Time, buttons & sensors: guides/scripting/time-buttons-sensors.md
+          - Storage & settings: guides/scripting/storage.md
+          - Network: guides/scripting/network.md
+          - Sound & music: guides/scripting/sound.md
+          - Controlling the device: guides/scripting/device.md
+          - Several apps together: guides/scripting/several-apps.md
+          - Sharing a script: guides/scripting/sharing.md
+          - When it goes wrong: guides/scripting/troubleshooting.md
+      - "Tutorial 1: Draw something": tutorials/first-draw.md
+      - "Tutorial 2: Give it a memory": tutorials/state-and-time.md
+      - "Tutorial 3: Feed it real data": tutorials/real-data.md
+      - "Recipe: Countdown": tutorials/recipe-countdown.md
+      - "Recipe: MQTT status": tutorials/recipe-mqtt-status.md
+      - "Recipe: Sensor chart": tutorials/recipe-sensor-chart.md
+      - "Recipe: Background doorbell": tutorials/recipe-doorbell.md
+      - Build an app with AI: guides/ai-prompt.md
+      - Keeping scripts small: tutorials/going-easy-on-memory.md
+      - Modbus in scripts: guides/modbus.md
+      - Bluetooth LE in scripts: guides/ble.md
+      - TCP in scripts: guides/tcp.md
+      - Hashing & mining in scripts: guides/hashing.md
+      - Signing in from scripts: guides/oauth.md
   - Reference:
       - Conventions: reference/conventions.md
-      - API:
-          - HTTP API v1: reference/http.md
-          - MQTT topics: reference/mqtt.md
-          - App & notification payload: reference/payload.md
-          - Visual reference: reference/visuals.md
-          - Device state: reference/device.md
-      - Configuration:
-          - Settings: reference/settings.md
-          - System configuration: reference/system.md
-          - GPIO & boards: reference/gpio.md
-      - Errors & limits:
-          - Errors: reference/errors.md
-          - Limits: reference/limits.md
+      - HTTP API: reference/http.md
+      - MQTT topics: reference/mqtt.md
+      - App & notification payload: reference/payload.md
+      - Visual reference: reference/visuals.md
+      - Song text: reference/songs.md
+      - Device state: reference/device.md
+      - Settings: reference/settings.md
+      - System configuration: reference/system.md
+      - Errors: reference/errors.md
+      - Limits: reference/limits.md
+  - Release notes:
+      - All releases: releases/index.md
+      - "1.2.2": releases/1.2.2.md
+  - Under the hood:
+      - Architecture overview: developers/index.md
+      - Building from source: developers/building.md
+      - Writing the docs: developers/writing-docs.md
+      - Display foundation: developers/display-foundation.md
+      - Hub script update internals: developers/hub-script-updates.md
+      - Fonts: developers/fonts.md
+      - Icon editor (Piskel): developers/icon-editor.md
+      - Host tests: developers/host-tests.md
+      - AWTRIX on Linux:
+          - Overview: developers/linux/index.md
+          - Running as a service: developers/linux/service.md
+          - Update packages: developers/linux/updates.md
+          - HTTPS administration: developers/linux/security.md
+          - ARM system build: developers/linux/system-build.md
+          - Buildroot configuration: developers/linux/buildroot.md
+      - TC002:
+          - Developer guide: developers/tc002/index.md
+          - MCU updates: developers/tc002/mcu-update.md
+          - Microphone: developers/tc002/microphone.md
+          - Continuous microphone audio: developers/tc002/audio-gate.md
+          - Voice internals: developers/tc002/ha-voice.md
+          - Speech: developers/tc002/speech.md
+          - Tools overview: developers/tc002/tools.md
+          - Install tools: developers/tc002/install-tools.md
+          - Desktop installer: developers/tc002/desktop-installer.md
+          - Browser image tools: developers/tc002/browser-image.md
+          - Kernel modules: developers/tc002/kernel.md
+          - Wi-Fi driver: developers/tc002/wifi-driver.md
+          - Speaker driver: developers/tc002/speaker-driver.md
+          - Bluetooth configuration: developers/tc002/bluetooth.md
+          - CA certificates: developers/tc002/ca-certificates.md
+          - OpenSSL: developers/tc002/openssl.md
+          - wpa_supplicant: developers/tc002/wpa-supplicant.md
   - Help:
       - Troubleshooting: troubleshooting/troubleshooting.md
       - FAQ: troubleshooting/faq.md
-  - Advanced:
-      - Simulator: advanced/simulator.md
-      - Building from source: advanced/building.md

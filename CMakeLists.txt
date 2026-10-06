@@ -1,0 +1,47 @@
+cmake_minimum_required(VERSION 3.20)
+project(awtrix_host LANGUAGES C CXX)
+if(NOT UNIX OR APPLE)
+  message(FATAL_ERROR "The Linux target requires Linux (use WSL on Windows).")
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/ProjectOptions.cmake")
+
+option(AWTRIX_REQUIRE_INTEGRATION_SERVICES "Require MQTT and TLS integration fixtures" OFF)
+option(AWTRIX_TC002_PROCESS_TESTS "Build tc002d-ip-system, which needs root in a throwaway network namespace" OFF)
+set(AWTRIX_TC002_TEST_BUSYBOX "" CACHE FILEPATH
+  "Native BusyBox with udhcpc and udhcpd for tc002d-ip-system (tools/tc002/busybox, BUSYBOX_VARIANT=host-dhcp-test)")
+set(AWTRIX_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/.pio/libdeps/native" CACHE PATH
+  "Dependencies installed by pio pkg install -e native")
+set(AWTRIX_RELEASE_VERSION "" CACHE STRING
+  "Release version the TC002 flash helper reports (build_bundle.sh passes version-g<commit>); empty: the version file")
+option(AWTRIX_TC002_LOADER "Build only libawtrix-loader.so with the stock glibc toolchain (tc002-loader preset)" OFF)
+option(AWTRIX_TC002_BUNDLE "Install the TC002 release bundle as the component tc002 (tc002 preset)" OFF)
+
+if(AWTRIX_TC002_LOADER)
+  include(cmake/Warnings.cmake)
+  include(cmake/Tc002Loader.cmake)
+  return()
+endif()
+
+find_package(Threads REQUIRED)
+find_package(OpenSSL REQUIRED)
+include(CTest)
+include(GNUInstallDirs)
+if(NOT EXISTS "${AWTRIX_DEPS}/base64/src/base64.hpp")
+  message(FATAL_ERROR "Missing base64/src/base64.hpp in ${AWTRIX_DEPS}; run pio pkg install -e native first")
+endif()
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/version" AWTRIX_VERSION)
+string(STRIP "${AWTRIX_VERSION}" AWTRIX_VERSION)
+
+include(cmake/Warnings.cmake)
+include(cmake/Core.cmake)
+include(cmake/Posix.cmake)
+include(cmake/Host.cmake)
+include(cmake/Tc002.cmake)
+include(cmake/Linux.cmake)
+if(AWTRIX_TC002_BUNDLE)
+  include(cmake/Tc002Bundle.cmake)
+endif()
+
+if(BUILD_TESTING)
+  add_subdirectory(tests)
+endif()

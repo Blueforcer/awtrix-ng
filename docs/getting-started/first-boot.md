@@ -1,146 +1,174 @@
-# First boot
+# Connect to Wi-Fi
 
-**Goal: connect AWTRIX to your Wi-Fi and learn its address.**
+This page connects your clock to your Wi-Fi. At the end you know its address and can open the web
+UI.
 
-With no Wi-Fi credentials yet, AWTRIX cannot reach your network, so it opens its own **open
-access point** and waits for you. The whole setup is three steps:
+<!-- only tc002 -->
+!!! tip "Set up with the installer"
+    Did you enter your Wi-Fi details in the [installer](tc002.md) and it confirmed the
+    connection? Then you are done. Press **Open your clock** in the graphical installer, or open
+    the address the terminal version printed.
 
-1. Join that access point with your phone or laptop.
-2. Tell it your own network's name and password.
-3. Restart it.
+<!-- /only -->
+## Set up Wi-Fi
 
-AWTRIX then scrolls its new IP address across the matrix, and that address is where the web UI
-lives.
+A clock without Wi-Fi details opens its own **setup hotspot**, a Wi-Fi network with no password.
+You join it with your phone or laptop and enter your home Wi-Fi there.
 
-## The panel tells you where you are
+1. Join the clock's hotspot ([step 1](#step-1-join-the-hotspot)).
+2. Enter your Wi-Fi name and password ([step 2](#step-2-enter-your-wi-fi)).
+<!-- only esp32 esp32-s3 -->
+3. Restart the clock ([step 3](#step-3-reboot)).
+<!-- /only -->
+<!-- only tc002 -->
+3. Wait. The clock connects by itself ([step 3](#step-3-reboot)).
+<!-- /only -->
 
-| The matrix shows | Meaning |
+Once it is connected, the clock shows its address on the display. Open that address in your browser to
+reach the web UI.
+
+## What the display shows {#what-the-panel-shows}
+
+<!-- only esp32 esp32-s3 -->
+| The display shows | Meaning |
 |---|---|
-| Sparks rising into a glowing **`AWTRIX`** | It is starting up and looking for your Wi-Fi. |
-| Rainbow **`AP MODE`** | No Wi-Fi. AWTRIX is waiting for you to configure it. |
-| Glowing **`AWTRIX   192.168.…`** scrolling past | It joined your network. That is its address. Setup is done. |
+| The AWTRIX start animation | The clock is starting and joining your Wi-Fi. |
+| **`AP MODE`** | No Wi-Fi. The setup hotspot is open and waits for you. |
+| An IP address such as `192.168.1.42` | The clock joined your network. This is its address. Setup is done. |
+<!-- /only -->
+<!-- only tc002 -->
+| The display shows | Meaning |
+|---|---|
+| The AWTRIX start animation | The clock is starting and joining your Wi-Fi. |
+| **`AP MODE`**, with the hotspot name and address scrolling below | No Wi-Fi. The setup hotspot is open and waits for you. |
+| The firmware version above an IP address such as `192.168.1.42` | The clock joined your network. This is its address. Setup is done. |
 
-The address scroll happens once per boot and takes a few seconds. Miss it and you can power-cycle
-AWTRIX to see it again, or find its address another way - see
-[Finding AWTRIX](discovery.md).
+The Status app shows the address at any time.
+<!-- /only -->
 
-## Step 1 - join the access point
+The address appears once, for a few seconds, each time the clock starts. If you missed it,
+unplug the clock and plug it back in, or see [Find your clock](discovery.md).
 
-Look for a new Wi-Fi network in your phone's or laptop's list and connect to it. **There is no
-password.**
+## Step 1 - join the hotspot {#step-1-join-the-hotspot}
 
-The network takes its name from AWTRIX. On a brand-new unit that is a name derived from its
-hardware address, like `awtrixng-a1b2c3`. If you have already set a name, it uses that instead -
-a unit named `kitchen-clock` comes up as a network called `kitchen-clock`.
+1. Open the Wi-Fi list on your phone or laptop.
+2. Choose the clock's network. **It has no password.**
 
-!!! warning "The access point is open - anyone in range can use it"
-    While it is up, anyone within radio range can join and read or write the stored Wi-Fi
-    configuration. Set AWTRIX up somewhere you trust and get it out of access-point mode
-    promptly.
+The network has the clock's name. A new clock uses a name made from its hardware address, like
+`awtrixng-a1b2c3`. If you already gave the clock a name, the network uses that name. A clock
+named `kitchen-clock` opens a network called `kitchen-clock`.
 
-Once you are connected, the setup page usually **opens by itself**, the way hotel and airport
-Wi-Fi login pages do.
+!!! warning "Anyone nearby can join the hotspot"
+    While the hotspot is open, anyone in range can join it and change the Wi-Fi settings. Set up
+    the clock somewhere you trust, and finish the setup soon.
 
-If nothing opens, type **`192.168.4.1`** into a browser. That is the address AWTRIX uses while it
-is its own access point. It is also the **router** or **gateway** address your phone shows in the
-connection details for this network, if you would rather read it off there.
+After you join, the setup page usually **opens by itself**, like the login page of hotel Wi-Fi.
+If nothing opens, type **`192.168.4.1`** into your browser.
 
-## Step 2 - enter your Wi-Fi
+## Step 2 - enter your Wi-Fi {#step-2-enter-your-wi-fi}
 
-The page that opens is the AWTRIX web UI, in setup mode: a single **System** tab with a blue
-banner telling you to get it onto your Wi-Fi. The other tabs stay hidden until AWTRIX is on a
-network.
+The setup page is the web UI in setup mode. It shows only the **System** tab, with a blue
+banner that asks you to connect to Wi-Fi.
 
-1. Press **Scan** next to the network name field. AWTRIX surveys the air and fills a dropdown,
-   strongest signal first, with a 🔒 on password-protected networks. Pick yours.
-2. Type your Wi-Fi password.
-3. While you are here, give it a **hostname** - a name like `kitchen-clock`. It becomes the
-   address you use instead of an IP (`kitchen-clock.local`), which is far easier to remember than
-   a number that can change.
+<!-- only esp32 esp32-s3 -->
+1. Enter your Wi-Fi name. You can also press **Scan** and choose from the networks nearby.
+<!-- /only -->
+<!-- only tc002 -->
+1. Type your Wi-Fi name.
+<!-- /only -->
+2. Enter your Wi-Fi password.
+3. Optional: enter a **hostname**, a name like `kitchen-clock`. You can then open the clock at
+   `http://kitchen-clock.local` instead of a number that may change.
 4. Press **Save**.
 
-Everything the web UI does, it does through the AWTRIX [HTTP API](../reference/http.md), so the
-save and the restart below both work from a terminal:
+If your network only admits known devices, add the **MAC address** at the top of the Wi-Fi
+section to your router's list first.
 
-```bash
-curl -X PUT http://<awtrix-ip>/api/v1/system \
-  -H "Content-Type: application/json" \
-  -d '{"wifiSsid":"MyNetwork","wifiPass":"secret123","hostname":"kitchen-clock"}'
+??? note "Do the same from a terminal"
+    The web UI uses the [HTTP API](../reference/http.md), so you can also save the settings
+    and restart with `curl`:
 
-curl -X POST http://<awtrix-ip>/api/v1/device/reboot
-```
+    ```bash
+    curl -X PUT http://<awtrix-ip>/api/v1/system \
+      -H "Content-Type: application/json" \
+      -d '{"wifiSsid":"MyNetwork","wifiPass":"secret123","hostname":"kitchen-clock"}'
 
-Always send `Content-Type: application/json` as in the example above. AWTRIX only refuses a
-`PUT` when the header is present with the *wrong* value - `curl -d` without an explicit `-H`
-sends `application/x-www-form-urlencoded` by default, and that is what gets refused with
-`415 unsupportedMediaType` ([Conventions](../reference/conventions.md#content-type-is-mandatory)).
-Full field list: [Wi-Fi configuration](../reference/system.md#wi-fi).
+    curl -X POST http://<awtrix-ip>/api/v1/device/reboot
+    ```
 
-## Step 3 - reboot
+    Always send `Content-Type: application/json`. Without it, `curl -d` sends a form type, and the
+    clock refuses that with `415 unsupportedMediaType`
+    ([Conventions](../reference/conventions.md#content-type-is-mandatory)).
+    All fields: [Wi-Fi configuration](../reference/system.md#wi-fi).
 
-Saving only stores your credentials. The restart is what makes AWTRIX leave its own access point
-and join your network. The **Reboot now** button in the banner that appears after saving does it,
-and pulling the power and plugging it back in works exactly as well.
+## Step 3 - connect to your network {#step-3-reboot}
 
-The access point disappears as AWTRIX restarts, so your phone drops back to its usual network by
-itself.
+<!-- only esp32 esp32-s3 -->
+Saving only stores your Wi-Fi details. Restart the clock to connect: press **Reboot now** in the
+banner that appears after saving, or unplug the clock and plug it back in.
+<!-- /only -->
+<!-- only tc002 -->
+Saving starts the connection by itself. If it fails, the setup hotspot opens again.
+<!-- /only -->
 
-You can also just walk away. While its access point is up, AWTRIX retries your configured
-network every **30 seconds** and restarts itself the moment it gets in. Retries pause while someone
-is connected to the access point, so correct credentials get you onto your network within
-half a minute of your phone leaving. The same applies to a router that was slower to boot, or one
-that came back after a power cut - no reboot needed on your side.
+The hotspot closes when the clock connects. Your phone goes back to your usual Wi-Fi by itself.
 
-## What you can and cannot do in setup mode
+While the hotspot is open and nobody is connected to it, the clock tries your saved network again
+every <!-- only esp32 esp32-s3 -->**30 seconds**<!-- /only --><!-- only tc002 -->**60 seconds**<!-- /only -->.<!-- only tc002 --> The hotspot may drop for a moment during a retry.<!-- /only -->
+While someone is connected to the hotspot, the retries pause.
 
-The access point exists to configure Wi-Fi, and that is nearly all it allows. Saving Wi-Fi settings
-and restarting work. Uploading icons, melodies or firmware, resetting AWTRIX, and putting it to
-sleep are all refused until it is on a network, along with the features that need a real network:
+## What works in setup mode
 
-| Not available until AWTRIX is on your Wi-Fi |
+The setup hotspot is only for Wi-Fi setup. You can save your Wi-Fi name, Wi-Fi password and
+clock name, restore a backup, read setup information and restart the clock.
+Logs, scripts, file lists, other uploads, resetting and sleep are refused until the clock
+is on your network. The complete list is in [Setup mode lockdown](../reference/errors.md#provisioning-lockdown-403). These also need your network:
+
+| Not available until the clock is on your Wi-Fi |
 |---|
-| Finding AWTRIX by name (`.local`) or by network discovery |
-| The IP address scroll on the panel |
+| Finding the clock by name (`.local`) or by network discovery |
+| The IP address on the display |
+<!-- only esp32 esp32-s3 -->
 | Art-Net |
-| Opening the Hub icon gallery, and exporting a settings backup |
+<!-- /only -->
+| The Hub icon gallery, and exporting a settings backup |
 
-If you had already turned on a **username and password**, they are enforced on the access
-point too. Authentication is off until you enable it - see
-[Securing the API](../reference/http.md#authentication).
+If you turned on a **username and password** before, the setup page asks for them too.
+Login is off until you turn it on. See [Authentication](../reference/http.md#authentication).
 
-## It came back as an access point
+## When it goes wrong
 
-Rainbow `AP MODE` after a restart means AWTRIX could not join your network within about 15
-seconds. In order of likelihood:
+### It shows AP MODE again
 
-- **Typo in the network name or password.** Nothing checks them when you save - a mistake only
-  shows up at the next boot. Rejoin the access point and correct it. Use **Scan** to pick the
-  network rather than typing its name.
-- **5 GHz-only network.** The AWTRIX radio is 2.4 GHz. If your router publishes both bands under
-  one name, that is fine; if the 2.4 GHz band is disabled, it cannot see the network at all
-  and it will not appear in the scan.
-- **A fixed IP address that does not fit your network.** If you configured a static address, switch
-  AWTRIX back to automatic (DHCP) and let it get an address from your router.
-- **Your router is down.** AWTRIX joins by itself once it is back, without a reboot on your side.
+`AP MODE` after a restart means the clock could not join your network within about 15 seconds.
+The most common causes:
+
+- **Wrong Wi-Fi name or password.** Join the hotspot again and correct them.<!-- only esp32 esp32-s3 --> **Scan** helps you pick the right network.<!-- /only -->
+- **Your Wi-Fi is 5 GHz only.** The clock uses 2.4 GHz. A router that sends both bands under one
+  name is fine. If 2.4 GHz is switched off, the clock cannot see your network.<!-- only esp32 esp32-s3 --> It does not appear in the scan either.<!-- /only -->
+- **A fixed IP address that does not fit your network.** If you set a static address, switch back
+  to automatic (DHCP).
+- **Your router is off.** The clock joins by itself once the router is back. You do not need to
+  restart it.
 
 ### Starting over
 
-Two resets, in the web UI under **System → Maintenance**:
+The web UI has two resets under **System → Maintenance**:
 
 | | |
 |---|---|
-| **Reset settings** | Clears display settings only. Your Wi-Fi, MQTT and hardware configuration and all your files survive. |
-| **Factory reset** | Clears **everything** - Wi-Fi credentials, all settings, and every file you uploaded (icons, melodies, palettes, scripts). AWTRIX comes back exactly as it was on its first boot, in access-point mode. |
+| **Reset settings** | Sets all [settings](../reference/settings.md) back to their defaults: the Display tab, volumes, which apps rotate and the rest. Wi-Fi, MQTT, hardware settings and all your files stay. |
+| **Factory reset** | Clears **everything**: Wi-Fi details, all settings and every uploaded file (icons, melodies, palettes, <!-- only esp32-s3 tc002 -->MP3s, <!-- /only -->scripts). The clock starts like new, with its setup hotspot. |
 
 !!! danger "A factory reset cannot be undone"
-    You confirm it by typing the hostname. Once it runs, your uploaded files are gone and
-    you start this page over from step 1.
+    You confirm it by typing the clock's hostname. After the reset your files are gone, and you
+    start this page again from step 1.
 
-More on what each reset keeps: [Persistence and resets](../reference/system.md#persistence-and-resets).
+Step by step<!-- only tc002 -->, and for a clock that does not start<!-- /only -->:
+[Reset & recovery](../guides/reset-recovery.md).
 
 ## Related
 
-- [Finding AWTRIX](discovery.md) - by name, by discovery, or off the panel
-- [Web UI tour](web-ui.md) - what the built-in interface can do now that it is all unlocked
-- [Securing the API](../reference/http.md#authentication) - turning on a username and password,
-  which are **off by default**
+- [Find your clock](discovery.md) - by name, by discovery, or from the display
+- [The web UI](web-ui.md) - everything the web UI can do
+- [Authentication](../reference/http.md#authentication) - turn on a username and password

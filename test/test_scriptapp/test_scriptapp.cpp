@@ -9,7 +9,7 @@
 #include "core/script/BerryVM.h"
 #include "core/script/ScriptApp.h"
 #include "core/script/ScriptBindings.h"
-#include "core/script/ScriptHeapTesting.h"
+#include "platform/linux/host/HostScriptHeap.h"
 #include "core/script/ScriptServices.h"
 #include "core/script/SharedState.h"
 
@@ -731,6 +731,11 @@ static void test_num_rejects_garbage_with_default() {
                                    "  pixel(7, 0, num('[1,2]') == nil ? 0x66 : 0)\n"
                                    "  pixel(8, 0, num('{\"val\":1}') == nil ? 0x77 : 0)\n"
                                    "  pixel(9, 0, num('') == nil ? 0x88 : 0)\n"
+                                   "  pixel(10, 0, num('0x10') == nil ? 0x99 : 0)\n"
+                                   "  pixel(11, 0, num('7 7') == nil ? 0xAA : 0)\n"
+                                   "  pixel(12, 0, num('.5') == nil ? 0xBB : 0)\n"
+                                   "  pixel(13, 0, num('7.') == nil ? 0xCC : 0)\n"
+                                   "  pixel(14, 0, num('--7') == nil ? 0xDD : 0)\n"
                                    "end"));
   RenderCtx ctx;
   Canvas c(32, 8);
@@ -746,6 +751,43 @@ static void test_num_rejects_garbage_with_default() {
   TEST_ASSERT_EQUAL_HEX32(0x66u, c.getPixel(7, 0));
   TEST_ASSERT_EQUAL_HEX32(0x77u, c.getPixel(8, 0));
   TEST_ASSERT_EQUAL_HEX32(0x88u, c.getPixel(9, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x99u, c.getPixel(10, 0));
+  TEST_ASSERT_EQUAL_HEX32(0xAAu, c.getPixel(11, 0));
+  TEST_ASSERT_EQUAL_HEX32(0xBBu, c.getPixel(12, 0));
+  TEST_ASSERT_EQUAL_HEX32(0xCCu, c.getPixel(13, 0));
+  TEST_ASSERT_EQUAL_HEX32(0xDDu, c.getPixel(14, 0));
+}
+
+static void test_num_reads_leading_zeros_signs_and_surrounding_space() {
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(loadWithPrelude(vm,
+                                   "def draw()\n"
+                                   "  var hours = num('07')\n"
+                                   "  pixel(0, 0, hours == 7 && type(hours) == 'int' ? 0x11 : 0)\n"
+                                   "  var zero = num('00', -1)\n"
+                                   "  pixel(1, 0, zero == 0 && type(zero) == 'int' ? 0x22 : 0)\n"
+                                   "  pixel(2, 0, num('-07') == -7 ? 0x33 : 0)\n"
+                                   "  pixel(3, 0, num('+5') == 5 ? 0x44 : 0)\n"
+                                   "  pixel(4, 0, num('07.50') == 7.5 ? 0x55 : 0)\n"
+                                   "  pixel(5, 0, num(' 42\\r\\n') == 42 ? 0x66 : 0)\n"
+                                   "  var big = num('1e3')\n"
+                                   "  pixel(6, 0, big == 1000 && type(big) == 'real' ? 0x77 : 0)\n"
+                                   "  pixel(7, 0, num('\"07\"') == 7 ? 0x88 : 0)\n"
+                                   "  pixel(8, 0, num('5E+2') == 500 ? 0x99 : 0)\n"
+                                   "end"));
+  RenderCtx ctx;
+  Canvas c(32, 8);
+  script::BindingScope s(&c, &ctx, "T");
+  TEST_ASSERT_TRUE(vm.call("draw"));
+  TEST_ASSERT_EQUAL_HEX32(0x11u, c.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x22u, c.getPixel(1, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x33u, c.getPixel(2, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x44u, c.getPixel(3, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x55u, c.getPixel(4, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x66u, c.getPixel(5, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x77u, c.getPixel(6, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x88u, c.getPixel(7, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x99u, c.getPixel(8, 0));
 }
 
 static void test_round_is_half_away_from_zero() {
@@ -1719,6 +1761,7 @@ int main(int, char**) {
   RUN_TEST(test_mqtt_subscription_cap);
   RUN_TEST(test_num_accepts_numbers_bare_and_quoted);
   RUN_TEST(test_num_rejects_garbage_with_default);
+  RUN_TEST(test_num_reads_leading_zeros_signs_and_surrounding_space);
   RUN_TEST(test_round_is_half_away_from_zero);
   RUN_TEST(test_clamp_min_max);
   RUN_TEST(test_store_roundtrip_in_vm);

@@ -1,5 +1,7 @@
 #include <unity.h>
 
+#include <cmath>
+
 #include "core/Settings.h"
 #include "core/render/Canvas.h"
 #include "core/render/Color.h"
@@ -175,7 +177,7 @@ static void test_correction_and_tint_compose() {
 
   TEST_ASSERT_TRUE(color::red(both.applyPixel(0xFFFFFFu)) <
                    color::red(single.applyPixel(0xFFFFFFu)));
-  TEST_ASSERT_EQUAL_UINT8(color::scale8(color::scale8(255, 128), 128),
+  TEST_ASSERT_EQUAL_UINT8(color::scaleChannel8(color::scaleChannel8(255, 128), 128),
                           color::red(both.applyPixel(0xFFFFFFu)));
 }
 
@@ -264,8 +266,158 @@ static void test_gradeFrom_settings() {
   TEST_ASSERT_EQUAL_HEX32(0x804020u, render::gradeFrom(s).tint);
 }
 
+static render::OutputTable flooredTable() {
+  render::OutputTable t{};
+  for (int c = 50; c < 256; ++c)
+    t[c] = static_cast<uint16_t>(std::lround((c - (50.0 - 205.0 / 254.0)) / (205.0 + 205.0 / 254.0) * 65535.0));
+  return t;
+}
+
+static render::OutputTable gammaTable() {
+  render::OutputTable t{};
+  for (int c = 50; c < 256; ++c)
+    t[c] = static_cast<uint16_t>(std::lround(std::pow((c - 49) / 206.0, 2.2) * 65535.0));
+  return t;
+}
+
+static const render::OutputTable kFloored = flooredTable();
+static const render::OutputTable kGamma = gammaTable();
+
+static void test_no_output_table_is_the_linear_byte() {
+  ColorGrade g;
+  g.setParams(neutral());
+  g.setOutput(nullptr);
+  TEST_ASSERT_TRUE(g.isIdentity());
+  TEST_ASSERT_EQUAL_HEX32(0x1234ABu, g.applyPixel(0x1234ABu));
+}
+
+static void test_a_floored_table_never_emits_codes_below_its_floor() {
+  ColorGrade g;
+  g.setParams(neutral());
+  g.setOutput(&kFloored);
+  TEST_ASSERT_EQUAL_HEX32(0x000000u, g.applyPixel(0x000000u));
+  TEST_ASSERT_EQUAL_HEX32(0x3232FFu, g.applyPixel(0x0101FFu));
+  for (uint32_t v = 1; v < 256; ++v) {
+    const uint8_t code = color::red(g.applyPixel(v << 16));
+    TEST_ASSERT_TRUE(code >= 50);
+    const int stock = 50 + static_cast<int>(v - 1) * 205 / 254;
+    TEST_ASSERT_INT_WITHIN(1, stock, code);
+  }
+}
+
+static void test_at_full_brightness_light_under_the_floor_rounds_to_the_nearer_of_off_and_floor() {
+  ColorGrade g;
+  g.setOutput(&kFloored);
+  g.setParams(GradeParams{});
+  TEST_ASSERT_EQUAL_UINT8(0, color::red(g.applyPixel(0x090000u)));
+  TEST_ASSERT_EQUAL_UINT8(50, color::red(g.applyPixel(0x0A0000u)));
+}
+
+static void test_dimming_keeps_what_full_brightness_shows_and_nothing_else() {
+  ColorGrade full, dimmed;
+  full.setOutput(&kFloored);
+  dimmed.setOutput(&kFloored);
+  full.setParams(GradeParams{});
+  GradeParams p;
+  for (int b = 1; b < 256; ++b) {
+    p.brightness = static_cast<uint8_t>(b);
+    dimmed.setParams(p);
+    for (uint32_t v = 0; v < 256; ++v) {
+      const bool shown = color::red(full.applyPixel(v << 16)) != 0;
+      TEST_ASSERT_EQUAL(shown, color::red(dimmed.applyPixel(v << 16)) != 0);
+    }
+  }
+  p.brightness = 0;
+  dimmed.setParams(p);
+  TEST_ASSERT_EQUAL_HEX32(0x000000u, dimmed.applyPixel(0xFFFFFFu));
+}
+
+static void test_codes_sharing_a_level_resolve_to_the_lowest() {
+  static render::OutputTable plateau = flooredTable();
+  for (int c = 61; c <= 70; ++c) plateau[c] = plateau[60];
+  ColorGrade g;
+  g.setParams(neutral());
+  g.setOutput(&plateau);
+  for (uint32_t v = 1; v < 256; ++v) {
+    const uint8_t code = color::red(g.applyPixel(v << 16));
+    TEST_ASSERT_TRUE(code <= 60 || code > 70);
+  }
+}
+
+static void test_a_dim_tinted_grey_does_not_turn_into_its_strongest_channel() {
+  ColorGrade g;
+  g.setOutput(&kFloored);
+  GradeParams p;
+  for (int b = 1; b < 256; ++b) {
+    p.brightness = static_cast<uint8_t>(b);
+    g.setParams(p);
+    const uint32_t out = g.applyPixel(0x16161Bu);
+    if (color::blue(out)) {
+      TEST_ASSERT_TRUE(color::red(out) >= 50);
+      TEST_ASSERT_TRUE(color::green(out) >= 50);
+    }
+  }
+}
+
+static void test_a_colour_keeps_its_hue_at_the_floor() {
+  ColorGrade g;
+  g.setOutput(&kFloored);
+  GradeParams p;
+  for (int b = 1; b < 256; ++b) {
+    p.brightness = static_cast<uint8_t>(b);
+    g.setParams(p);
+    const uint32_t red = g.applyPixel(0xFF0000u);
+    TEST_ASSERT_EQUAL_UINT8(0, color::green(red));
+    TEST_ASSERT_EQUAL_UINT8(0, color::blue(red));
+    const uint32_t orange = g.applyPixel(0xFF8000u);
+    TEST_ASSERT_FALSE(color::red(orange) == 50 && color::green(orange) == 50);
+  }
+}
+
+static int distinctCodes(const ColorGrade& g) {
+  bool seen[256] = {};
+  int count = 0;
+  for (uint32_t v = 0; v < 256; ++v) {
+    const uint8_t code = color::red(g.applyPixel(v << 16));
+    if (!seen[code]) ++count;
+    seen[code] = true;
+  }
+  return count;
+}
+
+static void test_a_gamma_encoded_panel_keeps_more_levels_when_dimmed() {
+  GradeParams p;
+  p.brightness = 26;
+  ColorGrade linear, curved;
+  linear.setParams(p);
+  curved.setParams(p);
+  linear.setOutput(&kFloored);
+  curved.setOutput(&kGamma);
+  TEST_ASSERT_TRUE(distinctCodes(curved) > 2 * distinctCodes(linear));
+  TEST_ASSERT_EQUAL_UINT8(0, color::red(curved.applyPixel(0x000000u)));
+}
+
+static void test_driver_brightness_survives_calibration_changes() {
+  ColorGrade actual, expected;
+  auto p = neutral();
+  actual.setBrightness(80);
+  p.tint = 0x80FFFFu;
+  p.brightness = 255;
+  actual.setGrade(p);
+  p.brightness = 80;
+  expected.setParams(p);
+  for (uint32_t rgb : {0x123456u, 0xFFFFFFu, 0xFF0000u})
+    TEST_ASSERT_EQUAL_HEX32(expected.applyPixel(rgb), actual.applyPixel(rgb));
+  actual.setBrightness(0);
+  actual.setGrade(neutral());
+  TEST_ASSERT_EQUAL_HEX32(0, actual.applyPixel(0xFFFFFFu));
+  actual.setBrightness(255);
+  TEST_ASSERT_EQUAL_HEX32(0x123456u, actual.applyPixel(0x123456u));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_driver_brightness_survives_calibration_changes);
   RUN_TEST(test_neutral_params_are_identity);
   RUN_TEST(test_default_params_apply_gamma);
   RUN_TEST(test_gamma_is_monotonic);
@@ -287,5 +439,13 @@ int main(int, char**) {
   RUN_TEST(test_apply_identity_copies);
   RUN_TEST(test_apply_ignores_size_mismatch);
   RUN_TEST(test_gradeFrom_settings);
+  RUN_TEST(test_no_output_table_is_the_linear_byte);
+  RUN_TEST(test_a_floored_table_never_emits_codes_below_its_floor);
+  RUN_TEST(test_codes_sharing_a_level_resolve_to_the_lowest);
+  RUN_TEST(test_a_dim_tinted_grey_does_not_turn_into_its_strongest_channel);
+  RUN_TEST(test_a_colour_keeps_its_hue_at_the_floor);
+  RUN_TEST(test_at_full_brightness_light_under_the_floor_rounds_to_the_nearer_of_off_and_floor);
+  RUN_TEST(test_dimming_keeps_what_full_brightness_shows_and_nothing_else);
+  RUN_TEST(test_a_gamma_encoded_panel_keeps_more_levels_when_dimmed);
   return UNITY_END();
 }

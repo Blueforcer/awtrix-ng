@@ -1,0 +1,66 @@
+:root { color-scheme: dark; font-synthesis: none; --bg: #171717; --card: #222221; --card2: #292927; --border: #373632; --brd2: #302f2b; --fg: #f3f1ec; --dim: #a6a198; --acc: #f5a568; --onpri: #23170e; --err: #ff9d90; --errbrd: #74443d; --warn: #ffb65c; --bnw: #3b2d20; --badbg: #412421; --trk: #514e47; --glow: #f5a56845; --ring: #f5a5681a; --ok: #8fbf72; --mono: "Cascadia Mono", "Cascadia Code", ui-monospace, Consolas, monospace; }
+@media (prefers-color-scheme: light) { :root { color-scheme: light; --bg: #f5f4f1; --card: #fff; --card2: #f0eee9; --border: #e2dfd8; --brd2: #ebe8e2; --fg: #242321; --dim: #706c65; --acc: #ac470f; --onpri: #fff; --err: #b3261e; --errbrd: #e2afa8; --warn: #945813; --bnw: #fff0d8; --badbg: #fde9e5; --trk: #c8c3b9; --glow: #ac470f30; --ring: #ac470f1a; --ok: #3d762e; } }
+* { box-sizing: border-box; scrollbar-color: var(--trk) transparent; scrollbar-width: thin; }
+html { background: var(--bg); color: var(--fg); }
+body { margin: 0; min-width: 360px; font: 14px/1.5 "Segoe UI Variable", "Aptos", system-ui, sans-serif; }
+[hidden] { display: none !important; }
+button, input { font: inherit; }
+#installer { max-width: 560px; padding: 18px 20px; margin: auto; }
+.masthead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+.wordmark { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+.wordmark b { color: var(--acc); }
+.edition { font-size: 13px; color: var(--dim); }
+.steps { list-style: none; display: flex; gap: 6px; padding: 0; margin: 0 0 12px; counter-reset: step; }
+.steps li { flex: 1; padding-top: 6px; border-top: 3px solid var(--border); color: var(--dim); font-size: 12px; font-weight: 550; counter-increment: step; }
+.steps li::before { content: counter(step) ". "; }
+.steps .complete { border-top-color: var(--acc); color: var(--fg); }
+.steps [aria-current] { border-top-color: var(--acc); color: var(--fg); }
+.workbench { padding: 16px 18px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+.release-line { display: flex; align-items: center; gap: 8px; font: 11px/1.4 var(--mono); color: var(--dim); overflow-wrap: anywhere; }
+.signal { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--acc); box-shadow: 0 0 8px var(--glow); }
+h2 { font-size: 19px; font-weight: 650; line-height: 1.25; letter-spacing: -.015em; margin: 10px 0 4px; }
+.status { font-size: 13.5px; margin: 0; min-height: 21px; }
+.help { font-size: 12.5px; color: var(--dim); margin: 8px 0 0; }
+.notice { border: 1px solid var(--bnw); border-left: 3px solid var(--warn); border-radius: 9px; background: var(--bnw); font-size: 12.5px; padding: 9px 12px; margin: 12px 0 0; overflow-wrap: anywhere; }
+.error { border-color: var(--errbrd); border-left-color: var(--err); background: var(--badbg); }
+progress { appearance: none; display: block; width: 100%; height: 6px; margin: 12px 0 0; border: 0; border-radius: 3px; overflow: hidden; background: var(--card2); accent-color: var(--acc); }
+progress::-webkit-progress-bar { background: var(--card2); }
+progress::-webkit-progress-value { background: var(--acc); transition: width .2s ease-out; }
+.wifi { margin-top: 14px; border-top: 1px solid var(--brd2); padding-top: 10px; }
+summary { cursor: pointer; width: fit-content; font-size: 13px; font-weight: 550; }
+summary span { font-size: 11px; font-weight: 400; color: var(--dim); margin-left: 6px; }
+.wifi form { margin-top: 10px; }
+.wifi-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+label { font-size: 12.5px; font-weight: 500; }
+input { display: block; width: 100%; min-width: 0; min-height: 36px; padding: 6px 10px; margin-top: 4px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg); color: var(--fg); font-size: 13.5px; }
+input:focus { outline: none; border-color: var(--acc); box-shadow: 0 0 0 3px var(--ring); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.actions:not(:has(button:not([hidden]))) { display: none; }
+button { cursor: pointer; min-height: 36px; border: 1px solid var(--acc); border-radius: 9px; background: var(--acc); color: var(--onpri); font-size: 13px; font-weight: 650; padding: 7px 14px; white-space: nowrap; transition: border-color .14s, background .14s, filter .14s; }
+button:hover { filter: brightness(1.06); }
+button:disabled { opacity: .45; cursor: default; }
+button.secondary { border-color: var(--border); color: var(--fg); background: var(--card2); font-weight: 500; }
+button.secondary:hover { filter: none; border-color: var(--acc); background: var(--border); }
+button.link { min-height: 0; padding: 4px 0; border: 0; background: none; color: var(--dim); font-weight: 500; text-decoration: underline; }
+button.link:hover { filter: none; color: var(--fg); }
+progress:not([value])::-webkit-progress-bar { background: linear-gradient(90deg, var(--card2) 0%, var(--acc) 50%, var(--card2) 100%) 0 0 / 200% 100%; animation: sweep 1.6s linear infinite; }
+@keyframes sweep { to { background-position: -200% 0; } }
+:is(button, input, summary):focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.small { font-size: 11.5px; color: var(--dim); margin: 8px 0 0; }
+.success h3 { font-size: 16px; font-weight: 650; margin: 12px 0 4px; }
+.success .notice { margin-top: 8px; }
+.hotspot { margin-top: 14px; border-top: 1px solid var(--brd2); padding-top: 10px; }
+.hotspot ol { padding-left: 18px; margin: 6px 0 10px; font-size: 13px; }
+.hotspot li { margin-bottom: 4px; }
+.hotspot strong { color: var(--acc); font-weight: 650; }
+.success p, .success li { font-size: 13px; margin: 0; }
+.success ol { padding-left: 18px; margin: 8px 0 12px; }
+.success li { margin-bottom: 4px; }
+.success strong { color: var(--acc); font-weight: 650; }
+[data-phase=loading] .signal, [data-phase=waiting] .signal, [data-phase=preparing] .signal, [data-phase=installing] .signal, [data-phase=provisioning] .signal { animation: pulse 1.8s ease-in-out infinite; }
+[data-phase=recovery] .signal, [data-phase=failed] .signal { background: var(--err); box-shadow: none; }
+[data-phase=verified] .signal, [data-phase=done] .signal { background: var(--ok); box-shadow: none; }
+[data-phase=done] .steps li { border-top-color: var(--acc); color: var(--fg); }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (max-width: 440px) { .wifi-fields { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

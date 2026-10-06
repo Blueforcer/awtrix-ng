@@ -11,7 +11,7 @@ constexpr int kFallDir = 1;
 }
 
 PowerAnimator::PowerAnimator(int width, int height)
-    : last_(width, height), scratch_(width, height), black_(width, height) {}
+    : last_(width, height), scratch_(width, height) {}
 
 void PowerAnimator::enter(Phase phase, int64_t nowMs, float atProgress) {
   if (atProgress < 0.0f) atProgress = 0.0f;
@@ -62,24 +62,26 @@ PowerAnimator::Phase PowerAnimator::update(bool on, int64_t nowMs) {
 }
 
 void PowerAnimator::syncDims(const Canvas& ref) {
-  if (black_.width() == ref.width() && black_.height() == ref.height()) return;
+  if (last_.width() == ref.width() && last_.height() == ref.height() &&
+      scratch_.width() == ref.width() && scratch_.height() == ref.height()) return;
   last_ = Canvas(ref.width(), ref.height());
   scratch_ = Canvas(ref.width(), ref.height());
-  black_ = Canvas(ref.width(), ref.height());
 }
 
 // Reuses the Rain transition against a black canvas, so the picture drops out of the panel row by
 // row rather than simply dimming.
 void PowerAnimator::composeOut(Canvas& out) {
   syncDims(out);
-  composeTransition(out, last_, black_, Transition::Rain, p_, kFallDir);
+  const Canvas black(0, 0, nullptr);
+  composeTransition(out, last_, black, Transition::Rain, p_, kFallDir);
 }
 
 void PowerAnimator::finish(Canvas& live) {
   syncDims(live);
   if (phase_ == Phase::In) {
     scratch_ = live;
-    composeTransition(live, black_, scratch_, Transition::Rain, p_, kFallDir);
+    const Canvas black(0, 0, nullptr);
+    composeTransition(live, black, scratch_, Transition::Rain, p_, kFallDir);
   }
   last_ = live;
 }

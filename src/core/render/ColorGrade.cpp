@@ -39,16 +39,19 @@ void ColorGrade::rebuild() {
   buildGammaTable();
 
   const uint8_t scale[3] = {
-      color::scale8(color::red(params_.correction), color::red(params_.tint)),
-      color::scale8(color::green(params_.correction), color::green(params_.tint)),
-      color::scale8(color::blue(params_.correction), color::blue(params_.tint)),
+      color::scaleChannel8(color::red(params_.correction), color::red(params_.tint)),
+      color::scaleChannel8(color::green(params_.correction), color::green(params_.tint)),
+      color::scaleChannel8(color::blue(params_.correction), color::blue(params_.tint)),
   };
 
+  prepareOutput();
   identity_ = params_.saturation >= 100;
   for (int i = 0; i < 256; ++i) {
     const uint32_t lit = static_cast<uint32_t>(gamma16_[i]) * params_.brightness / 255u;
     for (int ch = 0; ch < 3; ++ch) {
-      lut_[ch][i] = static_cast<uint8_t>((lit * scale[ch] / 255u + 128) / 257);
+      const uint32_t light = lit * scale[ch] / 255u;
+      rememberOutput(ch, i, static_cast<uint16_t>(gamma16_[i] * scale[ch] / 255u));
+      lut_[ch][i] = encodeOutput(light);
       if (lut_[ch][i] != static_cast<uint8_t>(i)) identity_ = false;
     }
   }
@@ -57,7 +60,10 @@ void ColorGrade::rebuild() {
 uint32_t ColorGrade::applyPixel(uint32_t c) const {
   if (identity_) return c;
   const uint32_t s = color::desaturate(c, params_.saturation);
-  return color::pack(lut_[0][color::red(s)], lut_[1][color::green(s)], lut_[2][color::blue(s)]);
+  const uint8_t r = color::red(s), g = color::green(s), b = color::blue(s);
+  uint8_t codes[3] = {lut_[0][r], lut_[1][g], lut_[2][b]};
+  settleOutput(params_.brightness, r, g, b, codes);
+  return color::pack(codes[0], codes[1], codes[2]);
 }
 
 void ColorGrade::apply(const Canvas& src, Canvas& dst) const {

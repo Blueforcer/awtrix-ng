@@ -60,8 +60,8 @@ void budgetHook(bvm* vm, int event, ...) {
   }
 }
 
-void armBudget() {
-  g_budget = BerryVM::kInstructionLimit;
+void armBudget(long instructionLimit) {
+  g_budget = instructionLimit;
   g_stage = kArmed;
   g_mallocFailed = false;
 }
@@ -95,7 +95,7 @@ const char* readSourceOnce(struct blexer*, void* data, size_t* size) {
 
 }
 
-BerryVM::BerryVM() {
+BerryVM::BerryVM(long instructionLimit) : instructionLimit_(instructionLimit) {
   vm_ = be_vm_new();
   if (!vm_) return;
 
@@ -157,7 +157,7 @@ bool BerryVM::load(const std::string& source) {
     return false;
   }
   const CompletedCall completed{vm_, callsSinceTrim_};
-  armBudget();
+  armBudget(instructionLimit_);
   int rc = be_loadbuffer(vm_, "script", source.c_str(), source.size());
   if (!captureError(rc)) return false;
 
@@ -173,7 +173,7 @@ bool BerryVM::loadSolidifiedPrelude() {
     return false;
   }
   const CompletedCall completed{vm_, callsSinceTrim_};
-  armBudget();
+  armBudget(instructionLimit_);
   awtrix_push_solidified_prelude(vm_);
   int rc = be_pcall(vm_, 0);
   bool ok = captureError(rc);
@@ -197,7 +197,7 @@ bool BerryVM::loadApp(const std::string& appKey, const std::string& source,
     return false;
   }
 
-  armBudget();
+  armBudget(instructionLimit_);
   SourceBuf buf{source.c_str(), source.size()};
   // islocal = true: top-level `var` in the script becomes a chunk local instead of a VM
   // global. Every app shares one VM, so without it two scripts would collide on names.
@@ -229,6 +229,19 @@ bool BerryVM::loadApp(const std::string& appKey, const std::string& source,
   return ok;
 }
 
+bool BerryVM::compile(const std::string& source) {
+  if (!vm_) {
+    err_ = "vm alloc failed";
+    return false;
+  }
+  const CompletedCall completed{vm_, callsSinceTrim_};
+  SourceBuf buf{source.c_str(), source.size()};
+  const int rc = be_protectedparser(vm_, "script", readSourceOnce, &buf, true);
+  if (!captureError(rc)) return false;
+  be_pop(vm_, be_top(vm_));
+  return true;
+}
+
 bool BerryVM::loadModule(const std::string& importName, const std::string& source) {
   if (!vm_) {
     err_ = "vm alloc failed";
@@ -240,7 +253,7 @@ bool BerryVM::loadModule(const std::string& importName, const std::string& sourc
     return false;
   }
 
-  armBudget();
+  armBudget(instructionLimit_);
   SourceBuf buf{source.c_str(), source.size()};
   int rc = be_protectedparser(vm_, "script", readSourceOnce, &buf, true);
   if (!captureError(rc)) return false;
@@ -301,7 +314,7 @@ bool BerryVM::doMethod(const std::string& appKey, const char* name, int argc,
   if (argc >= 1) be_pushstring(vm_, a->c_str());
   if (argc >= 2) be_pushstring(vm_, b->c_str());
 
-  armBudget();
+  armBudget(instructionLimit_);
   rc = be_pcall(vm_, 1 + argc);
   bool ok = captureError(rc);
   if (ok) {
@@ -321,6 +334,20 @@ bool BerryVM::doMethod(const std::string& appKey, const char* name, int argc,
     be_pop(vm_, be_top(vm_) - base);
   }
   return ok;
+}
+
+bool BerryVM::hasMethod(const std::string& appKey, const char* name) {
+  if (!vm_) return false;
+  const CompletedCall completed{vm_, callsSinceTrim_};
+  const int base = be_top(vm_);
+  be_getglobal(vm_, "_app_instance");
+  be_pushstring(vm_, appKey.c_str());
+  armBudget(instructionLimit_);
+  if (!captureError(be_pcall(vm_, 1))) return false;
+  be_pop(vm_, be_top(vm_) - base - 1);
+  const bool found = be_isinstance(vm_, base + 1) && be_getmethod(vm_, base + 1, name);
+  be_pop(vm_, be_top(vm_) - base);
+  return found;
 }
 
 bool BerryVM::method(const std::string& appKey, const char* name) {
@@ -369,6 +396,23 @@ void BerryVM::gcCollect() {
   }
 }
 
+void BerryVM::defineNative(const char* name, int (*fn)(bvm*), void* self) {
+  if (!vm_) return;
+  be_pushntvclosure(vm_, fn, 1);
+  be_pushcomptr(vm_, self);
+  be_setupval(vm_, -2, 0);
+  be_pop(vm_, 1);
+  be_setglobal(vm_, name);
+  be_pop(vm_, 1);
+}
+
+void* BerryVM::nativeSelf(bvm* vm) {
+  be_getupval(vm, 0, 0);
+  void* self = be_tocomptr(vm, -1);
+  be_pop(vm, 1);
+  return self;
+}
+
 bool BerryVM::hasFunction(const char* name) const {
   if (!vm_) return false;
   bvm* vm = const_cast<bvm*>(vm_);
@@ -395,7 +439,7 @@ bool BerryVM::doCall(const char* name, int argc, const std::string* a,
   if (argc >= 2) be_pushstring(vm_, b->c_str());
   if (argc >= 3) be_pushstring(vm_, c->c_str());
 
-  armBudget();
+  armBudget(instructionLimit_);
   int rc = be_pcall(vm_, argc);
   bool ok = captureError(rc);
   if (ok) {

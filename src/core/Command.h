@@ -19,11 +19,10 @@ enum class CommandType : uint8_t {
   Moodlight,
   SetDisplay,
   Sleep,
-  // arg is a sound::Source, payload is the value it names.
+  // payload is a sound object as sent, arg a sound::PlayAs, name the script whose own call it is.
   PlayAudio,
-  // payload is the raw request body; the stream keys are read from it further down.
-  PlayStream,
-  // arg is a sound::StopScope.
+  // payload is a whole recording, WAV or MP3, which the dispatch takes rather than copies.
+  // arg is a sound::Stop, name the script for the script scopes.
   StopAudio,
   Reboot,
   FactoryReset,
@@ -34,7 +33,10 @@ enum class CommandType : uint8_t {
   ScriptRemove,
   DeleteApp,
   SetRadioStations,
-  ScriptUpdate
+  ScriptUpdate,
+  ScriptDataSet,
+  BuiltinAppConfigSet,
+  SetAppEnabled
 };
 
 enum class Source : uint8_t { Mqtt = 0, Http = 1, Menu = 2, Internal = 3 };
@@ -70,7 +72,7 @@ struct DispatchDetail {
   std::string field;
   std::string message;
   int line = 0;
-  std::string hook;
+  std::string hook{};
 
   void clear() {
     field.clear();

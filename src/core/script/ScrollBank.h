@@ -8,6 +8,7 @@
 #include "core/render/Canvas.h"
 #include "core/render/Font.h"
 #include "core/render/ScrollController.h"
+#include "core/render/TextRenderer.h"
 
 namespace awtrix::script {
 
@@ -16,17 +17,18 @@ struct ScrollRun {
   int y = 0;
   int width = 0;
   uint32_t color = 0xFFFFFFu;
-  const uint32_t* glyphColors = nullptr;
-  std::size_t glyphCount = 0;
+  const text::TextRun* runs = nullptr;
+  std::size_t runCount = 0;
   int repeat = 0;
   ScrollSpec spec;
 };
 
 // Scroll position must survive between frames, but a script re-issues its scroll_text() calls
-// from scratch every draw(). This holds that state per app, keyed by the y it was drawn at.
+// from scratch every draw(). This holds that state per app, keyed by the strip it was drawn in:
+// its x, y and width, so two strips on one row move independently.
 class ScrollBank {
  public:
-  // The panel is 8 px tall: two lines of scrolling text is all that can be seen at once.
+  // Every app carries its own slots, so the count stays small for the ESP32's RAM.
   static constexpr int kLines = 2;
 
   void beginFrame();
@@ -39,13 +41,15 @@ class ScrollBank {
   struct Line {
     bool active = false;
     bool drawn = false;
+    int x = 0;
     int y = 0;
+    int width = 0;
     int repeat = 0;
     uint32_t used = 0;
     render::ScrollController scroll;
   };
 
-  Line& lineFor(int y);
+  Line& lineFor(int x, int y, int width);
 
   Line lines_[kLines];
   uint32_t clock_ = 0;

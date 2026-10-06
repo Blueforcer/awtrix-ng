@@ -1,71 +1,141 @@
-# Flashing
-
 ---
+only: [esp32, esp32-s3]
+---
+
+# Install AWTRIX NG
+
+<!-- only esp32 -->
+This page puts AWTRIX NG on a Ulanzi TC001, an AWTRIX 2 or an ESP32 DIY board over USB.
+<!-- /only -->
+<!-- only esp32-s3 -->
+This page puts AWTRIX NG on an ESP32-S3 board over USB.
+<!-- /only -->
 
 ## What you need
 
 | | |
 |---|---|
-| **The board** | A classic ESP32 with 4 MB of flash - what the common 32×8 clocks use - or an ESP32-S3 board. |
-| **A USB data cable** | Charge-only cables never show up as a serial port. |
-| **A browser, or `esptool`** | Firefox, Chrome, Edge or Opera on a desktop can do the whole flash themselves. Everything else needs `pip install esptool`. |
+<!-- only esp32 -->
+| **The board** | A classic ESP32 with 4, 8 or 16 MB of flash. The Ulanzi TC001 and the common 32×8 clocks have 4 MB. |
+<!-- /only -->
+<!-- only esp32-s3 -->
+| **The board** | An ESP32-S3 with 8 or 16 MB of flash, with or without PSRAM. |
+<!-- /only -->
+| **A USB data cable** | A charge-only cable does not show up as a serial port. |
+| **A browser** | Chrome, Edge or Opera on a desktop computer. Other browsers need `esptool` instead (`pip install esptool`). |
 
-Building the firmware yourself instead needs PlatformIO, Python and Node.js - that path is
-[Building from source](../advanced/building.md).
+## Install from your browser
 
-The commands below spell the esptool subcommands `read_flash`, `write_flash`, `erase_flash` and
-`flash_id`. esptool 5 spells them with hyphens - `read-flash` and so on - and prints a warning for
-the underscore form.
-
----
-
-## 1. Flash it from your browser
-
-Chrome, Edge or Opera on a desktop. Nothing to install:
+1. Connect the clock to your computer with the USB cable.
+2. Press **Fresh install** for a board that does not run AWTRIX NG yet, or **Update AWTRIX NG** for
+   one that does.
+3. Choose your board's port when the browser asks.
+4. Wait until the flasher says **Done**.
 
 <div id="awtrix-flasher"></div>
 <script type="module" src="../../assets/awtrix-flasher.js"></script>
 
-Pick your board's port when the browser asks. It detects the chip, the flash size and - on an S3 -
-whether the PSRAM is quad or octal, then writes the newest release for it.
+The flasher detects the chip and the flash size, and writes the newest release for your board.
+<!-- only esp32-s3 -->
+It takes the `-quad-` image only when the chip reports quad PSRAM inside it. Every other board gets
+the `-octal-` image. Then check **PSRAM** as described in
+[Which of the two S3 images](#which-of-the-two-s3-images).
+<!-- /only -->
 
-**Fresh install** is the first time you put AWTRIX NG on a board. It clears settings, Wi-Fi
-credentials, icons, melodies, palettes and scripts, and the device comes up as its own access
-point - that is [First boot](first-boot.md).
+**Fresh install** is for a board that does not run AWTRIX NG yet. It clears settings, Wi-Fi
+credentials, icons, melodies, palettes and scripts. The clock then opens its own setup hotspot:
+continue at [Connect to Wi-Fi](first-boot.md).
 
 **Update AWTRIX NG** is for a board that already runs it. Everything on it stays, and it comes
-back on your Wi-Fi on the new version. Without a cable, the same update runs
-[over the web UI](../guides/updating.md).
+back on your Wi-Fi with the new version. You can also update without a cable
+[in the web UI](../guides/updating.md).
 
----
+!!! tip "Keep a copy of the original firmware"
+    Installing overwrites the firmware your clock came with. If you may want it back later, make a
+    [backup](#back-up-the-original-firmware) first.
 
-## 2. Back up what is on the chip
+## Set your wiring
 
-Flashing overwrites everything, including the firmware the device came with. Take the copy before
-you flash, not after - this needs esptool even if the flash itself did not.
+<!-- only esp32 -->
+A fresh install uses the pin map of the Ulanzi TC001, the default of the common 32×8 clocks. If
+you have one of those, there is nothing to do. Continue at [Connect to Wi-Fi](first-boot.md).
 
+An AWTRIX 2 or a DIY board with other wiring needs its pin map set once:
+<!-- /only -->
+<!-- only esp32-s3 -->
+A fresh install uses the [standard pinout](../advanced/diy-build.md#3-the-standard-pinout). If you
+wired your board that way, there is nothing to do. Continue at [Connect to Wi-Fi](first-boot.md).
+
+A board with other wiring needs its pin map set once:
+<!-- /only -->
+
+1. Open the web UI and go to **System → GPIO**.
+2. Enter the **whole** pin map at once. Changing one pin on its own is usually rejected because it
+   collides with another pin.
+3. Save and restart the clock. The new map takes effect after the restart.
+
+<!-- only esp32 -->
+Presets for common boards, the pins each field accepts, and how to undo a bad map are in
+[GPIO & boards](../reference/gpio.md).
+<!-- /only -->
+<!-- only esp32-s3 -->
+The pins each field accepts, and how to undo a bad map, are in [GPIO & boards](../reference/gpio.md).
+<!-- /only -->
+
+## Install with esptool
+
+Use this method if your browser has no Web Serial support or the browser flasher refuses your board.
+`esptool` is a command-line tool: install it with `pip install esptool`.
+
+!!! note "Command names in esptool 5"
+    The commands below use `read_flash`, `write_flash`, `erase_flash` and `flash_id`. esptool 5
+    also accepts `read-flash`, `write-flash` and so on, and prints a warning for the underscore
+    form.
+
+In all commands, `--port` is `COM5` on Windows, `/dev/ttyUSB0` on Linux and
+`/dev/cu.usbserial-*` on macOS. Use your own port.
+
+### Back up the original firmware
+
+Make the backup **before** you install AWTRIX NG. This needs esptool, even if you install from the
+browser.
+
+<!-- only esp32 -->
 ```bash
 python -m esptool --chip esp32 --port COM5 --baud 921600 read_flash 0x0 0x400000 tc001-stock-4mb.bin
 ```
 
-* `--port` is `COM5` on Windows, `/dev/ttyUSB0` on Linux, `/dev/cu.usbserial-*` on macOS.
-* It takes about a minute. If it stalls or errors, retry with `--baud 115200`.
-* The file must be exactly 4,194,304 bytes. Anything shorter is a failed read, not a backup.
+* It takes about a minute. If it stops or fails, try again with `--baud 115200`.
+* The file must be exactly 4,194,304 bytes. A smaller file is a failed read, not a backup.
+* This is for a 4 MB board such as the TC001. For 8 MB read `0x800000` bytes, for 16 MB
+  `0x1000000`.
 
-To go back to it later, write the same file to offset 0:
+To restore it later, write the same file to offset 0:
 
 ```bash
 python -m esptool --chip esp32 --port COM5 --baud 460800 write_flash 0x0 tc001-stock-4mb.bin
 ```
+<!-- /only -->
+<!-- only esp32-s3 -->
+```bash
+python -m esptool --chip esp32s3 --port COM5 --baud 921600 read_flash 0x0 0x1000000 stock-16mb.bin
+```
 
-That restores the original firmware **and** everything that was stored on it, Wi-Fi credentials
-included.
+* This is for a 16 MB board. For 8 MB, read `0x800000` bytes instead.
+* It takes a few minutes. If it stops or fails, try again with `--baud 115200`.
+* The file must be exactly as large as the flash: 16,777,216 bytes for 16 MB, 8,388,608 bytes for
+  8 MB. A smaller file is a failed read, not a backup.
 
----
+To restore it later, write the same file to offset 0:
 
-## 3. Pick your image
+```bash
+python -m esptool --chip esp32s3 --port COM5 --baud 460800 write_flash 0x0 stock-16mb.bin
+```
+<!-- /only -->
 
-The manual route, for a browser without Web Serial or a board the flasher refuses.
+This restores the original firmware **and** everything stored on it, Wi-Fi credentials included.
+
+### Pick your image
 
 Download `usb-awtrix-ng.zip` from the
 [releases page](https://github.com/Blueforcer/awtrix-ng/releases) and unpack it. It holds one
@@ -73,128 +143,133 @@ image per board and flash size:
 
 | File | For |
 |---|---|
-| `usb-awtrix-ng-4mb.bin` | 4 MB ESP32 boards, the Ulanzi TC001 among them |
+<!-- only esp32 -->
+| `usb-awtrix-ng-4mb.bin` | 4 MB ESP32 boards, including the Ulanzi TC001 |
 | `usb-awtrix-ng-8mb.bin`, `usb-awtrix-ng-16mb.bin` | ESP32 boards with more flash |
-| `usb-awtrix-ng-s3-octal-*.bin` | ESP32-S3 boards - start here |
-| `usb-awtrix-ng-s3-quad-*.bin` | ESP32-S3 boards whose PSRAM the one above does not find |
+<!-- /only -->
+<!-- only esp32-s3 -->
+| `usb-awtrix-ng-s3-octal-8mb.bin`, `usb-awtrix-ng-s3-octal-16mb.bin` | ESP32-S3 boards. Start with this one |
+| `usb-awtrix-ng-s3-quad-8mb.bin`, `usb-awtrix-ng-s3-quad-16mb.bin` | ESP32-S3 boards where the octal image finds no PSRAM |
+<!-- /only -->
 
-Take the one matching your board's flash size. If you are unsure how much it has, ask the chip:
+Take the image that matches your board's flash size. If you do not know the flash size, ask the
+chip:
 
 ```bash
 python -m esptool --port COM5 flash_id
 ```
 
+The `firmware-awtrix-ng*.bin` files on the same page are **not** for a USB install. They are for
+[updating a clock](../guides/updating.md) that already runs AWTRIX NG.
+
+<!-- only esp32-s3 -->
 ### Which of the two S3 images
 
-An S3 reaches its PSRAM over one of two wirings, quad or octal, and the image has to match. Nothing
-printed on the board tells you reliably which one it is: `R8` and `R2` describe the size, sellers
-use them loosely, and a board can carry its PSRAM as a separate chip that no tool sees from outside.
+PSRAM is extra memory on many ESP32-S3 boards. It is connected in one of two ways, quad or octal,
+and the image must match. The markings on the board (`R8`, `R2`) do not tell you reliably which
+one your board uses.
 
-So do not guess - **write the `-octal-` image first**. It starts on every S3, with or without PSRAM,
-and then the device itself answers the question: open its page and look at **PSRAM**.
+So do not guess:
 
-| What the device shows | What it means |
+1. Write the `-octal-` image first. It starts on every S3, with or without PSRAM.
+2. Open the clock's web UI and look at **PSRAM**.
+3. Compare with this table:
+
+| The clock shows | What to do |
 |---|---|
-| A size, usually 8 MB | Right image, nothing more to do |
-| `none`, and your board has no PSRAM | Right image. No radio on this board, that is the hardware |
-| `none`, but your board is advertised with PSRAM | It is wired quad - write the `-quad-` image |
+| A size, usually 8 MB | Nothing. You have the right image. |
+| `none`, and your board has no PSRAM | Nothing. You have the right image. Radio needs PSRAM, so this board has no radio. |
+| `none`, but your board is sold with PSRAM | Your board is wired quad. Write the `-quad-` image. |
 
-!!! warning "Only in that order"
-    The `-quad-` image does not start at all on a board that is not quad - the panel stays dark
-    until you write the other one over USB. The `-octal-` image always starts, at worst without
-    PSRAM. That is why it goes first.
+!!! warning "Always try octal first"
+    The `-quad-` image does not start at all on a board that is not quad. The display stays dark
+    until you write the other image over USB. The `-octal-` image always starts.
 
-The `firmware-awtrix-ng*.bin` assets on the same page are **not** for this - they are for
-[updating a device](../guides/updating.md) that already runs AWTRIX NG.
+<!-- /only -->
+### Write the image
 
-Older releases carried these images under other names: loose files on the releases page rather
-than one zip up to v1.0.15, with the S3 one called `usb-awtrix-ng-s3-<size>.bin` before it named
-its PSRAM type, and `factory-awtrix-ng-<size>.bin` up to v1.0.14. Same images.
-
----
-
-## 4. Flash it with esptool
-
+<!-- only esp32 -->
 ```bash
 python -m esptool --chip esp32 --port COM5 --baud 460800 write_flash 0x0 usb-awtrix-ng-4mb.bin
 ```
+<!-- /only -->
+<!-- only esp32-s3 -->
+```bash
+python -m esptool --chip esp32s3 --port COM5 --baud 460800 write_flash 0x0 usb-awtrix-ng-s3-octal-16mb.bin
+```
+<!-- /only -->
 
-Use `--chip esp32s3` for an S3 board. When it finishes it prints `Hash of data verified.` If it
-never gets that far, [When it goes wrong](#when-it-goes-wrong) lists what usually stops it.
+When the write is done, esptool prints `Hash of data verified.` If it stops earlier, see
+[When it goes wrong](#when-it-goes-wrong).
 
-!!! warning "Do not raise the baud rate to 921600"
-    A write at 921600 aborts partway on the USB-serial bridge a TC001 uses. The chip has been
-    erased by then, so it is left half-written and will not boot. Repeat the write at
-    `--baud 460800`.
+<!-- only esp32 -->
+!!! warning "Do not use 921600 baud for writing"
+    On a TC001 a write at 921600 baud stops partway. The chip is then half-written and does not
+    start. Repeat the write with `--baud 460800`.
 
-What this does to AWTRIX:
+<!-- /only -->
+What happens to your data:
 
-* **Settings and Wi-Fi credentials are erased.** It comes up as its own access point - continue at
-  [First boot](first-boot.md).
-* **Files you uploaded may or may not survive.** Icons, melodies, palettes and scripts live in a
-  separate area that the image does not overwrite, but a firmware whose storage area sits
-  elsewhere will not find them. Download anything you care about first, through the web UI, or
-  list what's on the device with [`GET /api/v1/files`](../reference/http.md#get-apiv1files) and
-  fetch each file from its `/ICONS/`, `/MELODIES/` or `/PALETTES/` path.
+* **Settings and Wi-Fi credentials are erased.** The clock opens its setup hotspot. Continue at
+  [Connect to Wi-Fi](first-boot.md).
+* **Your files may or may not survive.** Icons, melodies, palettes and scripts are stored in a
+  separate area that the image does not overwrite. A different firmware may not find them there.
+  Download anything you want to keep first in the web UI, or list the files with
+  [`GET /api/v1/files`](../reference/http.md#get-apiv1files) and download each one from its
+  `/ICONS/`, `/MELODIES/` or `/PALETTES/` path.
 
-For a genuinely blank chip, erase before you write:
+To start from a completely empty chip, erase it before you write:
 
+<!-- only esp32 -->
 ```bash
 python -m esptool --chip esp32 --port COM5 erase_flash
 ```
-
----
-
-## 5. Watch it boot
-
+<!-- /only -->
+<!-- only esp32-s3 -->
 ```bash
-pio device monitor
+python -m esptool --chip esp32s3 --port COM5 erase_flash
 ```
+<!-- /only -->
 
-Any serial monitor at **115200 baud** does. The line you are looking for is:
+### Watch it start
 
+Open any serial monitor at **115200 baud**. After a successful install you see a line like:
+
+<!-- only esp32 -->
 ```text
 boot: AWTRIX NG 1.0.12 on ESP32
 ```
+<!-- /only -->
+<!-- only esp32-s3 -->
+```text
+boot: AWTRIX NG 1.0.12 on ESP32-S3
+```
+<!-- /only -->
 
-Freshly flashed, AWTRIX has no Wi-Fi credentials, so after about 15 seconds it opens an access
-point - that is [First boot](first-boot.md). On later boots, once it joins your network, it
-scrolls `AWTRIX   <ip>` across the matrix in rainbow colours, so you can read the web UI's
-address off the panel without a cable.
-
----
-
-## 6. Set your wiring
-
-A fresh flash always comes up on the ESP32 default pin map, the wiring of the common 32×8 clocks.
-If that is your board, you are done - continue to [First boot](first-boot.md).
-
-Anything else needs its GPIO map set once, in the web UI under **System → GPIO**. The map is
-stored on AWTRIX and takes effect after a reboot. Send the **whole** map at once: changing one
-pin on its own is usually rejected for colliding with another.
-
-Presets for both boards, the pins each field accepts, and how to recover from a map you regret are
-in [GPIO & boards](../reference/gpio.md).
-
----
+A freshly installed clock has no Wi-Fi credentials and opens its setup hotspot. See
+[Connect to Wi-Fi](first-boot.md). Once it is on your network, it shows its IP address on the
+display every time it starts.
 
 ## When it goes wrong
 
 | Symptom | What to check |
 |---|---|
-| **No serial port found** | A charge-only USB cable, or a missing driver for your board's USB-to-serial bridge. The port has to exist before anything can talk to it. |
-| **The write aborts partway** | Lower the baud rate - `--baud 115200` completes where 460800 does not. The chip is left unbootable until a write succeeds, so just repeat it. |
-| **`A fatal error occurred: Failed to connect`** | Some boards need the boot button held while the tool connects. On a TC001 that is not required; on a DIY board it often is. |
-| **`Unable to verify flash chip connection`**, and the reason differs every attempt | esptool speeds the port up partway through connecting, and not every USB-to-serial bridge survives that. Add `--no-stub` to the command: it holds one speed the whole way, which is slower but gets through. The browser flasher retries that way on its own. |
-| **Boots, but the panel stays dark** | The wrong matrix pin for your hardware, or brightness at 0. |
-| **Boots, but the hardware misbehaves** | Watch the serial log. A stored pin map the chip cannot use is announced there, and AWTRIX falls back to the defaults for its chip. |
-
----
+| **No serial port found** | The USB cable may be charge-only, or the driver for your board's USB-to-serial chip is missing. |
+| **The write stops partway** | Lower the baud rate: `--baud 115200` works where 460800 does not. The clock does not start until a write succeeds, so just repeat it. |
+<!-- only esp32 -->
+| **`A fatal error occurred: Failed to connect`** | Hold the boot button while esptool connects. A TC001 does not need this. DIY boards often do. |
+<!-- /only -->
+<!-- only esp32-s3 -->
+| **`A fatal error occurred: Failed to connect`** | Hold the boot button while esptool connects. Many boards need this. |
+<!-- /only -->
+| **`Unable to verify flash chip connection`**, with a different reason each time | Add `--no-stub` to the command. It is slower but works with more USB-to-serial chips. The browser flasher retries this way by itself. |
+| **It starts, but the display stays dark** | The **LED data** pin does not match your hardware, or the brightness is 0. See [Set your wiring](#set-your-wiring). |
+| **It starts, but the hardware behaves strangely** | Watch the serial log. If the saved pin map cannot be used on this chip, the log says so and the clock uses the default pins for its chip. |
 
 ## Related
 
-* [First boot](first-boot.md) - the access point, and joining your Wi-Fi
-* [Finding AWTRIX](discovery.md) - mDNS and UDP discovery
-* [Updating firmware](../guides/updating.md) - reflashing a device that is already running
-* [GPIO & boards](../reference/gpio.md) - the complete pin map reference
-* [Building from source](../advanced/building.md) - build environments, partition tables, CI
+* [Connect to Wi-Fi](first-boot.md) - the setup hotspot, and joining your network
+* [Find your clock](discovery.md) - get its address
+* [Updating firmware](../guides/updating.md) - update a clock that already runs AWTRIX NG
+* [GPIO & boards](../reference/gpio.md) - all pin settings
+* [Building from source](../developers/building.md) - for developers who build the firmware themselves

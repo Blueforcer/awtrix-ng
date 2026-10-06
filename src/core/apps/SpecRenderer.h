@@ -7,6 +7,7 @@
 #include "core/render/Canvas.h"
 #include "core/render/Font.h"
 #include "core/render/ScrollResolver.h"
+#include "core/render/ScrollText.h"
 
 namespace awtrix {
 namespace render {
@@ -18,6 +19,9 @@ struct SpecRender {
   int iconGap = 0;
   // First column scrolling text may light; everything left of it belongs to the icon and its gap.
   int textClipLeft = 0;
+  int baseline = kTextBaseline;
+  // Text inside draw commands keeps the eight-row line, since their y is absolute.
+  int drawBaseline = kTextBaseline;
   int64_t nowMs = 0;
   float textX = 0;
   const ResolvedScroll* scroll = nullptr;

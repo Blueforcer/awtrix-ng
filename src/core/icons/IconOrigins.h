@@ -36,6 +36,8 @@ bool parseCollection(const std::string& json, std::vector<Record>& out);
 std::string serialize(const std::vector<Record>& records);
 Result handle(Backend& storage, const std::string& method, const std::string& body = {},
               const std::string& name = {});
+// The record of from, if any, now names to.
+Result rename(Backend& storage, const std::string& from, const std::string& to);
 // Restore after all assets, discarding references whose files do not exist.
 bool restore(Backend& storage, const std::string& json, std::string& error);
 

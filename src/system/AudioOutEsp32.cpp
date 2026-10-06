@@ -14,10 +14,13 @@
 #include <memory>
 #include <vector>
 
+#include "core/audio/Limiter.h"
 #include "core/audio/Mp3FileDecoder.h"
-#include "core/radio/PlaylistParser.h"
+#include "core/audio/StreamDecode.h"
+#include "core/audio/StreamInputBuffer.h"
+#include "core/radio/StationUrl.h"
+#include "core/radio/StreamPolicy.h"
 #include "core/sound/SoundMp3.h"
-#include "core/radio/RadioDisplay.h"
 #include "core/script/ScriptServices.h"
 #include "system/HeapCaps.h"
 #include "system/HeapProbe.h"
@@ -47,21 +50,29 @@ int64_t audibleLeadMs(int frameSamples, int rateHz) {
 
 constexpr std::size_t kNetworkChunkBytes = 1024;
 
-// Held in PSRAM, which is what makes 64 KB affordable against a bursty station.
-constexpr std::size_t kInputBufferBytes = 64 * 1024;
-// Without a preroll, playback starts and immediately stutters while the buffer fills.
-constexpr std::size_t kPrerollBytes = 16 * 1024;
-constexpr std::size_t kUndecodableAfterBytes = 32 * 1024;
 // Capped per pass so the loop keeps reading the socket; flat out here starves the input.
 constexpr int kFramesPerPass = 2;
-constexpr std::size_t kCompactAtBytes = 32 * 1024;
 
 constexpr int kMaxRedirects = 3;
 constexpr uint32_t kConnectTimeoutMs = 8000;
-constexpr uint32_t kReadTimeoutMs = 8000;
-constexpr uint32_t kBackoffMs[] = {2000, 5000, 15000};
 
 const char* kUserAgent = "AWTRIX-NG";
+
+// Songs render at 44.1 kHz with a song's full polyphony, in blocks of an MP3 frame: the spectrum
+// analysis runs once per block.
+constexpr uint32_t kSongRate = 44100;
+constexpr std::size_t kSongVoices = 24;
+constexpr int kSongBlockFrames = mp3::kMaxSamplesPerFrame;
+
+// The task notices a stop within a frame; the bound only matters for a wedged I2S driver.
+constexpr int kReleaseWaitMs = 500;
+constexpr int kReleasePollMs = 5;
+
+// A parsed song is mostly small note lists, each below the size plain malloc steers to PSRAM.
+void* allocateSong(std::size_t bytes) {
+  if (void* p = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)) return p;
+  return std::malloc(bytes);
+}
 
 }
 
@@ -87,6 +98,7 @@ AudioOutEsp32::AudioOutEsp32(CoreEngine& engine, int pinBclk, int pinLrclk, int 
       pinMclk_(pinMclk),
       pinAmpEnable_(pinAmpEnable) {
   lock_ = xSemaphoreCreateMutex();
+  synth::setSongMemory({allocateSong, heap_caps_free});
   // Driven low until the first stream installs the driver: floating clock lines make the
   // amplifier crackle, a still BCLK sends it to sleep.
   for (int pin : {pinBclk_, pinLrclk_, pinDout_, pinMclk_}) {
@@ -118,7 +130,7 @@ DispatchResult AudioOutEsp32::playStream(const std::string& url, const std::stri
                                          DispatchDetail& detail) {
   radio::Url parsed;
   if (!radio::parseUrl(url, parsed)) {
-    detail = {"url", "not a usable http or https URL"};
+    detail = {"url", "invalid URL"};
     return DispatchResult::ValidationError;
   }
 
@@ -126,7 +138,7 @@ DispatchResult AudioOutEsp32::playStream(const std::string& url, const std::stri
     const std::size_t free = heap_caps_get_free_size(kGuardHeapCaps);
     const std::size_t largest = heap_caps_get_largest_free_block(kGuardHeapCaps);
     if (!script::fetchFits(true, free, largest)) {
-      detail = {"url", "not enough free memory for a TLS connection right now"};
+      detail = {"url", "not enough memory for TLS"};
       return DispatchResult::Busy;
     }
   }
@@ -142,16 +154,26 @@ DispatchResult AudioOutEsp32::playStream(const std::string& url, const std::stri
   stopRequested_.store(false);
 
   if (!ensureTask()) {
-    detail = {"", "could not start the audio task"};
+    detail = {"", "audio task failed"};
     return DispatchResult::Failed;
   }
   return DispatchResult::Ok;
 }
 
-bool AudioOutEsp32::playMp3(const std::string& path) {
+bool AudioOutEsp32::checkSong(const std::string& text, std::string& error) {
+  const synth::ParseResult parsed = songs_.get(text);
+  if (!parsed.ok()) error = parsed.describe();
+  return parsed.ok();
+}
+
+bool AudioOutEsp32::playSongOnce(const std::string& text, sound::Group group) {
+  const synth::ParseResult parsed = songs_.get(text);
+  if (!parsed.ok()) return false;
   if (xSemaphoreTake(lock_, portMAX_DELAY) == pdTRUE) {
-    pendingMp3_ = path;
-    pendingMp3Name_ = sound::mp3NameFor(path);
+    pendingMp3_.clear();
+    pendingSong_ = parsed.song;
+    pendingGroup_ = group;
+    mp3Pending_.store(true);
     mp3Stop_.store(false);
     mp3Seq_.fetch_add(1);
     xSemaphoreGive(lock_);
@@ -159,17 +181,63 @@ bool AudioOutEsp32::playMp3(const std::string& path) {
   return ensureTask();
 }
 
+bool AudioOutEsp32::playMp3(const std::string& path, sound::Group group) {
+  if (xSemaphoreTake(lock_, portMAX_DELAY) == pdTRUE) {
+    pendingMp3_ = path;
+    pendingSong_.reset();
+    pendingGroup_ = group;
+    mp3Pending_.store(true);
+    mp3Stop_.store(false);
+    mp3Seq_.fetch_add(1);
+    xSemaphoreGive(lock_);
+  }
+  return ensureTask();
+}
+
+// A request the task has not taken yet is dropped too, so oneShotPlaying() does not wait for the
+// task to open a file only to close it again.
+void AudioOutEsp32::stopOneShot() {
+  if (xSemaphoreTake(lock_, portMAX_DELAY) == pdTRUE) {
+    pendingMp3_.clear();
+    pendingSong_.reset();
+    mp3Pending_.store(false);
+    xSemaphoreGive(lock_);
+  }
+  mp3Stop_.store(true);
+}
+
+// Runs on the loop, while the audio task may hold the file. A request the task has not taken yet
+// is dropped; the file it took is stopped, and the loop waits until the task has closed it.
+void AudioOutEsp32::release(const std::string& path) {
+  bool held = false;
+  if (xSemaphoreTake(lock_, portMAX_DELAY) == pdTRUE) {
+    if (sound::within(pendingMp3_, path)) {
+      pendingMp3_.clear();
+      mp3Pending_.store(false);
+    }
+    held = sound::within(openMp3_, path);
+    // A request still waiting ends the open file anyway; the stop flag would cut it short too.
+    if (held && mp3Seq_.load() == mp3SeenSeq_) mp3Stop_.store(true);
+    xSemaphoreGive(lock_);
+  }
+  for (int waited = 0; held && waited < kReleaseWaitMs; waited += kReleasePollMs) {
+    vTaskDelay(pdMS_TO_TICKS(kReleasePollMs));
+    if (xSemaphoreTake(lock_, portMAX_DELAY) != pdTRUE) continue;
+    held = sound::within(openMp3_, path);
+    xSemaphoreGive(lock_);
+  }
+  if (held) logf("MP3 %s still open after %d ms", path.c_str(), kReleaseWaitMs);
+}
+
 void AudioOutEsp32::stopStream() {
   stopRequested_.store(true);
   playing_.store(false);
 }
 
-void AudioOutEsp32::setSoundVolume(uint8_t percent) {
-  soundVolume_.store(percent > 100 ? 100 : percent);
-}
-
-void AudioOutEsp32::setStreamVolume(uint8_t percent) {
-  streamVolume_.store(percent > 100 ? 100 : percent);
+void AudioOutEsp32::setVolumes(const sound::Volumes& volumes) {
+  alertVolume_.store(volumes.alert);
+  appVolume_.store(volumes.app);
+  radioVolume_.store(volumes.radio);
 }
 
 void AudioOutEsp32::publishTitle(const std::string& title) {
@@ -186,31 +254,14 @@ void AudioOutEsp32::publishError(const std::string& message) {
   handoffSeq_.fetch_add(1);
 }
 
-void AudioOutEsp32::publishMp3Started(const std::string& name) {
-  if (xSemaphoreTake(lock_, portMAX_DELAY) != pdTRUE) return;
-  pendingMp3Started_ = name;
-  pendingMp3Ended_ = false;
-  xSemaphoreGive(lock_);
-  handoffSeq_.fetch_add(1);
-}
-
-void AudioOutEsp32::publishMp3Ended() {
-  if (xSemaphoreTake(lock_, portMAX_DELAY) != pdTRUE) return;
-  pendingMp3Ended_ = true;
-  xSemaphoreGive(lock_);
-  handoffSeq_.fetch_add(1);
-}
-
 // The audio task parks state here rather than touch the engine.
-void AudioOutEsp32::tick(int64_t nowMs) {
+void AudioOutEsp32::tick(int64_t) {
   const uint32_t seq = handoffSeq_.load();
   if (seq == seenSeq_) return;
   seenSeq_ = seq;
 
   std::string title;
   std::string error;
-  std::string mp3Started;
-  bool mp3Ended = false;
   // Never block the main loop on the audio task's lock; rewind so the next tick retries.
   if (xSemaphoreTake(lock_, 0) != pdTRUE) {
     seenSeq_ = seq - 1;
@@ -218,35 +269,21 @@ void AudioOutEsp32::tick(int64_t nowMs) {
   }
   title.swap(pendingTitle_);
   error.swap(pendingError_);
-  mp3Started.swap(pendingMp3Started_);
-  mp3Ended = pendingMp3Ended_;
-  pendingMp3Ended_ = false;
   xSemaphoreGive(lock_);
 
   RuntimeState& runtime = engine_.state().runtime();
 
-  if (!mp3Started.empty() || mp3Ended) {
-    runtime.mp3Playing = !mp3Ended && !mp3Started.empty();
-    runtime.mp3Name = runtime.mp3Playing ? mp3Started : "";
-    engine_.state().emit(StateEvent::RadioChanged);
-  }
-
   if (!error.empty()) {
     runtime.radioError = error;
     runtime.radioPlaying = false;
-    engine_.state().emit(StateEvent::RadioChanged);
+    engine_.state().emit(StateEvent::AudioChanged);
     return;
   }
   if (title.empty()) return;
 
   runtime.radioTitle = title;
   runtime.radioPlaying = playing_.load();
-  engine_.state().emit(StateEvent::RadioChanged);
-
-  if (!engine_.state().settings().radioMeta) return;
-  AppSpec spec;
-  if (radio::buildAnnouncement(title, radio::Announcement::Title, spec))
-    engine_.notifications().push(spec, nowMs);
+  engine_.state().emit(StateEvent::AudioChanged);
 }
 
 void AudioOutEsp32::taskEntry(void* self) {
@@ -288,11 +325,17 @@ bool AudioOutEsp32::writeDecodedFrame(const mp3::DecodeResult& result, int16_t* 
       stats_.wanted(monotonicMs()) &&
       analyzer_.analyze(pcm, result.samples, result.channels, result.sampleRateHz, stats);
 
-  const int gain = mp3Playing_.load() ? soundVolume_.load() : streamVolume_.load();
-  if (gain < 100) {
+  uint8_t volume = radioVolume_.load();
+  if (mp3Playing_.load())
+    volume = mp3Group_ == sound::Group::App ? appVolume_.load() : alertVolume_.load();
+  if (volume != scaledVolume_) {
+    scaledVolume_ = volume;
+    scale_ = sound::volumeGain(volume, 100);
+  }
+  if (scale_ < sound::kVolumeUnity) {
     const int count = result.samples * result.channels;
     for (int i = 0; i < count; ++i)
-      pcm[i] = static_cast<int16_t>((static_cast<int32_t>(pcm[i]) * gain) / 100);
+      pcm[i] = static_cast<int16_t>((static_cast<int32_t>(pcm[i]) * scale_) >> 15);
   }
   // Blocks until the DMA queue has room, which paces the whole loop to real time.
   std::size_t written = 0;
@@ -315,19 +358,18 @@ int readMp3Bytes(void* ctx, uint8_t* dst, std::size_t max) {
 }
 }
 
-void AudioOutEsp32::playMp3File(const std::string& path, const std::string& name, int16_t* pcm) {
+void AudioOutEsp32::playMp3File(const std::string& path, int16_t* pcm) {
   File file = LittleFS.open(path.c_str(), "r");
   if (!file) {
+    mp3Playing_.store(false);
     logf("MP3 %s disappeared before playback", path.c_str());
     return;
   }
 
-  publishMp3Started(name);
-  mp3Playing_.store(true);
   decoder_.reset();
   mp3::Mp3FileDecoder walk(decoder_);
   mp3::DecodeResult result;
-  const uint32_t startSeq = mp3Seq_.load();
+  const uint32_t startSeq = mp3SeenSeq_;
   bool decodeFailed = false;
   bool i2sFailed = false;
   bool finished = false;
@@ -357,20 +399,58 @@ void AudioOutEsp32::playMp3File(const std::string& path, const std::string& name
   // would repeat for the whole reconnect.
   closeStream();
   mp3Playing_.store(false);
-  if (decodeFailed) logf("MP3 %s is not playable MPEG-1 Layer III audio", path.c_str());
+  if (decodeFailed) logf("MP3 %s is not audio this device can play", path.c_str());
   if (i2sFailed) logf("could not start the I2S output for MP3 %s", path.c_str());
-  publishMp3Ended();
+}
+
+void AudioOutEsp32::playSongPcm(std::shared_ptr<const synth::Song> song, int16_t* pcm) {
+  std::unique_ptr<synth::Player> player(new synth::Player(kSongRate, kSongVoices, true));
+  std::vector<float> block(kSongBlockFrames);
+  std::vector<int32_t> sum(kSongBlockFrames);
+  audio::Limiter limiter(kSongRate, kSongBlockFrames);
+  player->play(std::move(song));
+
+  mp3::DecodeResult result;
+  result.status = mp3::DecodeStatus::Ok;
+  result.sampleRateHz = static_cast<int>(kSongRate);
+  result.channels = 1;
+  result.samples = kSongBlockFrames;
+  const uint32_t startSeq = mp3SeenSeq_;
+  bool i2sFailed = false;
+  bool finished = false;
+
+  while (!mp3Stop_.load() && mp3Seq_.load() == startSeq) {
+    if (player->idle()) {
+      finished = true;
+      break;
+    }
+    player->render(block.data(), block.size());
+    for (int i = 0; i < kSongBlockFrames; ++i) sum[i] = static_cast<int32_t>(block[i] * 32767.0f);
+    limiter.apply(sum.data(), pcm, kSongBlockFrames);
+    if (!writeDecodedFrame(result, pcm)) {
+      i2sFailed = true;
+      break;
+    }
+  }
+
+  player.reset();
+  if (finished && i2sStarted_ && sampleRateHz_ > 0)
+    vTaskDelay(pdMS_TO_TICKS((kDmaBufferCount * kDmaBufferFrames * 1000) / sampleRateHz_));
+  closeStream();
+  mp3Playing_.store(false);
+  if (i2sFailed) logf("could not start the I2S output for a song");
 }
 
 // The audio task: core 1, priority 2, never returns. Nothing here may touch the engine.
 void AudioOutEsp32::run() {
-  std::vector<uint8_t> input;
-  input.reserve(kInputBufferBytes + kCompactAtBytes);
+  audio::StreamInputBuffer input(radio::kInputBufferBytes);
   std::vector<int16_t> pcm(mp3::kMaxPcmPerFrame);
   std::unique_ptr<WiFiClient> plain;
   std::unique_ptr<WiFiClientSecure> secure;
   Client* client = nullptr;
   int attempt = 0;
+  radio::StationUrl station;
+  uint32_t stationSeq = 0;
 
   auto waitMs = [this](uint32_t ms) {
     for (uint32_t waited = 0; waited < ms && mp3Seq_.load() == mp3SeenSeq_; waited += 100)
@@ -380,14 +460,28 @@ void AudioOutEsp32::run() {
   for (;;) {
     if (mp3Seq_.load() != mp3SeenSeq_) {
       std::string path;
-      std::string name;
+      std::shared_ptr<const synth::Song> song;
+      // Taken under the lock that release() checks, so no file is opened behind its back.
       if (xSemaphoreTake(lock_, portMAX_DELAY) == pdTRUE) {
         path = pendingMp3_;
-        name = pendingMp3Name_;
+        song = std::move(pendingSong_);
+        pendingSong_.reset();
+        openMp3_ = path;
+        mp3Group_ = pendingGroup_;
         mp3SeenSeq_ = mp3Seq_.load();
+        // Pending turns into playing under the lock, so oneShotPlaying() never drops in between.
+        if (!path.empty() || song) mp3Playing_.store(true);
+        mp3Pending_.store(false);
         xSemaphoreGive(lock_);
       }
-      if (!path.empty()) playMp3File(path, name, pcm.data());
+      if (song)
+        playSongPcm(std::move(song), pcm.data());
+      else if (!path.empty())
+        playMp3File(path, pcm.data());
+      if (xSemaphoreTake(lock_, portMAX_DELAY) == pdTRUE) {
+        openMp3_.clear();
+        xSemaphoreGive(lock_);
+      }
       continue;
     }
 
@@ -399,7 +493,8 @@ void AudioOutEsp32::run() {
       xSemaphoreGive(lock_);
     }
 
-    if (stopRequested_.load() || url.empty()) {
+    // Held, the station waits out a repeating one-shot instead of reconnecting in every gap.
+    if (stopRequested_.load() || url.empty() || streamHeld_.load()) {
       closeStream();
       plain.reset();
       secure.reset();
@@ -409,8 +504,12 @@ void AudioOutEsp32::run() {
       continue;
     }
 
+    if (seq != stationSeq) {
+      station = radio::StationUrl(url);
+      stationSeq = seq;
+    }
     radio::Url target;
-    std::string current = url;
+    std::string current = station.current();
     radio::ResponseHead head;
     bool connected = false;
 
@@ -440,7 +539,7 @@ void AudioOutEsp32::run() {
 
       std::string raw;
       const uint32_t started = millis();
-      while (millis() - started < kReadTimeoutMs && raw.find("\r\n\r\n") == std::string::npos &&
+      while (millis() - started < radio::kReadTimeoutMs && raw.find("\r\n\r\n") == std::string::npos &&
              raw.size() < 4096) {
         if (!client->available()) {
           vTaskDelay(pdMS_TO_TICKS(10));
@@ -475,18 +574,18 @@ void AudioOutEsp32::run() {
     }
 
     if (!connected) {
-      const uint32_t wait = kBackoffMs[attempt < 3 ? attempt : 2];
+      station.restart();
+      const uint32_t wait = radio::kBackoffMs[attempt < 3 ? attempt : 2];
       if (attempt < 3) ++attempt;
-      publishError("could not connect to the station");
+      publishError("connect failed");
       waitMs(wait);
       continue;
     }
 
-    if (head.contentType.find("audio/x-mpegurl") != std::string::npos ||
-        head.contentType.find("audio/x-scpls") != std::string::npos) {
+    if (radio::isPlaylistType(head.contentType)) {
       std::string body;
       const uint32_t started = millis();
-      while (millis() - started < kReadTimeoutMs && body.size() < 4096 && client->connected()) {
+      while (millis() - started < radio::kReadTimeoutMs && body.size() < radio::kMaxPlaylistBytes && client->connected()) {
         if (!client->available()) {
           vTaskDelay(pdMS_TO_TICKS(10));
           continue;
@@ -494,15 +593,9 @@ void AudioOutEsp32::run() {
         body.push_back(static_cast<char>(client->read()));
       }
       client->stop();
-      std::string resolved;
-      if (radio::parsePlaylist(body, resolved)) {
-        if (xSemaphoreTake(lock_, portMAX_DELAY) == pdTRUE) {
-          pendingUrl_ = resolved;
-          xSemaphoreGive(lock_);
-        }
-      } else {
-        publishError("the station URL is a playlist with no usable entry");
-        waitMs(kBackoffMs[2]);
+      if (!station.follow(body)) {
+        publishError("empty playlist");
+        waitMs(radio::kBackoffMs[2]);
       }
       continue;
     }
@@ -517,7 +610,6 @@ void AudioOutEsp32::run() {
     tracker_.reset();
     decoder_.reset();
     input.clear();
-    std::size_t consumed = 0;
     playing_.store(true);
 
     uint8_t chunk[kNetworkChunkBytes];
@@ -538,12 +630,10 @@ void AudioOutEsp32::run() {
              static_cast<unsigned>(w.count), static_cast<unsigned>(starvedMs_.load()));
       }
 #endif
-      // A read is cut to the room left, not to the chunk size: overshooting kInputBufferBytes could
-      // only be undone by dropping compressed bytes the decoder has not seen, which punches holes
-      // into the bitstream. What does not fit stays in the socket.
+      // Compressed bytes that do not fit in the input buffer stay in the socket.
       bool received = false;
-      while (input.size() - consumed < kInputBufferBytes) {
-        const std::size_t room = kInputBufferBytes - (input.size() - consumed);
+      while (input.room()) {
+        const std::size_t room = input.room();
         const int available = client->available();
         if (available <= 0) break;
         int want = available > static_cast<int>(sizeof(chunk)) ? static_cast<int>(sizeof(chunk))
@@ -558,7 +648,8 @@ void AudioOutEsp32::run() {
         splitter_.feed(
             chunk, static_cast<std::size_t>(got),
             [&](const uint8_t* data, std::size_t bytes) {
-              input.insert(input.end(), data, data + bytes);
+              // The socket read is bounded by room; splitting out metadata can only reduce bytes.
+              input.push(data, bytes);
             },
             [&](const std::string& block) {
               if (tracker_.update(block)) publishTitle(tracker_.title());
@@ -566,8 +657,8 @@ void AudioOutEsp32::run() {
       }
 
       if (!received) {
-        if (!client->connected() || millis() - lastData > kReadTimeoutMs) break;
-        if (input.size() == consumed) {
+        if (!client->connected() || millis() - lastData > radio::kReadTimeoutMs) break;
+        if (input.size() == 0) {
           starvedMs_.fetch_add(5);
           vTaskDelay(pdMS_TO_TICKS(5));
           continue;
@@ -575,34 +666,28 @@ void AudioOutEsp32::run() {
       }
 
       if (!prerolled) {
-        if (input.size() - consumed < kPrerollBytes) {
+        if (input.size() < radio::kPrerollBytes) {
           if (!received) vTaskDelay(pdMS_TO_TICKS(5));
           continue;
         }
         prerolled = true;
       }
 
-      std::size_t offset = consumed;
-      int decodedFrames = 0;
-      while (offset < input.size() && decodedFrames < kFramesPerPass) {
+      const auto decode = [&](const audio::StreamInputBuffer::View& encoded) {
         const int64_t decodeStart = esp_timer_get_time();
-        const mp3::DecodeResult result =
-            decoder_.decode(input.data() + offset, input.size() - offset, pcm.data());
+        const mp3::DecodeResult result = decoder_.decode(encoded.data, encoded.size, pcm.data());
         if (result.status == mp3::DecodeStatus::Ok) {
           const uint32_t took = static_cast<uint32_t>(esp_timer_get_time() - decodeStart);
           const uint32_t previous = decodeUs_.load();
           decodeUs_.store(previous ? (previous * 7 + took) / 8 : took);
         }
-        if (result.bytesConsumed == 0) break;
-        offset += result.bytesConsumed;
-        if (result.status == mp3::DecodeStatus::NeedMoreData) break;
-        if (result.status != mp3::DecodeStatus::Ok) continue;
-        ++decodedFrames;
-
+        return result;
+      };
+      const auto play = [&](const mp3::DecodeResult& result) {
         if (!writeDecodedFrame(result, pcm.data())) {
-          publishError("could not start the I2S output");
+          publishError("I2S failed");
           stopRequested_.store(true);
-          break;
+          return false;
         }
 
         if (playStartMs == 0) playStartMs = millis();
@@ -620,19 +705,12 @@ void AudioOutEsp32::run() {
           playStartMs = millis();
           deliveredSamples = 0;
         }
-      }
-      if (offset > consumed) {
-        decodedAnything = true;
-        consumed = offset;
-      }
-      // Dropped in batches; erasing after every frame would memmove tens of kilobytes per frame.
-      if (consumed >= kCompactAtBytes) {
-        input.erase(input.begin(), input.begin() + consumed);
-        consumed = 0;
-      }
-      bufferBytes_.store(static_cast<uint32_t>(input.size() - consumed));
-      if (!decodedAnything && bytesSeen > kUndecodableAfterBytes) {
-        publishError("this stream is not MPEG-1 Layer III audio");
+        return true;
+      };
+      if (audio::decodeFrames(input, kFramesPerPass, decode, play)) decodedAnything = true;
+      bufferBytes_.store(static_cast<uint32_t>(input.size()));
+      if (!decodedAnything && bytesSeen > radio::kUndecodableAfterBytes) {
+        publishError("not playable MP3");
         stopRequested_.store(true);
       }
     }
@@ -646,11 +724,12 @@ void AudioOutEsp32::run() {
 #endif
 
     const bool switched = urlSeq_.load() != seq || mp3Seq_.load() != mp3SeenSeq_;
+    station.restart();
     closeStream();
     if (client) client->stop();
     playing_.store(false);
     if (!stopRequested_.load() && !switched) {
-      waitMs(kBackoffMs[0]);
+      waitMs(radio::kBackoffMs[0]);
     }
   }
 }

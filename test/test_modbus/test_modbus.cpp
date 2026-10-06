@@ -3,7 +3,7 @@
 #include <cstring>
 #include <vector>
 #include "core/script/ModbusTcp.h"
-#include "core/script/ScriptHeapTesting.h"
+#include "platform/linux/host/HostScriptHeap.h"
 
 using namespace awtrix::script;
 void setUp() {}
@@ -121,6 +121,72 @@ static void test_fragmentation_timeout_disconnect_and_oversize() {
   TEST_ASSERT_FALSE(modbus::exchange(c, r, 1, clock, pause).ok);
 }
 
+static void test_diagnostics_preserve_callback_status() {
+  modbus::Read r;
+  const char* reason = nullptr;
+  int64_t now = 0;
+  auto clock = [&] { return now; };
+  auto pause = [&] { now += 10; };
+  Client c;
+  auto result = modbus::exchange(c, r, 42, clock, pause, &reason);
+  TEST_ASSERT_EQUAL(0, result.status);
+  TEST_ASSERT_EQUAL_STRING("response timeout", reason);
+  c.open = false;
+  result = modbus::exchange(c, r, 42, clock, pause, &reason);
+  TEST_ASSERT_EQUAL(0, result.status);
+  TEST_ASSERT_EQUAL_STRING("closed without response", reason);
+  c.writable = false;
+  modbus::exchange(c, r, 42, clock, pause, &reason);
+  TEST_ASSERT_EQUAL_STRING("send failed", reason);
+  c = Client{{0, 42, 0}};
+  modbus::exchange(c, r, 42, clock, pause, &reason);
+  TEST_ASSERT_EQUAL_STRING("incomplete response timeout", reason);
+  c.offset = 0;
+  c.open = false;
+  modbus::exchange(c, r, 42, clock, pause, &reason);
+  TEST_ASSERT_EQUAL_STRING("connection closed during response", reason);
+  uint8_t frame[] = {0, 41, 0, 0, 0, 5, 1, 3, 2, 0, 42};
+  result = modbus::decode(r, 42, frame, sizeof(frame), &reason);
+  TEST_ASSERT_EQUAL(0, result.status);
+  TEST_ASSERT_EQUAL_STRING("transaction mismatch", reason);
+  frame[1] = 42;
+  result = modbus::decode(r, 42, frame, sizeof(frame), &reason);
+  TEST_ASSERT_TRUE(result.ok);
+  TEST_ASSERT_NULL(reason);
+  heap::testing::setGrowthBudget(0);
+  modbus::decode(r, 42, frame, sizeof(frame), &reason);
+  TEST_ASSERT_EQUAL_STRING("not enough memory", reason);
+  const uint8_t exception[] = {0, 42, 0, 0, 0, 3, 1, 0x83, 2};
+  result = modbus::decode(r, 42, exception, sizeof(exception), &reason);
+  TEST_ASSERT_EQUAL(2, result.status);
+  TEST_ASSERT_EQUAL_STRING("illegal register address/range", reason);
+}
+
+static void test_failure_report_names_reason_code_and_request() {
+  modbus::Read r;
+  r.host = "10.0.0.5";
+  r.port = 1502;
+  r.unit = 3;
+  r.function = 4;
+  r.address = 100;
+  r.count = 2;
+  for (const auto& report : {
+           modbus::failureReport(r, "response timeout", 0, 2003),
+           modbus::failureReport(r, "illegal register address/range", 2, 15),
+           modbus::failureReport(r, nullptr, 0, 0)}) {
+    for (const char* detail : {"reg=100", "count=2", "unit=3", "fc=4", "host=10.0.0.5:1502"})
+      TEST_ASSERT_NOT_NULL(strstr(report.c_str(), detail));
+  }
+  const auto timeout = modbus::failureReport(r, "response timeout", 0, 2003);
+  TEST_ASSERT_NOT_NULL(strstr(timeout.c_str(), "response timeout"));
+  TEST_ASSERT_NOT_NULL(strstr(timeout.c_str(), "2003"));
+  const auto exception = modbus::failureReport(r, "custom device fault", 2, 15);
+  TEST_ASSERT_NOT_NULL(strstr(exception.c_str(), "custom device fault"));
+  TEST_ASSERT_NOT_NULL(strstr(exception.c_str(), "2"));
+  TEST_ASSERT_NOT_NULL(strstr(exception.c_str(), "15"));
+
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_endpoints_and_limits);
@@ -130,5 +196,7 @@ int main() {
   RUN_TEST(test_low_memory_does_not_collect_a_response);
   RUN_TEST(test_bits_and_maximum_register_response);
   RUN_TEST(test_fragmentation_timeout_disconnect_and_oversize);
+  RUN_TEST(test_diagnostics_preserve_callback_status);
+  RUN_TEST(test_failure_report_names_reason_code_and_request);
   return UNITY_END();
 }

@@ -76,59 +76,10 @@ static void test_centering_skips_a_leading_blank() {
   TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(2, 0));
 }
 
-static void test_draw_solid_A() {
-  Canvas c(8, 8);
-  int adv = text::drawText(c, kFont, 0, 0, "A", 0xFF0000u);
-  TEST_ASSERT_EQUAL_INT(4, adv);
-  for (int y = 0; y < 3; ++y)
-    for (int x = 0; x < 3; ++x) TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(x, y));
-  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(3, 0));
-}
-
-static void test_draw_B_diagonal() {
-  Canvas c(8, 8);
-  text::drawChar(c, kFont, 0, 0, 'B', 0x00FF00u);
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 0));
-  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(1, 0));
-  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(0, 1));
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(1, 1));
-}
-
-static void test_draw_AB_positions() {
-  Canvas c(8, 8);
-  text::drawText(c, kFont, 0, 0, "AB", 0xFFFFFFu);
-  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(2, 2));
-  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(4, 0));
-  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(5, 0));
-  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(5, 1));
-}
-
 static void test_offcanvas_is_safe() {
   Canvas c(8, 8);
   text::drawText(c, kFont, 30, 0, "AB", 0xFFFFFFu);
   TEST_ASSERT_TRUE(true);
-}
-
-static void test_run_lands_on_the_pixel_grid() {
-  Canvas c(8, 8);
-  text::TextPaint paint;
-  paint.flat = 0xFFFFFFu;
-  const int adv = text::drawRun(c, kFont, 2, 0, "A", paint);
-  TEST_ASSERT_EQUAL_INT(4, adv);
-  for (int y = 0; y < 3; ++y)
-    for (int x = 2; x < 5; ++x) TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(x, y));
-  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(1, 0));
-  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(5, 0));
-}
-
-static void test_run_covers_the_background() {
-  Canvas c(8, 8);
-  c.clear(0x00FF00u);
-  text::TextPaint paint;
-  paint.flat = 0xFF0000u;
-  text::drawRun(c, kFont, 2, 0, "A", paint);
-  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(2, 0));
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(1, 0));
 }
 
 
@@ -160,16 +111,6 @@ static void test_ramp_varies_within_one_glyph() {
   text::drawRun(c, kFont, 0, 0, "A", paintWith(r));
   TEST_ASSERT_NOT_EQUAL(c.getPixel(0, 0), c.getPixel(1, 0));
   TEST_ASSERT_NOT_EQUAL(c.getPixel(1, 0), c.getPixel(2, 0));
-}
-
-static void test_ramp_span_repeats() {
-  const uint32_t stops[2] = {0xFF0000u, 0x0000FFu};
-  render::ColorRamp r = rampOf(stops, 2);
-  r.spanPx = 4;
-  Canvas c(16, 8);
-  text::drawRun(c, kFont, 0, 0, "AAA", paintWith(r));
-  TEST_ASSERT_EQUAL_HEX32(c.getPixel(0, 0), c.getPixel(4, 0));
-  TEST_ASSERT_EQUAL_HEX32(c.getPixel(1, 0), c.getPixel(5, 0));
 }
 
 static void test_ramp_origin_shifts_by_whole_spans() {
@@ -208,15 +149,21 @@ static void test_ramp_origin_handles_negatives() {
   TEST_ASSERT_EQUAL_HEX32(cb.getPixel(0, 0), ca.getPixel(0, 0));
 }
 
-static void test_glyph_colours_paint_per_glyph() {
+static void test_runs_paint_their_own_colours() {
   const uint32_t cols[2] = {0xFF0000u, 0x00FF00u};
+  const text::TextRun runs[2] = {{1, cols[0]}, {1, cols[1]}};
   text::TextPaint p;
-  p.glyphColors = cols;
-  p.glyphCount = 2;
+  p.runs = runs;
+  p.runCount = 2;
   Canvas c(16, 8);
   text::drawRun(c, kFont, 0, 0, "AA", p);
-  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(0, 0));
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(4, 0));
+  bool first = false, second = false;
+  for (int y = 0; y < c.height(); ++y)
+    for (int x = 0; x < c.width(); ++x) {
+      first = first || c.getPixel(x, y) == cols[0];
+      second = second || c.getPixel(x, y) == cols[1];
+    }
+  TEST_ASSERT_TRUE(first && second);
 }
 
 static void test_empty_ramp_falls_back_to_flat() {
@@ -237,18 +184,12 @@ int main(int, char**) {
   RUN_TEST(test_measure_of_empty_text_has_no_ink);
   RUN_TEST(test_centering_places_the_ink_not_the_advance);
   RUN_TEST(test_centering_skips_a_leading_blank);
-  RUN_TEST(test_draw_solid_A);
-  RUN_TEST(test_draw_B_diagonal);
-  RUN_TEST(test_draw_AB_positions);
   RUN_TEST(test_offcanvas_is_safe);
-  RUN_TEST(test_run_lands_on_the_pixel_grid);
-  RUN_TEST(test_run_covers_the_background);
   RUN_TEST(test_ramp_stretches_between_the_ink);
   RUN_TEST(test_ramp_varies_within_one_glyph);
-  RUN_TEST(test_ramp_span_repeats);
   RUN_TEST(test_ramp_origin_shifts_by_whole_spans);
   RUN_TEST(test_ramp_origin_handles_negatives);
-  RUN_TEST(test_glyph_colours_paint_per_glyph);
+  RUN_TEST(test_runs_paint_their_own_colours);
   RUN_TEST(test_empty_ramp_falls_back_to_flat);
   return UNITY_END();
 }

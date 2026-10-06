@@ -10,3 +10,5 @@
 *.ico binary
 *.woff binary
 *.woff2 binary
+*.atts binary
+*.expect binary

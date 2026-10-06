@@ -4,20 +4,19 @@
 
 #include "core/Command.h"
 #include "core/CoreEngine.h"
+#include "persistence/DocumentFile.h"
 
 namespace awtrix {
 namespace radiostore {
 
 namespace {
 constexpr const char* kPath = "/radio.json";
+bool unsaved = false;
 }
 
-void save(const std::string& json) {
-  File f = LittleFS.open(kPath, "w");
-  if (!f) return;
-  f.print(json.c_str());
-  f.close();
-}
+bool pending() { return unsaved; }
+
+void save(const std::string& json) { unsaved = !document::write(kPath, json); }
 
 void load(CoreEngine& engine) {
   File f = LittleFS.open(kPath, "r");

@@ -1,0 +1,62 @@
+name: Experimental ARM userspace
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - firmware/buildroot/**
+      - tools/system/**
+      - .github/workflows/system-build.yml
+
+permissions:
+  contents: read
+
+jobs:
+  arm-userspace:
+    name: Cross-build, emulated contracts and provenance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      AWTRIX_WORK: ${{ github.workspace }}/../awtrix-armv7-build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install Linux build and contract tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git rsync patch bc bison flex file unzip cpio wget xz-utils openssl qemu-user mosquitto
+      - name: Check offline tooling
+        run: python -m unittest discover -s tools/system -p 'test_*.py' -v
+      - name: Freeze sources and cross-build userspace
+        run: |
+          python tools/system/build.py prepare --work "$AWTRIX_WORK" --revision HEAD
+          python tools/system/build.py build --work "$AWTRIX_WORK" --jobs 4
+      - name: Test the actual ARM application and update verifier under QEMU
+        run: |
+          python tools/system/run_arm_contracts.py --work "$AWTRIX_WORK"
+      - name: Collect licenses, sources and component inventory
+        run: |
+          python tools/system/build.py legal-info --work "$AWTRIX_WORK"
+          python tools/system/qualify.py --work "$AWTRIX_WORK"
+      - name: Verify that experimental userspace cannot pass public release gates
+        run: |
+          set +e
+          python tools/system/qualify.py --work "$AWTRIX_WORK" --public
+          result=$?
+          set -e
+          test "$result" -eq 2
+      - name: Bundle development evidence
+        run: |
+          tar -C "$AWTRIX_WORK" -czf arm-userspace-development.tar.gz \
+            build-result.json inputs.json arm-contracts.json output/.config output/images/rootfs.tar \
+            output/qualification output/legal-info
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: arm-userspace-development-not-tc002-firmware
+          path: arm-userspace-development.tar.gz
+          if-no-files-found: error
+          retention-days: 14

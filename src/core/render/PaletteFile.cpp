@@ -4,6 +4,7 @@
 #include <cstdlib>
 
 #include "core/render/ColorRamp.h"
+#include "core/StrCase.h"
 
 namespace awtrix {
 namespace render {
@@ -16,6 +17,28 @@ bool isHex(char c) {
   return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
+}
+
+bool loadPaletteFile(const std::string& name, Palette& out, PaletteRead read, PaletteNames forEachName) {
+  if (name.find("..") != std::string::npos || name.find('/') != std::string::npos) return false;
+  std::string text;
+  if (!read(name + ".txt", text)) {
+    struct Lookup {
+      const std::string& name;
+      std::string& text;
+      PaletteRead read;
+      bool found = false;
+    } lookup{name, text, read};
+    forEachName({&lookup, [](void* context, std::string_view leaf) {
+      auto& lookup = *static_cast<Lookup*>(context);
+      if (leaf.size() <= 4 || !strcase::equalsIgnoreCase(leaf.substr(leaf.size() - 4), ".txt") ||
+          !strcase::equalsIgnoreCase(leaf.substr(0, leaf.size() - 4), lookup.name)) return false;
+      lookup.found = lookup.read(std::string(leaf), lookup.text);
+      return lookup.found;
+    }});
+    if (!lookup.found) return false;
+  }
+  return parsePaletteFile(text, out);
 }
 
 bool parsePaletteFile(const std::string& text, Palette& out) {

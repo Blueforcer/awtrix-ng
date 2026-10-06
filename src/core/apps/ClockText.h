@@ -33,4 +33,9 @@ uint32_t scaleColor(uint32_t color, float level);
 
 std::string buildDateText(const Settings& s, int weekday, int mday, int month, int year);
 
+// English three-letter names as the date text uses them; "?" outside the range. weekday counts
+// from 0 = Sunday, month from 1 = January.
+const char* weekdayShortName(int weekday);
+const char* monthShortName(int month);
+
 }

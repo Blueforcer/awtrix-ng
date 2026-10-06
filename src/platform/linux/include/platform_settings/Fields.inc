@@ -1,0 +1,5 @@
+SETTING_ENUM(clockFace, kClockFaceSheet, kClockFaceNames, kClockFaceCount)
+SETTING_ENUM(musicSource, 0, kMusicSourceNames, 3)
+SETTING_BOOL(calendarAnimation, true)
+SETTING_BOOL(bootSound, true)
+SETTING_BOOL(enlargeApps, true)

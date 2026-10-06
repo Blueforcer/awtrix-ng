@@ -22,7 +22,7 @@ constexpr std::size_t kMaxVfsPathBytes = 256;
 
 std::string vfsPath(const std::string& path) { return std::string(kMountPoint) + path; }
 
-int openRead(const std::string& path) {
+int openRead(std::string_view path) {
   char full[kMaxVfsPathBytes];
   const std::size_t rootLen = std::strlen(kMountPoint);
   if (rootLen + path.size() >= sizeof(full)) {
@@ -32,7 +32,8 @@ int openRead(const std::string& path) {
     return -1;
   }
   std::memcpy(full, kMountPoint, rootLen);
-  std::memcpy(full + rootLen, path.c_str(), path.size() + 1);
+  std::memcpy(full + rootLen, path.data(), path.size());
+  full[rootLen + path.size()] = '\0';
   return ::open(full, O_RDONLY | O_BINARY);
 }
 

@@ -21,6 +21,9 @@ void setPaletteLoader(PaletteLoader loader);
 // stays loaded only while something still holds it.
 std::shared_ptr<const Palette> paletteByName(const std::string& name);
 
+// The same lookup as a copy, without touching the cache or allocating shared ownership.
+bool lookupPalette(const std::string& name, Palette& out);
+
 std::shared_ptr<const Palette> paletteFromStopList(const uint32_t* stops, std::size_t n);
 
 std::shared_ptr<const Palette> paletteFromPositionedStopList(const PaletteStop* stops,

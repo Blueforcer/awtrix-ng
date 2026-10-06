@@ -1,0 +1,20 @@
+config BR2_PACKAGE_AWTRIX_NG
+	bool "awtrix-ng headless Linux application"
+	depends on BR2_INSTALL_LIBSTDCPP
+	depends on BR2_TOOLCHAIN_HAS_THREADS
+	depends on BR2_USE_WCHAR
+	# std::filesystem is linked without a separate libstdc++fs library.
+	depends on BR2_TOOLCHAIN_GCC_AT_LEAST_9
+	select BR2_PACKAGE_OPENSSL
+	select BR2_PACKAGE_OPENSSL_FORCE_LIBOPENSSL
+	select BR2_PACKAGE_JPEG
+	select BR2_PACKAGE_AWTRIX_BASE64
+	help
+	  Build the shared AWTRIX application from a local Git snapshot.
+	  The runner supplies AWTRIX_NG_SNAPSHOT and AWTRIX_NG_REVISION.
+	  This is an experimental headless Linux target, without a TC002
+	  kernel, bootloader, display driver or other hardware support.
+
+comment "awtrix-ng needs a toolchain w/ C++, threads, wchar, gcc >= 9"
+	depends on !BR2_INSTALL_LIBSTDCPP || !BR2_TOOLCHAIN_HAS_THREADS || \
+		!BR2_USE_WCHAR || !BR2_TOOLCHAIN_GCC_AT_LEAST_9

@@ -18,8 +18,8 @@ class DateApp : public IApp {
     const uint32_t col = s.dateColor.valueOr(s.textColor);
     const ContentFrame f = contentFrame(c, text::measure(*ctx.font, str).inkWidth());
     text::drawCenteredIn(c, *ctx.font, str, 6, col, f.x, f.width);
-    if (s.weekdayBar.show)
-      drawWeekdayBar(c, s.weekdayBar, ctx.weekday, f.x, f.width, 3, c.height() - 1);
+    if (s.dateWeekdayBar.show)
+      drawWeekdayBar(c, s.dateWeekdayBar, ctx.weekday, f.x, f.width, 3, c.height() - 1);
   }
 
  private:

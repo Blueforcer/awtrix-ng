@@ -37,6 +37,8 @@ class BindingScope {
   static StoreFlush takeStoreFlush();
 
   static const std::string& currentScript();
+  static Canvas* currentCanvas();
+  static const RenderCtx* currentContext();
 };
 
 }

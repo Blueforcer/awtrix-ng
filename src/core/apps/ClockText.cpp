@@ -3,6 +3,8 @@
 #include <cmath>
 #include <cstdio>
 
+#include "core/render/Color.h"
+
 namespace awtrix {
 
 namespace {
@@ -57,13 +59,7 @@ float separatorLevel(int mode, int second, int64_t nowMs) {
 }
 
 uint32_t scaleColor(uint32_t color, float level) {
-  if (level >= 1.0f) return color;
-  if (level <= 0.0f) return 0u;
-  const auto ch = [&](int shift) {
-    const float v = static_cast<float>((color >> shift) & 0xFFu) * level;
-    return static_cast<uint32_t>(v + 0.5f) << shift;
-  };
-  return ch(16) | ch(8) | ch(0);
+  return color::scale<color::Rounding::Nearest>(color, level);
 }
 
 std::string buildDateText(const Settings& s, int weekday, int mday, int month, int year) {
@@ -105,6 +101,14 @@ std::string buildDateText(const Settings& s, int weekday, int mday, int month, i
       break;
   }
   return out;
+}
+
+const char* weekdayShortName(int weekday) {
+  return weekday >= 0 && weekday < 7 ? kWeekdays[weekday] : "?";
+}
+
+const char* monthShortName(int month) {
+  return month >= 1 && month <= 12 ? kMonths[month - 1] : "?";
 }
 
 }

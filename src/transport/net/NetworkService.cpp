@@ -39,15 +39,15 @@ net::WifiAssoc assocNow(bool apMode) {
 }
 
 void NetworkService::publishStatus() {
-  if (!status_) return;
-  const bool hasSsid = cfg_ && !cfg_->wifiSsid.empty();
+  const bool hasSsid = !cfg_->wifiSsid.empty();
   net::applyWifiAssoc(*status_, assocNow(apMode_), hasSsid,
                       hasSsid ? cfg_->wifiSsid : std::string(),
                       std::string(WiFi.localIP().toString().c_str()));
 }
 
-void NetworkService::begin(const DeviceConfig& cfg, bool forceAp,
+void NetworkService::begin(const DeviceConfig& cfg, net::LinkStatus& status, bool forceAp,
                            const std::function<void()>& onWait) {
+  status_ = &status;
   hostname_ = net::effectiveHostname(cfg.hostname, WiFi.macAddress().c_str());
   WiFi.persistent(true);
   WiFi.setHostname(hostname_.c_str());
@@ -77,7 +77,7 @@ void NetworkService::begin(const DeviceConfig& cfg, bool forceAp,
       cfg.wifiConnectTimeout > 0 ? static_cast<unsigned long>(cfg.wifiConnectTimeout) : 15000UL;
   if (!forceAp && !cfg.wifiSsid.empty()) {
     WiFi.begin(cfg.wifiSsid.c_str(), cfg.wifiPass.c_str());
-    if (status_) net::applyWifiAssoc(*status_, net::WifiAssoc::Joining, true, cfg.wifiSsid, "");
+    net::applyWifiAssoc(*status_, net::WifiAssoc::Joining, true, cfg.wifiSsid, "");
     const unsigned long start = millis();
     // Blocks boot until the join succeeds or times out; onWait keeps the boot animation moving so
     // the matrix does not look frozen.
@@ -117,26 +117,27 @@ void NetworkService::begin(const DeviceConfig& cfg, bool forceAp,
 
   publishStatus();
   // The join loop above gives up silently, so nothing else would record why boot ended offline.
-  if (status_ && status_->phase == net::LinkPhase::Offline &&
+  if (status_->phase == net::LinkPhase::Offline &&
       status_->error == net::LinkError::None && !forceAp)
     status_->setError(net::LinkError::Timeout);
 }
 
-void NetworkService::tick() {
+void NetworkService::tick(uint32_t nowMs) {
   if (apMode_) {
     dns_.processNextRequest();
-    retryJoinFromAp();
+    retryJoinFromAp(nowMs);
     return;
   }
-  const unsigned long nowMs = millis();
+  const bool connected = WiFi.status() == WL_CONNECTED;
+  if ((status_->phase == net::LinkPhase::Connected) != connected) publishStatus();
   if (nowMs - lastCheckMs_ < kCheckMs) return;
   lastCheckMs_ = nowMs;
   publishStatus();
-  if (WiFi.status() != WL_CONNECTED) {
+  if (!connected) {
     logf("wifi: connection lost, reconnecting");
     weakChecks_ = 0;
     WiFi.reconnect();
-    if (status_) net::noteWifiRetry(*status_, kCheckMs);
+    net::noteWifiRetry(*status_, kCheckMs);
     return;
   }
   roamIfWeak(nowMs);
@@ -146,7 +147,7 @@ void NetworkService::tick() {
 // otherwise clings to a weak AP indefinitely. Requires several bad samples plus a long cooldown so
 // a passing dip cannot start flapping.
 void NetworkService::roamIfWeak(unsigned long nowMs) {
-  if (!cfg_ || cfg_->wifiRoamRssi >= 0) return;
+  if (cfg_->wifiRoamRssi >= 0) return;
   if (nowMs - lastRoamMs_ < kRoamCooldownMs) return;
   if (WiFi.RSSI() >= cfg_->wifiRoamRssi) {
     weakChecks_ = 0;
@@ -163,15 +164,14 @@ void NetworkService::roamIfWeak(unsigned long nowMs) {
 // In provisioning mode, keep trying the stored credentials so the device recovers on its own once
 // the router comes back. Skipped while someone is attached to the AP, because a join attempt
 // disrupts the portal they are using.
-void NetworkService::retryJoinFromAp() {
-  if (!cfg_ || cfg_->wifiSsid.empty()) return;
+void NetworkService::retryJoinFromAp(uint32_t now) {
+  if (cfg_->wifiSsid.empty()) return;
   if (WiFi.softAPgetStationNum() > 0) return;
-  const unsigned long now = millis();
   if (now - lastApRetryMs_ < kApRetryMs) return;
   lastApRetryMs_ = now;
   if (WiFi.status() != WL_CONNECTED) {
     publishStatus();
-    if (status_) net::noteWifiRetry(*status_, kApRetryMs);
+    net::noteWifiRetry(*status_, kApRetryMs);
     WiFi.begin(cfg_->wifiSsid.c_str(), cfg_->wifiPass.c_str());
     return;
   }
@@ -180,7 +180,7 @@ void NetworkService::retryJoinFromAp() {
   if (onJoinedFromAp_) onJoinedFromAp_();
 }
 
-bool NetworkService::isConnected() const { return !apMode_ && WiFi.status() == WL_CONNECTED; }
+bool NetworkService::isConnected() const { return status_->phase == net::LinkPhase::Connected; }
 
 std::string NetworkService::ip() const {
   return std::string((apMode_ ? WiFi.softAPIP() : WiFi.localIP()).toString().c_str());

@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <new>
 
+#include "core/api/JsonReader.h"
 #include "core/apps/AppRegistry.h"
 #include "core/apps/IApp.h"
+#include "core/input/Buttons.h"
 #include "core/script/ScriptBindings.h"
 #include "core/script/ScriptConfig.h"
 #include "core/script/ScriptHeap.h"
@@ -68,10 +71,12 @@ ScriptHost::ScriptHost(AppRegistry& registry, ScriptServices& services, AppHook 
       httpAdapter_(this),
       mqttAdapter_(this),
       onInstalled_(std::move(onInstalled)),
-      onRemoved_(std::move(onRemoved)) {
+      onRemoved_(std::move(onRemoved)),
+      vm_(services.instructionLimit) {
   activate();
   if (!installBindings(vm_, vmError_)) {
     if (svc_.log) svc_.log("[script] engine unavailable: " + vmError_);
+    return;
   }
 }
 
@@ -168,31 +173,141 @@ void ScriptHost::reportFrameTimes() {
 }
 
 
-// Installs or replaces a script, app or module alike. False means the install was refused
-// (see lastRefusal()); a script that compiles and then throws still counts as installed.
-bool ScriptHost::set(const std::string& name, const std::string& source,
-                     const std::string& storeJson) {
-  if (name.empty()) return false;
+void ScriptHost::clearRefusal() {
   lastRefusal_.clear();
   refusalTransient_ = false;
   refusalInvalid_ = false;
+}
+
+// Installs or replaces a script, app or module alike. False means the install was refused
+// (see lastRefusal()); a script that compiles and then throws still counts as installed.
+// An @ondemand app is only compiled here and gets its instance from launch(); saving one that
+// is running rebuilds it like any other app.
+bool ScriptHost::set(const std::string& name, const std::string& source,
+                     const std::string& storeJson) {
+  if (name.empty()) return false;
+  clearRefusal();
 
   const ScriptMeta meta = parseMeta(source);
   if (meta.module && refuseModule(name, meta)) return false;
+  if (!meta.module && apps_.count(name) == 0 && registry_.find(name)) {
+    lastRefusal_ = "'" + name + "' is a built-in app";
+    refusalInvalid_ = true;
+    if (svc_.log) svc_.log("[script] " + name + ": " + lastRefusal_);
+    return false;
+  }
 
-  const bool isNew = !has(name);
+  const bool launched = isOnDemand(name) && apps_.count(name) != 0;
+  const bool dormant = meta.onDemand && !launched;
   const auto replaced = apps_.find(name);
+  const bool wasShown = replaced != apps_.end() && replaced->second->visible();
   if (replaced != apps_.end()) replaced->second->releaseIcons();
+  if (!admit(name, source.size(), !dormant)) return false;
 
+  std::unique_ptr<ScriptError> dormantError;
+  if (dormant) {
+    dormantError.reset(new (std::nothrow) ScriptError);
+    if (!dormantError) {
+      lastRefusal_ = "not enough memory to compile";
+      return false;
+    }
+  }
+
+  activate();
+  const bool wasApp = retire(name);
+
+  std::vector<std::string> imports = collectImports(source);
+  if (imports.empty())
+    imports_.erase(name);
+  else
+    imports_[name] = std::move(imports);
+
+  vm_.gcCollect();
+  if (!meta.onDemand) {
+    const auto previous = meta_.find(name);
+    if (previous != meta_.end()) {
+      previous->second.parsed.onDemand = false;
+      previous->second.dormantError.reset();
+    }
+  }
+
+  if (meta.module) {
+    if (wasApp) {
+      registry_.remove(name);
+      apps_.erase(name);
+      if (onRemoved_) onRemoved_(name);
+    }
+    std::string seeded;
+    return installModule(name, meta, source, seededStore(meta, source, storeJson, seeded));
+  }
+
+  if (dormant) {
+    installDormant(name, meta, source, wasApp, std::move(dormantError));
+  } else {
+    std::string seeded;
+    instantiate(name, meta, source, seededStore(meta, source, storeJson, seeded));
+    // A restart on screen stays on screen: on_show follows setup() before anything else runs.
+    if (wasShown) {
+      apps_[name]->notifyVisible(true, lastCtx());
+      drainStoreFlush();
+    }
+  }
+  if (onInstalled_) onInstalled_(name);
+  return true;
+}
+
+bool ScriptHost::launch(const std::string& name) {
+  clearRefusal();
+  const auto meta = meta_.find(name);
+  if (meta == meta_.end() || !meta->second.parsed.onDemand) {
+    lastRefusal_ = "no on-demand script '" + name + "'";
+    refusalInvalid_ = true;
+    return false;
+  }
+  if (apps_.count(name)) return true;
+  std::string source, storeJson;
+  if (!svc_.readSource || !svc_.readSource(name, source)) {
+    lastRefusal_ = "cannot read '" + name + "'";
+    return false;
+  }
+  if (svc_.readStore) svc_.readStore(name, storeJson);
+  if (!admit(name, source.size(), true)) return false;
+
+  activate();
+  vm_.gcCollect();
+  std::string seeded;
+  instantiate(name, meta->second.parsed, source, seededStore(meta->second.parsed, source, storeJson, seeded));
+  return true;
+}
+
+void ScriptHost::unload(const std::string& name) {
+  if (!isOnDemand(name)) return;
+  auto it = apps_.find(name);
+  if (it == apps_.end()) return;
+  activate();
+  // on_hide runs before the unload.
+  it->second->notifyVisible(false, lastCtx());
+  drainStoreFlush();
+  it->second->releaseIcons();
+  registry_.remove(name);
+  purge(name);
+  vm_.dropApp(name);
+  apps_.erase(it);
+  vm_.gcCollect();
+  if (heapWarned_ && vm_.heapBytes() <= heap::info().budgetBytes) heapWarned_ = false;
+}
+
+// The memory checks every compile passes first. growsVm is false for a compile that leaves
+// nothing behind, which the shared Berry heap budget then does not have to cover.
+bool ScriptHost::admit(const std::string& name, std::size_t sourceBytes, bool growsVm) {
+  const bool replacing = apps_.count(name) != 0 || modules_.count(name) != 0;
   if (svc_.freeHeap) {
-    const std::size_t need = installNeedsBytes(source.size(), !isNew);
+    const std::size_t need = installNeedsBytes(sourceBytes, replacing);
     const std::size_t have = svc_.freeHeap();
     if (have < need) {
       refusalTransient_ = !httpOwner_.empty();
-      lastRefusal_ = "not enough free memory to compile (" + std::to_string(have) +
-                     " bytes free, needs " + std::to_string(need) + "); " +
-                     (refusalTransient_ ? "a script fetch is in flight, try again"
-                                        : "remove a script or reboot");
+      lastRefusal_ = "not enough memory to compile (" + std::to_string(have) + "/" +
+                     std::to_string(need) + " bytes)" + (refusalTransient_ ? "; retry" : "");
       if (svc_.log) svc_.log("[script] " + name + ": " + lastRefusal_);
       return false;
     }
@@ -202,28 +317,30 @@ bool ScriptHost::set(const std::string& name, const std::string& source,
   // allocation, and a long-running device fragments.
   if (svc_.maxAllocHeap) {
     const std::size_t block = svc_.maxAllocHeap();
-    if (block < source.size()) {
-      lastRefusal_ = "heap too fragmented to compile (largest contiguous block " +
-                     std::to_string(block) + " bytes, source is " +
-                     std::to_string(source.size()) + "); remove a script or reboot";
+    if (block < sourceBytes) {
+      lastRefusal_ = "heap too fragmented to compile (" + std::to_string(block) + " < " +
+                     std::to_string(sourceBytes) + " bytes)";
       if (svc_.log) svc_.log("[script] " + name + ": " + lastRefusal_);
       return false;
     }
   }
 
   const heap::Info hi = heap::info();
-  if (isNew && vm_.heapBytes() > hi.budgetBytes) {
-    lastRefusal_ = "shared Berry heap " + std::to_string(vm_.heapBytes()) + " bytes is over the " +
-                   std::to_string(hi.budgetBytes) + " byte " + hi.name +
-                   " budget; remove a script";
+  if (growsVm && !replacing && vm_.heapBytes() > hi.budgetBytes) {
+    lastRefusal_ = "Berry heap over budget (" + std::to_string(vm_.heapBytes()) + "/" +
+                   std::to_string(hi.budgetBytes) + " bytes)";
     if (svc_.log && !heapWarned_) {
       svc_.log("[script] " + lastRefusal_ + "; refusing new scripts until it drops");
       heapWarned_ = true;
     }
     return false;
   }
+  return true;
+}
 
-  activate();
+// Drops what the VM holds under this name before it is compiled again. True when that was an
+// app instance, whose registry entry the caller still owns.
+bool ScriptHost::retire(const std::string& name) {
   const bool wasApp = apps_.count(name) != 0;
   if (wasApp) {
     purge(name);
@@ -231,34 +348,23 @@ bool ScriptHost::set(const std::string& name, const std::string& source,
   }
   auto stale = modules_.find(name);
   if (stale != modules_.end()) {
+    if (svc_.extensionLifecycle) svc_.extensionLifecycle->forget(name);
     vm_.dropModule(stale->second.importName);
     modules_.erase(stale);
   }
+  return wasApp;
+}
 
-  std::vector<std::string> imports = collectImports(source);
-  if (imports.empty())
-    imports_.erase(name);
-  else
-    imports_[name] = std::move(imports);
+// Modules have settings too, so the defaults are seeded for both: an app and a module read their
+// store the moment their body runs.
+const std::string& ScriptHost::seededStore(const ScriptMeta& meta, const std::string& source,
+                                           const std::string& storeJson, std::string& seeded) {
+  if (meta.hasConfig && seedConfigDefaults(parseConfig(source), storeJson, seeded)) return seeded;
+  return storeJson;
+}
 
-  vm_.gcCollect();
-
-  // Modules have settings too, so the defaults are seeded before the branch:
-  // both an app and a module read their store the moment their body runs.
-  std::string seeded;
-  const std::string* store = &storeJson;
-  if (meta.hasConfig && seedConfigDefaults(parseConfig(source), storeJson, seeded))
-    store = &seeded;
-
-  if (meta.module) {
-    if (wasApp) {
-      registry_.remove(name);
-      apps_.erase(name);
-      if (onRemoved_) onRemoved_(name);
-    }
-    return installModule(name, meta, source, *store);
-  }
-
+void ScriptHost::instantiate(const std::string& name, const ScriptMeta& meta,
+                             const std::string& source, const std::string& storeJson) {
   const std::size_t vmBefore = vm_.heapBytes();
   const std::size_t freeBefore = svc_.freeHeap ? svc_.freeHeap() : 0;
 
@@ -268,7 +374,7 @@ bool ScriptHost::set(const std::string& name, const std::string& source,
     // than eat the last of the heap, so a script too big to load fails instead of the device.
     heap::InstallReserve reserve(kInstallReserveBytes);
     installingApp_ = name;
-    app = std::make_unique<ScriptApp>(vm_, name, source, meta, *store, lastCtx());
+    app = std::make_unique<ScriptApp>(vm_, name, source, meta, storeJson, lastCtx());
     installingApp_.clear();
   }
   vm_.gcCollect();
@@ -278,18 +384,36 @@ bool ScriptHost::set(const std::string& name, const std::string& source,
   ScriptApp* raw = app.get();
   registry_.add(raw);
   apps_[name] = std::move(app);
-  meta_[name] = meta;
-  if (onInstalled_) onInstalled_(name);
-  return true;
+  auto& installed = meta_[name];
+  installed.parsed = meta;
+  installed.dormantError.reset();
+}
+
+// Out of the rotation and into the menu: the old instance goes, and the compile result is kept
+// so a broken script still reports its error before anyone starts it.
+void ScriptHost::installDormant(const std::string& name, const ScriptMeta& meta,
+                                const std::string& source, bool wasApp,
+                                std::unique_ptr<ScriptError> error) {
+  if (wasApp) {
+    registry_.remove(name);
+    apps_.erase(name);
+  }
+  {
+    heap::InstallReserve reserve(kInstallReserveBytes);
+    if (!vm_.compile(source)) *error = parseScriptError(vm_.lastError());
+  }
+  vm_.gcCollect();
+  if (error->empty()) error.reset();
+  meta_[name] = {meta, std::move(error)};
 }
 
 bool ScriptHost::refuseModule(const std::string& name, const ScriptMeta& meta) {
   const std::string& importName = meta.moduleName.empty() ? name : meta.moduleName;
   if (!isIdentifier(importName)) {
-    lastRefusal_ = "module name '" + importName +
-                   "' is not a valid identifier; use letters, digits and _";
-  } else if (isReservedModule(importName)) {
-    lastRefusal_ = "module name '" + importName + "' is reserved by a built-in module";
+    lastRefusal_ = "module name '" + importName + "' is invalid";
+  } else if (isReservedModule(importName) ||
+             (svc_.extensionLifecycle && svc_.extensionLifecycle->reserves(importName))) {
+    lastRefusal_ = "module name '" + importName + "' is reserved";
   } else {
     for (const auto& kv : modules_) {
       if (kv.first != name && kv.second.importName == importName) {
@@ -322,7 +446,10 @@ bool ScriptHost::installModule(const std::string& name, const ScriptMeta& meta,
     if (!storeJson.empty()) vm_.call1("_store_load", storeJson);
     ok = vm_.loadModule(mod.importName, source);
   }
-  if (!ok) mod.error = parseScriptError(vm_.lastError());
+  if (!ok) {
+    if (svc_.extensionLifecycle) svc_.extensionLifecycle->forget(name);
+    mod.error = parseScriptError(vm_.lastError());
+  }
 
   vm_.gcCollect();
   reportHeap(name, vmBefore, freeBefore);
@@ -330,7 +457,7 @@ bool ScriptHost::installModule(const std::string& name, const ScriptMeta& meta,
 
   const std::string importName = mod.importName;
   modules_[name] = std::move(mod);
-  meta_[name] = meta;
+  meta_[name] = {meta, nullptr};
   reloadDependents(importName, name);
   return true;
 }
@@ -383,6 +510,13 @@ void ScriptHost::remove(const std::string& name) {
   }
 
   auto it = apps_.find(name);
+  if (it == apps_.end() && isOnDemand(name)) {
+    purge(name);
+    meta_.erase(name);
+    imports_.erase(name);
+    if (onRemoved_) onRemoved_(name);
+    return;
+  }
   if (it == apps_.end()) return;
   registry_.remove(name);
   purge(name);
@@ -401,8 +535,11 @@ void ScriptHost::purge(const std::string& name) {
   vm_.call1("_app_forget", name);
 }
 
-// The host-side half: shared values, in-flight request ownership and mqtt subscriptions.
+// The host-side half: shared values, in-flight request ownership, mqtt subscriptions and the sounds
+// the script left playing.
 void ScriptHost::forgetScript(const std::string& name) {
+  std::string ignored;
+  if (svc_.application) svc_.application->sound(SoundAction::Release, std::string(), name, ignored);
   shared_.purge(name);
   timers_.purge(name);
   for (auto& button : buttons_)
@@ -421,6 +558,7 @@ void ScriptHost::forgetScript(const std::string& name) {
       ++it;
     }
   }
+  if (svc_.extensionLifecycle) svc_.extensionLifecycle->forget(name);
 }
 
 
@@ -438,9 +576,13 @@ void ScriptHost::drainHttp(const RenderCtx* ctx) {
     auto it = httpOwner_.find(r.id);
     if (it == httpOwner_.end()) continue;
     const std::string script = it->second.script;
-    httpOwner_.erase(it);
     auto app = apps_.find(script);
-    if (app == apps_.end() || !active(script)) continue;
+    if (app != apps_.end() && !active(script)) {
+      it->second.dueMs = svc_.monotonicMs ? svc_.monotonicMs() : 0;
+      continue;
+    }
+    httpOwner_.erase(it);
+    if (app == apps_.end()) continue;
     app->second->dispatchHttp(r.id, r.status, r.body, r.ok, ctx);
     drainStoreFlush();
   }
@@ -454,17 +596,18 @@ void ScriptHost::sweepHttp(const RenderCtx* ctx) {
 
   std::vector<std::pair<uint32_t, std::string>> expired;
   for (auto it = httpOwner_.begin(); it != httpOwner_.end();) {
-    if (now - it->second.dueMs >= 0) {
-      expired.push_back({it->first, it->second.script});
-      it = httpOwner_.erase(it);
-    } else {
+    const bool installed = apps_.count(it->second.script) != 0;
+    if (now - it->second.dueMs < 0 || (installed && !active(it->second.script))) {
       ++it;
+      continue;
     }
+    if (installed) expired.push_back({it->first, it->second.script});
+    it = httpOwner_.erase(it);
   }
 
   for (const auto& e : expired) {
     auto app = apps_.find(e.second);
-    if (app == apps_.end() || !active(e.second)) continue;
+    if (app == apps_.end()) continue;
     app->second->dispatchHttp(e.first, 0, std::string(), false, ctx);
     drainStoreFlush();
   }
@@ -516,12 +659,46 @@ void ScriptHost::drainMqtt(const RenderCtx* ctx) {
   }
 }
 
+void ScriptHost::defineNative(const char* name, Native fn, void* self) { vm_.defineNative(name, fn, self); }
+
+bool ScriptHost::defineModule(const std::string& name, const std::string& source) {
+  if (vm_.loadModule(name, source)) return true;
+  if (svc_.log) svc_.log("[script] module " + name + " unavailable: " + vm_.lastError());
+  return false;
+}
+
+bool ScriptHost::deliver(const std::string& app, const char* what, const char* function, const std::string& a,
+                         const std::string& b, const std::string& c, const RenderCtx* ctx) {
+  auto it = apps_.find(app);
+  if (it == apps_.end() || !active(app)) return false;
+  it->second->dispatch(what, function, a, b, c, ctx);
+  drainStoreFlush();
+  return true;
+}
+
+bool ScriptHost::deliverHook(const std::string& app, const char* hook, const std::string& event,
+                              const RenderCtx* ctx) {
+  const auto it = apps_.find(app);
+  if (it == apps_.end() || !active(app)) return false;
+  activate();
+  const bool consumed = it->second->dispatchHook(hook, event, ctx ? ctx : lastCtx());
+  drainStoreFlush();
+  return consumed;
+}
+
+void ScriptHost::call(const char* function, const std::string& a, const std::string& b) {
+  vm_.call2(function, a, b);
+}
+
 void ScriptHost::updateVisibility(const std::string& currentAppId,
                                   const std::string& incomingAppId, const RenderCtx* ctx) {
   for (auto& button : buttons_)
     if (button.owner != currentAppId) button.owner.clear();
   for (auto& kv : apps_) {
     const bool shown = kv.first == currentAppId || kv.first == incomingAppId;
+    if (kv.second->visible() && !shown) {
+      if (svc_.extensionLifecycle) svc_.extensionLifecycle->hidden(kv.first);
+    }
     kv.second->notifyVisible(shown, ctx);
     drainStoreFlush();
   }
@@ -537,6 +714,7 @@ void ScriptHost::tick(const RenderCtx& ctx, const std::string& currentAppId,
   drainHttp(&ctx);
   sweepHttp(&ctx);
   drainMqtt(&ctx);
+  if (svc_.extensionLifecycle) svc_.extensionLifecycle->tick(&ctx);
   drainTimers(&ctx);
 
   // loop() runs once a second for every script, not once per frame, and the stagger set at
@@ -580,8 +758,8 @@ bool ScriptHost::active(const std::string& name) const {
 }
 
 bool ScriptHost::isHeadless(const std::string& name) const {
-  const auto it = meta_.find(name);
-  return it != meta_.end() && it->second.headless;
+  const ScriptMeta* meta = metaOf(name);
+  return meta && meta->headless;
 }
 
 bool ScriptHost::wantsShow(const std::string& name) {
@@ -600,7 +778,8 @@ long ScriptHost::durationMs(const std::string& name) const {
 
 bool ScriptHost::scrollHolds(const std::string& name) const {
   auto it = apps_.find(name);
-  return it != apps_.end() && it->second->scrollHolds();
+  return it != apps_.end() && (it->second->scrollHolds() ||
+                              (svc_.extensionLifecycle && svc_.extensionLifecycle->holds(name)));
 }
 
 bool ScriptHost::handleButton(const std::string& currentAppId, const std::string& btn) {
@@ -613,8 +792,8 @@ bool ScriptHost::handleButton(const std::string& currentAppId, const std::string
 }
 
 
-bool ScriptHost::handleButtonState(const std::string& currentAppId, int button, bool pressed) {
-  if (button < 0 || button >= 3) return false;
+bool ScriptHost::handleButtonState(const std::string& currentAppId, int button, bool pressed, bool held) {
+  if (button < 0 || button >= input::kButtonCount) return false;
   static const char* const names[] = {"left", "select", "right"};
   auto& state = buttons_[button];
   if (!pressed && !state.down) return false;
@@ -631,19 +810,29 @@ bool ScriptHost::handleButtonState(const std::string& currentAppId, int button, 
       drainStoreFlush();
       if (consumed) {
         state.owner = currentAppId;
+        restartTurn();
         return true;
       }
     }
-    return handleButton(currentAppId, names[button]);
+    const bool consumed = handleButton(currentAppId, names[button]);
+    if (consumed) restartTurn();
+    return consumed;
   }
   if (!state.down) return false;
+  if (!pressed && held) {
+    state.down = false;
+    state.owner.clear();
+    return false;
+  }
   auto app = apps_.find(state.owner);
   if (state.owner != currentAppId || !active(state.owner) || app == apps_.end() ||
       !app->second->ok() || !app->second->visible()) state.owner.clear();
   if (!state.owner.empty()) {
     const char* event = nullptr;
+    // Holding select belongs to the device menu, so select never reports long or repeat.
     if (!pressed) event = "release";
-    else if (!state.longSent && now - state.pressedAt >= 600) {
+    else if (button == input::index(input::Button::Select)) event = nullptr;
+    else if (!state.longSent && now - state.pressedAt >= 500) {
       state.longSent = true;
       state.repeatAt = now + 150;
       event = "long";
@@ -654,6 +843,7 @@ bool ScriptHost::handleButtonState(const std::string& currentAppId, int button, 
     if (event) {
       app->second->handleButtonEvent(names[button], event, lastCtx());
       drainStoreFlush();
+      restartTurn();
     }
   }
   if (!pressed) {
@@ -664,11 +854,16 @@ bool ScriptHost::handleButtonState(const std::string& currentAppId, int button, 
 }
 
 
+
 ScriptError ScriptHost::errorOf(const std::string& name) const {
   auto mod = modules_.find(name);
   if (mod != modules_.end()) return mod->second.error;
   auto it = apps_.find(name);
-  if (it == apps_.end()) return ScriptError();
+  if (it == apps_.end()) {
+    const auto dormant = meta_.find(name);
+    return dormant == meta_.end() || !dormant->second.dormantError
+               ? ScriptError() : *dormant->second.dormantError;
+  }
   return it->second->ok() ? ScriptError() : it->second->error();
 }
 
@@ -679,20 +874,33 @@ std::vector<SharedEntry> ScriptHost::sharedSnapshot() const {
 std::map<std::string, ScriptHost::Info> ScriptHost::list() const {
   std::map<std::string, Info> out;
   auto describe = [&](const std::string& name, Info& info) {
-    auto m = meta_.find(name);
-    if (m == meta_.end()) return;
-    info.headless = m->second.headless;
-    info.config = m->second.hasConfig;
-    info.metaName = m->second.name;
-    info.desc = m->second.desc;
-    info.author = m->second.author;
-    info.version = m->second.version;
-    info.icons = m->second.icons;
+    const ScriptMeta* meta = metaOf(name);
+    if (!meta) return;
+    info.headless = meta->headless;
+    info.config = meta->hasConfig;
+    info.onDemand = meta->onDemand;
+    info.metaName = meta->name;
+    info.desc = meta->desc;
+    info.author = meta->author;
+    info.version = meta->version;
+    info.icons = meta->icons;
+    info.requirements = meta->requirements;
+    info.needs = meta->needs;
+    info.displayWidth = meta->displayWidth;
+    info.displayHeight = meta->displayHeight;
   };
   for (const auto& kv : apps_) {
     Info info;
     info.error = kv.second->ok() ? ScriptError() : kv.second->error();
     info.skipping = !kv.second->lastWantedShow();
+    info.loaded = true;
+    describe(kv.first, info);
+    out[kv.first] = std::move(info);
+  }
+  for (const auto& kv : meta_) {
+    if (!kv.second.parsed.onDemand || apps_.count(kv.first)) continue;
+    Info info;
+    if (kv.second.dormantError) info.error = *kv.second.dormantError;
     describe(kv.first, info);
     out[kv.first] = std::move(info);
   }

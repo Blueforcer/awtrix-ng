@@ -1,0 +1,159 @@
+# @name    Puls
+# @desc    Heart rate from a Bluetooth chest strap or watch, with a heart beating in time
+# @author  awtrix-ng
+# @version 1.3
+# @config  match text  "Device name" default="" help="Start of the sensor's Bluetooth name; empty takes the first heart-rate sensor seen"
+# @config  skip  text  "Ignore"      default="" help="A heart-rate sensor to pass over, by the start of its name"
+# @config  low   number "Rest below" default=60 min=30 max=120 unit=bpm
+# @config  high  number "Hard above" default=150 min=100 max=220 unit=bpm
+
+import ble
+import string
+
+class Puls
+  var state, since, bpm, seen, conn, scan, trend, label, hue, big, small, match, skip, low, high
+
+  def init()
+    self.state = ble.available() ? "scan" : "none"
+    self.since = 0
+    self.bpm = 0
+    self.seen = 0
+    self.trend = []
+    self.label = ""
+    self.hue = 0
+    self.match = store.get("match", "")
+    self.skip = store.get("skip", "")
+    self.low = store.get("low", 60)
+    self.high = store.get("high", 150)
+    # Two hearts as row bitmasks, 11 and 9 columns wide: the big one on the beat.
+    self.big = [0x18C, 0x3DE, 0x7FF, 0x7FF, 0x7FF, 0x3FE, 0x1FC, 0x0F8, 0x070, 0x020]
+    self.small = [0x0D8, 0x1FC, 0x1FC, 0x1FC, 0x0F8, 0x070, 0x020]
+  end
+
+  def setup()
+    if self.state == "scan" self.find() end
+  end
+
+  # Scan for the Heart Rate service, take the first sensor whose name fits, subscribe to its
+  # measurement. Every way of losing it - a scan that cannot start, a failed connect, a dropped link,
+  # a sensor gone quiet - leads back here.
+  def find()
+    if self.scan != nil ble.stop(self.scan) end
+    if self.conn != nil ble.disconnect(self.conn) end
+    self.state = "scan"
+    self.since = now_ms()
+    self.conn = nil
+    self.scan = ble.scan(def (dev, err)
+      if self.state != "scan" return end
+      if dev == nil
+        if err != nil
+          log("Puls: " + str(err))
+          self.scan = nil
+          timer.after(3000, / -> self.find())
+        end
+        return
+      end
+      var name = dev.find("name", "")
+      if self.skip != "" && string.find(name, self.skip) == 0 return end
+      if self.match != "" && string.find(name, self.match) != 0 return end
+      self.state = "link"
+      self.since = now_ms()
+      ble.stop(self.scan)
+      self.scan = nil
+      self.conn = ble.connect(dev["addr"], def (conn, e)
+        if conn == nil
+          log("Puls: " + str(e))
+          self.conn = nil
+          timer.after(3000, / -> self.find())
+          return
+        end
+        ble.on_disconnect(conn, def (why)
+          self.conn = nil
+          timer.after(2000, / -> self.find())
+        end)
+        ble.subscribe(conn, "180d", "2a37", def (data, e2)
+          if data == nil
+            log("Puls: " + str(e2))
+            ble.disconnect(conn)
+            return
+          end
+          var v = (data[0] & 1) != 0 ? data.get(1, 2) : data[1]
+          if v <= 0 return end
+          self.bpm = v
+          self.seen = now_ms()
+          self.state = "live"
+        end)
+      end, {"random": dev["random"]})
+    end, {"uuid": "180d", "active": true, "dedupe": 0})
+    if self.scan == nil self.state = "none" end
+  end
+
+  def loop()
+    var t = now_ms()
+    var fresh = self.state == "live" && t - self.seen < 5000
+    if fresh
+      self.label = str(self.bpm)
+      self.hue = self.bpm < self.low ? 200 : self.bpm < 100 ? 120 : self.bpm < self.high ? 45 : 0
+      self.trend.push(self.bpm)
+      if size(self.trend) > 36 self.trend.remove(0) end
+    elif self.state == "live" && t - self.seen > 15000 && self.conn != nil
+      ble.disconnect(self.conn)
+      self.conn = nil
+    elif self.state == "link" && t - self.since > 20000
+      self.find()
+    end
+    if !fresh
+      self.label = self.state == "none" ? "KEIN BT" : self.state == "scan" ? "SUCHE" : self.state == "link" ? "VERBINDE" : "WARTE"
+    end
+  end
+
+  def draw()
+    clear()
+    var t = now_ms()
+    var live = self.state == "live" && t - self.seen < 5000
+    var period = live ? 60000 / self.bpm : 1600
+    var phase = t % period
+    var beat = phase < 110 || (phase > 220 && phase < 300)
+    var rows = beat ? self.big : self.small
+    var w = beat ? 11 : 9
+    var x0 = beat ? 1 : 2
+    var y0 = beat ? 3 : 5
+    var core = live ? hsv(355, 90, beat ? 90 : 55) : hsv(220, 40, beat ? 35 : 20)
+    for r : 0 .. size(rows) - 1
+      var bits = rows[r]
+      for c : 0 .. w - 1
+        if ((bits >> (w - 1 - c)) & 1) != 0 pixel(x0 + c, y0 + r, core) end
+      end
+    end
+    if beat && live
+      pixel(x0 + 2, y0 + 1, 0xFFB0B0)
+      pixel(x0 + 3, y0 + 1, 0xFF8080)
+    end
+    if live
+      var color = hsv(self.hue, 85, 90)
+      font("large")
+      var right = text(15, 9, self.label, color)
+      font("small")
+      text(17 + right, 9, "BPM", 0x606060)
+    else
+      text(15, 9, self.label, 0x707090)
+    end
+    var n = size(self.trend)
+    if n > 1
+      var lo = self.trend[0]
+      var hi = lo
+      for v : self.trend
+        if v < lo lo = v end
+        if v > hi hi = v end
+      end
+      var span = hi - lo < 10 ? 10 : hi - lo
+      var shade = live ? hsv(self.hue, 80, 45) : 0x282828
+      for i : 0 .. n - 1
+        var y = 15 - (self.trend[i] - lo) * 4 / span
+        pixel(width() - n + i, y, i == n - 1 && live ? hsv(self.hue, 85, 90) : shade)
+      end
+    end
+  end
+end
+
+return Puls()

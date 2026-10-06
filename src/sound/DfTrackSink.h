@@ -22,16 +22,17 @@ class DfTrackSink : public sound::ITrackSink {
     delay(200);
     sendVolume();
   }
-  // The module's own scale is 0-30, which is why a percentage cannot be handed straight over.
-  void setVolume(uint8_t percent) override {
-    const uint8_t clamped = percent > 100 ? 100 : percent;
-    volume_ = static_cast<uint8_t>((clamped * 30 + 50) / 100);
-    sendVolume();
+  // A track that is playing takes the change at once; one still waiting gets it from sendPending(),
+  // spaced from its play command.
+  void setVolumes(const sound::Volumes& volumes) override {
+    volumes_ = volumes;
+    if (playing_ && pendingTrack_ == 0) setLevel(volumes_.of(group_));
   }
   // The module drops a play command that arrives while a track is still running, so this stops
   // first (0x16) and holds the track back until the stop is acknowledged or the timeout expires.
-  bool playTrack(int track) override {
+  bool playTrack(int track, sound::Group group) override {
     if (track < sound::kMinTrack || track > sound::kMaxTrack) return false;
+    group_ = group;
     retries_ = kMaxRetries;
     sendCmd(0x16, 0);
     pendingTrack_ = track;
@@ -85,12 +86,26 @@ class DfTrackSink : public sound::ITrackSink {
         break;
     }
   }
+  // After the stop's acknowledgement: a changed level first, then the track kAfterVolumeMs later.
   void sendPending() {
+    if (setLevel(volumes_.of(group_))) {
+      playAtMs_ = millis() + kAfterVolumeMs;
+      return;
+    }
     const int track = pendingTrack_;
     pendingTrack_ = 0;
     // 0x12 plays track N from the /MP3 folder, so the track number is the file number.
     sendCmd(0x12, static_cast<uint16_t>(track));
     playing_ = true;
+  }
+  // The module's scale is 0-30; unchanged levels are not sent. True when a change went out.
+  bool setLevel(uint8_t percent) {
+    const uint8_t clamped = percent > 100 ? 100 : percent;
+    const uint8_t level = static_cast<uint8_t>((clamped * 30 + 50) / 100);
+    if (level == volume_) return false;
+    volume_ = level;
+    sendVolume();
+    return true;
   }
   void sendVolume() { sendCmd(0x06, volume_, 0x00); }
 
@@ -113,11 +128,15 @@ class DfTrackSink : public sound::ITrackSink {
 
   static constexpr uint32_t kStopReplyTimeoutMs = 150;
   static constexpr uint32_t kPostStopMs = 50;
+  static constexpr uint32_t kAfterVolumeMs = 30;
   static constexpr uint8_t kMaxRetries = 2;
   static constexpr int kRxBytesPerTick = 40;
 
   HardwareSerial& serial_ = Serial1;
   int rx_pin_ = 23, tx_pin_ = 18;
+  sound::Volumes volumes_;
+  sound::Group group_ = sound::Group::Alert;
+  // The last level sent, on the module's scale.
   uint8_t volume_ = 24;
   bool playing_ = false;
   int pendingTrack_ = 0;

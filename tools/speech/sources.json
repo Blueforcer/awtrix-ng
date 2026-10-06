@@ -1,0 +1,36 @@
+{
+  "sources": {
+    "CMUdict-LICENSE.txt": {
+      "sha256": "bd4ce8e44170a5f9f481310ca85c51de3c4f851a65e679b40e603b143bd3542a",
+      "url": "https://raw.githubusercontent.com/cmusphinx/cmudict/74790861f652b15e4ac49015a90074ad62a27690/LICENSE"
+    },
+    "cmudict.dict": {
+      "sha256": "81917843c7f44ce2b094ac63873c2c7a4cf802040792c455ba3ca406891c3d22",
+      "url": "https://raw.githubusercontent.com/cmusphinx/cmudict/74790861f652b15e4ac49015a90074ad62a27690/cmudict.dict"
+    },
+    "esdb-rel-2026.02.25.zip": {
+      "sha256": "98c973dd3326bbc7aa3373a7e6460065d04ed1f9a57b66dc362f80298fbf6fec",
+      "url": "https://codeload.github.com/en-wl/wordlist/zip/refs/tags/rel-2026.02.25"
+    }
+  },
+  "query": {
+    "sql_parameters": [
+      "person",
+      "surname",
+      "place",
+      "name",
+      "demonym",
+      "trademark",
+      "upper",
+      "name?",
+      "upper?",
+      "abbr?",
+      "abbr"
+    ],
+    "sql_where": "size<=35 and spelling in ('_','A') and region in ('','US') and variant_level<=1 and category='' and pos_category='' and pos_class not in (?,?,?,?,?,?,?,?,?,?,?) and base_pos!='abbr'"
+  },
+  "data_file": "esdb35-us-application.tsv",
+  "bytes": 417544,
+  "tsv_sha256": "d3ffd805a715f9a00cdd89e3e19fc13b44a58a0532477e7e865b896a65419c63",
+  "packed_sha256": "7314ba936d2fbd23fad4fd8e1d59097f44be9a0524211d3211d40a2c7761c094"
+}

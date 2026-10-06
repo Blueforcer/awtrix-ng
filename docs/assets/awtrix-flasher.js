@@ -13,7 +13,7 @@ import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.
 // {"version": "v1.0.15", "assets": ["usb-awtrix-ng-4mb.bin", ...]}.
 // Resolved against this module's own URL so the page works both under the
 // GitHub Pages sub-path and on a site served from the root.
-const FIRMWARE = new URL("../firmware/", import.meta.url);
+const FIRMWARE = new URL("../../firmware/", import.meta.url);
 
 // A write at 921600 aborts partway on the USB-serial bridge a TC001 uses, and
 // the chip is erased by then. Same ceiling as the esptool instructions.

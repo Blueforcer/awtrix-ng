@@ -1,0 +1,97 @@
+name: TC002 update package
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: TC002 update package (awtrix-ng-tc002.awup)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git rsync patch bc bison flex file unzip cpio wget xz-utils cmake ninja-build squashfs-tools
+          pip install cryptography==50.0.2
+          echo "MUSL_WORK=$RUNNER_TEMP/tc002-musl" >> "$GITHUB_ENV"
+      # The pinned Buildroot toolchain is the hour of this job and changes only with the Buildroot
+      # version, configuration and patches. It is saved right after it is built, so a later failure
+      # does not throw it away.
+      - name: Restore the musl toolchain
+        id: musl
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ env.MUSL_WORK }}/output/host
+          key: tc002-musl-${{ hashFiles('tools/system/sources.lock.json', 'firmware/buildroot/configs/**', 'firmware/buildroot/patches/**', 'firmware/buildroot/external.mk', 'firmware/buildroot/external.desc') }}
+      - name: Build the musl toolchain
+        if: steps.musl.outputs.cache-hit != 'true'
+        run: |
+          python tools/system/build.py toolchain --work "$MUSL_WORK" --jobs "$(nproc)"
+          rm -rf "$MUSL_WORK/output/build" "$MUSL_WORK/downloads" "$MUSL_WORK/buildroot"
+      - name: Save the musl toolchain
+        if: steps.musl.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.MUSL_WORK }}/output/host
+          key: ${{ steps.musl.outputs.cache-primary-key }}
+      # Every tarball is checked against its pinned SHA-256 on use, so an older cache is a safe start.
+      - name: Restore the source downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/awtrix-tc002/downloads
+          key: tc002-downloads-${{ hashFiles('tools/tc002/**/*.sh') }}
+          restore-keys: tc002-downloads-
+      - name: Fetch the glibc toolchain and prepare the kernel tree
+        run: |
+          eval "$(bash tools/tc002/toolchain/fetch-arm-gnu-9.2.sh | tail -1)"
+          echo "TC002_GLIBC_PREFIX=$TC002_GLIBC_PREFIX" >> "$GITHUB_ENV"
+          echo "TC002_MUSL_PREFIX=$MUSL_WORK/output/host/bin/arm-linux-" >> "$GITHUB_ENV"
+          bash tools/tc002/kernel/fetch-source.sh
+          bash tools/tc002/kernel/prepare-tree.sh
+      - name: Build the release bundle and the update package
+        run: |
+          bash tools/tc002/install/build_bundle.sh "$RUNNER_TEMP/tc002" --jobs "$(nproc)"
+          python tools/tc002/install/tc002_install.py package --bundle "$RUNNER_TEMP/tc002/bundle" --out awtrix-ng-tc002.awup
+      # The corresponding sources of the shipped GPL/LGPL programs and modules. source_package.py
+      # wants the musl recipe of the pinned Buildroot, which the toolchain cache does not keep.
+      - name: Fetch the musl recipe of the pinned Buildroot
+        run: |
+          read -r url sha version < <(python -c 'import json; b = json.load(open("tools/system/sources.lock.json"))["buildroot"]; print(b["url"], b["sha256"], b["version"])')
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/buildroot.tar.xz" "$url"
+          echo "$sha  $RUNNER_TEMP/buildroot.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/buildroot.tar.xz" -C "$RUNNER_TEMP" "buildroot-$version/package/musl"
+          echo "MUSL_RECIPE=$RUNNER_TEMP/buildroot-$version/package/musl" >> "$GITHUB_ENV"
+      # The USB installation package names the source archive by its release URL and digest, so
+      # both are built here; on main the URL names the tag of the version file.
+      - name: Build the corresponding sources and the USB installation package
+        run: |
+          tag=$GITHUB_REF_NAME
+          [[ $GITHUB_REF == refs/tags/v* ]] || tag="v$(tr -d '[:space:]' < version)"
+          . tools/tc002/kernel/common.sh
+          aic=$(sed -n 's/^AIC_COMMIT=//p' tools/tc002/kernel/build_aic8800.sh)
+          python tools/tc002/install/source_package.py --commit "$GITHUB_SHA" \
+            --bundle-manifest "$RUNNER_TEMP/tc002/bundle/manifest.json" --downloads "$TC002_DL_DIR" \
+            --kernel-source "$KERNEL_SRC" --aic-source "$TC002_CACHE/bundle/aic8800/src/k230-${aic:0:8}" \
+            --musl-buildroot-recipe "$MUSL_RECIPE" --output "$PWD/tc002-sources.tar.gz"
+          sha=$(sha256sum tc002-sources.tar.gz | cut -d' ' -f1)
+          python tools/tc002/install/browser_package.py "$RUNNER_TEMP/tc002/bundle" usb-awtrix-ng-tc002.zip \
+            --license LICENSE.md --notices THIRD-PARTY-NOTICES.md \
+            --source-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/tc002-sources.tar.gz" \
+            --source-sha256 "$sha"
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: tc002-update
+          path: |
+            awtrix-ng-tc002.awup
+            usb-awtrix-ng-tc002.zip
+            tc002-sources.tar.gz
+          if-no-files-found: error

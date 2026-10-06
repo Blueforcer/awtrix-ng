@@ -5,65 +5,116 @@
 
 #include "core/Command.h"
 #include "core/sound/AudioSinks.h"
+#include "core/sound/Sound.h"
+#include "core/sound/SoundSpec.h"
 
 namespace awtrix {
 namespace sound {
 
-// Auto is the only value that consults more than one sink; the rest never fall back.
-enum class Source : uint8_t { Auto, Mp3, Melody, Track, Rtttl };
+enum class PlayResult : uint8_t { Ok, NotFound, NoSink, Invalid };
 
-enum class StopScope : uint8_t { Sounds, Stream, All };
-
-enum class PlayResult : uint8_t { Ok, Muted, NotFound, NoSink, Invalid };
-
-struct Caps {
-  bool buzzer = false;
-  bool track = false;
-  bool mp3 = false;
-  bool radio = false;
+struct GroupStatus {
+  bool playing = false;
+  std::string name;
+  std::string error;
+  bool operator==(const GroupStatus& o) const {
+    return playing == o.playing && name == o.name && error == o.error;
+  }
+  bool operator!=(const GroupStatus& o) const { return !(*this == o); }
 };
 
 class AudioRouter final {
  public:
-  void setTone(IToneSink* tone) { tone_ = tone; }
-  void setTrack(ITrackSink* track) { track_ = track; }
-  void setPcm(IPcmSink* pcm) { pcm_ = pcm; }
+  void setTone(IToneSink* tone);
+  void setTrack(ITrackSink* track);
+  void setPcm(IPcmSink* pcm);
   void setAssets(const IAssetProbe* assets) { assets_ = assets; }
 
-  PlayResult play(Source source, const std::string& value, DispatchDetail& detail);
+  // The four settings, in percent. A sink attached later gets the current levels at once.
+  void setVolumes(int master, int radio, int app, int alert);
+  const Volumes& volumes() const { return volumes_; }
+
+  // group is Alert or App; script is the script whose own call this is, "" for anyone else.
+  PlayResult play(const Choices& choices, Group group, const std::string& script,
+                  DispatchDetail& detail);
+  PlayResult playEffect(const Choices& choices, const std::string& script, DispatchDetail& detail);
+  void adoptPcm(const Spec& spec);
   DispatchResult playStream(const std::string& url, const std::string& label,
                             DispatchDetail& detail);
-  void stop(StopScope scope);
-
-  // One-shots only; a stream keeps playing.
-  void setMuted(bool muted) { muted_ = muted; }
-
-  // No-ops are dropped: a DFPlayer takes ten bytes at 9600 baud per change.
-  void setVolumes(uint8_t buzzerPercent, uint8_t trackPercent, uint8_t mp3Percent,
-                  uint8_t streamPercent);
-
+  void stop(Stop what, const std::string& script = std::string());
+  // Called before sound files are deleted or replaced. See IPcmSink::release.
+  void release(const std::string& path);
   void tick(int64_t nowMs);
 
-  // One-shots only, or a looping notification would wait for a station to end.
-  bool isPlaying() const;
+  // The alert that repeats now, as a token for stopRepeatingAlert(); 0 when none does. Asked right
+  // after play() started an alert, it names that alert.
+  uint32_t repeatingAlert() const;
+  // Ends that alert's repeating, and nothing that replaced it.
+  void stopRepeatingAlert(uint32_t token);
+
+  // A one-shot that repeats counts between its plays as well.
+  bool alertPlaying() const;
+  // An app one-shot or an effect; never the music. What sound.playing() answers.
+  bool appSoundPlaying() const;
   Caps caps() const;
+  // Whether some entry is a kind this clock has the output for; files are not looked up.
+  bool canPlay(const Choices& choices) const;
+  // Song and speech text judged by the sink that would play them; true where none exists.
+  bool check(const Choices& choices, Origin origin, DispatchDetail& detail);
+
+  const GroupStatus& alertStatus() const { return alert_; }
+  const GroupStatus& appStatus() const { return app_; }
+  // True once after either status changed.
+  bool takeStatusChanged();
 
  private:
   enum class Sink : uint8_t { None, Tone, Track, Pcm };
+  static constexpr int64_t kRepeatGapMs = 250;
 
-  PlayResult playAuto(const std::string& name, DispatchDetail& detail);
+  PlayResult startFirst(const Choices& choices, Group group, bool effect,
+                        const std::string& script, DispatchDetail& detail);
+  PlayResult start(const Spec& spec, Group group, bool effect, const std::string& script,
+                   DispatchDetail& detail);
+  PlayResult startFile(const Spec& spec, Group group, bool effect, const std::string& script,
+                       DispatchDetail& detail);
+  PlayResult startPcm(const Spec& spec, const std::string& path, Group group, bool effect,
+                      const std::string& script, DispatchDetail& detail);
+  std::string findMp3(const std::string& name, const std::string& script) const;
+  const char* missingOutput(const Spec& spec) const;
+  bool mayStartOneShot(Group group) const { return group != Group::App || !alertPlaying(); }
+  bool oneShotActive() const;
+  bool oneShotOn() const { return repeating_ || oneShotActive(); }
+  void oneShotStarted(Sink sink, Group group, const std::string& script, const Spec& spec,
+                      bool effect);
+  void setRepeating(bool on);
+  void stopOneShot();
   void stopOthersThan(Sink keep);
+  void setStatus(Group group, const std::string& name);
+  void refreshStatus();
 
   IToneSink* tone_ = nullptr;
   ITrackSink* track_ = nullptr;
   IPcmSink* pcm_ = nullptr;
   const IAssetProbe* assets_ = nullptr;
-  bool muted_ = false;
-  // -1 is "never pushed"; a missing sink is skipped so one attached later still gets its value.
-  int buzzerVolume_ = -1;
-  int trackVolume_ = -1;
-  int mp3Volume_ = -1;
-  int streamVolume_ = -1;
+
+  Volumes volumes_;
+  bool volumesPushed_ = false;
+
+  // Counts the one-shots started; a repeat keeps the number of the play it repeats.
+  uint32_t oneShotSeq_ = 0;
+  Group oneShotGroup_ = Group::Alert;
+  std::string oneShotOwner_;
+  // A one-shot with loop: started again once it ended, until it is stopped or replaced.
+  bool repeating_ = false;
+  // Whether the repeating one-shot plays on the station's speaker; only then is the station held.
+  bool repeatOnSpeaker_ = false;
+  bool streamHeld_ = false;
+  Spec repeat_;
+  int64_t lastRepeatMs_ = 0;
+
+  GroupStatus alert_;
+  GroupStatus app_;
+  bool statusChanged_ = false;
 };
 
 }

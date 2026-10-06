@@ -146,6 +146,19 @@ function isSentinel(ctx, v) {
   return typeof v === "number" && ctx.sentinelIds.has(v);
 }
 
+// AWTRIX 3 read "70" and "true" like 70 and true; NG wants the JSON types.
+function scalar(v) {
+  if (typeof v !== "string") return v;
+  const t = v.trim();
+  if (t === "true" || t === "false") return t === "true";
+  return t !== "" && Number.isFinite(Number(t)) ? Number(t) : v;
+}
+
+function enumIndex(ctx, spec, v) {
+  if (typeof v === "boolean") return spec.values.length === 2 ? Number(v) : -1;
+  return Number.isInteger(v) && !isSentinel(ctx, v) && v >= 0 && v < spec.values.length ? v : -1;
+}
+
 function toMs(ctx, key, to, v, out) {
   if (isSentinel(ctx, v)) {
     ctx.wrapMs.add(v);
@@ -198,19 +211,57 @@ function convertTextFragments(v, ctx) {
   return out;
 }
 
+// AWTRIX 3 read any icon longer than 64 characters as base64; NG wants a data
+// URL naming the type. Only recognisable GIF and JPEG data is rewritten.
+function inlineIcon(v) {
+  if (typeof v !== "string" || v.length <= 64 || v.startsWith("data:")) return v;
+  if (v.startsWith("R0lGOD")) return "data:image/gif;base64," + v;
+  if (v.startsWith("/9j/")) return "data:image/jpeg;base64," + v;
+  return v;
+}
+
+// AWTRIX 3 spread a notification's sound over sound (a name), rtttl and
+// loopSound; NG takes one sound object. rtttl plays where both are given, as
+// it did in AWTRIX 3. An NG sound passes through untouched.
+function convertSound(s, ctx) {
+  let sound = s.sound;
+  if ("rtttl" in s) {
+    sound = { rtttl: s.rtttl };
+    change(ctx, "key", "rtttl", 'sound: {"rtttl": ...}');
+    if ("sound" in s) change(ctx, "strip", "sound", "", "the rtttl melody plays instead");
+  }
+  if (!("loopSound" in s)) return sound;
+  if (s.loopSound !== true) {
+    change(ctx, "strip", "loopSound: " + JSON.stringify(s.loopSound), "", "a sound plays once by default");
+    return sound;
+  }
+  if (typeof sound === "string" && sound !== "") {
+    sound = { file: sound, loop: true };
+  } else if (sound && typeof sound === "object" && !Array.isArray(sound)) {
+    sound = Object.assign({}, sound, { loop: true });
+  } else {
+    change(ctx, "strip", "loopSound", "", "there is no sound to repeat");
+    return sound;
+  }
+  change(ctx, "key", "loopSound", '"loop": true inside sound');
+  return sound;
+}
+
 // The pushed-app / notification payload -- the heart of the key map. Original
 // key order is preserved; converted keys stay in their place.
 export function transformAppPayload(obj, kind, ctx) {
   const out = {};
   let wantsPalette = false;
   let scrollObj = null;
-  for (const [k, v] of Object.entries(obj)) {
+  let soundIn = null;
+  for (let [k, v] of Object.entries(obj)) {
     const spec = KEY_MAP[k];
     if (!spec) {
       out[k] = v;
       if (!NG_KEY_SET.has(k)) warn(ctx, "unmappedKey", { key: k });
       continue;
     }
+    if (spec.number || spec.kind === "enum" || spec.kind === "scroll") v = scalar(v);
     if (spec.notificationOnly && kind === "app") {
       warn(ctx, "notificationOnlyKey", { key: spec.to || k });
     }
@@ -231,18 +282,23 @@ export function transformAppPayload(obj, kind, ctx) {
       case "seconds":
         toMs(ctx, k, spec.to, v, out);
         break;
-      case "enum":
-        if (Number.isInteger(v) && v >= 0 && v < spec.values.length) {
-          out[spec.to] = spec.values[v];
-          change(ctx, "value", k + ": " + v, spec.to + ': "' + spec.values[v] + '"');
+      case "enum": {
+        const n = enumIndex(ctx, spec, v);
+        if (n >= 0) {
+          out[spec.to] = spec.values[n];
+          change(ctx, "value", k + ": " + v, spec.to + ': "' + spec.values[n] + '"');
         } else if (typeof v === "string" && spec.values.includes(v)) {
           out[spec.to] = v;                          // already the NG word
           if (spec.to !== k) change(ctx, "key", k, spec.to);
+        } else if (spec.template && isSentinel(ctx, v)) {
+          out[spec.template] = v;
+          change(ctx, "key", k, spec.template);
         } else {
           out[k] = v;
           warn(ctx, "enumOutOfRange", { key: k, value: JSON.stringify(v) });
         }
         break;
+      }
       case "palette":
         if (k === "gradient") {
           if (Array.isArray(v)) {
@@ -280,6 +336,11 @@ export function transformAppPayload(obj, kind, ctx) {
         }
         break;
       }
+      case "sound":
+        soundIn = soundIn || {};
+        soundIn[k] = v;
+        if (!("sound" in out)) out.sound = null;     // keeps the place of the first sound key
+        break;
       case "draw":
         out.draw = convertDraw(v, ctx);
         break;
@@ -293,6 +354,11 @@ export function transformAppPayload(obj, kind, ctx) {
         } else if (k === "overlay") {
           out.overlay = v === "clear" ? "" : v;
           if (v === "clear") change(ctx, "value", 'overlay: "clear"', 'overlay: ""');
+        } else if (k === "icon") {
+          out.icon = inlineIcon(v);
+          if (out.icon !== v) {
+            change(ctx, "value", "icon: <base64>", 'icon: "' + out.icon.slice(0, out.icon.indexOf(",") + 1) + '…"');
+          }
         } else {
           out[k] = v;
         }
@@ -302,6 +368,11 @@ export function transformAppPayload(obj, kind, ctx) {
         warn(ctx, "deadKey", { key: k, note: spec.note, anchor: spec.anchor });
         break;
     }
+  }
+  if (soundIn) {
+    const merged = convertSound(soundIn, ctx);
+    if (merged === undefined) delete out.sound;
+    else out.sound = merged;
   }
   if (scrollObj) {
     out.scroll = Object.assign(
@@ -390,10 +461,8 @@ export function transformSettingsPayload(obj, ctx) {
         break;
       case "volume": {
         const pct = Math.round(Math.max(0, Math.min(30, Number(v) || 0)) * 100 / 30);
-        out.buzzerVolume = pct;
-        out.dfplayerVolume = pct;
-        change(ctx, "key", k, "buzzerVolume + dfplayerVolume",
-          "NG has one volume per output, each 0-100; the old 0-30 value is rescaled");
+        out[spec.to] = pct;
+        change(ctx, "key", k, spec.to, "the master volume is 0-100; the 0-30 value is rescaled");
         break;
       }
       case "nested":
@@ -463,7 +532,7 @@ export function transformBody(bodyKind, v, ctx) {
     case "sound": {
       const out = {};
       for (const [k, val] of Object.entries(v)) {
-        if (k === "sound") out.sound = val;
+        if (k === "sound") { out.file = val; change(ctx, "key", "sound", "file"); }
         else { out[k] = val; warn(ctx, "unmappedKey", { key: k }); }
       }
       return out;
@@ -1086,11 +1155,14 @@ export function convertN8n(input, ctx) {
           entry.name = spec.to;
           entry.value = typeof entry.value === "string" ? String(Math.round(n * 1000)) : Math.round(n * 1000);
         } else if (spec.kind === "enum") {
-          const n = Number(entry.value);
-          if (Number.isInteger(n) && n >= 0 && n < spec.values.length && !isExpr) {
+          const n = isExpr ? -1 : enumIndex(ctx, spec, scalar(entry.value));
+          if (n >= 0) {
             change(ctx, "value", entry.name + ": " + entry.value, spec.to + ": " + spec.values[n]);
             entry.name = spec.to;
             entry.value = spec.values[n];
+          } else if (spec.template && isExpr) {
+            change(ctx, "key", entry.name, spec.template);
+            entry.name = spec.template;
           } else {
             warn(ctx, "enumOutOfRange", { key: entry.name, value: JSON.stringify(entry.value) });
           }

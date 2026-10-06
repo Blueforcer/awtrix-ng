@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 #include "core/Command.h"
@@ -18,9 +19,9 @@ class CommandBus {
   bool empty() const { return count_ == 0; }
   bool full() const { return count_ == buf_.size(); }
 
-  bool push(const Command& c) {
+  bool push(Command c) {
     if (full() || buf_.empty()) return false;
-    buf_[head_] = c;
+    buf_[head_] = std::move(c);
     head_ = (head_ + 1) % buf_.size();
     ++count_;
     return true;
@@ -28,7 +29,9 @@ class CommandBus {
 
   bool pop(Command& out) {
     if (empty()) return false;
-    out = buf_[tail_];
+    // Move-constructs a temporary; the previous output buffers are freed and the slot is empty.
+    out = Command(std::move(buf_[tail_]));
+    buf_[tail_] = Command{};
     tail_ = (tail_ + 1) % buf_.size();
     --count_;
     return true;

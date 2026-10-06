@@ -1,0 +1,9 @@
+# Source archive: official kernel.org signed checksum manifest.
+# https://cdn.kernel.org/pub/linux/kernel/v6.x/sha256sums.asc
+sha256  2b69564f7d4fea0c859b1959ba33709ee6e9139bd100e30a853b57159a8221b8  linux-6.18.52.tar.xz
+
+# License files checked against the stable Linux v6.18.52 source tag.
+# https://github.com/gregkh/linux/tree/v6.18.52/LICENSES
+sha256  fb5a425bd3b3cd6071a3a9aff9909a859e7c1158d54d32e07658398cd67eb6a0  COPYING
+sha256  8780e78a1a737e127f25a65f6d95269bffd36158dc261114de7859b490bfc5aa  LICENSES/preferred/GPL-2.0
+sha256  8e378ab93586eb55135d3bc119cce787f7324f48394777d00c34fa3d0be3303f  LICENSES/exceptions/Linux-syscall-note

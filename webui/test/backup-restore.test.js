@@ -1,14 +1,15 @@
 /* Backup & restore.
    - Offline (default): drives the real zipStore() inside jsdom and checks it
      emits a well-formed store-only ZIP (manifest first, extractable entries).
-   - Live (--sim): a full round-trip - the browser's zipStore builds an archive
-     from the running simulator, we scramble the state, POST the archive back to
+   - Live (--live): a full round-trip against a running AWTRIX NG such as
+     awtrix-linux on :8080 - the browser's zipStore builds an archive from it,
+     we scramble the state, POST the archive back to
      the real /api/v1/restore, and confirm the state came back. The ZIP the
      browser writes is read by the actual firmware ZipReader, so this is the
      writer<->reader interop check the offline test can't be. */
-const { boot, bootSim, goto, flush } = require('./harness');
+const { boot, bootLive, goto, flush, stubXhr } = require('./harness');
 
-const SIM = process.argv.includes('--sim');
+const LIVE = process.argv.includes('--live');
 const BASE = 'http://localhost:8080';
 let pass = 0, fail = 0;
 function assert(cond, msg) {
@@ -134,7 +135,61 @@ async function testSelectAllCategories() {
   window.close();
 }
 
-// ---- live simulator: full round-trip ---------------------------------------
+async function testSetupOffersWifiAndRestore() {
+  const { window, netlog } = await boot({ device: { ipAddress: '0.0.0.0', macAddress: 'A4:CF:12:0B:3C:7D' },
+    system: { wifiSsid: '', hostname: 'awtrix', netStatic: true, ip: '10.0.0.2',
+      gateway: '10.0.0.1', dns1: '10.0.0.1', wifiConnectTimeout: 30, mqttHost: 'broker' } });
+  await goto(window, '#/system');
+  const doc = window.document;
+  const rows = [...doc.querySelectorAll('#sec-wifi .frow')];
+  const fields = rows.filter(row => row.querySelector('input'));
+  assert(fields.length === 3, 'setup offers exactly Wi-Fi name, password and hostname');
+  assert(rows[0] && !rows[0].querySelector('input') && rows[0].textContent.includes('A4:CF:12:0B:3C:7D'),
+    'setup shows the MAC address first, for networks that only admit known devices');
+  const restore = doc.querySelector('#sec-backup');
+  assert(!!restore, 'setup offers backup restore');
+  const files = restore ? [...restore.querySelectorAll('input[type=file]')] : [];
+  assert(files.length === 1 && doc.querySelectorAll('input[type=file]').length === 1,
+    'restore is the only file upload in setup');
+  assert(restore && !restore.querySelector('input[type=checkbox]') &&
+    ![...restore.querySelectorAll('button')].some(b => b.textContent === 'Download backup'),
+    'setup offers no backup download');
+  const link = restore && restore.querySelector('.captive-hint a');
+  assert(link && link.getAttribute('href') === window.location.origin + '/' &&
+    link.textContent === window.location.host, 'captive hint links to this setup page');
+  assert(!doc.querySelector('#sec-adv'), 'setup does not expose other system settings');
+  assert(netlog.every(line => !/secrets|\/api\/v1\/(settings|files|apps)/.test(line)),
+    'setup does not request private settings or files');
+  const changes = ['SetupNetwork', 'test-password', 'new-host'];
+  fields.forEach((field, i) => {
+    const input = field.querySelector('input');
+    input.value = changes[i];
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+  const fetch = window.fetch;
+  let saved;
+  window.fetch = async (url, opts) => {
+    if (url === '/api/v1/system' && opts.method === 'PUT') saved = JSON.parse(opts.body);
+    return fetch(url, opts);
+  };
+  doc.querySelector('#savebar button.pri').click();
+  await flush();
+  assert(JSON.stringify(saved) === JSON.stringify({ wifiSsid: changes[0], wifiPass: changes[1], hostname: changes[2] }),
+    'setup saves only the three allowed string fields');
+  const uploads = [];
+  stubXhr(window, uploads);
+  if (files.length) {
+    Object.defineProperty(files[0], 'files', { value: [new window.File(['zip'], 'backup.zip')] });
+    files[0].dispatchEvent(new window.Event('change'));
+    await flush();
+  }
+  assert(uploads.length === 1 && uploads[0].method === 'POST' && uploads[0].url === '/api/v1/restore' &&
+    uploads[0].files[0]?.name === 'backup.zip', 'setup restore uploads the chosen backup');
+  assert(doc.querySelector('#toasts').textContent.includes('Backup restored'), 'setup restore reports success');
+  window.close();
+}
+
+// ---- live backend: full round-trip -----------------------------------------
 async function postArchive(bytes) {
   const fd = new FormData();
   fd.append('file', new Blob([bytes], { type: 'application/zip' }), 'backup.zip');
@@ -142,7 +197,7 @@ async function postArchive(bytes) {
   return { status: r.status, body: await r.json() };
 }
 
-async function testRoundTripAgainstSim() {
+async function testRoundTripAgainstLiveBackend() {
   // Seed a known state through the real API.
   await fetch(BASE + '/api/v1/settings', {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -152,9 +207,15 @@ async function testRoundTripAgainstSim() {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ wifiSsid: 'BackupNet', wifiPass: 'topsecret' }),
   });
+  // A script with a sound of its own; the sound has to come back with the scripts category.
+  await fetch(BASE + '/api/v1/apps/script/BkRacer', { method: 'PUT', body: 'def draw() end\n' });
+  const sound = new FormData();
+  sound.append('file', new Blob(['ID3-backup-boost']), 'boost.mp3');
+  const upload = await fetch(BASE + '/api/v1/apps/script/BkRacer/sounds', { method: 'POST', body: sound });
+  assert(upload.status === 200, 'the script sound is stored (got ' + upload.status + ')');
 
   // The browser builds the backup from the live device.
-  const { window } = await bootSim(BASE + '/');
+  const { window } = await bootLive(BASE + '/');
   const entries = await window.collectBackup({ wifi: true, settings: true, icons: true,
     melodies: true, palettes: true, scripts: true, apporder: true });
   const names = entries.map(e => e.name);
@@ -162,6 +223,8 @@ async function testRoundTripAgainstSim() {
   assert(names.includes('config/wifi.json'), 'wifi captured');
   assert(names.includes('config/system.json'), 'system config captured');
   assert(names.includes('config/settings.json'), 'settings captured');
+  assert(names.includes('SCRIPTS/BkRacer.ax') && names.includes('SCRIPTS/BkRacer/boost.mp3'),
+    'a script and its sound are captured');
   const bytes = await blobBytes(window, window.zipStore(entries));
   window.close();
 
@@ -174,6 +237,8 @@ async function testRoundTripAgainstSim() {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ wifiSsid: 'WrongNet', wifiPass: 'wrong' }),
   });
+  await fetch(BASE + '/api/v1/apps/BkRacer', { method: 'DELETE' });
+  assert((await fetch(BASE + '/SCRIPTS/BkRacer/boost.mp3')).status === 404, 'deleting the script took its sound');
 
   // The firmware reads the browser's archive and applies it.
   const res = await postArchive(bytes);
@@ -181,6 +246,9 @@ async function testRoundTripAgainstSim() {
   assert(res.body.ok === true, 'restore reports ok');
   assert(res.body.applied.settings >= 1, 'settings applied');
   assert(res.body.applied.wifi >= 1, 'wifi applied');
+  const restored = await fetch(BASE + '/SCRIPTS/BkRacer/boost.mp3');
+  assert(restored.status === 200 && await restored.text() === 'ID3-backup-boost', 'the script sound is restored byte for byte');
+  await fetch(BASE + '/api/v1/apps/BkRacer', { method: 'DELETE' });
 
   // Confirm the scrambled state was overwritten.
   const set = await (await fetch(BASE + '/api/v1/settings')).json();
@@ -198,7 +266,8 @@ async function testRoundTripAgainstSim() {
 async function main() {
   await testZipStructure();
   await testSelectAllCategories();
-  if(!SIM){
+  await testSetupOffersWifiAndRestore();
+  if(!LIVE){
     const{window,store}=await boot();
     store.files['/ICONS'].set('mail.gif',12);
     const origin={name:'mail.gif',hub:'https://awtrix.de/icons/',slug:'mail',sha256:'a'.repeat(64)};
@@ -210,12 +279,22 @@ async function main() {
     store.originFailure=true;let failed=false;
     try{await window.collectBackup({icons:true});}catch(e){failed=true;}
     assert(failed,'metadata storage failure cannot silently produce incomplete backup');
+    for(const[status,body,want]of[
+      [401,'{"error":{"code":"unauthorized","message":"Login required"}}','Login required'],
+      [507,'{"error":{"code":"insufficientStorage"}}','insufficientStorage'],
+      [400,'{"error":"manifest missing"}','manifest missing'],
+      [500,'oops','HTTP 500']]){
+      window.xhrPost=async()=>({status,responseText:body});
+      let msg='';
+      try{await window.restoreBackup({name:'b.zip'});}catch(e){msg=e.message;}
+      assert(msg===want,'restore error '+status+' reads "'+want+'" (got "'+msg+'")');
+    }
     window.close();
   }
-  if (SIM) {
-    await testRoundTripAgainstSim();
+  if (LIVE) {
+    await testRoundTripAgainstLiveBackend();
   } else {
-    console.log('  (skipping live round-trip; pass --sim with the simulator running)');
+    console.log('  (skipping live round-trip; pass --live with awtrix-linux running on :8080)');
   }
   await flush(20);
   console.log(`backup-restore: ${pass} passed, ${fail} failed`);

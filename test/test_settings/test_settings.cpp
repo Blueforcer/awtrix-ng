@@ -3,6 +3,7 @@
 #include <string>
 
 #include "core/Settings.h"
+#include "core/SettingsBlob.h"
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
 
@@ -75,8 +76,16 @@ static void test_defaults_unchanged() {
   TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, s.textColor);
   TEST_ASSERT_EQUAL_INT(7000, (int)s.appDurationMs);
   TEST_ASSERT_TRUE(s.useCelsius);
-  TEST_ASSERT_TRUE(s.soundEnabled);
+  TEST_ASSERT_TRUE(s.bootSound);
+  TEST_ASSERT_EQUAL_INT(60, s.volume);
+  TEST_ASSERT_EQUAL_INT(80, s.radioVolume);
+  TEST_ASSERT_EQUAL_INT(100, s.appVolume);
+  TEST_ASSERT_EQUAL_INT(100, s.alertVolume);
+  TEST_ASSERT_TRUE(s.calendarAnimation);
   TEST_ASSERT_FALSE(s.blockNavigation);
+  TEST_ASSERT_TRUE(s.weekdayBar.show);
+  TEST_ASSERT_TRUE(s.dateWeekdayBar.show);
+  TEST_ASSERT_EQUAL_HEX32(s.weekdayBar.activeColor, s.dateWeekdayBar.activeColor);
 }
 
 static void test_toJson_camelCase_schema() {
@@ -220,6 +229,23 @@ static void test_validate_bad_enum_value() {
   TEST_ASSERT_EQUAL_STRING("must be one of: steady blink pulse", e.message.c_str());
 }
 
+static void test_clock_face_names_on_the_wire() {
+  Settings s;
+  TEST_ASSERT_EQUAL_INT(kClockFaceSheet, s.clockFace);
+  TEST_ASSERT_EQUAL_STRING("sheet", strAt(reply(s), "clockFace").c_str());
+  Body d;
+  d.set("clockFace", "big");
+  d.applyTo(s);
+  TEST_ASSERT_EQUAL_INT(kClockFaceBig, s.clockFace);
+  TEST_ASSERT_EQUAL_STRING("big", strAt(reply(s), "clockFace").c_str());
+  Body bad;
+  bad.set("clockFace", "square");
+  SettingsError e;
+  TEST_ASSERT_FALSE(bad.validate(e));
+  TEST_ASSERT_EQUAL_STRING("clockFace", e.field.c_str());
+  TEST_ASSERT_EQUAL_STRING("must be one of: sheet ring flap month big", e.message.c_str());
+}
+
 static void test_validate_accepts_valid_payload() {
   Body d;
   d.set("brightness", 200);
@@ -238,27 +264,24 @@ static void test_validate_brightness_range() {
   TEST_ASSERT_EQUAL_STRING("brightness", e.field.c_str());
 }
 
-// One key per output, all four on the same 0-100 scale.
-static void test_validate_volume_range() {
-  SettingsError e;
-  for (const char* key : {"buzzerVolume", "dfplayerVolume", "mp3Volume", "radioVolume"}) {
-    Body dOk;
-    dOk.set(key, 100);
-    TEST_ASSERT_TRUE_MESSAGE(dOk.validate(e), e.field.c_str());
-
-    Body dOver;
-    dOver.set(key, 101);
-    TEST_ASSERT_FALSE_MESSAGE(dOver.validate(e), key);
+// The four mixer volumes validate; per-output keys are unknown.
+static void test_mixer_volumes_validate_and_old_keys_are_unknown() {
+  for (const char* key : {"volume", "radioVolume", "appVolume", "alertVolume"}) {
+    Body ok;
+    ok.set(key, 40);
+    SettingsError e;
+    TEST_ASSERT_TRUE_MESSAGE(ok.validate(e), key);
+    Body high;
+    high.set(key, 101);
+    TEST_ASSERT_FALSE_MESSAGE(high.validate(e), key);
     TEST_ASSERT_EQUAL_STRING(key, e.field.c_str());
   }
-}
-
-// The old single key is gone rather than quietly accepted, so a stale client hears about it.
-static void test_the_old_volume_key_is_rejected() {
-  Body d;
-  d.set("volume", 20);
-  SettingsError e;
-  TEST_ASSERT_FALSE(d.validate(e));
+  for (const char* key : {"buzzerVolume", "dfplayerVolume", "mp3Volume", "soundEnabled"}) {
+    Body old;
+    old.set(key, 40);
+    SettingsError e;
+    TEST_ASSERT_FALSE_MESSAGE(old.validate(e), key);
+  }
 }
 
 static void test_validate_type_mismatch() {
@@ -275,6 +298,19 @@ static void test_validate_unknown_key_rejected() {
   SettingsError e;
   TEST_ASSERT_FALSE(d.validate(e));
   TEST_ASSERT_EQUAL_STRING("ABRI", e.field.c_str());
+}
+
+static void test_restore_skips_keys_this_firmware_dropped() {
+  Body d;
+  d.set("radioMeta", true).set("brightness", 40);
+  SettingsError e;
+  TEST_ASSERT_TRUE(Settings::validateRead(api::JsonReader(d.str()), e,
+                                          Settings::UnknownKeys::Skip));
+  Body bad;
+  bad.set("radioMeta", true).set("brightness", 999);
+  TEST_ASSERT_FALSE(Settings::validateRead(api::JsonReader(bad.str()), e,
+                                           Settings::UnknownKeys::Skip));
+  TEST_ASSERT_EQUAL_STRING("brightness", e.field.c_str());
 }
 
 static void test_validate_bad_transition_name() {
@@ -314,12 +350,12 @@ static void test_applyJson_clamps_out_of_range_on_load() {
   Body d;
   d.set("brightness", 9999);
   d.set("timeMode", 99);
-  d.set("buzzerVolume", -4);
+  d.set("appVolume", -4);
   d.set("saturation", 140);
   d.applyTo(s);
   TEST_ASSERT_EQUAL_INT(255, s.brightness);
   TEST_ASSERT_EQUAL_INT(6, s.timeMode);
-  TEST_ASSERT_EQUAL_INT(0, s.buzzerVolume);
+  TEST_ASSERT_EQUAL_INT(0, s.appVolume);
   TEST_ASSERT_EQUAL_INT(100, s.saturation);
 }
 
@@ -368,6 +404,7 @@ static void test_json_roundtrip_covers_every_field() {
   a.calendarHeaderColor = 0x111111u;
   a.calendarTextColor = 0x222222u;
   a.calendarBodyColor = 0x333333u;
+  a.calendarAnimation = false;
   a.time24h = false;
   a.timeLeadingZero = false;
   a.timeShowSeconds = true;
@@ -381,11 +418,18 @@ static void test_json_roundtrip_covers_every_field() {
   a.weekdayBar.startOnMonday = false;
   a.useCelsius = false;
   a.blockNavigation = true;
-  a.soundEnabled = false;
+  a.bootSound = false;
   a.uppercase = false;
   a.weekdayBar.show = false;
   a.weekdayBar.activeColor = 0x444444u;
   a.weekdayBar.inactiveColor = 0x555555u;
+  a.dateWeekdayBar.show = true;
+  a.dateWeekdayBar.startOnMonday = false;
+  a.dateWeekdayBar.weekendMask = 1u << 5;
+  a.dateWeekdayBar.activeColor = 0x00AAFFu;
+  a.dateWeekdayBar.inactiveColor = 0x113355u;
+  a.dateWeekdayBar.weekendActiveColor = 0xFFAA00u;
+  a.dateWeekdayBar.weekendInactiveColor = 0x663300u;
   a.timeColor = OptColor{0x666666u, true};
   a.dateColor = OptColor{0x777777u, true};
   a.humidityColor = OptColor{0x888888u, true};
@@ -393,10 +437,10 @@ static void test_json_roundtrip_covers_every_field() {
   a.batteryColor = OptColor{0xAAAAAAu, true};
   a.scrollDefaults.speed = 250;
   a.scrollDefaults.mode = ScrollMode::Bounce;
-  a.buzzerVolume = 17;
-  a.dfplayerVolume = 42;
-  a.mp3Volume = 91;
-  a.radioVolume = 33;
+  a.volume = 17;
+  a.radioVolume = 42;
+  a.appVolume = 91;
+  a.alertVolume = 33;
   a.saturation = 65;
   a.gamma = 2.4f;
   a.colorCorrection = OptColor{0xBBCCDDu, true};
@@ -428,6 +472,7 @@ static void test_canonicalKey_rejects_what_is_not_a_flat_field() {
   TEST_ASSERT_NULL(Settings::canonicalKey("brightness\":1,\"autoBrightness"));
   TEST_ASSERT_NULL(Settings::canonicalKey("scroll"));
   TEST_ASSERT_NULL(Settings::canonicalKey("weekdayBar"));
+  TEST_ASSERT_NULL(Settings::canonicalKey("dateWeekdayBar"));
 }
 
 static void test_read_answers_every_field_kind() {
@@ -481,8 +526,153 @@ static void test_read_follows_an_applied_patch() {
   TEST_ASSERT_EQUAL_INT(0x102030, s.read("dateColor").i);
 }
 
+static void test_stored_settings_from_before_clock_faces_take_the_nearest_face() {
+  const struct {
+    const char* json;
+    int face;
+  } cases[] = {{"{\"timeMode\":3}", kClockFaceRing},
+               {"{\"timeMode\":4}", kClockFaceRing},
+               {"{\"timeMode\":5}", kClockFaceBig},
+               {"{\"timeMode\":0}", kClockFaceBig},
+               {"{\"timeMode\":2}", kClockFaceSheet},
+               {"{\"timeMode\":6}", kClockFaceSheet},
+               {"{\"brightness\":20}", kClockFaceSheet},
+               {"{\"timeMode\":3,\"clockFace\":\"flap\"}", kClockFaceFlap}};
+  for (const auto& c : cases) {
+    Settings s;
+    s.clockFace = kClockFaceMonth;
+    s.applyStored(api::JsonReader(c.json));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(c.face, s.clockFace, c.json);
+  }
+  Settings patched;
+  patched.clockFace = kClockFaceMonth;
+  patched.applyRead(api::JsonReader("{\"timeMode\":3}"));
+  TEST_ASSERT_EQUAL_INT(kClockFaceMonth, patched.clockFace);
+}
+
+static void test_clock_and_date_weekday_bar_patches_are_independent() {
+  Settings s;
+  s.dateWeekdayBar.activeColor = 0x00AAFFu;
+  TEST_ASSERT_EQUAL_INT(1, s.applyRead(api::JsonReader(
+      R"({"weekdayBar":{"show":false,"activeColor":"#FF0000"}})")));
+  TEST_ASSERT_FALSE(s.weekdayBar.show);
+  TEST_ASSERT_TRUE(s.dateWeekdayBar.show);
+  TEST_ASSERT_EQUAL_HEX32(0x00AAFFu, s.dateWeekdayBar.activeColor);
+  TEST_ASSERT_EQUAL_INT(1, s.applyRead(api::JsonReader(
+      R"({"dateWeekdayBar":{"startOnMonday":false,"weekendDays":["friday"]}})")));
+  TEST_ASSERT_TRUE(s.weekdayBar.startOnMonday);
+  TEST_ASSERT_FALSE(s.dateWeekdayBar.startOnMonday);
+  TEST_ASSERT_EQUAL_UINT8(1u << 5, s.dateWeekdayBar.weekendMask);
+  TEST_ASSERT_EQUAL_UINT8((1u << 0) | (1u << 6), s.weekdayBar.weekendMask);
+  TEST_ASSERT_EQUAL_HEX32(0x00AAFFu, s.dateWeekdayBar.activeColor);
+}
+
+static void test_old_saved_weekday_bar_is_copied_even_after_a_clock_face_key() {
+  for (const char* json : {
+           R"({"clockFace":"flap","weekdayBar":{"show":false,"startOnMonday":false,"weekendDays":["friday"],"activeColor":"#102030","inactiveColor":"#405060","weekendActiveColor":"#708090","weekendInactiveColor":"#A0B0C0"}})",
+           R"({"weekdayBar":{"show":false,"activeColor":"#102030"},"clockFace":"flap"})"}) {
+    Settings s;
+    s.dateWeekdayBar.weekendMask = 0;
+    s.dateWeekdayBar.activeColor = 0xFF0000u;
+    s.applyStored(api::JsonReader(json));
+    const std::string saved = reply(s);
+    const std::string clock(at(saved, "weekdayBar").valueText());
+    const std::string date(at(saved, "dateWeekdayBar").valueText());
+    TEST_ASSERT_EQUAL_STRING(clock.c_str(), date.c_str());
+    TEST_ASSERT_EQUAL_INT(kClockFaceFlap, s.clockFace);
+  }
+}
+
+static void test_new_saved_weekday_bars_remain_independent_in_either_key_order() {
+  for (const char* json : {
+           R"({"clockFace":"month","weekdayBar":{"show":false,"activeColor":"#FF0000"},"dateWeekdayBar":{"show":true,"activeColor":"#00FF00"}})",
+           R"({"dateWeekdayBar":{"show":true,"activeColor":"#00FF00"},"weekdayBar":{"show":false,"activeColor":"#FF0000"},"clockFace":"month"})"}) {
+    Settings s;
+    s.applyStored(api::JsonReader(json));
+    TEST_ASSERT_FALSE(s.weekdayBar.show);
+    TEST_ASSERT_TRUE(s.dateWeekdayBar.show);
+    TEST_ASSERT_EQUAL_HEX32(0xFF0000u, s.weekdayBar.activeColor);
+    TEST_ASSERT_EQUAL_HEX32(0x00FF00u, s.dateWeekdayBar.activeColor);
+    TEST_ASSERT_EQUAL_INT(kClockFaceMonth, s.clockFace);
+    const std::string saved = reply(s);
+    Settings restored;
+    restored.applyStored(api::JsonReader(saved));
+    TEST_ASSERT_EQUAL_STRING(saved.c_str(), reply(restored).c_str());
+  }
+}
+
+static void test_date_weekday_bar_validation_reports_its_own_nested_field() {
+  const struct {
+    const char* json;
+    const char* field;
+  } cases[] = {
+      {R"({"dateWeekdayBar":true})", "dateWeekdayBar"},
+      {R"({"dateWeekdayBar":{"show":"yes"}})", "dateWeekdayBar.show"},
+      {R"({"dateWeekdayBar":{"weekendDays":["caturday"]}})", "dateWeekdayBar.weekendDays"},
+      {R"({"dateWeekdayBar":{"activeColor":null}})", "dateWeekdayBar.activeColor"},
+      {R"({"dateWeekdayBar":{"nonesuch":true}})", "dateWeekdayBar.nonesuch"}};
+  for (const auto& c : cases) {
+    SettingsError err;
+    TEST_ASSERT_FALSE(Settings::validateRead(api::JsonReader(c.json), err));
+    TEST_ASSERT_EQUAL_STRING(c.field, err.field.c_str());
+  }
+}
+
+static void test_settings_blob_roundtrips_current_settings_with_a_schema_version() {
+  Settings source;
+  Body().set("brightness", 37).set("clockFace", "month")
+      .raw("weekdayBar", R"({"show":false,"activeColor":"#102030"})")
+      .raw("dateWeekdayBar", R"({"show":true,"activeColor":"#405060"})")
+      .applyTo(source);
+  const std::string blob = settingsblob::encode(source);
+  TEST_ASSERT_EQUAL_INT(settingsblob::kSchemaVersion, intAt(blob, "schemaVersion"));
+  Settings restored;
+  settingsblob::apply(restored, blob);
+  TEST_ASSERT_EQUAL_STRING(reply(source).c_str(), reply(restored).c_str());
+}
+
+static void test_settings_blob_rejects_empty_or_malformed_data_before_mutation() {
+  for (const char* blob : {"", " ", R"({"brightness":19,"weekdayBar":{"show":false})",
+                           R"({"brightness":19} trailing)"}) {
+    Settings settings;
+    settings.clockFace = kClockFaceMonth;
+    settings.dateWeekdayBar.activeColor = 0x102030u;
+    const std::string before = reply(settings);
+    settingsblob::apply(settings, blob);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(before.c_str(), reply(settings).c_str(), blob);
+  }
+}
+
+static void test_settings_blob_preserves_legacy_migration_without_a_version() {
+  Settings settings;
+  settingsblob::apply(settings,
+      R"({"timeMode":3,"weekdayBar":{"show":false,"activeColor":"#102030"}})");
+  TEST_ASSERT_EQUAL_INT(kClockFaceRing, settings.clockFace);
+  TEST_ASSERT_FALSE(settings.dateWeekdayBar.show);
+  TEST_ASSERT_EQUAL_HEX32(0x102030u, settings.dateWeekdayBar.activeColor);
+}
+
+static void test_settings_blob_accepts_newer_versions_and_clamps_known_fields() {
+  Settings settings;
+  settingsblob::apply(settings,
+      R"({"schemaVersion":999,"futureSetting":true,"brightness":999,"clockFace":"month","weekdayBar":{"show":false},"dateWeekdayBar":{"show":true}})");
+  TEST_ASSERT_EQUAL_INT(255, settings.brightness);
+  TEST_ASSERT_EQUAL_INT(kClockFaceMonth, settings.clockFace);
+  TEST_ASSERT_FALSE(settings.weekdayBar.show);
+  TEST_ASSERT_TRUE(settings.dateWeekdayBar.show);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_settings_blob_roundtrips_current_settings_with_a_schema_version);
+  RUN_TEST(test_settings_blob_rejects_empty_or_malformed_data_before_mutation);
+  RUN_TEST(test_settings_blob_preserves_legacy_migration_without_a_version);
+  RUN_TEST(test_settings_blob_accepts_newer_versions_and_clamps_known_fields);
+  RUN_TEST(test_clock_and_date_weekday_bar_patches_are_independent);
+  RUN_TEST(test_old_saved_weekday_bar_is_copied_even_after_a_clock_face_key);
+  RUN_TEST(test_new_saved_weekday_bars_remain_independent_in_either_key_order);
+  RUN_TEST(test_date_weekday_bar_validation_reports_its_own_nested_field);
+  RUN_TEST(test_stored_settings_from_before_clock_faces_take_the_nearest_face);
   RUN_TEST(test_json_roundtrip_covers_every_field);
   RUN_TEST(test_defaults_unchanged);
   RUN_TEST(test_toJson_camelCase_schema);
@@ -496,13 +686,14 @@ int main(int, char**) {
   RUN_TEST(test_transition_direction_travels_as_a_named_enum);
   RUN_TEST(test_clock_enums_names_on_the_wire);
   RUN_TEST(test_validate_bad_enum_value);
+  RUN_TEST(test_clock_face_names_on_the_wire);
   RUN_TEST(test_validate_accepts_valid_payload);
   RUN_TEST(test_validate_brightness_range);
   RUN_TEST(test_validate_saturation_range);
-  RUN_TEST(test_validate_volume_range);
-  RUN_TEST(test_the_old_volume_key_is_rejected);
+  RUN_TEST(test_mixer_volumes_validate_and_old_keys_are_unknown);
   RUN_TEST(test_validate_type_mismatch);
   RUN_TEST(test_validate_unknown_key_rejected);
+  RUN_TEST(test_restore_skips_keys_this_firmware_dropped);
   RUN_TEST(test_validate_bad_transition_name);
   RUN_TEST(test_names_are_case_insensitive);
   RUN_TEST(test_validate_timeMode_range);

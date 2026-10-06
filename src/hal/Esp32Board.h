@@ -20,11 +20,14 @@ class Esp32Board : public IBoard {
   const char* name() const override { return pins::activeProfile().label; }
   int matrixWidth() const override { return layout_.width(); }
   int matrixHeight() const override { return layout_.height(); }
+  bool displayReady() const override { return renderer_.ready(); }
 
   void begin() override;
   void show(const Canvas& canvas) override { renderer_.show(canvas); }
   void setBrightness(uint8_t brightness) override { renderer_.setBrightness(brightness); }
   void setMatrixLayout(const MatrixLayout& layout) override {
+    if (renderer_.ready() && (layout.width() != layout_.width() || layout.height() != layout_.height()))
+      return;
     layout_ = layout;
     renderer_.setLayout(layout);
   }

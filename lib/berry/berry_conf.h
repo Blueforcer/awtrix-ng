@@ -299,6 +299,18 @@
  **/
 #define BE_USE_OVERLOAD_HASH            1
 
+/* Macro: BE_MAX_PARSER_DEPTH
+ * Hard limit on parser recursion depth (nested expressions and blocks).
+ * Each level costs ~hundreds of bytes of native C stack, so this protects
+ * pathological source from overflowing the C stack at compile time.
+ * Stored in a bbyte, so values above 255 are clamped.
+ * Default: 25 (safe on ESP32 with an 8 KB task stack; well above any
+ * realistic hand-written Berry code).
+ * AWTRIX: 25 -- scripts compile on the 8 KB Arduino loop task. The deepest of
+ * the 209 scripts in awtrix-ng and awtrix-hub-uploads (2026-10-03) reaches 13.
+ **/
+#define BE_MAX_PARSER_DEPTH             25
+
 /* Macro: BE_USE_DEBUG_HOOK
  * Berry debug hook switch.
  * Default: 1 (upstream's comment here says 0, but default/berry_conf.h

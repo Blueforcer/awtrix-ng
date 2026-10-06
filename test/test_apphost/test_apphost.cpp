@@ -32,6 +32,22 @@ static void test_auto_transition_cycle() {
   TEST_ASSERT_EQUAL_INT(ph(AppPhase::Fixed), ph(h.phase()));
 }
 
+static void test_restart_turn_gives_the_full_time_again() {
+  AppHost h;
+  h.setApps({"a", "b"});
+  h.tick(100, 1000, 200, true);
+  h.tick(900, 1000, 200, true);
+  h.restartTurn(900);
+  h.tick(1800, 1000, 200, true);
+  TEST_ASSERT_EQUAL_INT(ph(AppPhase::Fixed), ph(h.phase()));
+  h.tick(1900, 1000, 200, true);
+  TEST_ASSERT_EQUAL_INT(ph(AppPhase::InTransition), ph(h.phase()));
+  // A transition already on its way finishes as planned.
+  h.restartTurn(1950);
+  h.tick(2100, 1000, 200, true);
+  TEST_ASSERT_EQUAL_STRING("b", h.currentId().c_str());
+}
+
 static void test_first_dwell_starts_at_the_first_tick() {
   AppHost h;
   h.setApps({"a", "b", "c"});
@@ -338,5 +354,6 @@ int main(int, char**) {
   RUN_TEST(test_gate_applies_to_previous_too);
   RUN_TEST(test_gate_refusing_everyone_holds_the_current_app);
   RUN_TEST(test_gate_does_not_veto_a_named_destination);
+  RUN_TEST(test_restart_turn_gives_the_full_time_again);
   return UNITY_END();
 }

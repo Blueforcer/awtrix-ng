@@ -43,11 +43,11 @@ bool ScriptMqttBridge::offer(const char* topic, const uint8_t* payload, unsigned
   if (concrete.empty()) return false;
 
   std::string body;
-  if (payload && len) body.assign(reinterpret_cast<const char*>(payload), len);
 
   bool matched = false;
   for (const auto& filter : topics_) {
     if (!mqtt::topicMatches(filter, concrete)) continue;
+    if (!matched && payload && len) body.assign(reinterpret_cast<const char*>(payload), len);
     matched = true;
     onMessage_(script::MqttMessage{concrete, body, filter});
   }

@@ -1,39 +1,28 @@
 # App & notification payload
 
-One JSON schema drives both pushed apps and notifications. The same object describes a *page*: text, icon, colors, charts, draw primitives, a background effect, an overlay, and timing.
+One JSON format describes both pushed apps and notifications. It sets what an app or a
+notification shows: text, icon, colors, charts, drawings, a background effect, a weather overlay
+and timing.
 
 | | |
 |---|---|
 | **Pushed app** | `PUT /api/v1/apps/pushed/{name}` · MQTT `<prefix>/cmd/apps/pushed/<name>` |
 | **Notification** | `POST /api/v1/notifications` · MQTT `<prefix>/cmd/notify` |
 
-The schema has exactly **42 top-level keys** - 35 shared, plus 7 read only for notifications. Any other key is an error.
+Every top-level key is listed on this page. A few keys work only for notifications. Any other
+key is an error.
 
-## Errors
-
-One rule: **the whole payload is applied, or the whole payload is rejected.** Nothing is stored when a request fails, and no key quietly falls back to a default.
-
-| Condition | Response |
-|---|---|
-| Body is not valid JSON | `400 invalidJson` |
-| Body over 8192 bytes | `413 payloadTooLarge` |
-| Unknown top-level key | `422 validationFailed`, `field` = the key |
-| Malformed color, any position | `422 validationFailed`, `field` = the key |
-| A mode key given a word that is not in its list | `422 validationFailed`, `field` = the key |
-| Unknown `effect` or `overlay` name | `422 validationFailed`, `field` = `effect` / `overlay` |
-| Unknown draw command name | `422 validationFailed`, `field` = `draw[<i>]` |
-| Draw element that is not an array | `422 validationFailed`, `field` = `draw[<i>]` |
-| Wrong argument count for a draw command | `422 validationFailed`, `field` = `draw[<i>]` |
-| Non-numeric coordinate, size or radius | `422 validationFailed`, `field` = `draw[<i>]` |
-| `pixels` with an odd coordinate tail | `422 validationFailed`, `field` = `draw[<i>]` |
-
-Geometry outside the panel is **not** an error - it is clipped. A shape with zero width or height is not an error either and simply draws nothing; see [Draw commands](#draw-commands).
+<!-- only tc002 -->
+The optional `layout` key splits the display into [regions](../guides/layouts.md), each with its
+own text, icon, chart, progress bar or drawing. It replaces the visual keys below and cannot be
+combined with them. Colors, palettes, effects, overlays and draw commands go into the layout instead.
+<!-- /only -->
 
 ## Endpoints
 
 ### Pushed apps
 
-The app name comes from the **URL path**, never from the JSON body.
+The app name comes from the **URL**, never from the JSON body.
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/weather \
@@ -41,52 +30,53 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/weather \
   -d '{"text":"21.5C","icon":"2422","textColor":"#00AAFF"}'
 ```
 
-The app lives in RAM until it is replaced, deleted, expired by `lifetimeMs`, or AWTRIX restarts.
-Nothing is written to flash for it; content that must return by itself after a reboot belongs in a
-[script](../guides/scripting.md).
+A pushed app stays until you replace or delete it, its `lifetimeMs` runs out, or AWTRIX restarts.
+It does not come back after a restart. For content that should, write a
+[script](../guides/scripting/index.md).
 
-Delete an app with `DELETE /api/v1/apps/{name}` - the route on the app itself, which works for any
-kind of app, not on
-the `pushed` sub-collection. An empty body or the literal `{}` on `PUT` is **not** a delete: it
-answers `422` and points you at `DELETE`.
+Delete an app with `DELETE /api/v1/apps/{name}`. This route works for any kind of app. There is
+no `DELETE` on the `pushed` path. An empty body or `{}` on `PUT` does **not** delete: it answers
+`422` and points you to `DELETE`.
 
 ```bash
 curl -X DELETE http://<awtrix-ip>/api/v1/apps/weather
 ```
 
-A name must match `[A-Za-z0-9_-]{1,32}`, checked before the payload is parsed; a malformed one is
-`400 invalidName`. Any method other than `PUT` on `/api/v1/apps/pushed/{name}` returns
-`405 methodNotAllowed`.
+A name must match `[A-Za-z0-9_-]{1,32}`. Any other name gets `400 invalidName`, and the body is
+not read. Any method other than `PUT` on `/api/v1/apps/pushed/{name}` gets
+`405 methodNotAllowed`, whatever the name.
 
 ### Notifications
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
-  -d '{"text":"Doorbell","icon":"1234","hold":true,"soundRtttl":"d:d=4,o=5,b=120:c,e,g"}'
+  -d '{"text":"Doorbell","icon":"1234","hold":true,"sound":{"rtttl":"d:d=4,o=5,b=120:c,e,g"}}'
 ```
 
-Dismiss the notification currently on screen:
+Close the notification shown:
 
 ```bash
 curl -X DELETE http://<awtrix-ip>/api/v1/notifications/active
 ```
 
-Or retract a specific one by its `name` - wherever it sits in the queue, not just the one on screen:
+Or remove a notification by its `name`: wherever it is in the queue, not only shown:
 
 ```bash
 curl -X DELETE http://<awtrix-ip>/api/v1/notifications/backup-job
 ```
 
-`200 {"ok":true}` when a match was removed, `404 notFound` when nothing in the queue carries that name. The literal name `active` is reserved for the on-screen route and cannot be addressed this way. Full rules: [`DELETE /api/v1/notifications/{name}`](http.md#delete-apiv1notificationsname).
+This answers `200 {"ok":true}` when one was removed and `404 notFound` when no notification in
+the queue has that name. The name `active` is reserved for the notification that is shown. Full
+rules: [`DELETE /api/v1/notifications/{name}`](http.md#delete-apiv1notificationsname).
 
-`POST` is the only accepted method on `/api/v1/notifications`.
+`POST` is the only method on `/api/v1/notifications`.
 
 ### Array payloads
 
-A top-level **array** sent to `PUT /api/v1/apps/pushed/{name}` creates indexed apps `<name>0`, `<name>1`, … - one per object element. Non-object elements are skipped without consuming an index. `DELETE /api/v1/apps/{name}` erases the exact name plus the numbered apps that array push created; an app you pushed to `<name>1` yourself is a separate app and stays.
-
-An array is **all-or-nothing**: if any element trips any rule in [Errors](#errors), or the batch as a whole will not fit under the resident-app cap, the whole request is rejected and none of its apps are created or updated.
+Send a JSON **array** to `PUT /api/v1/apps/pushed/{name}` to create numbered apps `<name>0`,
+`<name>1`, …: one per object in the array. Entries that are not objects are skipped and do not
+use up a number.
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/stocks \
@@ -95,47 +85,54 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/stocks \
 # -> creates apps "stocks0" and "stocks1"
 ```
 
-An array sent to `POST /api/v1/notifications` may hold at most **one** element; more than one is rejected with `422 validationFailed` and nothing is queued, so post notifications one at a time. A single object element is parsed as the notification; an empty array - or one whose single element is not an object - queues a notification with every key left at its default.
+`DELETE /api/v1/apps/{name}` removes the app with that exact name plus the numbered apps an array
+created. An app you pushed to `<name>1` yourself is a separate app and stays.
 
-### Limits
+An array is **all or nothing**. If any element breaks a rule in [Errors](#errors), or the new apps
+would not fit under the app limit, the whole request is rejected and no app is created or
+changed.
 
-Every cap a payload can reach - the request body size, the number of resident pushed apps, the
-notification queue depth and the chart point count - is listed with the response you get at each
-edge in [Limits](limits.md#apps-and-notifications).
+An array sent to `POST /api/v1/notifications` may hold at most **one** element. More than one
+gets `422 validationFailed` and nothing is queued. Send notifications one at a time. A single
+object element is used as the notification. An empty array, or one whose element is not an
+object, queues a notification with every key at its default.
 
 ## Colors
 
-Every color-typed field below accepts the same five forms - `"#FF0000"`, `"F00"`, `[255,0,0]`,
-`["HSV",0,100,100]` or the packed integer `16711680` - and always reads back as uppercase
-`"#RRGGBB"`. Anything the parser cannot read is rejected with `422 validationFailed` and the
-offending key in `field`, wherever it sits in the payload.
+Every color key below accepts the same five forms (`"#FF0000"`, `"F00"`, `[255,0,0]`,
+`["HSV",0,100,100]` or the number `16711680`) and is always read back as uppercase `"#RRGGBB"`.
+Anything else gets `422 validationFailed` with the key in `field`, wherever it is in the payload.
 
-These forms are the same everywhere in the API, written out once under
-[Visuals → Colors](visuals.md#colors): exact ranges, HSV wrapping, and what `null` means on a
-nullable color key.
+Exact ranges, HSV wrapping and what `null` means are in
+[Visuals → Colors](visuals.md#colors).
 
 ## Text
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `text` | string \| array | - | `""` | The page text, or an array of colored fragments |
-| `textCase` | string | `inherit` · `upper` · `asTyped` | `inherit` | Casing; `inherit` follows the global `uppercase` setting |
-| `font` | string | `small` · `large` | `small` | Which panel font to draw with. `large` is seven rows tall and reaches the top row |
-| `textColor` | color \| `"palette"` | - | global `textColor` (`#FFFFFF`) | Text color, or `"palette"` to paint from the app's [palette](#palette) |
+| `text` | string \| array | - | `""` | The text, or an array of colored pieces |
+| `textCase` | string | `inherit` · `upper` · `asTyped` | `inherit` | Upper or lower case. `inherit` follows the global `uppercase` setting |
+| `font` | string | a name from `capabilities.fonts` | `small` | The font: `small`, `large` or a Matrix font. See [The fonts](../guides/text.md#the-fonts) |
+| `textColor` | color \| `"palette"` | - | global `textColor` (`#FFFFFF`) | Text color, or `"palette"` to color the text from the app's [palette](#palette) |
 | `textBlinkMs` | int | ms, 0 = off | `0` | Blink period |
-| `textFadeMs` | int | ms, 0 = off | `0` | Sinusoidal fade period |
-| `textCenter` | bool | - | `true` | Center text that fits; `false` left-aligns |
-| `scroll` | object \| string | see below | inherited | Text motion - mode, direction, entry, trigger, speed and gap |
-| `textOffsetX` | int | px | `0` | X shift applied after positioning |
-| `textInFront` | bool | - | `false` | Draw order only - see below |
+| `textFadeMs` | int | ms, 0 = off | `0` | Period of a smooth fade in and out |
+| `textAlign` | string | `start` · `center` · `end` | `center` | Where still text sits: left, centered or right |
+| `scroll` | object \| string | see below | inherited | How text moves: mode, direction, start, speed and gap |
+| `textOffsetX` | int | px | `0` | Moves the text left or right after it is placed |
+| `textInFront` | bool | - | `false` | Draws the text on top of charts and drawings. See below |
 
-`text` is folded from UTF-8 into the matrix font's codepage: Latin-1 accents, Latin Extended-A letters, `€` and Cyrillic all have their own glyphs. A character with no mapping - an emoji, an unsupported script - renders as a single `?` placeholder: exactly one per dropped character, not one per byte. A number or bool passed as `text` is silently ignored, leaving the text empty. The full range table is under [Character mapping](visuals.md#what-is-mapped).
+`text` is UTF-8. Latin accents, Latin Extended-A, Greek, Cyrillic, Vietnamese, IPA letters,
+common currency signs, and the Chinese and Korean characters for dates and weekdays all have
+their own letters in every font. A character without a letter (an emoji, an unsupported
+script) shows as one `?`. A number or `true`/`false` as `text` is ignored and the text stays
+empty. The full list is in [Character mapping](visuals.md#what-is-mapped).
 
 There is no lowercase mode.
 
 ### Colored fragments
 
-Pass an array of `{"text": string, "color": color}` objects to color runs of text independently. Fragments draw left-to-right, each advancing by its own rendered width. There is no cap on fragment count.
+To color parts of the text differently, pass an array of `{"text": string, "color": color}`
+objects. They are drawn left to right, one after the other. There is no limit on how many.
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/cpu \
@@ -143,28 +140,34 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/cpu \
   -d '{"text":[{"text":"CPU ","color":"#888888"},{"text":"87","color":"#FF0000"},{"text":"%","color":"#888888"}]}'
 ```
 
-A missing or non-string `text` yields `""`; a fragment without a `color` is white.
+A piece without `text` (or with a `text` that is not a string) is empty. A piece without `color`
+is white.
 
-When `text` is a fragment array the top-level `textColor` is ignored and each fragment's own `color` wins - unless `textColor` is `"palette"`, which paints the whole run from the palette and ignores the fragment colors. `textBlinkMs`, `textFadeMs`, `textCase` and the global `uppercase` setting apply either way.
+With pieces, the top-level `textColor` is ignored and each piece uses its own `color`, unless
+`textColor` is `"palette"`: then the whole text is colored from the palette and the piece colors
+are ignored. `textBlinkMs`, `textFadeMs`, `textCase` and the global `uppercase` setting apply
+either way.
 
 ### Which color wins
 
-For non-fragment text, exactly one styling path wins. Checked in this order:
+For plain text, only one coloring applies. AWTRIX checks in this order:
 
 | Priority | Condition | Result |
 |---|---|---|
-| 1 | `textColor: "palette"` with a `palette` set | Ramp across the text - `textBlinkMs`/`textFadeMs` **ignored** |
-| 2 | `textFadeMs > 0` | Smooth pulsing fade of the resolved color |
-| 3 | `textBlinkMs > 0` | Blink of the resolved color |
-| 4 | - | Solid `textColor`, else global `textColor` |
+| 1 | `textColor: "palette"` and a `palette` is set | Palette colors across the text: `textBlinkMs`/`textFadeMs` are **ignored** |
+| 2 | `textFadeMs > 0` | The color fades smoothly in and out |
+| 3 | `textBlinkMs > 0` | The color blinks |
+| 4 | - | Plain `textColor`, else the global `textColor` |
 
-So a palette beats `textColor`, and `textFadeMs` beats `textBlinkMs` when both are set. Asking for `"palette"` without setting one leaves the text on its own color. Painting text from a palette is described under [`palette`](#palette).
+So a palette beats `textColor`, and `textFadeMs` beats `textBlinkMs`. `"palette"` without a
+`palette` keeps the text in its normal color. See [`palette`](#palette).
 
-- **`textBlinkMs`** - the color shows during the *second* half of each period and black during the first. The glyphs are still painted in black, so they occlude the background rather than becoming transparent.
-- **`textFadeMs`** - the color rises and falls smoothly between black and full brightness, once per period.
+- **`textBlinkMs`**: the text is black for the first half of each period and in color for the
+  second half. The black text still covers the background. It does not become see-through.
+- **`textFadeMs`**: the text fades from black to full color and back, once per period.
 
 ```bash
-# Gradient across the string
+# Gradient across the text
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/hot \
   -H 'Content-Type: application/json' \
   -d '{"text":"OVERHEAT","palette":["#FFFF00","#FF0000"],"textColor":"palette"}'
@@ -177,36 +180,58 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
 
 ### `textInFront`
 
-`textInFront` sets z-order, not position - the baseline is row 6 either way. With `true` the decorations (draw commands, progress bar, charts) are painted first and the text lands **on top**; the default `false` paints the text first and the decorations over it.
+`textInFront` decides what is drawn on top, not where the text sits: the text stays where its
+font puts it either way. With `true`, drawings, progress bar and charts are drawn first and the text **on
+top**. With the default `false`, the text is drawn first and the others over it.
 
-### Positioning and centering
+### Positioning and alignment
 
-`textCenter` takes effect whenever the text is **not animating** - with `scroll.mode: "static"`, or when the text fits and `scroll.whenFits` is `static`. The text is then centered in the space to the right of the icon column (or across the whole panel when there is no icon), and never overlaps the icon. With `textCenter: false` the text is left-aligned against the icon column instead (or the left edge with no icon). While the text animates, `textCenter` has no effect - the scroll position sets x.
+`textAlign` works whenever the text is **not moving**: with `scroll.mode: "static"`, or when
+the text fits and `scroll.whenFits` is `static`. It places the text in the space right of the
+icon, or across the whole display without an icon, and the text never covers the icon:
 
-`textOffsetX` is added to the final x in the static case, and it participates in **every** scroll anchor: the rest position, the offscreen entry point, the exit point and the `loop` period all include it, so a positive `textOffsetX` lengthens each cycle by the same amount in every mode. X-axis only.
+- `start`: the text starts right after the icon, or at the left edge without an icon.
+- `center`: the text is centered.
+- `end`: the text ends at the right edge of the display, on every display width.
+
+Still text wider than that space starts right after the icon, or at the left edge without an
+icon. While the text scrolls, `textAlign` has no effect.
+
+`textOffsetX` moves static text left or right. For scrolling text, it moves every point of the
+scroll (where it rests, where it enters and leaves, and the `loop` distance), so a positive value
+makes each cycle longer by that many pixels in every mode. It moves left/right only.
 
 ### Scrolling
 
-`scroll` decides whether text moves and how. It takes an object of seven independent fields. A [script](../guides/scripting.md#styled-and-scrolling-text) sets the same fields, by the same names, on its own `scroll_text()` calls.
+`scroll` decides whether and how text moves. It takes an object with seven separate fields.
+A [script](../guides/scripting/drawing.md#styled-and-scrolling-text) uses the same fields, with the same
+names, for its `scroll_text()` calls.
 
 | Field | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `mode` | string | `static` · `wrap` · `loop` · `bounce` | `wrap` | Motion behaviour |
-| `direction` | string | `left` · `right` | `left` | Travel direction |
-| `entry` | string | `inline` · `offscreen` | `inline` | Start at rest on the panel, or scroll in from outside it |
-| `whenFits` | string | `static` · `scroll` | `static` | Whether text that already fits still animates |
-| `speed` | int | ≥ 0 | `100` | Percent of the base rate |
-| `gap` | int | ≥ 0 | `8` | `loop` only - pixels between repetitions |
+| `mode` | string | `static` · `wrap` · `loop` · `bounce` | `wrap` | How the text moves |
+| `direction` | string | `left` · `right` | `left` | Direction of travel |
+| `entry` | string | `inline` · `offscreen` | `inline` | Start on the display, or scroll in from outside |
+| `whenFits` | string | `static` · `scroll` | `static` | Whether text that fits still moves |
+| `speed` | int | ≥ 0 | `100` | Speed in percent of the normal speed |
+| `gap` | int | ≥ 0 | `8` | `loop` only: pixels between repeats |
 | `holdMs` | int | ≥ 0 | `1000` | Pause before the text starts moving, and at each `bounce` turn |
 
-A bare string is shorthand for the mode alone: `"scroll": "bounce"` is exactly `"scroll": {"mode": "bounce"}`.
+A plain string sets only the mode: `"scroll": "bounce"` is the same as
+`"scroll": {"mode": "bounce"}`.
 
-Every field is inherited **individually** from the global `scroll` setting, so `{"scroll":{"mode":"bounce"}}` bounces at the globally configured speed and leaves the other five fields as they are. Inheriting is simply leaving the key out - there is no special value that means "inherit". The global default is read when the page is drawn, so changing it also moves apps that are already pushed.
+Each field you leave out comes from the global `scroll` setting. So `{"scroll":{"mode":"bounce"}}`
+bounces at the global speed and keeps the other five fields as set globally. There is no special
+value for "use the global one": just leave the key out. If you change the global setting later,
+apps that are already pushed follow it too.
 
-`speed`, `gap` and `holdMs` must not be negative, the enums take only the values listed above, and no other field name is accepted. A violation is rejected outright with `422 validationFailed` and the offending key in `field` - `scroll.speed`, say. This holds on every route that takes a `scroll`: pushed apps, notifications and `PATCH /api/v1/settings` alike, and nothing is stored when it trips.
+`speed`, `gap` and `holdMs` must not be negative, the word fields take only the values listed,
+and no other field name is accepted. Otherwise the request gets `422 validationFailed` with the
+key in `field`: for example `scroll.speed`. This is the same on every route that takes `scroll`:
+pushed apps, notifications and `PATCH /api/v1/settings`. Nothing is saved.
 
 ```bash
-# Half speed, sweeping back and forth
+# Half speed, moving back and forth
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
   -H 'Content-Type: application/json' \
   -d '{"text":"A LONG HEADLINE THAT WILL NOT FIT","scroll":{"mode":"bounce","speed":50}}'
@@ -214,66 +239,109 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
 
 #### Modes
 
-| `mode` | Motion | Cycle counted | Hold |
+| `mode` | Movement | One run is | Pause |
 |---|---|---|---|
-| `static` | None. The text is drawn at its aligned position and overflow is clipped | never | - |
-| `wrap` | Runs from the start anchor until it has fully exited, then jumps back to the start anchor | per exit | at the start anchor, on every cycle |
-| `loop` | Continuous. A fresh copy always slides in behind the last, `gap` pixels apart, so the screen is never empty | per fold | initial only |
-| `bounce` | Sweeps between resting beside the icon (or the left edge) and sitting flush against the far edge | per round trip | at **both** turning points |
+| `static` | None. Text that does not fit is cut off | never counted | - |
+| `wrap` | Moves until it has left the display, then starts again from the start position | each time it leaves | at the start, every time |
+| `loop` | Moves without end. A new copy follows `gap` pixels behind, so the display is never empty | each full repeat | at the very start only |
+| `bounce` | Moves back and forth between resting next to the icon (or the left edge) and touching the other edge | each round trip | at **both** ends |
 
-`holdMs: 0` removes the hold entirely, which is the only way to get a `bounce` that reverses on the spot or a `wrap` that restarts without pausing.
+`holdMs: 0` removes the pause. This is the only way to get a `bounce` that turns at once, or a
+`wrap` that restarts without pausing.
 
-The base rate is **21 px/s at `speed: 100`**, so `pxPerSec = 21 × (speed / 100)`. `0` freezes the text where it starts, and there is no upper clamp. `200` is the sharpest a scroll gets on an 8 px panel; above it legibility drops however smooth the motion is. Every hold lasts `holdMs`, 1000 ms by default.
+At `speed: 100` text moves **21 pixels per second**: `pixels per second = 21 × speed / 100`.
+`0` stops the text where it starts. There is no upper limit<!-- only esp32 esp32-s3 -->, but above `200` text on an 8-pixel
+display gets hard to read<!-- /only -->.
 
-#### Anchors
+#### Start and end points
 
-The text area begins right of the icon and its [`iconGap`](#icongap) when an icon is present - column 9 for an 8px icon with the default gap - and at column 0 otherwise.
+When there is an icon, the text area starts right after the icon and its [`iconGap`](#icongap):
+column 9 for an 8-pixel icon with the default gap. Without an icon it starts at column 0.
 
-With `direction: left`, an `inline` text rests at the start of that area, while an `offscreen` text starts just past the right edge and scrolls in; either way it finishes once it has moved fully off the left edge. `direction: right` mirrors the whole geometry - rest, entry and exit anchors all swap ends - so the text rests flush against the right edge, an `offscreen` text enters from just past the left edge, and it exits off the right edge.
+With `direction: left`, `inline` text starts at the beginning of that area, and `offscreen` text
+starts just past the right edge and scrolls in. Either way it ends when it has fully left the
+left edge. `direction: right` mirrors all of this: the text rests at the right edge, `offscreen`
+text enters from the left, and it leaves on the right.
 
 #### Entry and trigger
 
-`entry: offscreen` starts the text outside the panel and skips the initial hold. `wrap` re-enters from outside on every cycle, and drops the hold each time with it; `loop` uses the offscreen anchor for the initial position only, after which the fold carries it; `bounce` runs only its first leg from outside and then settles into the ping-pong between the two anchors. With `mode: "static"` it is ignored.
+`entry: offscreen` starts the text outside the display, without the first pause. `wrap` comes in
+from outside on every run, each time without a pause. `loop` starts outside only the first time.
+`bounce` comes in from outside only for its first leg and then moves between its two ends. With
+`mode: "static"`, `entry` has no effect.
 
-`whenFits: static` keeps the rule that text short enough to fit never moves. `whenFits: scroll` animates it regardless of width.
+`whenFits: static` keeps text that fits still. `whenFits: scroll` moves it anyway.
 
 ## Icon
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `icon` | string | - | `""` | Icon ID, or inline base64 when longer than 64 chars |
-| `iconMode` | string | `fixed` · `pushOnce` · `push` | `fixed` | Whether approaching text shoves the icon aside |
-| `iconOffsetX` | int | px | `0` | X shift of the icon |
-| `iconGap` | int | 0–128 px | `1` | Empty columns between the icon and the text |
-| `icons` | array | up to 4 objects | `[]` | Additional icons at absolute `x`, `y` positions |
+| `icon` | string | - | `""` | Icon ID, the image itself as a data URL, or a web address |
+| `iconMode` | string | `fixed` · `pushOnce` · `push` | `fixed` | Whether scrolling text pushes the icon away |
+| `iconOffsetX` | int | px | `0` | Moves the icon left or right |
+| `iconGap` | int | 0–128 px | `1` | Empty columns between icon and text |
+| `icons` | array | up to 4 objects | `[]` | More icons at any `x`, `y` position |
 
-The mode is chosen purely by **length**:
+`icon` takes one of <!-- only esp32 esp32-s3 -->two<!-- /only --><!-- only tc002 -->three<!-- /only --> forms:
 
-- **64 characters or fewer** - an icon ID resolved against the filesystem. Animated `/ICONS/<id>.gif` is tried **first**, then static `/ICONS/<id>.jpg`.
-- **More than 64 characters** - inline base64 data, decoded and sniffed: a `GIF8` magic makes it an animated GIF, otherwise it is decoded as JPEG.
+- **An icon ID** of up to 64 characters. AWTRIX looks for `/ICONS/<id>.gif` **first**, then
+  `/ICONS/<id>.jpg`.
+- **A data URL**: the image itself, base64-encoded: `data:image/gif;base64,…` for a GIF,
+  `data:image/jpeg;base64,…` for a JPEG. The type in the URL decides how the image is read. An
+  image that does not match its type is not shown.
+<!-- only tc002 -->
+- **A web address** that starts with `http://` or `https://`, up to 2048 characters. The clock
+  downloads the picture itself.
+  See [Pictures from the internet](../guides/icons.md#pictures-from-the-internet).
+<!-- /only -->
 
-Only JPEG and GIF are supported - no PNG, no BMP. The `icon` image starts at the top row of the display.
+Anything else (plain base64 without the `data:` prefix, a PNG data URL, an ID longer than 64
+characters) is rejected with `422`.
+<!-- only esp32 esp32-s3 -->
 
-- **JPEG** always occupies an 8×8 square. A larger image is not rejected, but only its top-left 8×8 corner is shown, so draw JPEG icons at 8×8.
-- **GIF** keeps its own width and height, up to the active panel's dimensions.
+A web address (`http://` or `https://`) is accepted, but shows no icon and keeps no space for it.
+<!-- /only -->
 
-A non-string `icon` is ignored.
+Icon files and data URLs must be JPEG or GIF. PNG and BMP do not work there.<!-- only tc002 --> A web address can
+also point to a PNG.<!-- /only --> An icon lower than the display is centered vertically.
 
-An icon narrower than the panel reserves a **column of its own width plus `iconGap`** - 9px for an 8px icon with the default 1px gap - that indents text, bars and the line chart. Scrolling text disappears at the right edge of that column, so the gap stays clear while it moves; static text is not cut there, and a negative `textOffsetX` can still pull it into the gap. A GIF spanning the panel's full width is treated as a **background** instead: it is drawn at x=0 beneath the text, indents nothing, and replaces the app's `backgroundColor` colour and any `effect`. An icon that is missing or cannot be loaded falls back to the icon-less layout rather than leaving a black column.
+- A **JPEG** always takes an 8×8 square. A larger JPEG is not rejected, but only its top-left
+  8×8 part is shown. Make JPEG icons 8×8.
+- A **GIF** keeps its own width and height, up to the size of the display.
+<!-- only tc002 -->
+- A **web address** always takes a 16×16 square, as tall as the display. The square is there at
+  once and stays empty until the picture has arrived.
+<!-- /only -->
 
-Transparent GIF pixels render as **black** on the first frame of an animation; within an animation they keep what the previous frame drew there.
+An `icon` that is not a string is ignored.
+
+An icon narrower than the display takes **its own width plus `iconGap`** on the left: 9 pixels for
+an 8-pixel icon with the default gap. Text, bar chart and line chart start after it. The
+progress bar starts right at the icon's edge and runs under the gap.
+Scrolling text disappears at the edge of that space, so the gap stays clear while text moves.
+Static text is not cut there, and a negative `textOffsetX` can still move it into the gap.
+
+A GIF as wide as the display is used as a **background** instead: it starts at x=0 behind the text,
+takes no space, and replaces the `backgroundColor` and any `effect`. An icon that is missing or
+cannot be loaded is left out, and everything else is laid out as if there were no icon.
+
+Transparent GIF pixels are **black** on the first frame of an animation. On later frames they
+keep what the previous frame showed.
 
 ### `iconMode`
 
 | Value | Behavior |
 |---|---|
-| `fixed` | Icon stays put; text scrolls out behind the gap |
-| `pushOnce` | Scrolling text shoves the icon off to the left **once**; it stays gone, and the text then restarts at x=0 |
-| `push` | Icon is pushed out but **returns** on every scroll cycle |
+| `fixed` | The icon stays. The text scrolls out behind the gap |
+| `pushOnce` | Scrolling text pushes the icon off to the left **once**. It stays gone, and the text then restarts at x=0 |
+| `push` | The icon is pushed out and **comes back** on every scroll run |
 
-The shift travels from 0 until the icon and its gap have left the panel - −9px for an 8px icon with the default gap - as the text approaches. Does nothing when `icon` is empty.
+The icon moves left as the text comes near, until the icon and its gap have left the display:
+9 pixels for an 8-pixel icon with the default gap. Without an `icon` this key does nothing.
 
-`iconOffsetX` moves the ordinary `icon` on the X axis only; it starts at the top row. It does not change the column reserved for text and charts, so a positive `iconOffsetX` slides the icon *over* the text rather than moving the text out of the way: the icon is painted after the text and covers it. Use `icons` below for freely positioned images.
+`iconOffsetX` moves the `icon` left or right only. Its height on the display does not change. It does not move the
+space kept for text and charts. A positive `iconOffsetX` therefore moves the icon *over* the
+text, and the icon covers it. For freely placed images, use `icons` below.
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
@@ -283,9 +351,14 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
 
 ### `iconGap`
 
-`iconGap` is the number of empty columns between the icon's right edge and the text. It counts from the icon's real width, so a 12px-wide GIF with the default gap starts the text at column 13. `0` puts the text right against the icon, which suits an icon whose artwork already ends in an empty column. The gap moves with the icon under `push` and `pushOnce`, and scrolling text never runs into it.
+`iconGap` is the number of empty columns between the right edge of the icon and the text. It
+counts from the icon's real width, so a 12-pixel GIF with the default gap puts the text at
+column 13. `0` puts the text right next to the icon: useful when the icon image already ends in
+an empty column. The gap moves with the icon under `push` and `pushOnce`, and scrolling text
+never runs into it.
 
-The value must be an integer from 0 to 128. Anything else - a negative number, a fraction, a string or `null` - rejects the request with `422 validationFailed` and `field` = `iconGap`.
+The value must be a whole number from 0 to 128. Anything else (a negative number, a fraction, a
+string or `null`) gets `422 validationFailed` with `field` = `iconGap`.
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
@@ -295,7 +368,7 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/news \
 
 ### Multiple icons
 
-Pushed apps and notifications accept the same optional `icons` array:
+Pushed apps and notifications take the same optional `icons` array:
 
 ```json
 {
@@ -307,52 +380,57 @@ Pushed apps and notifications accept the same optional `icons` array:
 }
 ```
 
-Each object requires a nonempty `icon` string with the same ID/base64 convention as the ordinary
-`icon` field. `x` and `y` are optional integers, defaulting to zero, from −65535 to 65535. Negative
-coordinates clip at the display edge. Images retain their own size and must fit the panel's
-width and height before positioning.
+Each object needs an `icon` string that is not empty, in the same form as the normal `icon` key
+(ID or data URL). `x` and `y` are optional whole numbers from −65535 to 65535, default 0. Parts
+outside the display are cut off. Each image keeps its own size and must be no larger than the
+display.
 
-Each entry animates independently, including two entries using the same image. Each GIF uses
-its own colors and frame timings. Icons draw in array order after text, decorations and the
-ordinary `icon`, before the overlay; later entries
-cover earlier ones. They reserve no text columns and do not move with `iconMode`. You can also
-set `icon` to show an image beside the text or a full-width GIF background.
+Each icon animates on its own, even two copies of the same image, each with its own colors and
+frame times. They are drawn in array order, after the text, drawings and the normal `icon`, and
+before the overlay. Later icons cover earlier ones. They take no space from the text and do not
+move with `iconMode`. You can still use `icon` for an image next to the text or a full-width GIF
+background.
 
-There are at most **4 additional icons per page**. More than 4 entries, an invalid coordinate,
-a missing `icon`, or an unknown object property rejects the entire request with
-`422 validationFailed` and a field such as `icons[1].x`. If an image cannot be loaded, that icon
-is skipped and the rest of the page is shown. An image that does not exist is looked for again
-once a file is uploaded or deleted; one that failed for lack of memory is retried after five
-seconds. Additional icons load one per frame, so a page with several appears over a few frames;
-their animations start together once all of them are there.
+There are at most **4 extra icons per app or notification**. More than 4, a wrong coordinate, a
+missing `icon` or an unknown key rejects the whole request with `422 validationFailed` and a field
+such as `icons[1].x`.
 
-Send `"icons": []` to remove a pushed app's additional icons. In scripts, call `icon(name, x, y)`
-several times in `draw()`; see [Panel and drawing](../guides/scripting.md#panel-and-drawing).
+If an image cannot be loaded, only that icon is left out. A missing image is shown once it is
+uploaded. When memory is short, AWTRIX tries again after five seconds. An app or a notification
+with several extra icons may take a few frames to show all of them. Their animations start
+together once all are there.
 
-## Timing & how long a page lives
+Send `"icons": []` to remove a pushed app's extra icons. In a script, call `icon(name, x, y)`
+several times in `draw()`. See [Display and drawing](../guides/scripting/drawing.md#panel-and-drawing).
+
+## Timing & how long an app lives {#timing-how-long-a-page-lives}
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `durationMs` | long | ms | `0` | How long to show; 0 or less uses global `appDurationMs` (7000). Honoured by both pushed apps and notifications |
-| `lifetimeMs` | long | ms, 0 = forever | `0` | **Pushed apps only.** Auto-expire after this long |
+| `durationMs` | long | ms | `0` | How long the app or notification is shown. 0 or less uses the global `appDurationMs` (7000). Works for pushed apps and notifications |
+| `lifetimeMs` | long | ms, 0 = forever | `0` | **Pushed apps only.** Remove or mark the app after this time |
 | `lifetimeExpiry` | string | `remove` · `mark` | `remove` | What happens when the lifetime runs out |
-| `repeat` | int | `0` = off | `0` | How many times scrolling text runs across the screen |
+| `repeat` | int | `0` = off | `0` | How many times scrolling text runs across the display |
 
 ### `durationMs`
 
-`durationMs` sets how long the page shows - for **both** pushed apps and notifications. A value of 0 or less falls back to the global `appDurationMs` setting (7000 ms), so a pushed app can dwell longer or shorter than the rest of the loop without touching the global setting.
+`durationMs` sets how long the app is shown, for **both** pushed apps and notifications. With 0
+or less, the global `appDurationMs` setting (7000 ms) is used. So one pushed app can stay longer
+or shorter than the others without changing the global setting.
 
-For notifications, `durationMs` is ignored entirely when `hold` is `true`.
+For a notification with `hold: true`, `durationMs` is ignored.
 
 ### `lifetimeMs` and `lifetimeExpiry`
 
-Measured as elapsed time from when the app was received. A value of 0 or less disables expiry. Both keys parse on a notification but are never read there - only pushed apps expire.
+The lifetime counts from the moment AWTRIX received the app. 0 or less means it never runs out.
+A notification accepts both keys but ignores them: only pushed apps run out.
 
-- **`lifetimeExpiry: "remove"`** (default) - the app is deleted and drops out of the rotation.
-- **`lifetimeExpiry: "mark"`** - the app stays in rotation with a 1px dark-red (`#6E0700`) frame drawn around the canvas as a stale marker.
+- **`lifetimeExpiry: "remove"`** (default): the app is deleted and leaves the rotation.
+- **`lifetimeExpiry: "mark"`**: the app stays in the rotation with a 1-pixel dark-red
+  (`#6E0700`) frame around it, to show it is out of date.
 
 ```bash
-# Vanish after 5 minutes
+# Disappear after 5 minutes
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/temp \
   -H 'Content-Type: application/json' \
   -d '{"text":"Transient","lifetimeMs":300000,"lifetimeExpiry":"remove"}'
@@ -360,14 +438,22 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/temp \
 
 ### `repeat`
 
-`repeat` sets how many times scrolling text runs across the screen. The page then stays exactly that long: the text is never cut off halfway, and the page does not linger once the text has been read.
+`repeat` sets how many times scrolling text runs across the display. The app or notification then
+stays exactly that long: the text is never cut off halfway, and it does not stay on after the text
+has been read.
 
-It defaults to **`0`** - off. Nothing is counted, and the page stays for `durationMs` (or the global `appDurationMs`), however much text is left. `repeat: 1` shows long text once from beginning to end, `repeat: 2` twice, and so on. What counts as one run depends on the scroll mode - see [Scrolling](#scrolling).
+The default is **`0`**: off. Then it stays for `durationMs` (or the global
+`appDurationMs`), however much text is left. `repeat: 1` shows long text once from start to end,
+`repeat: 2` twice, and so on. What counts as one run depends on the scroll mode. See
+[Scrolling](#scrolling).
 
-Two cases where a count above `0` still does not decide:
+Two cases where `repeat` does not decide:
 
-- **The text does not move**, because it fits on the screen or the mode is `static`. There is nothing to count, so the page uses `durationMs` (or the global `appDurationMs`) as usual, and `repeat` has no effect.
-- **You set `durationMs` yourself.** The page then stays at least that long. `{"text":"...","repeat":1,"durationMs":20000}` is shown for 20 seconds even if the text is read in 4.
+- **The text does not move**, because it fits or the mode is `static`. There is nothing to count,
+  so `durationMs` (or the global `appDurationMs`) is used.
+- **You set `durationMs` yourself.** It then stays at least that long.
+  `{"text":"...","repeat":1,"durationMs":20000}` is shown for 20 seconds even if the text is read
+  in 4.
 
 It works the same for pushed apps and notifications.
 
@@ -375,27 +461,35 @@ It works the same for pushed apps and notifications.
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `backgroundColor` | color | - | absent → black | Solid canvas fill |
+| `backgroundColor` | color | - | none → black | Background color |
 
-`backgroundColor` is ignored whenever an `effect` resolves: an effect owns the whole canvas and is never drawn alongside a fill colour.
+`backgroundColor` is ignored when an `effect` is set: the effect fills the whole background.
 
 ## Charts
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `barChart` | array of int | max 16 entries | `[]` | Bar chart values |
-| `lineChart` | array of int | max 16 entries | `[]` | Line chart values |
-| `chartAutoscale` | bool | - | `true` | Scale to the data max, else fix the max at 8 |
-| `chartColor` | color | - | resolved text color | Color of the bars and of the line |
+| `barChart` | array of int | max 16 entries | `[]` | Values for a bar chart |
+| `lineChart` | array of int | max 16 entries | `[]` | Values for a line chart |
+| `chartAutoscale` | bool | - | `true` | Scale to the largest value. `false` fixes the top at 8 |
+| `chartColor` | color | - | the text color | Color of the bars and the line |
 
-`barChart` and `lineChart` can be combined; both are drawn. Both are capped at 16 entries, with extras silently dropped, and both share `chartAutoscale`. Non-numeric entries coerce to 0.
+You can use `barChart` and `lineChart` together. Both are drawn. Both take at most 16 entries (more are ignored) and both use `chartAutoscale`. Entries that are not numbers count as 0.
 
-- **`chartAutoscale: true`** - the chart spans `min .. max` of the data, where `max` is floored at 1 and `min` at 0. An all-positive series therefore spans `0 .. max`; the range only opens downward once a value is actually negative.
-- **`chartAutoscale: false`** - the range is fixed at `0 .. 8`: a value of 8 fills the full 8px height, and values outside the range clamp to the canvas.
+- **`chartAutoscale: true`**: the chart goes from the smallest to the largest value, but the top
+  is at least 1 and the bottom at most 0. So all-positive values go from `0` to the largest. The
+  range only goes below 0 when a value is negative.
+- **`chartAutoscale: false`**: the range is fixed at `0` to `8`: a value of 8 fills the full
+  height, and values outside the range are cut to fit.
 
-**`barChart`** divides the space to the right of the icon column evenly among the values - each bar at least 1px wide, separated by a 1px gap. Bars are anchored to the row where the value **zero** falls: with all-positive data that is the bottom row, so a bar's height is proportional to its value as a fraction of the range max. Once the series contains a negative value the baseline lifts off the bottom, positive bars grow up from it and negative bars hang below it.
+**`barChart`** shares the space right of the icon evenly between the values. Each bar is at least
+1 pixel wide, with a 1-pixel gap between bars. Bars start at the row where **zero** is: with only
+positive values that is the bottom row. With a negative value, the zero line moves up. Positive
+bars grow up from it and negative bars hang below it.
 
-**`lineChart`** requires at least **2 points** - a 1-element array draws nothing. Its points are spread evenly across the space to the right of the icon column and connected left to right. A line has no baseline to anchor to, so it simply spans the full range: it sits on the bottom row at the range min and on the top row at the range max.
+**`lineChart`** needs at least **2 values**: a single value draws nothing. The points are spread
+evenly across the space right of the icon and joined from left to right. The lowest value is on
+the bottom row and the highest on the top row.
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/traffic \
@@ -403,17 +497,21 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/traffic \
   -d '{"barChart":[2,5,3,8,6,4,7,1],"chartColor":"#00FF00","chartAutoscale":true}'
 ```
 
-`chartColor` colors both charts. Unfilled cells are not painted at all - they keep whatever the background or effect put there.
+`chartColor` colors both charts. Empty parts of the chart are not painted. The background or
+effect shows through.
 
 ## Progress bar
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `progress` | int | percent, below 0 = off | `-1` | Fill percentage |
-| `progressColor` | color | - | `#00FF00` | Filled portion |
-| `progressTrackColor` | color | - | `#FFFFFF` | Unfilled portion |
+| `progress` | int | percent, below 0 = off | `-1` | How full the bar is |
+| `progressColor` | color | - | `#00FF00` | The filled part |
+| `progressTrackColor` | color | - | `#FFFFFF` | The empty part |
 
-Drawn on the **bottom row only**, spanning from the icon's right edge when an icon is present - x=8 for an 8px icon - else x=0. It runs under the [`iconGap`](#icongap), so it starts that many pixels further left than text and charts. Values above 100 clamp to 100; `progress: 0` draws a full row of `progressTrackColor`. Any value below 0 draws nothing. The filled part covers that percentage of the bar's width, and the track is the unfilled remainder of the row rather than a background behind it.
+The bar is drawn on the **bottom row only**. With an icon it starts right at the icon's edge (x=8 for an 8-pixel icon), otherwise at x=0. It also covers the [`iconGap`](#icongap), so it
+starts a little further left than text and charts. Values above 100 count as 100.
+`progress: 0` draws the whole row in `progressTrackColor`, and a value below 0 draws nothing.
+The filled part covers that percentage of the bar, and the rest of the row is the track.
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/download \
@@ -425,117 +523,128 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/download \
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `effect` | string | case-insensitive | `""` | Animated background effect name |
-| `effectSpeed` | float | 0.1 - 10.0 | `1.0` | Pace multiplier for the effect and the app's overlay |
+| `effect` | string | any case | `""` | Name of an animated background effect |
+| `effectSpeed` | float | 0.1 - 10.0 | `1.0` | Speed of the effect and of the app's overlay |
 
-`effect` is matched **case-insensitively** - `Plasma`, `plasma` and `PLASMA` are the same effect. An unknown name is rejected with `422 {"code":"validationFailed","field":"effect"}` and nothing is stored. An empty string means "no effect", and `backgroundColor`/black is used instead.
+Upper and lower case do not matter in `effect`: `Plasma`, `plasma` and `PLASMA` are the same. An
+unknown name gets `422 {"code":"validationFailed","field":"effect"}` and nothing is saved. An
+empty string means no effect. `backgroundColor` or black is used.
 
-The 19 effect names, and what each one draws, are in
-[Visual reference → Background effects](visuals.md#background-effects). The live list is at
+The 19 effects and what each one looks like are listed in
+[Visual reference → Background effects](visuals.md#background-effects). The current list is in
 `GET /api/v1/capabilities` → `effects`.
 
 ### `effectSpeed`
 
-**`effectSpeed`** multiplies the pace of the animation: `2.0` runs it twice as fast, `0.5` half as
-fast. It is **clamped to 0.1 - 10.0**, so `0` and negatives become `0.1` - a near-standstill, never a
-full freeze - and anything above `10.0` is capped. It drives the app's effect **and** an overlay the
-app names itself.
+**`effectSpeed`** multiplies the speed of the animation: `2.0` is twice as fast, `0.5` half as
+fast. Values are **kept within 0.1 - 10.0**: `0` and negative values become `0.1` (very slow, but
+never fully stopped), and values above `10.0` become `10.0`. It sets the speed of the app's
+effect **and** of an overlay the app sets itself.
 
-Colours come from the app-level [`palette`](#palette), which the effect shares with the text and the
-charts. Which effects use a palette at all is listed by `GET /api/v1/capabilities` ->
-`paletteEffects`; the rest keep their own colours whatever palette is set.
+The colors come from the app's [`palette`](#palette), the same one used for text and charts.
+Which effects use a palette is listed in `GET /api/v1/capabilities` -> `paletteEffects`. The
+others keep their own colors.
 
 ```bash
-curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/ambient   -H 'Content-Type: application/json'   -d '{"effect":"Plasma","effectSpeed":0.5,"palette":"Lava"}'
+curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/ambient \
+  -H 'Content-Type: application/json' \
+  -d '{"effect":"Plasma","effectSpeed":0.5,"palette":"Lava"}'
 ```
 
-Palette and speed belong to the app that sent them: two apps using `Plasma` with different palettes
-keep their own colours, and an app carrying neither key gets the defaults.
+Palette and speed belong to the app that sets them. Two apps with `Plasma` and different palettes
+each keep their own colors, and an app without these keys gets the defaults.
 
 ## Palette
 
-One palette per app, shared by whatever asks for it: the text, the charts, the progress bar and the
-effect. A payload names it once.
+One palette per app, shared by the text, the charts, the progress bar and the effect. You name
+it once.
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `palette` | string \| array \| null | max 16 stops | absent | Built-in or user palette name, or a list of colour stops |
-| `paletteBlend` | bool | - | `true` | Interpolate between the 16 entries; `false` gives hard bands |
-| `paletteSpan` | int | px, 0 = stretch | `0` | Pixels per full pass when painting text |
-| `paletteSpeed` | float | 0.0 - 10.0, 0 = still | `0` | Palette passes per second when painting text |
+| `palette` | string \| array \| null | max 16 stops | none | Name of a built-in or custom palette, or a list of colors |
+| `paletteBlend` | bool | - | `true` | Smooth blend between the 16 colors. `false` gives hard stripes |
+| `paletteSpan` | int | px, 0 = stretch | `0` | Pixels per full palette run when coloring text |
+| `paletteSpeed` | float | 0.0 - 10.0, 0 = still | `0` | Palette runs per second when coloring text |
 
-**`palette`** as a string is resolved **case-insensitively**, as `/PALETTES/<name>.txt` on the
-filesystem first and then against the 8 built-in names: `Cloud`, `Lava`, `Ocean`, `Forest`,
-`Stripe`, `Party`, `Heat`, `Rainbow`. A file therefore replaces the built-in of the same name for as
-long as it exists, which is how a built-in is edited. A name it cannot resolve either way is
-rejected with `422 {"code":"validationFailed","field":"palette"}` - it is not quietly swapped for a
-built-in. `null` and `""` clear it.
+**`palette` as a name**: upper and lower case do not matter. AWTRIX first looks for the file
+`/PALETTES/<name>.txt`, then for one of the 8 built-in palettes: `Cloud`, `Lava`, `Ocean`,
+`Forest`, `Stripe`, `Party`, `Heat`, `Rainbow`. So a file with a built-in name replaces that
+built-in for as long as the file exists: this is how you change a built-in palette. A name that
+matches neither gets `422 {"code":"validationFailed","field":"palette"}`. AWTRIX does not quietly
+use another palette. `null` and `""` remove the palette.
 
-**`palette`** as an array takes 1 to 16 colour **stops**, which are spread across all 16 entries by
-linear interpolation. Two stops describe a full ramp between them, not two entries followed by
-fourteen leftovers. An empty array is rejected.
+**`palette` as an array**: 1 to 16 colors (**stops**), spread evenly over the 16 palette
+entries with smooth blending. Two stops make a full blend from the first to the second color.
+An empty array, or one with more than 16 colors, is rejected.
 
-An element may instead be `{"color": <colour>, "pos": 0-100}`, placing that stop at a percentage of
-the ramp rather than letting it fall on the even spread - so `pos` decides how much of the ramp each
-colour gets. Both keys are required. The two element forms cannot be mixed in one array, out-of-order
-stops are sorted, the ends extend flat, and two stops at one position are a hard edge. The same thing
-a palette file writes as `RRGGBB@70`; see
+An element may also be `{"color": <color>, "pos": 0-100}`. This puts that color at a percentage
+of the palette instead of spreading the colors evenly, so `pos` sets how much room each color
+gets. Both keys are required. You cannot mix both forms in one array. Stops are sorted by
+position, the first and last color extend to the ends, and two stops at the same position make a
+hard edge. A palette file writes the same as `RRGGBB@70`. See
 [Visual reference → Custom palettes](visuals.md#custom-palettes).
 
-To paint something from it, set that thing's colour field to the string `"palette"`:
+To use the palette for something, set that thing's color key to `"palette"`:
 
-| Field | Sampled by |
+| Key | What picks the color |
 |---|---|
-| `textColor` | pixel column across the text |
-| `chartColor` | each bar's or point's value, within the chart's own range |
-| `progressColor` | position along the bar; the fill reveals the ramp up to `progress` |
+| `textColor` | the pixel column across the text |
+| `chartColor` | each bar's or point's value, within the chart's range |
+| `progressColor` | the position along the bar. The filled part shows the palette up to `progress` |
 
-`progressTrackColor` stays a plain colour - the unfilled part of the bar has no value behind it.
+`progressTrackColor` is always a plain color.
 
 ### Painting text
 
-The ramp is sampled **per pixel column**, so the colour is even across the string whatever the glyph
-widths are. Two regimes:
+The palette is applied **per pixel column**, so the colors spread evenly whatever the letter
+widths are.
 
-- **`paletteSpan: 0`** (the default) stretches one pass between the first and last lit column. The
-  text starts on the first colour and ends on the last.
-- **`paletteSpan: N`** repeats the palette every `N` pixels. The cycle is seamless, so a long
-  scrolling string keeps its colour variation instead of flattening out.
+- **`paletteSpan: 0`** (default) stretches the palette once from the first to the last lit
+  column: the text starts with the first color and ends with the last.
+- **`paletteSpan: N`** repeats the palette every `N` pixels, without a visible seam. Long
+  scrolling text keeps changing color instead of looking flat.
 
-**`paletteSpeed`** moves the ramp along the text at that many palette passes per second. Motion
-always cycles, so a speed above `0` puts a `paletteSpan: 0` ramp into the repeating regime with the
-text's own width as the span.
+**`paletteSpeed`** moves the colors along the text at that many palette runs per second. With a
+speed above `0`, a `paletteSpan: 0` palette repeats across the width of the text.
 
 ```bash
-# Gradient stretched across the string
-curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/hot   -H 'Content-Type: application/json'   -d '{"text":"OVERHEAT","palette":["#FFFF00","#FF0000"],"textColor":"palette"}'
+# Gradient stretched across the text
+curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/hot \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"OVERHEAT","palette":["#FFFF00","#FF0000"],"textColor":"palette"}'
 
 # Repeating, moving rainbow
-curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/party   -H 'Content-Type: application/json'   -d '{"text":"PARTY TIME","palette":"Rainbow","textColor":"palette","paletteSpan":24,"paletteSpeed":1}'
+curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/party \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"PARTY TIME","palette":"Rainbow","textColor":"palette","paletteSpan":24,"paletteSpeed":1}'
 
-# Bars coloured by value
-curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/load   -H 'Content-Type: application/json'   -d '{"barChart":[3,5,2,8,6,9],"palette":"Heat","chartColor":"palette"}'
+# Bars colored by value
+curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/load \
+  -H 'Content-Type: application/json' \
+  -d '{"barChart":[3,5,2,8,6,9],"palette":"Heat","chartColor":"palette"}'
 ```
 
-The `palettes` list returned by `GET /api/v1/capabilities` carries only the eight built-in names, not
-your `/PALETTES/*.txt` files. Your own files still work by name; list them with
+The `palettes` list in `GET /api/v1/capabilities` shows only the eight built-in names, not your
+`/PALETTES/*.txt` files. Your files still work by name. List them with
 `GET /api/v1/files?dir=/PALETTES`.
 
 ## Overlay
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `overlay` | string | case-insensitive | `""` | Weather overlay drawn on top of everything |
+| `overlay` | string | any case | `""` | Weather overlay drawn on top of everything |
 
-Names are matched case-insensitively, so `"SNOW"` and `"snow"` are equivalent. The 6 overlays are
-`rain`, `snow`, `drizzle`, `storm`, `thunder` and `frost`; what each one draws is in
-[Visual reference → Weather overlays](visuals.md#weather-overlays). An unrecognized name is rejected
-with `422 {"code":"validationFailed","field":"overlay"}` and nothing is stored, so a typo cannot
-masquerade as an opt-out from the global overlay.
+Upper and lower case do not matter: `"SNOW"` and `"snow"` are the same. The 6 overlays are
+`rain`, `snow`, `drizzle`, `storm`, `thunder` and `frost`. What each looks like is in
+[Visual reference → Weather overlays](visuals.md#weather-overlays). An unknown name gets
+`422 {"code":"validationFailed","field":"overlay"}` and nothing is saved, so a typo cannot
+silently turn off the global overlay.
 
-An empty `overlay` falls back to the global overlay set via `PATCH /api/v1/display`. A non-empty per-app overlay **wins** over the global one. Overlays are drawn **last**, on top of text and decorations.
+An empty `overlay` uses the global overlay set with `PATCH /api/v1/display`. An app's own overlay
+**wins** over the global one. Overlays are drawn **last**, on top of text and drawings.
 
-Overlays honour the app's `effectSpeed` and `palette`: the speed scales their pace, and a palette recolours them. Without a palette they keep their stock colours.
+Overlays follow the app's `effectSpeed` and `palette`: the speed sets how fast they move, and a
+palette changes their colors. Without a palette they keep their normal colors.
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/forecast \
@@ -547,34 +656,41 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/forecast \
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `draw` | array of arrays | uncapped | `[]` | Drawing commands, each an array with the command name first |
+| `draw` | array of arrays | no limit | `[]` | Drawing commands. Each is an array starting with the command name |
 
 | Command | Arguments |
 |---|---|
 | `["pixel", x, y, color]` | One pixel |
 | `["pixels", color, x1, y1, x2, y2, …]` | Many pixels in one color |
-| `["line", x1, y1, x2, y2, color]` | Both endpoints included |
-| `["rect", x, y, w, h, color]` | Outline, 1px, spans `x` … `x+w-1` |
-| `["rectFill", x, y, w, h, color]` | Filled |
-| `["circle", cx, cy, r, color]` | Center and radius |
-| `["circleFill", cx, cy, r, color]` | Filled |
-| `["text", x, y, "HI", color]` | Baseline sits at `y + 5` |
-| `["bitmap", x, y, w, h, data]` | `data` is base64 RGB888 or an array of colors |
+| `["line", x1, y1, x2, y2, color]` | A line, both end points included |
+| `["rect", x, y, w, h, color]` | A 1-pixel outline from `x` to `x+w-1` |
+| `["rectFill", x, y, w, h, color]` | A filled rectangle |
+| `["circle", cx, cy, r, color]` | A circle: center and radius |
+| `["circleFill", cx, cy, r, color]` | A filled circle |
+| `["text", x, y, "HI", color]` | Text. With `y` 1 it sits on the same rows as the text of the `text` key<!-- only tc002 -->, in an app drawn at double size<!-- /only --> |
+| `["bitmap", x, y, w, h, data]` | An image. `data` is base64 RGB888 or an array of colors |
 
-- The trailing `color` may be left out; the command then uses the app's text color. `pixels` takes its color first, where `null` means the same.
+- You may leave out the last `color`. The command then uses the app's text color. `pixels` takes
+  its color first, and `null` there means the same.
 - Commands are drawn in array order.
-- Off-canvas pixels are dropped, never wrapped.
-- `w` or `h` of zero or less draws nothing, as does a negative radius. A radius of `0` draws the center pixel.
-- A short `bitmap` leaves the remaining cells undrawn; extra entries are ignored.
+- Pixels outside the display are cut off. They do not wrap around.
+- `w` or `h` of zero or less draws nothing, and so does a negative radius. A radius of `0` draws
+  the center pixel.
+- A `bitmap` with too few colors leaves the rest empty. Extra colors are ignored.
 
-`text` here is UTF-8 like the page's `text` and is drawn in the page's `font`, but is unaffected by `textCase`, `palette`, `textBlinkMs`, `textFadeMs`, `textCenter` and the global `uppercase` setting. The page's own text sits on a fixed baseline at row 6.
+`text` here is UTF-8 like the `text` key and uses the same `font`, but `textCase`,
+`palette`, `textBlinkMs`, `textFadeMs`, `textAlign` and the global `uppercase` setting do not
+apply to it. In `small`, `y` is the top row of the capitals.
 
-`bitmap` data comes in two interchangeable forms: an array of `w × h` colors, row-major, in any of the [color forms](#colors); or a base64 string of `w × h × 3` raw RGB888 bytes. The base64 form is far smaller for a large image.
+`bitmap` data comes in two forms: an array of `w × h` colors, row by row, in any of the
+[color forms](#colors). Or a base64 string of `w × h × 3` bytes (red, green, blue for each
+pixel). The base64 form is much smaller for a large image.
 
-The number of commands is bounded only by the 8192-byte body limit. See [Keeping payloads small](../guides/graphics.md#keeping-payloads-small) for how far that goes.
+The number of commands is limited only by the request size limit (<!-- only esp32 esp32-s3 -->8192 bytes<!-- /only --><!-- only tc002 -->2 MiB<!-- /only -->).
+See [Keeping payloads small](../guides/graphics.md#keeping-payloads-small).
 
 ```bash
-# A framed box with a filled circle and a label
+# A frame with a filled circle and a label
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/art \
   -H 'Content-Type: application/json' \
   -d '{"draw":[
@@ -586,28 +702,32 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/art \
 
 ## Notification-only keys
 
-These 7 keys are accepted **only** by `POST /api/v1/notifications`. A pushed app that sends one is rejected with `422 validationFailed` (an app's name comes from its URL path, not the body).
+These 5 keys work **only** with `POST /api/v1/notifications`. A pushed app that sends one gets
+`422 validationFailed` (a pushed app's name comes from its URL, not from the body).
 
 | Key | Type | Range | Default | Meaning |
 |---|---|---|---|---|
-| `name` | string | - | `""` | Label for [dismissing this notification by name](#notifications); matched exactly, use URL-safe characters |
-| `hold` | bool | - | `false` | Never auto-expire; stay until dismissed |
-| `stack` | bool | - | `true` | Queue behind existing notifications, else replace the current one |
-| `wakeup` | bool | - | `false` | Render even while the matrix is powered off |
-| `sound` | string \| int | - | `""` | A name: a stored MP3, else a melody, else a DFPlayer track |
-| `soundRtttl` | string | - | `""` | Inline RTTTL melody |
-| `soundLoop` | bool | - | `false` | Re-trigger the melody when it finishes |
+| `name` | string | - | `""` | A name to [remove this notification by](#notifications). Must match exactly, use characters that are safe in a URL |
+| `hold` | bool | - | `false` | Stay until closed. Never close by itself |
+| `stack` | bool | - | `true` | Wait in line behind other notifications. `false` replaces the current one |
+| `wakeup` | bool | - | `false` | Show even while the display is switched off |
+| `sound` | string \| object \| array | - | none | A sound to play when the notification appears. See [Sound](#sound) |
 
 ### `hold` and `stack`
 
-**`hold: true`** - the notification never auto-expires; `durationMs` and `appDurationMs` are ignored and it stays until `DELETE /api/v1/notifications/active`. It pins only the **front** of the queue; stacked notifications behind it wait indefinitely.
+**`hold: true`**: the notification never closes by itself. `durationMs` and `appDurationMs` are
+ignored. It stays until `DELETE /api/v1/notifications/active`. Notifications waiting behind it
+wait until then.
 
-**`stack: true`** (default) - appended to the queue and shown after the ones ahead of it. A push into a [full queue](limits.md#apps-and-notifications) is rejected with `507 insufficientStorage`.
+**`stack: true`** (default): the notification joins the end of the queue and is shown after the
+ones before it. If the [queue is full](limits.md#apps-and-notifications), it gets
+`507 insufficientStorage`.
 
-**`stack: false`** - **replaces** the notification currently on screen, leaving any queued behind it intact. Scroll, icon and sound start again from the beginning. On an empty queue, `stack: false` simply pushes.
+**`stack: false`**: the notification **replaces** the one shown. The ones waiting behind it
+stay. Scrolling, icon and sound start from the beginning. With an empty queue it is simply shown.
 
 ```bash
-# Interrupt whatever is showing right now
+# Interrupt whatever is on screen right now
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"URGENT","stack":false,"textColor":"#FF0000"}'
@@ -615,46 +735,74 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
 
 ### `wakeup`
 
-Renders the notification even while the matrix is powered off via `PATCH /api/v1/display {"power":false}`. Display blanking is skipped for as long as a `wakeup` notification is the active one.
+Shows the notification even while the display is switched off with
+`PATCH /api/v1/display {"power":false}`. The display stays on for as long as the `wakeup`
+notification is shown.
 
 ### Sound
 
-Both `sound` and `soundRtttl` are gated on the global `soundEnabled` setting, and play once when the notification first appears.
+`sound` takes the [sound object](http.md#the-sound-object) of `POST /api/v1/audio/play`: a stored
+name, an object with one source key, or a list of 1 to 4 of them.<!-- only esp32-s3 tc002 --> `station` is not allowed here.<!-- /only -->
+The sound plays as an alert, at the alert volume, when the notification appears.
 
-`sound` accepts a **string or an integer** - an integer is converted to its decimal string, so `"sound": 5` becomes `"5"`. Bools, floats and objects are ignored. It is a name, and the device picks the output, in this order:
+| `sound` | Plays |
+|---|---|
+<!-- only esp32 -->
+| `"ding"` | the melody `/MELODIES/ding.txt` |
+<!-- /only -->
+<!-- only esp32-s3 tc002 -->
+| `"ding"` | the MP3 `/MP3/ding.mp3`, else the melody `/MELODIES/ding.txt` |
+| `{"file":"Racer/boost"}` | the sound `boost` of the script `Racer` |
+<!-- /only -->
+| `{"rtttl":"bell:d=4,o=5,b=120:c,e,g"}` | the melody in the request |
+<!-- only tc002 -->
+| `{"speech":"The door is open."}` | the text, read aloud (needs a voice) |
+| `[{"speech":"The door is open."},"ding"]` | the first entry the clock can play |
+<!-- /only -->
+<!-- only esp32 esp32-s3 -->
+| `{"track":3}` | DFPlayer track 3 |
+| `[{"track":3},"ding"]` | the first entry the clock can play |
+<!-- /only -->
+| `""` or `null` | no sound |
 
-1. the stored MP3 `/MP3/<sound>.mp3`, on a panel with a speaker - a playing radio stream is interrupted and reconnects afterwards;
-2. the stored melody `/MELODIES/<sound>.txt`, on a panel with a buzzer;
-3. a DFPlayer track, when the name is a plain number from 1 to 2999 and a DFPlayer is wired.
+- A notification sent by a script with `notify()` looks for a plain name in the script's own
+  folder first.
+- `sound` is checked when the notification arrives. A sound with a mistake, for example a melody
+  that cannot be read, gets `422 validationFailed` and the notification is not shown. `field`
+  starts with `sound`: `sound.rtttl`, or `sound[1].file` inside a list. A number is not a sound:
+  `"sound": 5` answers `must be a string, object or list`.
+- A name that is not stored, or a sound the clock cannot play, is not an error. The notification
+  is shown without sound.
 
-A name nothing is stored under plays nothing; the notification is still shown. The same rule applies to `sound` on [`POST /api/v1/audio/play`](http.md#post-apiv1audioplay) and to `sound.play()` in a script - see [Letting AWTRIX choose](../guides/sounds.md#letting-awtrix-choose).
-
-`soundRtttl` is an inline melody string played directly, with no filesystem access. It is parsed when the notification arrives, so an unparseable melody is rejected with `422 validationFailed` (`field: "soundRtttl"`) and nothing is pushed - the same check `POST /api/v1/audio/play` makes. A melody that plays there works here. It needs a buzzer: with `pinBuzzer` unset there is no output for the notes and the notification is shown silently.
-
-When both `sound` and `soundRtttl` are present, only the `soundRtttl` melody plays.
-
-**`soundLoop: true`** re-triggers whichever of `soundRtttl`/`sound` applies once it finishes, for as long as the notification is shown. Combined with `hold`, this gives an indefinite alarm:
+**`"loop": true`** inside the sound plays it again each time it ends, for as long as the
+notification is shown. When the notification leaves the display, the sound stops at once. Without
+`loop`, a sound plays to its end. Together with `hold`, this makes an alarm that plays until you
+close it:
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
-  -d '{"text":"ALARM","hold":true,"soundLoop":true,"soundRtttl":"siren:d=8,o=5,b=200:c,g,c,g"}'
+  -d '{"text":"ALARM","hold":true,"sound":{"rtttl":"siren:d=8,o=5,b=200:c,g,c,g","loop":true}}'
 ```
 
 ## Render order
 
-Each frame is painted in this order:
+Each frame is drawn in this order. Later layers cover earlier ones:
 
-1. **Background** - the effect if `effect` resolves, otherwise a clear to `backgroundColor` or black.
-2. **Text and decorations** - if `textInFront`, decorations then text; otherwise text then decorations. Decorations are always `draw` commands → progress → bar chart → line chart.
-3. **Icon** - starts at the top row, at `iconOffsetX` plus any `iconMode` shift. A full-width ordinary icon is the background instead.
-4. **Additional icons** - `icons` entries, in array order, at their absolute `x`, `y` positions.
-5. **Overlay** - the per-app overlay if set, else the global one.
-6. **Stale marker** - a dark-red frame if a `lifetimeExpiry: "mark"` app has expired. Drawn before the icons and overlay, so those paint over it.
+1. **Background**: the `effect` if set, otherwise `backgroundColor` or black.
+2. **Text and drawings**: with `textInFront`, drawings first and then text. Otherwise text
+   first. Drawings are always in this order: `draw` commands → progress bar → bar chart → line
+   chart.
+3. **Out-of-date frame**: the dark-red frame of an expired `lifetimeExpiry: "mark"` app.
+4. **Icon**: centered vertically, moved by `iconOffsetX` and `iconMode`. A full-width GIF icon is the
+   background instead.
+5. **Extra icons**: the `icons` entries, in array order, at their `x`, `y` positions.
+6. **Overlay**: the app's overlay if set, else the global one.
 
 ## Worked example
 
-Everything at once - a pushed app with an icon, a gradient, a chart, a progress bar, an effect and an overlay:
+Everything at once: a pushed app with an icon, a gradient, a chart, a progress bar, an effect
+and an overlay:
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/dashboard \
@@ -680,3 +828,45 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/dashboard \
         "lifetimeExpiry": "mark"
       }'
 ```
+
+## Errors
+
+One rule: **the whole payload is applied, or none of it.** When a request fails nothing is saved.
+
+The keys that take a number or `true`/`false` (all but `iconGap`), and `text`, `icon`, `effect`,
+`overlay` and `name`, do not refuse a value of another type: the value is ignored and the key
+keeps its default. `"hold":"yes"` gives a notification without `hold`, `"textInFront":1` keeps
+`false`, and `"repeat":"many"` keeps `0`. These problems are refused:
+
+| Problem | Answer |
+|---|---|
+| Body is not valid JSON | `400 invalidJson` |
+| Body over <!-- only esp32 esp32-s3 -->8192 bytes<!-- /only --><!-- only tc002 -->2 MiB<!-- /only --> | `413 payloadTooLarge` |
+| Unknown top-level key | `422 validationFailed`, `field` = the key |
+| A color that cannot be read, anywhere | `422 validationFailed`, `field` = the key |
+| A word key given a word that is not in its list | `422 validationFailed`, `field` = the key |
+| Unknown `effect` or `overlay` name | `422 validationFailed`, `field` = `effect` / `overlay` |
+| A notification `sound` with a mistake | `422 validationFailed`, `field` = `sound` or `sound.<key>` |
+| Unknown draw command | `422 validationFailed`, `field` = `draw[<i>]` |
+| A draw command that is not an array | `422 validationFailed`, `field` = `draw[<i>]` |
+| Wrong number of arguments for a draw command | `422 validationFailed`, `field` = `draw[<i>]` |
+| A coordinate, size or radius that is not a number | `422 validationFailed`, `field` = `draw[<i>]` |
+| `pixels` with an odd number of coordinates | `422 validationFailed`, `field` = `draw[<i>]` |
+
+Drawing outside the display is **not** an error: the parts outside are cut off. A shape with zero
+width or height is not an error either. It just draws nothing (see
+[Draw commands](#draw-commands)).<!-- only tc002 --> With `layout`, each region must fit inside the display. What is
+drawn inside a region is cut off at its edges.<!-- /only -->
+
+## Limits
+
+Every cap a payload can reach (request size, number of pushed apps, notification queue length
+and chart points) is listed with its error in [Limits](limits.md#apps-and-notifications).
+
+## Related
+
+- [HTTP API](http.md)
+- [MQTT API](mqtt.md)
+- [Visual reference](visuals.md)
+- [Limits](limits.md)
+- [Errors](errors.md)

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace awtrix::script {
@@ -15,6 +16,7 @@ struct ConfigField {
   std::string label;
   std::string help;
   std::string unit;
+  std::string group;
   // Already-encoded JSON, not a display string -- it is spliced straight into the store.
   std::string defJson;
   // Select choices, comma-joined into one string to save the allocations a vector would cost.
@@ -35,6 +37,8 @@ struct ConfigSchema {
 
 ConfigSchema parseConfig(const std::string& source);
 
+bool declares(const ConfigSchema& schema, std::string_view key);
+
 bool seedConfigDefaults(const ConfigSchema& schema, const std::string& storeJson,
                         std::string& out);
 
@@ -44,17 +48,24 @@ bool dropUndeclaredValues(const ConfigSchema& before, const ConfigSchema& after,
 bool appendConfigJson(std::string& out, const std::string& name, const ConfigSchema& schema,
                       const std::string& storeJson);
 
-struct ConfigPatch {
+struct StorePatch {
   bool ok = false;
+  bool malformed = false;
   std::string message;
   std::string field;
   std::string storeJson;
 };
 
-ConfigPatch applyConfigPatch(const ConfigSchema& schema, const std::string& storeJson,
+StorePatch applyConfigPatch(const ConfigSchema& schema, const std::string& storeJson,
                              const std::string& patchJson);
 
 using ConfigTextFn = std::function<bool(const std::string& name, std::string& out)>;
+
+// Reads a script's source and store for a GET route. 0 when both were read; otherwise the HTTP
+// status, with `body` holding the error.
+int readScriptForResponse(const std::string& name, const ConfigTextFn& readSource,
+                          const ConfigTextFn& readStore, std::string& source,
+                          std::string& storeJson, std::string& body);
 
 int configResponse(const std::string& name, const ConfigTextFn& readSource,
                    const ConfigTextFn& readStore, std::string& body);

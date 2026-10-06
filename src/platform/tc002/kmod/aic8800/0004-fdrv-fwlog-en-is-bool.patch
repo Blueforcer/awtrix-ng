@@ -1,0 +1,22 @@
+aic8800_fdrv: declare fwlog_en as bool like aic8800_bsp
+
+struct aicbsp_feature_t is filled by aic8800_bsp and copied by
+aic8800_fdrv. The bsp copy of aic_bsp_export.h declares fwlog_en as
+bool, the fdrv copy as int, so fdrv read a 20-byte struct from a
+12-byte one and copied three uninitialised stack bytes into
+rwnx_hw->fwlog_en. The stock fdrv reads a single byte there.
+
+---
+diff --git a/aic8800_fdrv/aic_bsp_export.h b/aic8800_fdrv/aic_bsp_export.h
+index d3d0205..c911400 100755
+--- a/aic8800_fdrv/aic_bsp_export.h
++++ b/aic8800_fdrv/aic_bsp_export.h
+@@ -15,7 +15,7 @@ struct aicbsp_feature_t {
+ 	int      hwinfo;
+ 	uint32_t sdio_clock;
+ 	uint8_t  sdio_phase;
+-	int fwlog_en;
++	bool     fwlog_en;
+ 	uint8_t irqf;
+ };
+ 

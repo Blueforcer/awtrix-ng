@@ -89,18 +89,26 @@ std::string fromStreamBytes(const std::string& in) {
 
 const FontGlyph* glyphFor(const GfxFont& font, uint32_t cp) {
   if (cp >= font.first && cp <= font.last) return &font.glyphs[cp - font.first];
-  for (uint8_t r = 0; r < font.rangeCount; ++r) {
-    const FontRange& range = font.ranges[r];
-    if (cp < range.first || cp > range.last) continue;
-    const uint16_t slot = range.index[cp - range.first];
-    return slot ? &font.glyphs[slot - 1] : nullptr;
+  uint8_t lo = 0, hi = font.rangeCount;
+  while (lo < hi) {
+    const uint8_t mid = static_cast<uint8_t>((lo + hi) / 2);
+    if (font.ranges[mid].last < cp) lo = static_cast<uint8_t>(mid + 1);
+    else hi = mid;
   }
-  return nullptr;
+  if (lo == font.rangeCount || cp < font.ranges[lo].first) return nullptr;
+  const FontRange& range = font.ranges[lo];
+  const uint16_t slot = range.index[cp - range.first];
+  return slot ? &font.glyphs[slot - 1] : nullptr;
+}
+
+namespace {
+uint32_t upperCodepoint(uint32_t cp);
 }
 
 bool GlyphIter::next(const FontGlyph*& glyph) {
   if (i_ >= s_.size()) return false;
-  const uint32_t cp = nextCodepoint(s_, i_);
+  uint32_t cp = nextCodepoint(s_, i_);
+  if (upper_ && cp != kInvalidCodepoint) cp = upperCodepoint(cp);
   glyph = cp == kInvalidCodepoint ? nullptr : glyphFor(font_, cp);
   if (!glyph) glyph = glyphFor(font_, kPlaceholder);
   return true;
@@ -123,6 +131,8 @@ uint32_t upperCodepoint(uint32_t cp) {
   if (cp >= 0x139 && cp <= 0x148) return (cp & 1) ? cp : cp - 1;
   if (cp >= 0x14A && cp <= 0x177) return (cp & 1) ? cp - 1 : cp;
   if (cp >= 0x179 && cp <= 0x17E) return (cp & 1) ? cp : cp - 1;
+  if (cp == 0x1A1 || cp == 0x1B0) return cp - 1;
+  if (cp >= 0x1EA0 && cp <= 0x1EF9) return (cp & 1) ? cp - 1 : cp;
 
   if (cp == 0x3AC) return 0x386;
   if (cp >= 0x3AD && cp <= 0x3AF) return cp - 0x25;
@@ -138,6 +148,8 @@ uint32_t upperCodepoint(uint32_t cp) {
   if (cp >= 0x4C1 && cp <= 0x4CE) return (cp & 1) ? cp : cp - 1;
   if (cp >= 0x4D0 && cp <= 0x52F) return (cp & 1) ? cp - 1 : cp;
   return cp;
+}
+
 }
 
 void appendUtf8(std::string& out, uint32_t cp) {
@@ -156,8 +168,6 @@ void appendUtf8(std::string& out, uint32_t cp) {
     out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
     out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
   }
-}
-
 }
 
 std::string toUpperUtf8(std::string_view s) {

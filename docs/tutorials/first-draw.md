@@ -1,19 +1,18 @@
-# 1. Draw something
+# Tutorial 1: Draw something
 
-This is the first of three tutorials that build one app together. By the end of the
-third, your panel shows the chance of rain for the next sixteen hours, fetched from a
-real weather service, with the location set from the web UI.
+This is the first of three tutorials that build one app step by step. At the end of the
+third, your display shows the chance of rain for the next sixteen hours. The data comes from a
+real weather service, and you set the location in the web UI.
 
-Right now we build none of that. We build a picture.
+In this first tutorial you draw a picture.
 
 | Tutorial | What it adds |
 |---|---|
-| **1. Draw something** | pixels on the panel, from numbers you type in yourself |
-| [2. Give it a memory](state-and-time.md) | state, a clock, and a setting the user can change |
-| [3. Feed it real data](real-data.md) | a real forecast over the network |
+| **Tutorial 1: Draw something** | pixels on the display, from numbers you type in yourself |
+| [Tutorial 2: Give it a memory](state-and-time.md) | state, a clock, and a setting the user can change |
+| [Tutorial 3: Feed it real data](real-data.md) | a real forecast over the network |
 
-You need an AWTRIX in front of you, or the [simulator](../advanced/simulator.md), which
-runs scripts just as well and reloads faster.
+You need an AWTRIX on your network and a browser.
 
 ---
 
@@ -23,6 +22,7 @@ Open the web UI, go to the **Scripts** tab, and create a script called `Rain`.
 
 Paste this in and press **Save**, or `Ctrl-S`:
 
+<!-- panel -->
 ```berry
 # @name Rain
 # @desc Chance of rain, hour by hour
@@ -37,34 +37,35 @@ end
 return Rain()
 ```
 
-Your app has joined the **rotation**, which is the queue of apps taking turns on the
-panel. Wait a few seconds and it comes round, or press the right button on the device
-to skip ahead to it. The panel says **rain** in blue.
+Your app is now in the **rotation**, the list of apps that take turns on the display. Wait a
+few seconds until it comes up, or press the right button on the device to skip to it. The
+display shows **rain** in blue. The `1` and the `6` in `text()` are its position on the
+display, explained [below](#how-the-panel-is-addressed).
 
 That is a complete app. Three things make it one:
 
-**It is a class.** Everything the app owns lives inside it. Two people can both write
-`class Rain` without ever colliding, because each script gets its own private scope.
+**It is a class.** Everything the app owns lives inside it. Two scripts can both use
+`class Rain` without problems, because each script is kept separate.
 
 **It has a `draw()`.** This is the only method an app must have. AWTRIX calls it about
-forty times a second while your app is the one on screen, and whatever it paints is
+forty times a second while your app is the one shown, and whatever it paints is
 the frame.
 
 **It ends with `return Rain()`.** That hands AWTRIX the instance to run.
 
 !!! tip "The editor knows the API"
-    Built-in calls are highlighted in their own colour, and **Ctrl-Space** completes
+    Built-in calls are highlighted in their own color, and **Ctrl-.** completes
     them. A misspelled `pixel` stays plain, so you see it before you save. The list
-    always matches the firmware you are actually talking to.
+    always matches the firmware on your device.
 
 ### When it goes wrong
 
-Nothing you do here can harm the device. A broken script breaks only itself: the panel
+Nothing you do here can harm the device. A broken script breaks only itself: the display
 shows `ERR:` in red when its turn comes, every other app keeps running, and saving the
 script again clears it. The message is waiting next to your script in the **Scripts**
 tab.
 
-These are the three you will actually meet, with the exact words AWTRIX uses:
+These are the three errors you will meet most often, with the exact words AWTRIX uses:
 
 | Message | What happened |
 |---|---|
@@ -72,47 +73,70 @@ These are the three you will actually meet, with the exact words AWTRIX uses:
 | `no draw() method` | the class has no `draw()`, so there is nothing to paint |
 | `syntax_error: unexpected token …` | usually a missing `end` |
 
-The third one deserves a warning. Berry closes every `if`, `for`, `while`, `def` and
-`class` with `end`, and a missing one is the most common mistake there is. The line
-number in the message is where the parser finally gave up, which is *after* the line you
-actually got wrong, sometimes several lines after. Look upwards from it, not at it.
+Berry closes every `if`, `for`, `while`, `def` and `class` with `end`. A missing `end` is
+the most common mistake. The line number in the message is often *after* the line with the
+mistake, sometimes several lines after. Look upwards from it.
 
-Errors that only show up while the app is running arrive the same way. `"x" + 5` raises
-`type_error: unsupported operand type(s) for +: 'string' and 'int'`, because Berry will
-not join a number to a string for you. Write `"x" + str(5)`. That one catches everybody
-at least once.
+Errors that only happen while the app runs are shown the same way. `"x" + 5` raises
+`type_error: unsupported operand type(s) for +: 'string' and 'int'`, because Berry does not
+join a number to a string for you. Write `"x" + str(5)`.
 
 ---
 
-## How the panel is addressed
+## How the display is addressed {#how-the-panel-is-addressed}
 
-The panel is 32 pixels wide and 8 tall. `x` runs from 0 on the left, `y` runs from 0 at
-the **top**, so a larger `y` is further down.
+The display is a grid of pixels, <!-- only esp32 esp32-s3 -->32 wide and 8 tall<!-- /only --><!-- only tc002 -->52 wide and 16 tall<!-- /only -->. `x` counts the
+columns from `0` on the left. `y` counts the rows from `0` at the **top**, so a larger `y` is
+further down.
 
-These two lines go inside `draw()`, next to the `text()` call you already have:
+Light one pixel in each corner. The two `pixel()` lines go inside `draw()`, next to the
+`text()` call you already have:
 
+<!-- panel style=diagram mark=row:6 -->
 ```berry
+# @name Rain
+# @desc Chance of rain, hour by hour
+
+class Rain
+  def draw()
+    clear()
+    text(1, 6, "rain", 0x0088FF)
     pixel(0, 0, 0xFF0000)                        # top left
     pixel(width() - 1, height() - 1, 0x00FF00)   # bottom right
+  end
+end
+
+return Rain()
 ```
 
-Ask `width()` and `height()` rather than writing 32 and 8. Some builds run a different
-panel, and a script that measures adapts to them for free. It costs you nothing today
-and saves you a rewrite later.
+The red pixel is `(0, 0)`. The green one is <!-- only esp32 esp32-s3 -->`(31, 7)`<!-- /only --><!-- only tc002 -->`(51, 15)`<!-- /only -->.
 
-Anything you draw outside the panel is quietly clipped. Drawing at `x = 500` is not an
-error, it just does not appear. That is a friendlier rule than it sounds, because it
-means a chart that runs long cannot crash your app.
+**In `text()`, `y` is the baseline, not the top.** The baseline is the line the letters stand
+on. `text(1, 6, …)` puts it on row 6, tinted in the picture. The letters sit right above it,
+on rows 1 to 5. `x = 1` is the column where the first letter starts.<!-- only esp32 esp32-s3 -->
+Almost every app uses `y = 6`.<!-- /only --><!-- only tc002 --> A second line goes 8 rows
+lower, at `y = 14`.<!-- /only --> Other fonts fill other rows:
+[Where text sits](../guides/display.md#where-text-sits) lists them.
 
-One thing surprises everyone once: **`y` in `text()` is the baseline, not the top.**
-Almost every app wants `y = 6`.
+<!-- only esp32 esp32-s3 -->
+Use `width()` and `height()` instead of writing 32 and 8. Some displays are wider, and a script that
+asks adapts to them automatically.
+<!-- /only -->
+<!-- only tc002 -->
+Use `width()` and `height()` instead of writing 52 and 16. Other clocks have a different display
+size, and a script that asks adapts to them automatically.
+<!-- /only -->
+
+Anything you draw outside the display is cut off. Drawing at `x = 500` is not an error. It
+just does not appear, so a chart that is too long cannot crash your app.
+
+[How the display works](../guides/display.md#the-display) explains the grid with more pictures.
 
 ---
 
-## Colours are just numbers
+## Colors are just numbers
 
-A colour is a single integer. What a colour picker calls `#0088FF` is `0x0088FF` here.
-There is no colour object and nothing to construct.
+A color is a single number. What a color picker calls `#0088FF` is `0x0088FF` here.
 
 These three lines paint exactly the same blue, three different ways:
 
@@ -122,42 +146,49 @@ These three lines paint exactly the same blue, three different ways:
     text(1, 6, "rain", hsv(208, 100, 100))  # from hue 0 to 360, sat and value 0 to 100
 ```
 
-`hsv()` earns its place when the colour has to follow a value, which is exactly what we
-will want in a moment.
+`hsv()` is useful when the color should follow a value. We use it later on this page.
 
-A word of warning about brightness. These LEDs are genuinely bright in a dark room.
-`0xFFFFFF` is right for a few glyphs. For anything that fills area, something like
-`0x202020` is plenty, and saturated colours at moderate value read better than the same
-hue at full blast.
+The LEDs are very bright in a dark room. `0xFFFFFF` is fine for a few letters. For larger
+areas, something like `0x202020` is enough. Strong colors at medium brightness are easier
+to read than the same color at full brightness.
 
 ---
 
-## Centre the text properly
+## Center the text properly
 
-Guessing where text starts works until the text changes length. Measure instead:
+A fixed start position stops working when the text changes length. Measure the text
+instead:
 
+<!-- panel style=diagram -->
 ```berry
+# @name Rain
+# @desc Chance of rain, hour by hour
+
+class Rain
   def draw()
     clear()
     var s = "rain"
     text((width() - text_ink_width(s)) / 2, 6, s, 0x0088FF)
   end
+end
+
+return Rain()
 ```
 
-`text_ink_width()` reports how wide the lit pixels are, which is what you want for
-fitting and centring. There is also `text_width()`, which reports how far the pen
-moves. Use that one when you are chaining runs of text side by side.
+`text_ink_width()` measures only the lit pixels, so use it to center text. `text_width()`
+also counts the small gap after the last letter, so use it when you put two texts side
+by side.
 
 ---
 
 ## Now the bars
 
-Text was the warm-up. What this app actually wants to show is sixteen numbers, one per
-hour, each a percentage.
+The app should show sixteen numbers, one per hour, each a percentage.
 
-We do not have real numbers yet, so type some in. The shape of the code will not change
-when the real ones arrive in [tutorial 3](real-data.md).
+We do not have real numbers yet, so type some in. The code stays the same when the real
+numbers arrive in [tutorial 3](real-data.md).
 
+<!-- panel style=diagram -->
 ```berry
 # @name Rain
 # @desc Chance of rain, hour by hour
@@ -172,11 +203,12 @@ class Rain
   def draw()
     clear()
     var h = height()
+    var w = width() / size(self.hours)
     for i : 0 .. size(self.hours) - 1
       var v = self.hours[i]
       var bar = v * h / 100
       if bar > 0
-        rect_fill(i * 2, h - bar, 2, bar, 0x0088FF)
+        rect_fill(i * w, h - bar, w, bar, 0x0088FF)
       end
     end
   end
@@ -185,62 +217,68 @@ end
 return Rain()
 ```
 
-Sixteen bars, two pixels wide each, filling the panel exactly.
+Sixteen bars side by side. `w` is the width of one bar: the display width divided by the number
+of bars.
+<!-- only esp32 esp32-s3 -->
+On a 32 pixel display each bar is two pixels wide. On a wider display the bars get
+wider, so the chart always spans the display.
+<!-- /only -->
+<!-- only tc002 -->
+On the 52 pixel display each bar is three pixels wide. The four columns left over on the right
+stay dark.
+<!-- /only -->
 
-Three new things arrived with that.
+This code has three new parts.
 
-**`var hours` and `init()`.** A value the app needs to remember lives in a member. You
-declare it with `var` at the top of the class and give it a value in `init()`, which
-Berry runs once as the instance is created. Members are how state survives from one
-frame to the next.
+**`var hours` and `init()`.** A value the app needs to remember lives in a *member* (a
+variable that belongs to the app). You declare it with `var` at the top of the class and
+give it a value in `init()`, which runs once when the app starts. Members keep their value
+from one frame to the next.
 
 !!! warning "Declare every member, and give it a value"
-    Berry lets you assign to a member you never declared, so a stray `self.total = 0`
-    somewhere quietly works. Reading one you never declared does not. It raises
-    `attribute_error: the 'Rain' object has no attribute 'total'` and the panel shows
-    `ERR:`. A `var` line at the top of the class and a value in `init()` cost two lines
-    and remove the whole category of problem.
+    Berry lets you assign to a member you never declared, so `self.total = 0` somewhere
+    works. Reading a member you never declared does not. It raises
+    `attribute_error: the 'Rain' object has no attribute 'total'` and the display shows
+    `ERR:`. A `var` line at the top of the class and a value in `init()` prevent this.
 
-**The loop.** `for i : 0 .. size(self.hours) - 1` walks the indices. Berry writes ranges
-with `..`, and every block closes with `end`. A missing `end` is the single most common
-reason a script refuses to install.
+**The loop.** `for i : 0 .. size(self.hours) - 1` goes through every position in the list.
+Berry writes ranges with `..`, and every block closes with `end`.
 
 **The arithmetic.** `v * h / 100` scales a percentage into pixels. Multiply first, then
-divide. Two integers divided in Berry give an integer, so `v / 100 * h` would collapse
-every bar under 100% to zero.
+divide. Two whole numbers divided in Berry give a whole number, so `v / 100 * h` would
+turn every bar under 100% into zero.
 
-The `if bar > 0` guard is there so a zero percent hour draws nothing at all rather than
-a stub. On a panel this small the difference between "no rain" and "a little rain"
-should be visible, and a one pixel bar for both would hide it.
+The `if bar > 0` check makes an hour with zero percent draw nothing at all. So you can see
+the difference between "no rain" and "a little rain".
 
 ---
 
-## Let the colour carry the meaning
+## Let the color carry the meaning
 
-Thirty-two by eight leaves no room for a legend, so colour has to do that work.
+A <!-- only esp32 esp32-s3 -->32 × 8<!-- /only --><!-- only tc002 -->52 × 16<!-- /only --> display has no room for a legend, so color has to show the meaning.
 
 ```berry
     for i : 0 .. size(self.hours) - 1
       var v = self.hours[i]
       var bar = v * h / 100
       if bar > 0
-        rect_fill(i * 2, h - bar, 2, bar, hsv(208, 100, clamp(v, 25, 90)))
+        rect_fill(i * w, h - bar, w, bar, hsv(208, 100, clamp(v, 25, 90)))
       end
     end
 ```
 
-`hsv(208, 100, v)` holds the hue at blue and lets the value follow the percentage, so a
-likely hour glows and an unlikely one sits back. `clamp(v, 25, 90)` keeps the dimmest
-bar visible and the brightest one comfortable to look at.
+`hsv(208, 100, v)` keeps the color blue and lets the brightness follow the percentage. A
+likely hour is bright, an unlikely one is dim. `clamp(v, 25, 90)` keeps the dimmest bar
+visible and the brightest one comfortable to look at.
 
-This is worth more than it looks. The bar height already encodes the number. Brightness
-encoding it a second time makes the shape readable from across a room, which is the
-distance most panels are read from.
+The bar height already shows the number. Brightness shows it a second time, so you can read
+the chart from across the room.
 
 ---
 
 ## The finished script
 
+<!-- panel -->
 ```berry
 # @name Rain
 # @desc Chance of rain, hour by hour
@@ -256,11 +294,12 @@ class Rain
   def draw()
     clear()
     var h = height()
+    var w = width() / size(self.hours)
     for i : 0 .. size(self.hours) - 1
       var v = self.hours[i]
       var bar = v * h / 100
       if bar > 0
-        rect_fill(i * 2, h - bar, 2, bar, hsv(208, 100, clamp(v, 25, 90)))
+        rect_fill(i * w, h - bar, w, bar, hsv(208, 100, clamp(v, 25, 90)))
       end
     end
   end
@@ -269,9 +308,8 @@ end
 return Rain()
 ```
 
-Change a number in the list, save, and the panel follows immediately. That loop is
-short enough to be worth doing a few times, because it is the loop you will be living
-in for the next two tutorials.
+Change a number in the list and save. The display changes immediately. Try it a few times:
+you will work this way in the next two tutorials.
 
 ---
 
@@ -280,19 +318,20 @@ in for the next two tutorials.
 - An app is a class with a `draw()` and a final `return YourClass()`.
 - `draw()` runs about forty times a second and paints one frame from what the app
   already knows.
+- `x` counts the columns from the left, `y` the rows from the top. In `text()`, `y` is the
+  baseline the letters stand on.
 - `width()` and `height()` beat hardcoded numbers.
-- Colours are integers, and `hsv()` is how you make one follow a value.
+- Colors are integers, and `hsv()` is how you make one follow a value.
 - Members declared with `var` and set in `init()` are how an app remembers anything.
 
 ## Next
 
-[**2. Give it a memory**](state-and-time.md) puts those sixteen numbers under the
-app's own control. They start changing on a timer, the app survives a reboot with its
-last values intact, and the accent colour becomes something the user can pick in the
-web UI without touching your code.
+[**Tutorial 2: Give it a memory**](state-and-time.md) lets the app change the sixteen numbers by
+itself. They change on a timer, the app keeps its last values after a reboot, and the user
+can pick the color in the web UI without editing code.
 
 ## Related
 
-- [App scripting](../guides/scripting.md) is the full reference behind every call used here
-- [Charts & drawing](../guides/graphics.md) covers the drawing calls in their own right
-- [Simulator](../advanced/simulator.md) if you would rather iterate without hardware
+- [How the display works](../guides/display.md) – where things sit on the display, with pictures
+- [Scripting guide](../guides/scripting/index.md) – the full reference for every call used here
+- [Charts & drawing](../guides/graphics.md) – all drawing calls

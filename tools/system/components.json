@@ -1,0 +1,527 @@
+{
+  "components": [
+    {
+      "files_sha256": "91937ff33ae936bac8b46b572dfd3e24e6c18ae01a54cd37dcb83039856f2338",
+      "id": "berry",
+      "license": {
+        "file": "LICENSES/MIT-Berry.txt",
+        "name": "MIT",
+        "sha256": "ee13cc1b190b67260dcebd4ac32dc4ce3043ab1f4a673b13d92c3d57d7369add",
+        "spdx": "MIT"
+      },
+      "name": "Berry",
+      "notice": "Berry",
+      "origin": {
+        "note": "tag v1.1.0; the vendored tree was subsequently rebased on upstream master at 65f234eb81 (2026-07-20), which lib/berry/src matches apart from the patches below (lib/berry/berry_conf.h)",
+        "reference": "b5ede66721937533fbf5c286ef44a5111ea30c75",
+        "url": "https://github.com/berry-lang/berry"
+      },
+      "patch_marker": "AWTRIX",
+      "patches": [
+        {
+          "files": [
+            "lib/berry/berry_conf.h"
+          ],
+          "summary": "berry_conf.h is the project's copy of upstream default/berry_conf.h with AWTRIX values"
+        },
+        {
+          "files": [
+            "lib/berry/src/be_exec.c",
+            "lib/berry/src/be_exec.h",
+            "lib/berry/src/be_mem.c",
+            "lib/berry/src/be_mem.h",
+            "lib/berry/src/be_parser.c",
+            "lib/berry/src/be_strlib.c",
+            "lib/berry/src/be_vm.c"
+          ],
+          "summary": "VM stack nil-fill, float constant tables outside ESP32 IRAM, idle-stack/trace release seam and newlib-nano printf handling, marked AWTRIX"
+        },
+        {
+          "files": [
+            "lib/berry/default/be_modtab.c",
+            "lib/berry/src/be_modbuslib.c",
+            "lib/berry/generate/be_const_strtab.h",
+            "lib/berry/generate/be_const_strtab_def.h"
+          ],
+          "summary": "AWTRIX Modbus module and registration from main 421eb23, with regenerated constant string tables for the script bindings"
+        },
+        {
+          "files": [
+            "lib/berry/src/be_strlib.c"
+          ],
+          "summary": "2026-09-26: bound integer-format length modifier insertion by the actual format buffer capacity and raise value_error before overflow (upstream issue berry-lang/berry#544)."
+        },
+        {
+          "files": [
+            "lib/berry/src/be_lexer.c"
+          ],
+          "summary": "2026-09-28: NUL-terminate leading-dot real literals before conversion (backport of upstream 6e6e6213, berry-lang/berry#546), and keep the token name table in enum order so syntax errors name the right keyword (still wrong upstream)."
+        },
+        {
+          "files": [
+            "lib/berry/src/be_code.c",
+            "lib/berry/src/be_code.h",
+            "lib/berry/src/be_parser.c"
+          ],
+          "summary": "2026-10-03: backport of upstream 66d2d0f9 and 4bf803a5 (berry-lang/berry#549, #551) and of the register release from 997de1c7 (#553): a short-circuit result keeps its own register, so the call arguments after `a || b` are no longer shifted, an assignment to a nested index no longer releases a register that a local still holds, and `p := l[i]` as a call argument no longer shifts the arguments. From the rest of #553 only the refusal of a `:=` that would create a local over a pending temporary is taken; upstream refuses every variable created by `:=`."
+        },
+        {
+          "files": [
+            "lib/berry/src/be_filelib.c"
+          ],
+          "summary": "compile i_savecode only with BE_USE_BYTECODE_SAVER, whose functions it calls, marked AWTRIX"
+        },
+        {
+          "files": [
+            "lib/berry/src/be_bytecode.c",
+            "lib/berry/src/be_byteslib.c",
+            "lib/berry/src/be_code.c",
+            "lib/berry/src/be_debuglib.c",
+            "lib/berry/src/be_lexer.c",
+            "lib/berry/src/be_parser.c",
+            "lib/berry/src/be_string.c"
+          ],
+          "summary": "2026-10-03: backport of upstream 6e6e6213 (berry-lang/berry#546) and 2c0b935c: parser depth limit (BE_MAX_PARSER_DEPTH in berry_conf.h), out-of-range jumps refused, string escapes bounded, string size capped, bytes() offsets checked without integer overflow and setbytes() clamped to the source, bytecode loader and debug.caller() hardened."
+        }
+      ],
+      "paths": [
+        "lib/berry"
+      ],
+      "review": {
+        "date": "2026-09-16",
+        "decision": "accepted",
+        "rationale": "MIT requires the license and copyright notice: license text shipped in LICENSES/MIT-Berry.txt, attribution row in THIRD-PARTY-NOTICES.md; the ARM recipe installs both under /usr/share/licenses/awtrix-ng for Linux targets; local modifications are listed above and marked in the sources"
+      },
+      "targets": [
+        "esp32",
+        "linux"
+      ],
+      "vendored": true,
+      "version": "1.1.0"
+    },
+    {
+      "files_sha256": "73a5a0e201a7d089c4aa23d44e9566d03948872d4abe925534cf4f028fa778c9",
+      "id": "pubsubclient",
+      "license": {
+        "file": "LICENSES/MIT-PubSubClient.txt",
+        "name": "MIT",
+        "sha256": "b416abfc7294f9279480389e4825463ac71b2b064b892aa7d95abd5d4b6edc63",
+        "spdx": "MIT"
+      },
+      "name": "PubSubClient",
+      "notice": "PubSubClient",
+      "origin": {
+        "note": "release 2.8",
+        "reference": "2d228f2f862a95846c65a8518c79f48dfc8f188c",
+        "url": "https://github.com/knolleary/pubsubclient"
+      },
+      "patch_marker": "awtrix",
+      "patches": [
+        {
+          "files": [
+            "lib/PubSubClient/src/PubSubClient.cpp",
+            "lib/PubSubClient/src/PubSubClient.h",
+            "lib/PubSubClient/README.awtrix.md",
+            "lib/PubSubClient/library.json"
+          ],
+          "summary": "awtrix.1: inbound length validation before topic and packet-id access; documented in lib/PubSubClient/README.awtrix.md, which records the original file hashes"
+        }
+      ],
+      "paths": [
+        "lib/PubSubClient"
+      ],
+      "review": {
+        "date": "2026-09-16",
+        "decision": "accepted",
+        "rationale": "MIT requires the license and copyright notice: license text shipped in LICENSES/MIT-PubSubClient.txt, attribution row in THIRD-PARTY-NOTICES.md; the ARM recipe installs both under /usr/share/licenses/awtrix-ng for Linux targets; the local security patch is documented with the original file hashes"
+      },
+      "targets": [
+        "esp32",
+        "linux"
+      ],
+      "vendored": true,
+      "version": "2.8.0-awtrix.1"
+    },
+    {
+      "files_sha256": "5e38e2a493af38a21900abbafc0a6fcfede3dfade0557da58140d879df9b2815",
+      "id": "tjpg-decoder",
+      "license": {
+        "file": "LICENSES/TJpg_Decoder.txt",
+        "name": "BSD-2-Clause (FreeBSD)",
+        "sha256": "d015619c5c685a618ce7387dc67e150fe04b7498d24174e2946d8a0d421f640c",
+        "spdx": "BSD-2-Clause"
+      },
+      "name": "TJpg_Decoder",
+      "notice": "TJpg_Decoder",
+      "origin": {
+        "note": "release 1.0.8 per lib/TJpg_Decoder/library.json; the upstream commit is not recorded",
+        "reference": null,
+        "url": "https://github.com/Bodmer/TJpg_Decoder"
+      },
+      "patch_marker": "AWTRIX",
+      "patches": [
+        {
+          "files": [
+            "lib/TJpg_Decoder/src/TJpg_Decoder.cpp",
+            "lib/TJpg_Decoder/src/TJpg_Decoder.h"
+          ],
+          "summary": "drawFsJpg overload taking an already open fs::File"
+        }
+      ],
+      "paths": [
+        "lib/TJpg_Decoder/src/TJpg_Decoder.cpp",
+        "lib/TJpg_Decoder/src/TJpg_Decoder.h",
+        "lib/TJpg_Decoder/src/User_Config.h",
+        "lib/TJpg_Decoder/library.json",
+        "lib/TJpg_Decoder/library.properties",
+        "lib/TJpg_Decoder/keywords.txt",
+        "lib/TJpg_Decoder/README.md",
+        "lib/TJpg_Decoder/license.txt"
+      ],
+      "review": {
+        "date": "2026-09-16",
+        "decision": "accepted",
+        "rationale": "BSD-2-Clause requires the copyright notice and disclaimer: license text shipped in LICENSES/TJpg_Decoder.txt, attribution row in THIRD-PARTY-NOTICES.md; the Arduino wrapper is distributed with the ESP32 dependency; both applications use the C decoder recorded separately as tjpgdec"
+      },
+      "targets": [
+        "esp32"
+      ],
+      "vendored": true,
+      "version": "1.0.8"
+    },
+    {
+      "files_sha256": "8c4b85a013335fed28983f2997144539773bac51e4fef1c13dba513442ad2936",
+      "id": "tjpgdec",
+      "license": {
+        "file": "LICENSES/TJpg_Decoder.txt",
+        "name": "TJpgDec license (permissive; copyright notice must be retained)",
+        "sha256": "d015619c5c685a618ce7387dc67e150fe04b7498d24174e2946d8a0d421f640c",
+        "spdx": null
+      },
+      "name": "TJpgDec",
+      "notice": "TJpgDec — Tiny JPEG Decompressor",
+      "origin": {
+        "note": "the C decoder bundled with TJpg_Decoder 1.0.8 is shared by both application targets",
+        "reference": "R0.03",
+        "url": "http://elm-chan.org/fsw/tjpgd/"
+      },
+      "patch_marker": "AWTRIX",
+      "patches": [
+        {
+          "files": [
+            "lib/TJpg_Decoder/src/tjpgd.h"
+          ],
+          "summary": "unconditional <stdint.h> include replaces the _WIN32 fallback typedefs"
+        }
+      ],
+      "paths": [
+        "lib/TJpg_Decoder/src/tjpgd.c",
+        "lib/TJpg_Decoder/src/tjpgd.h",
+        "lib/TJpg_Decoder/src/tjpgdcnf.h"
+      ],
+      "review": {
+        "date": "2026-09-16",
+        "decision": "accepted",
+        "rationale": "the TJpgDec terms require retaining the copyright notice: the notice stays in the sources and is reproduced in THIRD-PARTY-NOTICES.md; license text shipped in LICENSES/TJpg_Decoder.txt, attribution row in THIRD-PARTY-NOTICES.md; the ARM recipe installs both under /usr/share/licenses/awtrix-ng for Linux targets"
+      },
+      "targets": [
+        "esp32",
+        "linux"
+      ],
+      "vendored": true,
+      "version": "R0.03"
+    },
+    {
+      "files_sha256": "5a4538c4bf0add984d136134a55fc6ecc40ed06f85136a04a6aff02206b19631",
+      "id": "cpp-httplib",
+      "license": {
+        "file": "LICENSES/MIT-cpp-httplib.txt",
+        "name": "MIT",
+        "sha256": "4b45cbe16d7b71b89ae6127e26e0d90a029198ca5e958ad8e3d0b8bbed364d8b",
+        "spdx": "MIT"
+      },
+      "name": "cpp-httplib",
+      "notice": "cpp-httplib",
+      "origin": {
+        "note": "CPPHTTPLIB_VERSION 0.20.0 in the vendored header; the upstream tag is not recorded",
+        "reference": null,
+        "url": "https://github.com/yhirose/cpp-httplib"
+      },
+      "patch_marker": "AWTRIX",
+      "patches": [
+        {
+          "files": [
+            "src/platform/linux/host/vendor/httplib.h"
+          ],
+          "summary": "2026-09-15 hardening: bounded line and header growth for requests, responses and trailers; chunked terminator required; malformed request headers close the socket"
+        },
+        {
+          "files": [
+            "src/platform/linux/host/vendor/httplib.h"
+          ],
+          "summary": "2026-09-25: a request with neither Content-Length nor chunked encoding has no body (RFC 9112 section 6.3) instead of being read until the peer closes"
+        },
+        {
+          "files": [
+            "src/platform/linux/host/vendor/httplib.h"
+          ],
+          "summary": "2026-09-26: preserve literal header values (CVE-2026-45372), consume bounded trailers separately from initial headers (CVE-2025-53628), backport iterative Content-Disposition/filename* parsing (CVE-2026-29076), reject signed chunk sizes (GHSA-h6wq-j5mv-f3q8), and omit exception detail headers (CVE-2026-28434). Based on upstream advisories and the v0.37.0 multipart parser."
+        },
+        {
+          "files": [
+            "src/platform/linux/host/vendor/httplib.h"
+          ],
+          "summary": "2026-10-04: the client accepts response status and header lines that end in a bare LF (streamABC/regiocast and other radio servers) and Shoutcast's ICY 200 OK as HTTP/1.0; request and trailer parsing are unchanged"
+        }
+      ],
+      "paths": [
+        "src/platform/linux/host/vendor/httplib.h"
+      ],
+      "review": {
+        "date": "2026-09-16",
+        "decision": "accepted",
+        "rationale": "MIT requires the license and copyright notice: license text shipped in LICENSES/MIT-cpp-httplib.txt, attribution row in THIRD-PARTY-NOTICES.md; the ARM recipe installs both under /usr/share/licenses/awtrix-ng for Linux targets; the local patches are identified in the header"
+      },
+      "targets": [
+        "linux"
+      ],
+      "vendored": true,
+      "version": "0.20.0"
+    },
+    {
+      "bundled_from": "PlatformIO dependency densaugeo/base64@^1.4.0 (platformio.ini) on ESP32 and in the host builds; Buildroot package awtrix-base64 in the ARM userspace",
+      "id": "base64",
+      "license": {
+        "file": "LICENSES/MIT-densaugeo-base64.txt",
+        "name": "MIT",
+        "sha256": "dce584239dbb753c429f0caf7f536096c73cb06e0a6222fc9c4d15c51d236b48",
+        "spdx": "MIT"
+      },
+      "name": "densaugeo/base64",
+      "notice": "densaugeo/base64",
+      "origin": {
+        "note": "upstream has no 1.4.0 tag; this is the 1.4.0 release commit (firmware/buildroot/package/awtrix-base64/awtrix-base64.mk)",
+        "reference": "ac168f5fa2865de855384f6a2d61444ce7d92c27",
+        "url": "https://github.com/Densaugeo/base64_arduino"
+      },
+      "patches": [],
+      "paths": [],
+      "recipe_package": "awtrix-base64",
+      "review": {
+        "date": "2026-09-16",
+        "decision": "accepted",
+        "rationale": "MIT requires the license and copyright notice: license text shipped in LICENSES/MIT-densaugeo-base64.txt, attribution row in THIRD-PARTY-NOTICES.md; the ARM recipe installs both under /usr/share/licenses/awtrix-ng for Linux targets; the ARM build fetches the pinned commit through the awtrix-base64 recipe"
+      },
+      "targets": [
+        "esp32",
+        "linux"
+      ],
+      "vendored": false,
+      "version": "1.4.0"
+    },
+    {
+      "files_sha256": "3b9a5dfa8e4e51822f0619cdfec3a38c6c6d857dc6e707ec775303f5e469f96b",
+      "id": "tlsdyn",
+      "license": {
+        "file": "LICENSES/Apache-2.0.txt",
+        "name": "Apache-2.0",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "spdx": "Apache-2.0"
+      },
+      "name": "ESP-IDF dynamic mbedTLS buffers",
+      "notice": "ESP-IDF dynamic mbedTLS buffers",
+      "origin": {
+        "note": "components/mbedtls/port/dynamic, vendored unchanged (platformio.ini)",
+        "reference": "v4.4.7",
+        "url": "https://github.com/espressif/esp-idf"
+      },
+      "patch_marker": "AWTRIX",
+      "patches": [],
+      "paths": [
+        "src/system/tlsdyn"
+      ],
+      "review": {
+        "date": "2026-09-16",
+        "decision": "accepted",
+        "rationale": "Apache-2.0 requires the license text and copyright notice: license text shipped in LICENSES/Apache-2.0.txt, attribution row in THIRD-PARTY-NOTICES.md; not part of the Linux application; the files are unmodified and carry no local marker"
+      },
+      "targets": [
+        "esp32"
+      ],
+      "vendored": true,
+      "version": "v4.4.7"
+    },
+    {
+      "files_sha256": "7527a7de7e784e06c7bb746abd8ad0d52e00184b0f9563a84afc5df86258a8e7",
+      "id": "matrix-fonts",
+      "license": {
+        "file": "LICENSES/MIT-Matrix-Fonts.txt",
+        "name": "OFL-1.1 for combined font data; upstream MIT and Apache notices retained",
+        "sha256": "7db5ddbfb3c4b6bc390f9406d4129a38094af37faaf16ed53666c379e51e596b",
+        "spdx": "OFL-1.1"
+      },
+      "name": "MatrixChunky6 / MatrixChunky8",
+      "notice": "MatrixChunky6 / MatrixChunky8",
+      "origin": {
+        "note": "BDF sources under assets/fonts (outside the application snapshot) compiled into src/media/AwtrixFont.h by scripts/gen_font.py; the upstream commit is not recorded",
+        "reference": null,
+        "url": "https://github.com/trip5/Matrix-Fonts"
+      },
+      "patches": [
+        {
+          "files": [
+            "src/media/AwtrixFont.h"
+          ],
+          "summary": "generated glyph tables; the header also carries the project's own awtrix.bdf glyphs"
+        }
+      ],
+      "paths": [
+        "src/media/AwtrixFont.h"
+      ],
+      "review": {
+        "date": "2026-09-26",
+        "decision": "accepted",
+        "rationale": "Combined panel font data are distributed under OFL-1.1 because the source fonts incorporate BoutiqueBitmap7x7 glyphs. Pinned Boutique OFL and Trip5 MIT grants permit this with inherited notices; original BDF CC-BY metadata is preserved without inventing a version. The rights holder explicitly additionally licensed project-owned awtrix.bdf, all AWTRIX glyph supplements and generated font-data contributions under OFL-1.1. Full OFL/MIT/Apache notices and reserved names are shipped. Application, renderer and independent generator licenses remain unchanged; all 22 BDFs and all noncomment generated C++ data are unchanged."
+      },
+      "targets": [
+        "esp32",
+        "linux"
+      ],
+      "vendored": true,
+      "version": null
+    },
+    {
+      "files_sha256": "cda5bec003a3e31945083b2c2d1a97d66ec4f04d26e1a8f2ceb83e22d40886d1",
+      "id": "matrix-fonts-originals",
+      "license": {
+        "file": "LICENSES/MIT-Matrix-Fonts.txt",
+        "name": "OFL-1.1 for combined font data; upstream MIT and Apache notices retained",
+        "sha256": "7db5ddbfb3c4b6bc390f9406d4129a38094af37faaf16ed53666c379e51e596b",
+        "spdx": "OFL-1.1"
+      },
+      "name": "Matrix-Fonts original catalog",
+      "notice": "Matrix-Fonts original catalog",
+      "origin": {
+        "note": "Ten original BDF files and root LICENSE are pinned with per-file SHA-256 under assets/fonts/matrix-fonts. Original unversioned CC-BY metadata is preserved; the inherited Boutique OFL and Trip5 MIT grants support OFL distribution of the combined fonts with retained notices. See docs/developers/fonts.md.",
+        "reference": "894dddc5e1b158e43483ffbf31c7629f69391124",
+        "url": "https://github.com/trip5/Matrix-Fonts"
+      },
+      "patches": [
+        {
+          "files": [
+            "src/media/MatrixFonts.h"
+          ],
+          "summary": "Generated bitmap/glyph/range tables preserve original font metrics and add separately identified AWTRIX supplements; combined font data use OFL-1.1 with inherited notices and the project-owned font-data exception."
+        }
+      ],
+      "paths": [
+        "src/media/MatrixFonts.h"
+      ],
+      "review": {
+        "date": "2026-09-26",
+        "decision": "accepted",
+        "rationale": "Combined panel font data are distributed under OFL-1.1 because the source fonts incorporate BoutiqueBitmap7x7 glyphs. Pinned Boutique OFL and Trip5 MIT grants permit this with inherited notices; original BDF CC-BY metadata is preserved without inventing a version. The rights holder explicitly additionally licensed project-owned awtrix.bdf, all AWTRIX glyph supplements and generated font-data contributions under OFL-1.1. Full OFL/MIT/Apache notices and reserved names are shipped. Application, renderer and independent generator licenses remain unchanged; all 22 BDFs and all noncomment generated C++ data are unchanged."
+      },
+      "targets": [
+        "esp32",
+        "linux"
+      ],
+      "vendored": true,
+      "version": null
+    },
+    {
+      "files_sha256": "3c58937348663cb7af3e766ca13dd616d7c260bc1edc2a91fd42b769c5fa2081",
+      "id": "cmudict-scowl",
+      "license": {
+        "file": "LICENSES/CMUdict-SCOWL.txt",
+        "name": "CMUdict BSD-style license with the SCOWL notices",
+        "sha256": "42aaf97e99bbc06d9158c45d82dfc28ef37b4ccec8dc2614f8414b76a7b56e05",
+        "spdx": null
+      },
+      "name": "CMUdict pronunciations selected with SCOWL",
+      "notice": "CMUdict",
+      "origin": {
+        "note": "a selection of CMUdict entries (tools/speech/esdb35-us-application.tsv, chosen with the ESDB/SCOWL spelling list rel-2026.02.25) compiled into SpeechLexiconData.h by tools/speech/generate_lexicon.py; inputs pinned in tools/speech/sources.json",
+        "reference": "74790861f652b15e4ac49015a90074ad62a27690",
+        "url": "https://github.com/cmusphinx/cmudict"
+      },
+      "patches": [
+        {
+          "files": [
+            "src/platform/tc002/speech/SpeechLexiconData.h"
+          ],
+          "summary": "the selected entries encoded as a lookup table; pronunciations unchanged"
+        }
+      ],
+      "paths": [
+        "src/platform/tc002/speech/SpeechLexiconData.h"
+      ],
+      "review": {
+        "date": "2026-10-02",
+        "decision": "pending",
+        "rationale": "CMUdict's BSD-style license and the SCOWL notices require keeping the copyright notice and disclaimer with source and binary copies: text in LICENSES/CMUdict-SCOWL.txt, row in THIRD-PARTY-NOTICES.md, installed with the Linux application and in the TC002 bundle"
+      },
+      "targets": [
+        "linux"
+      ],
+      "vendored": true,
+      "version": null
+    }
+  ],
+  "notice_exclusions": [
+    {
+      "notice": "bluetrum-tools",
+      "reason": "development-time MCU format reference; upstream tool sources are not vendored or linked into the application; attribution and license text are retained and included in TC002 bundle notices"
+    },
+    {
+      "notice": "Arduino core for ESP32",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
+      "notice": "ESP-IDF",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
+      "notice": "Mbed TLS",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
+      "notice": "newlib",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
+      "notice": "FastLED",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
+      "notice": "Adafruit BusIO",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
+      "notice": "Adafruit Unified Sensor",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
+      "notice": "Adafruit BME280 Library",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
+      "notice": "Adafruit BMP280 Library",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
+      "notice": "Adafruit HTU21DF Library",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
+      "notice": "Adafruit SHT31 Library",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
+      "notice": "Unity",
+      "reason": "test framework resolved by PlatformIO for native unit tests; not distributed"
+    }
+  ],
+  "schema_version": 1,
+  "scope": "Bundled or vendored application components of AWTRIX NG with their origin, local patches, license evidence and review decision; framework, toolchain and PlatformIO-resolved ESP32 libraries are recorded as notice exclusions. Verified by tools/system/check_components.py."
+}

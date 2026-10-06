@@ -294,6 +294,40 @@ static void test_upstream_indices_are_stable() {
     TEST_ASSERT_EQUAL_STRING(upstream[i], kTransitionNames[i]);
 }
 
+static void test_empty_canvas_transitions_like_a_black_one() {
+  const Canvas empty(0, 0, nullptr);
+  const Geometry geometries[] = {{1, 1}, {32, 8}, {51, 16}, {128, 32}};
+  for (const auto& g : geometries) {
+    Canvas picture(g.w, g.h), black(g.w, g.h), expected(g.w, g.h), actual(g.w, g.h);
+    fillPattern(picture, 7u);
+    for (Transition effect : allEffects()) {
+      for (int dir : {-1, 1}) {
+        for (float p : {-0.5f, 0.0f, 0.01f, 0.25f, 0.45f, 0.9f, 1.0f, 1.5f}) {
+          for (bool clipped : {false, true}) {
+            expected.clear(0x123456u);
+            actual.clear(0x123456u);
+            if (clipped) {
+              expected.setClipRect(g.w / 4, g.h / 4, g.w / 2, g.h / 2);
+              actual.restoreClipRect(expected.clipRect());
+            } else {
+              expected.setClipRect(0, 0, g.w, g.h);
+              actual.restoreClipRect(expected.clipRect());
+            }
+            composeTransition(expected, picture, black, effect, p, dir);
+            composeTransition(actual, picture, empty, effect, p, dir);
+            TEST_ASSERT_TRUE_MESSAGE(samePixels(expected, actual), where(effect, g).c_str());
+            expected.clear(0x123456u);
+            actual.clear(0x123456u);
+            composeTransition(expected, black, picture, effect, p, dir);
+            composeTransition(actual, empty, picture, effect, p, dir);
+            TEST_ASSERT_TRUE_MESSAGE(samePixels(expected, actual), where(effect, g).c_str());
+          }
+        }
+      }
+    }
+  }
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_named_effect_passes_through);
@@ -312,5 +346,6 @@ int main(int, char**) {
   RUN_TEST(test_symmetric_effects_ignore_direction);
   RUN_TEST(test_names_and_enum_agree);
   RUN_TEST(test_upstream_indices_are_stable);
+  RUN_TEST(test_empty_canvas_transitions_like_a_black_one);
   return UNITY_END();
 }

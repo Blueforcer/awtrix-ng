@@ -16,13 +16,13 @@ bool schemeIsHttp(const std::string& url) {
 
 bool readOne(api::JsonReader entry, int index, Station& out, StationError& error) {
   if (!entry.isObject()) {
-    error = {"stations", "each entry must be an object", index};
+    error = {"stations", "must be an object", index};
     return false;
   }
   std::string name, url;
   api::JsonReader r = entry;
   if (!r.enterObject()) {
-    error = {"stations", "each entry must be an object", index};
+    error = {"stations", "must be an object", index};
     return false;
   }
   while (r.nextMember()) {
@@ -42,15 +42,15 @@ bool readOne(api::JsonReader entry, int index, Station& out, StationError& error
   out.name = name;
   out.url = url;
   if (out.name.size() > kMaxNameLength) {
-    error = {"name", "must be at most 24 characters", index};
+    error = {"name", "at most 24 characters", index};
     return false;
   }
   if (out.url.size() > kMaxUrlLength) {
-    error = {"url", "must be at most 255 characters", index};
+    error = {"url", "at most 255 characters", index};
     return false;
   }
   if (!schemeIsHttp(out.url)) {
-    error = {"url", "must start with http:// or https://", index};
+    error = {"url", "must be an http(s) URL", index};
     return false;
   }
   return true;
@@ -106,7 +106,7 @@ bool parseStations(const std::string& json, std::vector<Station>& out, StationEr
     if (!readOne(array, index, station, error)) return false;
     for (const Station& existing : parsed) {
       if (existing.name == station.name) {
-        error = {"name", "duplicate station name", index};
+        error = {"name", "duplicate name", index};
         return false;
       }
     }

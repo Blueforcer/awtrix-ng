@@ -1,24 +1,34 @@
+---
+only: [esp32, esp32-s3]
+---
+
 # Recipe: Sensor chart
 
-The panel's own temperature over the last few hours, drawn as a dim trend line with the
-current reading sitting on top of it.
+This app shows the device's own temperature over the last few hours.
 
-No network, no broker, no configuration beyond how often to sample. If your board has a
-temperature sensor, this works the moment you paste it in. If it does not, the app stays
-out of the rotation instead of showing you a confident zero.
+It needs no network and no broker. The only setting is how often to take a sample. If your
+device has a temperature sensor, the app works as soon as you paste it in. If it has none,
+the app stays out of the rotation instead of showing a wrong zero.
+
+---
+
+## What you get
+
+A dim line of the temperature over the last four hours, with the current reading in bright
+orange at the right edge, for example `21.4°`.
 
 ---
 
 ## The script
 
 In the web UI, open the **Scripts** tab, create a script called `Trend`, paste this in and
-save. The settings declared at the top of the file then appear under **Apps**, the `⋯`
-menu on that app's row, then **Settings**. New to all this?
-[Tutorial 1](first-draw.md) takes it slowly.
+save. The settings declared at the top of the file then appear under **Apps**: press **⚙**
+on that app's row. New to all this?
+[Tutorial 1: Draw something](first-draw.md) takes it slowly.
 
 ```berry
 # @name    Trend
-# @desc    Panel temperature, recent history
+# @desc    Device temperature, recent history
 # @author  awtrix-ng
 # @version 1.0
 # @config  every number "Sample every" default=15 min=1 max=60 unit=min
@@ -38,6 +48,7 @@ class Trend
       self.hist = []
     end
     self.label = nil
+    self.x = 0
     self.shown = nil
     self.period = store.get("every") * 60
     self.ticks = 0
@@ -88,78 +99,71 @@ end
 return Trend()
 ```
 
-At the default of fifteen minutes the chart covers four hours once it has filled up.
-Set it to 1 while you are testing so you can watch it work.
+With the default of fifteen minutes, the full chart covers four hours. Set it to 1 while
+you test, so you can watch it fill.
 
 ---
 
 ## How it works
 
-**Sensors answer `nil` when the board does not have them.** Not zero, `nil`. That
-distinction is the whole reason this app is trustworthy: a missing sensor makes
-`should_show()` return `false` and the rotation skips past, instead of the panel
-reporting a crisp `0.0°` that somebody might believe. Every one of `sensor.temperature()`,
-`humidity()`, `pressure()`, `light()`, `battery()` and `battery_volts()` behaves the
-same way, and every one of them deserves the same check.
+**A missing sensor answers `nil`, not zero.** Then `should_show()` returns `false` and the
+rotation skips the app. The display never shows a wrong `0.0°`. `sensor.temperature()`,
+`humidity()`, `pressure()`, `light()`, `battery()` and `battery_volts()` all work this way,
+so check every one of them for `nil`.
 
-The `if self.label == nil` at the top of `draw()` covers the same ground a second time.
-`should_show()` keeps the app out of the rotation, but an app can still be summoned to
-the panel directly over the API, and painting from members that are still `nil` is how
-you turn a missing sensor into an `ERR:`.
+The `if self.label == nil` at the top of `draw()` is a second check. The app can still be
+brought to the display directly over the API. Without the check, a missing sensor would
+show `ERR:`.
 
-Readings are always in Celsius. If you want to follow the device's own preference,
-`settings.get("useCelsius")` tells you what the user picked and the conversion is yours
-to do.
+Values are always in Celsius. `settings.get("useCelsius")` tells you what the user chose
+for the device. If you want to follow it, convert the value yourself.
 
-**Two different rhythms live in one `loop()`.** The label follows the sensor as closely
-as it can, so the number on the panel is current. The history only takes a sample every
-fifteen minutes, because sixteen values at one per second would cover sixteen seconds
-and tell you nothing. Splitting them costs one `if`.
+**One `loop()`, two speeds.** The label follows the sensor every second, so the number on
+the display is current. The history takes a sample only every fifteen minutes. Sixteen
+values at one per second would cover only sixteen seconds.
 
-**The label is rebuilt only when the value changes.** `if r != self.shown` looks like a
-micro-optimisation and is not. `str(r) + "°"` allocates a new string every time it runs,
-and on a still afternoon the temperature does not move for minutes at a time. The same
-guard also caches the x position, so `draw()` never measures anything.
+**The label is rebuilt only when the value changes.** `str(r) + "°"` creates a new string
+every time it runs, and the temperature often stays the same for minutes. The same check
+also stores the x position, so `draw()` never measures anything.
 
-**`round(r, 1)` before `str()`, always.** A raw sensor real prints every decimal it
-carries, and `21.399999618530273` does not fit on a 32 pixel panel.
+**Always `round(r, 1)` before `str()`.** A raw sensor value prints all its decimals, and
+`21.399999618530273` does not fit on a <!-- only esp32 esp32-s3 -->32<!-- /only --><!-- only tc002 -->52<!-- /only --> pixel display.
 
-**The chart is drawn first and dim, the number second and bright.** Both occupy the same
-eight rows, and painting order decides what wins. `line_chart()` spans the full panel
-width and takes at most sixteen values, dropping any extras, which is why the history is
-trimmed to sixteen. It needs at least two points to draw anything, hence the `size` check.
+**The chart is drawn first and dim, the number second and bright.** Both use the same
+eight rows, and what is drawn last is on top. `line_chart()` fills the full display width and
+takes at most sixteen values, so the history is trimmed to sixteen. It needs at least two
+values to draw anything, so the app checks `size` first.
 
-Autoscaling is on by default, so the line uses the full height of the panel for whatever
-range the data actually covers. That is right for temperature, where the interesting part
-is a two degree drift. It is wrong for a percentage, which should be measured against 0
-to 100, and `line_chart(list, colour, false)` is how you turn it off.
+Automatic scaling is on by default: the line uses the full display height for the range the
+data covers. That is right for temperature, where a change of two degrees is interesting.
+Turn it off with `line_chart(list, color, false)`. Then the scale is fixed at 0 to 8, one step
+per pixel row, so the values must already be pixel heights. Whole numbers are drawn: `21.4`
+counts as `21`.
 
 ---
 
 ## Making it yours
 
-**Chart something else.** Swap in `sensor.humidity()` and change the unit in the label.
-The rest of the app does not care what the number means.
+**Chart something else.** Use `sensor.humidity()` instead and change the unit in the
+label. The rest of the app stays the same.
 
 **Chart something from the network.** Replace the `sensor` call with the fetch from
-[tutorial 3](real-data.md) and you have a graph of anything with an API.
+[tutorial 3](real-data.md).
 
-**Show the direction rather than the history.** Keep just the oldest and newest values
-and draw an arrow. On a panel this small a single glyph often reads faster than sixteen
-data points.
+**Show the direction instead of the history.** Keep only the oldest and newest values and
+draw an arrow. On a small display, one symbol is often easier to read than sixteen values.
 
 **Use bars instead of a line.** `bar_chart()` takes the same three arguments. Bars suit
-values that stand alone, like hourly rainfall; a line suits a quantity that drifts, like
+separate values, like hourly rain. A line suits a value that changes slowly, like
 temperature.
 
-**Publish the reading for other apps.** `shared.set("temp", r)` makes it readable by
-every app on the device as `Trend.temp`, so the next app that wants the temperature does
-not need its own copy of any of this.
+**Share the value with other apps.** `shared.set("temp", r)` makes it readable for every
+app on the device as `Trend.temp`. Other apps then do not need their own copy of this code.
 
 ---
 
 ## Related
 
-- [Brightness & sensors](../guides/brightness.md) for what each board actually measures
-- [Charts & drawing](../guides/graphics.md) for the chart calls in their own right
-- [App scripting](../guides/scripting.md) for `shared` and the full sensor reference
+- [Brightness & sensors](../guides/brightness.md) – what each board measures
+- [Charts & drawing](../guides/graphics.md) – all chart calls
+- [Scripting guide](../guides/scripting/index.md) – `shared` and the full sensor reference

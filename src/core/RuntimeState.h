@@ -5,7 +5,9 @@
 #include <string>
 
 #include "core/effects/IEffect.h"
+#include "core/mirror/MirrorStatus.h"
 #include "core/net/LinkStatus.h"
+#include "platform_input/Runtime.h"
 
 namespace awtrix {
 
@@ -16,7 +18,7 @@ struct Indicator {
   uint16_t fadeMs = 0;
 };
 
-struct RuntimeState {
+struct RuntimeState : PlatformInputState {
   float temperatureC = 0.0f;
   float humidity = 0.0f;
   float pressureHpa = 0.0f;
@@ -26,9 +28,10 @@ struct RuntimeState {
   float batteryVoltage = 0.0f;
   uint8_t batteryPercent = 0;
   bool lowBattery = false;
-
+  // True while an external supply such as USB feeds the device, where the platform can tell.
+  bool externalPower = false;
   // Set once the sensors have been probed at boot. Temperature, humidity and battery decide whether
-  // those built-in apps exist at all; pressure and light only feed readings to scripts and the API.
+  // those built-in apps exist at all; pressure and light feed readings to scripts and the API.
   bool hasTemperature = true;
   bool hasHumidity = true;
   bool hasBattery = true;
@@ -42,8 +45,6 @@ struct RuntimeState {
   std::string radioStation;
   std::string radioTitle;
   std::string radioError;
-  bool mp3Playing = false;
-  std::string mp3Name;
   uint8_t brightnessActual = 120;
   std::string globalOverlay;
   EffectSettings globalOverlaySettings;
@@ -59,7 +60,10 @@ struct RuntimeState {
 
   long receivedMessages = 0;
   net::LinkStatus wifi;
+  // Signal of the joined network in dBm, 0 while not connected or not reported.
+  int wifiRssi = 0;
   net::LinkStatus mqtt;
+  mirror::Status mirror;
   uint16_t fps = 0;
 };
 

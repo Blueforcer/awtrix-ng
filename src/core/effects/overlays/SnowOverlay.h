@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "core/effects/EffectMath.h"
 #include "core/effects/EffectNoise.h"
 #include "core/effects/IEffect.h"
 
@@ -24,7 +25,7 @@ class SnowOverlay : public IEffect {
       const int sway = static_cast<int>((frame / 3 + (lane >> 4)) % 3) - 1;
       const int px = (x + sway + c.width()) % c.width();
       const bool bright = (roll >> 8) & 1u;
-      c.setPixel(px, y, bright ? paletteColor(230, 0xCCCCCCu) : paletteColor(140, 0x777777u));
+      fx::lighten(c, px, y, bright ? paletteColor(230, 0xCCCCCCu) : paletteColor(140, 0x777777u));
     }
   }
 

@@ -104,6 +104,33 @@ static void test_owning_copy_keeps_independent_pixels() {
   TEST_ASSERT_EQUAL_HEX32(0xABCDEFu, copy.getPixel(0, 0));
 }
 
+static void* failFrameAllocation(std::size_t) { return nullptr; }
+
+static void test_frame_allocation_failure_is_empty_and_drawing_is_safe() {
+  const auto allocator = render::frameAllocator();
+  render::setFrameAllocator({failFrameAllocation, std::free});
+  Canvas failed(128, 32);
+  render::setFrameAllocator(allocator);
+  TEST_ASSERT_FALSE(failed.valid());
+  TEST_ASSERT_EQUAL_INT(0, failed.width());
+  TEST_ASSERT_EQUAL_INT(0, failed.height());
+  TEST_ASSERT_EQUAL_UINT(0, failed.size());
+  failed.clear(); failed.setPixel(0, 0, 0xFFFFFF);
+  TEST_ASSERT_EQUAL_UINT32(0, failed.getPixel(0, 0));
+}
+
+static void test_same_size_copy_reuses_storage_under_memory_pressure() {
+  Canvas source(32, 8), target(32, 8);
+  source.clear(0x123456);
+  auto* pixels = target.data();
+  const auto allocator = render::frameAllocator();
+  render::setFrameAllocator({failFrameAllocation, std::free});
+  target = source;
+  render::setFrameAllocator(allocator);
+  TEST_ASSERT_EQUAL_PTR(pixels, target.data());
+  TEST_ASSERT_EQUAL_HEX32(0x123456, target.getPixel(31, 7));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_dimensions_and_clear);
@@ -115,5 +142,7 @@ int main(int, char**) {
   RUN_TEST(test_external_buffer_drawing_and_clear);
   RUN_TEST(test_empty_external_buffers);
   RUN_TEST(test_owning_copy_keeps_independent_pixels);
+  RUN_TEST(test_frame_allocation_failure_is_empty_and_drawing_is_safe);
+  RUN_TEST(test_same_size_copy_reuses_storage_under_memory_pressure);
   return UNITY_END();
 }

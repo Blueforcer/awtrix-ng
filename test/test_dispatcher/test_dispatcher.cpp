@@ -1,6 +1,8 @@
+#include "core/sound/RoutedPcmSink.h"
 #include <unity.h>
 
 #include <string>
+#include <vector>
 
 #include "core/Dispatcher.h"
 #include "core/StateStore.h"
@@ -18,7 +20,9 @@ struct FakeApp : IAppService {
   DispatchResult setPushedApp(const std::string& n, const std::string& j, DispatchDetail&) override { customName = n; customJson = j; return setReturn; }
   void deletePushedApp(const std::string& n) override { deletedName = n; }
   bool setAppOrder(const std::string& j) override { orderJson = j; return orderReturn; }
-  bool switchApp(const std::string& n) override { switchName = n; return switchReturn; }
+  std::vector<std::string> switched;
+  void setAppEnabled(const std::string& n, bool on) override { switched.push_back(n + (on ? " on" : " off")); }
+  DispatchResult switchApp(const std::string& n, DispatchDetail&) override { switchName = n; return switchReturn ? DispatchResult::Ok : DispatchResult::NotFound; }
   void nextApp() override { ++next; }
   void previousApp() override { ++prev; }
 };
@@ -32,9 +36,12 @@ struct FakeNotify : INotifyService {
 struct FakeTone : sound::IToneSink {
   std::string melody, rtttl; bool melodyExists = true; int stops = 0;
   void begin() override {}
-  void setVolume(uint8_t) override {}
-  bool playRtttl(const std::string& p) override { rtttl = p; return true; }
-  bool playMelodyFile(const std::string& p) override { melody = p; return melodyExists; }
+  void setVolumes(const sound::Volumes&) override {}
+  bool playRtttl(const std::string& p, sound::Group) override { rtttl = p; return true; }
+  bool playMelodyFile(const std::string& p, sound::Group) override {
+    melody = p;
+    return melodyExists;
+  }
   void stop() override { ++stops; }
   void tick() override {}
   bool isPlaying() const override { return false; }
@@ -65,18 +72,32 @@ struct FakeOverlay : IEffect {
   void render(Canvas&, int64_t) override {}
 };
 
-struct FakePcm : sound::IPcmSink {
-  std::string url, label; int streamStops = 0, mp3Stops = 0;
-  void setSoundVolume(uint8_t) override {}
-  void setStreamVolume(uint8_t) override {}
-  bool playMp3(const std::string&) override { return true; }
-  void stopMp3() override { ++mp3Stops; }
-  bool mp3Playing() const override { return false; }
-  DispatchResult playStream(const std::string& u, const std::string& l, DispatchDetail&) override {
-    url = u; label = l; return DispatchResult::Ok;
+struct FakePcm : sound::RoutedPcmSink {
+  std::string url, label, mp3; int streamStops = 0, mp3Stops = 0;
+  sound::Group group = sound::Group::Radio;
+  DispatchResult streamResult = DispatchResult::Ok;
+  DispatchDetail streamDetail;
+  void setVolumes(const sound::Volumes&) override {}
+  bool playMp3(const std::string& path, sound::Group g) override {
+    mp3 = path;
+    group = g;
+    return true;
+  }
+  void stopOneShot() override { ++mp3Stops; }
+  bool oneShotPlaying() const override { return false; }
+  DispatchResult playStream(const std::string& u, const std::string& l, DispatchDetail& d) override {
+    url = u; label = l; d = streamDetail; return streamResult;
   }
   void stopStream() override { ++streamStops; }
   void tick(int64_t) override {}
+};
+struct FakeAssets : sound::IAssetProbe {
+  std::vector<std::string> paths;
+  bool hasFile(const std::string& path) const override {
+    for (const std::string& p : paths)
+      if (p == path) return true;
+    return false;
+  }
 };
 struct FakeStations : IRadioStations {
   std::string lastJson; DispatchResult setReturn = DispatchResult::Ok;
@@ -98,6 +119,7 @@ struct Harness {
   FakeScripts scripts;
   FakeTone tone;
   FakePcm pcm;
+  FakeAssets assets;
   sound::AudioRouter audio;
   FakeStations stations;
   FakeOverlay ovRain{"rain"}, ovSnow{"snow"};
@@ -109,69 +131,126 @@ struct Harness {
     overlays.add(&ovSnow);
     audio.setTone(&tone);
     audio.setPcm(&pcm);
+    audio.setAssets(&assets);
     ctx.overlays = &overlays;
     ctx.scripts = &scripts;
     ctx.stations = &stations;
   }
-  static Command play(sound::Source source, const std::string& value) {
+  static Command play(const std::string& json) {
     Command c(CommandType::PlayAudio);
-    c.arg = static_cast<int>(source);
-    c.payload = value;
+    c.arg = static_cast<int>(sound::PlayAs::Once);
+    c.payload = json;
     return c;
   }
-  static Command stopAudio(sound::StopScope scope) {
+  static Command stopAudio(sound::Stop what) {
     Command c(CommandType::StopAudio);
-    c.arg = static_cast<int>(scope);
+    c.arg = static_cast<int>(what);
     return c;
   }
-  DispatchResult run(const Command& c) { return d.dispatch(c, ctx); }
+  DispatchResult run(Command c) { return d.dispatch(c, ctx); }
 };
 
 int rc(DispatchResult r) { return static_cast<int>(r); }
 
 }
 
+// Who asked decides the group: a script's own call is the app's and finds its own sound first,
+// anything else is an alert.
+void test_a_scripts_call_is_app_and_the_apis_alert() {
+  Harness h;
+  h.assets.paths = {"/MP3/ding.mp3"};
+  Command api = Harness::play("\"ding\"");
+  api.source = Source::Http;
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(api)));
+  TEST_ASSERT_EQUAL_STRING("/MP3/ding.mp3", h.pcm.mp3.c_str());
+  TEST_ASSERT_EQUAL_INT((int)sound::Group::Alert, (int)h.pcm.group);
+  TEST_ASSERT_EQUAL_STRING("ding", h.audio.alertStatus().name.c_str());
+
+  h.assets.paths.push_back("/SCRIPTS/racer/ding.mp3");
+  Command own = Harness::play("\"ding\"");
+  own.name = "racer";
+  own.source = Source::Internal;
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(own)));
+  TEST_ASSERT_EQUAL_STRING("/SCRIPTS/racer/ding.mp3", h.pcm.mp3.c_str());
+  TEST_ASSERT_EQUAL_INT((int)sound::Group::App, (int)h.pcm.group);
+  TEST_ASSERT_EQUAL_STRING("ding", h.audio.appStatus().name.c_str());
+
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(api)));
+  TEST_ASSERT_EQUAL_STRING("/MP3/ding.mp3", h.pcm.mp3.c_str());
+  Command folder = Harness::play("\"racer/ding\"");
+  folder.source = Source::Http;
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(folder)));
+  TEST_ASSERT_EQUAL_STRING("/SCRIPTS/racer/ding.mp3", h.pcm.mp3.c_str());
+  TEST_ASSERT_EQUAL_INT((int)sound::Group::Alert, (int)h.pcm.group);
+}
+
+// Only a script's own call may ask for nextBar; elsewhere the sound object is refused whole.
+void test_the_sound_object_is_read_for_its_sender() {
+  Harness h;
+  Command api = Harness::play("{\"song\":\"bpm 90\",\"loop\":true,\"nextBar\":true}");
+  api.source = Source::Mqtt;
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError), rc(h.run(api)));
+  TEST_ASSERT_EQUAL_STRING("nextBar", h.ctx.detail.field.c_str());
+  Command own = api;
+  own.source = Source::Internal;
+  own.name = "racer";
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Unavailable), rc(h.run(own)));
+  TEST_ASSERT_TRUE(h.ctx.detail.message.c_str()[0] != '\0');
+}
+
 void test_radio_play_by_station_name() {
   Harness h;
-  Command c(CommandType::PlayStream);
-  c.payload = "{\"station\":\"SWR3\"}";
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(c)));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(Harness::play("{\"station\":\"SWR3\"}"))));
   TEST_ASSERT_EQUAL_STRING("http://swr3.example/live", h.pcm.url.c_str());
   TEST_ASSERT_EQUAL_STRING("SWR3", h.pcm.label.c_str());
   TEST_ASSERT_TRUE(h.state.runtime().radioPlaying);
   TEST_ASSERT_EQUAL_STRING("SWR3", h.state.runtime().radioStation.c_str());
 }
 
-void test_radio_play_by_index_and_url() {
+void test_radio_play_by_position_and_address() {
   Harness h;
-  Command byIndex(CommandType::PlayStream);
-  byIndex.payload = "{\"index\":0}";
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(byIndex)));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(Harness::play("{\"station\":0}"))));
   TEST_ASSERT_EQUAL_STRING("SWR3", h.pcm.label.c_str());
 
-  Command byUrl(CommandType::PlayStream);
-  byUrl.payload = "{\"url\":\"https://ad.hoc/stream\"}";
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(byUrl)));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
+                        rc(h.run(Harness::play("{\"station\":\"https://ad.hoc/stream\"}"))));
   TEST_ASSERT_EQUAL_STRING("https://ad.hoc/stream", h.pcm.url.c_str());
+}
+
+// A script starts the radio like anyone else.
+void test_a_script_starts_a_station() {
+  Harness h;
+  Command own = Harness::play("{\"station\":\"SWR3\"}");
+  own.source = Source::Internal;
+  own.name = "racer";
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(own)));
+  TEST_ASSERT_TRUE(h.state.runtime().radioPlaying);
 }
 
 void test_radio_play_rejects_unknown_and_malformed() {
   Harness h;
-  Command unknown(CommandType::PlayStream);
-  unknown.payload = "{\"station\":\"nope\"}";
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::NotFound), rc(h.run(unknown)));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::NotFound),
+                        rc(h.run(Harness::play("{\"station\":\"nope\"}"))));
+  TEST_ASSERT_EQUAL_STRING("station", h.ctx.detail.field.c_str());
+  TEST_ASSERT_TRUE(h.ctx.detail.message.c_str()[0] != '\0');
 
-  Command badIndex(CommandType::PlayStream);
-  badIndex.payload = "{\"index\":7}";
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::NotFound), rc(h.run(badIndex)));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::NotFound), rc(h.run(Harness::play("{\"station\":7}"))));
+  TEST_ASSERT_TRUE(h.ctx.detail.message.c_str()[0] != '\0');
 
-  Command badScheme(CommandType::PlayStream);
-  badScheme.payload = "{\"url\":\"ftp://x/\"}";
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError), rc(h.run(badScheme)));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError),
+                        rc(h.run(Harness::play("{\"station\":true}"))));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError), rc(h.run(Harness::play("{}"))));
+  TEST_ASSERT_FALSE(h.state.runtime().radioPlaying);
+}
 
-  Command empty(CommandType::PlayStream);
-  empty.payload = "{}";
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError), rc(h.run(empty)));
+void test_a_refused_stream_address_names_the_station_key() {
+  Harness h;
+  h.pcm.streamResult = DispatchResult::ValidationError;
+  h.pcm.streamDetail = {"url", "invalid URL"};
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError),
+                        rc(h.run(Harness::play("{\"station\":\"http://\"}"))));
+  TEST_ASSERT_EQUAL_STRING("station", h.ctx.detail.field.c_str());
+  TEST_ASSERT_TRUE(h.ctx.detail.message.c_str()[0] != '\0');
   TEST_ASSERT_FALSE(h.state.runtime().radioPlaying);
 }
 
@@ -179,21 +258,19 @@ void test_radio_stop_clears_the_title() {
   Harness h;
   h.state.runtime().radioPlaying = true;
   h.state.runtime().radioTitle = "Something";
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
-                        rc(h.run(Harness::stopAudio(sound::StopScope::Stream))));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(Harness::stopAudio(sound::Stop::Radio))));
   TEST_ASSERT_EQUAL_INT(1, h.pcm.streamStops);
   TEST_ASSERT_FALSE(h.state.runtime().radioPlaying);
   TEST_ASSERT_EQUAL_STRING("", h.state.runtime().radioTitle.c_str());
 }
 
-// Silencing the one-shots must leave the station the user chose alone, and the state that
-// reports it with them.
-void test_stop_sounds_leaves_the_station_reported() {
+// Silencing the alerts must leave the station the user chose alone, and the state that reports it
+// with them.
+void test_stop_alert_leaves_the_station_reported() {
   Harness h;
   h.state.runtime().radioPlaying = true;
   h.state.runtime().radioTitle = "Something";
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
-                        rc(h.run(Harness::stopAudio(sound::StopScope::Sounds))));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(Harness::stopAudio(sound::Stop::Alert))));
   TEST_ASSERT_EQUAL_INT(0, h.pcm.streamStops);
   TEST_ASSERT_EQUAL_INT(1, h.pcm.mp3Stops);
   TEST_ASSERT_EQUAL_INT(1, h.tone.stops);
@@ -205,11 +282,9 @@ void test_radio_without_hardware_fails_but_stations_still_work() {
   Harness h;
   h.audio.setPcm(nullptr);
   // Stopping what cannot play is not an error: there is simply nothing there to stop.
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
-                        rc(h.run(Harness::stopAudio(sound::StopScope::All))));
-  Command play(CommandType::PlayStream);
-  play.payload = "{\"station\":\"SWR3\"}";
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Unavailable), rc(h.run(play)));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(Harness::stopAudio(sound::Stop::All))));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Unavailable),
+                        rc(h.run(Harness::play("{\"station\":\"SWR3\"}"))));
 
   Command set(CommandType::SetRadioStations);
   set.payload = "{\"stations\":[]}";
@@ -288,6 +363,12 @@ static void test_custom_empty_body_and_braces_delete_the_app() {
   c2.payload = "{}";
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(c2)));
   TEST_ASSERT_EQUAL_STRING("clock", h.app.deletedName.c_str());
+  h.app.deletedName.clear();
+  Command c3(CommandType::SetPushedApp);
+  c3.name = "spaced";
+  c3.payload = "{ }";
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(c3)));
+  TEST_ASSERT_EQUAL_STRING("spaced", h.app.deletedName.c_str());
 }
 
 static void test_custom_capacity_maps_to_Capacity() {
@@ -316,6 +397,21 @@ static void test_switch_not_found_is_NotFound() {
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::NotFound), rc(h.run(c)));
 }
 
+static void test_app_switch_reads_a_bare_boolean() {
+  Harness h;
+  Command c(CommandType::SetAppEnabled);
+  c.name = "Status";
+  c.payload = "false";
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(c)));
+  c.payload = "true";
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(c)));
+  c.payload = "{\"enabled\":true}";
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError), rc(h.run(c)));
+  TEST_ASSERT_EQUAL_UINT(2u, (unsigned)h.app.switched.size());
+  TEST_ASSERT_EQUAL_STRING("Status off", h.app.switched[0].c_str());
+  TEST_ASSERT_EQUAL_STRING("Status on", h.app.switched[1].c_str());
+}
+
 static void test_next_previous() {
   Harness h;
   h.run(Command(CommandType::NextApp));
@@ -327,10 +423,10 @@ static void test_next_previous() {
 static void test_settings_applies_to_state() {
   Harness h;
   Command c(CommandType::SetSettings);
-  c.payload = "{\"brightness\":200,\"soundEnabled\":false}";
+  c.payload = "{\"brightness\":200,\"volume\":30}";
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(c)));
   TEST_ASSERT_EQUAL_INT(200, h.state.settings().brightness);
-  TEST_ASSERT_FALSE(h.state.settings().soundEnabled);
+  TEST_ASSERT_EQUAL_INT(30, h.state.settings().volume);
 }
 
 static void test_settings_bad_json_is_ParseError() {
@@ -353,9 +449,9 @@ static void test_settings_invalid_field_is_ValidationError_and_atomic() {
 static void test_settings_range_error_reports_field() {
   Harness h;
   Command c(CommandType::SetSettings);
-  c.payload = "{\"buzzerVolume\":199}";
+  c.payload = "{\"alertVolume\":199}";
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError), rc(h.run(c)));
-  TEST_ASSERT_EQUAL_STRING("buzzerVolume", h.ctx.detail.field.c_str());
+  TEST_ASSERT_EQUAL_STRING("alertVolume", h.ctx.detail.field.c_str());
 }
 
 static void test_indicator_sets_runtime() {
@@ -380,7 +476,7 @@ static void test_indicator_clear_turns_off() {
 }
 
 static void test_indicator_empty_body_and_braces_turn_it_off() {
-  for (const char* body : {"", "{}"}) {
+  for (const char* body : {"", "{}", "{ }"}) {
     Harness h;
     h.state.runtime().indicators[0].on = true;
     Command c(CommandType::SetIndicator);
@@ -393,29 +489,85 @@ static void test_indicator_empty_body_and_braces_turn_it_off() {
 
 static void test_indicator_unparseable_color_is_rejected() {
   Harness h;
-  h.state.runtime().indicators[0].on = false;
-  h.state.runtime().indicators[0].color = 0x00FF00u;
+  Indicator& ind = h.state.runtime().indicators[0];
+  ind.on = false;
+  ind.color = 0x00FF00u;
+  ind.blinkMs = 500;
   Command c(CommandType::SetIndicator);
   c.arg = 1;
   c.payload = "{\"color\":\"not-a-colour\"}";
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError), rc(h.run(c)));
   TEST_ASSERT_EQUAL_STRING("color", h.ctx.detail.field.c_str());
-  TEST_ASSERT_FALSE(h.state.runtime().indicators[0].on);
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, h.state.runtime().indicators[0].color);
+  TEST_ASSERT_FALSE(ind.on);
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, ind.color);
+  TEST_ASSERT_EQUAL_UINT16(500, ind.blinkMs);
 }
 
 static void test_indicator_zero_and_null_still_turn_off() {
   for (const char* body : {"{\"color\":0}", "{\"color\":null}"}) {
     Harness h;
-    h.state.runtime().indicators[0].on = true;
-    h.state.runtime().indicators[0].color = 0x00FF00u;
+    Indicator& ind = h.state.runtime().indicators[0];
+    ind.on = true;
+    ind.color = 0x00FF00u;
+    ind.blinkMs = 500;
+    ind.fadeMs = 300;
     Command c(CommandType::SetIndicator);
     c.arg = 1;
     c.payload = body;
     TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(c)));
-    TEST_ASSERT_FALSE(h.state.runtime().indicators[0].on);
-    TEST_ASSERT_EQUAL_HEX32(0x00FF00u, h.state.runtime().indicators[0].color);
+    TEST_ASSERT_FALSE(ind.on);
+    TEST_ASSERT_EQUAL_HEX32(0x00FF00u, ind.color);
+    TEST_ASSERT_EQUAL_UINT16(0, ind.blinkMs);
+    TEST_ASSERT_EQUAL_UINT16(0, ind.fadeMs);
   }
+}
+
+static void test_indicator_color_alone_stops_blinking_and_fading() {
+  Harness h;
+  Indicator& ind = h.state.runtime().indicators[0];
+  ind.on = true;
+  ind.color = 0x00FF00u;
+  ind.blinkMs = 640;
+  ind.fadeMs = 300;
+  Command c(CommandType::SetIndicator);
+  c.arg = 1;
+  c.payload = "{\"color\":[255,0,0]}";
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(c)));
+  TEST_ASSERT_TRUE(ind.on);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, ind.color);
+  TEST_ASSERT_EQUAL_UINT16(0, ind.blinkMs);
+  TEST_ASSERT_EQUAL_UINT16(0, ind.fadeMs);
+}
+
+static void test_indicator_animation_alone_keeps_color_and_state() {
+  Harness h;
+  Indicator& ind = h.state.runtime().indicators[2];
+  ind.on = true;
+  ind.color = 0x0000FFu;
+  ind.fadeMs = 300;
+  Command c(CommandType::SetIndicator);
+  c.arg = 3;
+  c.payload = "{\"blinkMs\":640}";
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(c)));
+  TEST_ASSERT_TRUE(ind.on);
+  TEST_ASSERT_EQUAL_HEX32(0x0000FFu, ind.color);
+  TEST_ASSERT_EQUAL_UINT16(640, ind.blinkMs);
+  TEST_ASSERT_EQUAL_UINT16(0, ind.fadeMs);
+}
+
+static void test_indicator_commands_leave_the_other_indicators_alone() {
+  Harness h;
+  Command first(CommandType::SetIndicator);
+  first.arg = 1;
+  first.payload = "{\"color\":[255,0,0]}";
+  Command third(CommandType::SetIndicator);
+  third.arg = 3;
+  third.payload = "{\"blinkMs\":640,\"color\":[0,255,0]}";
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(first)));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(third)));
+  TEST_ASSERT_EQUAL_UINT16(0, h.state.runtime().indicators[0].blinkMs);
+  TEST_ASSERT_EQUAL_UINT16(0, h.state.runtime().indicators[1].blinkMs);
+  TEST_ASSERT_EQUAL_UINT16(640, h.state.runtime().indicators[2].blinkMs);
 }
 
 static void test_moodlight_unparseable_color_is_rejected() {
@@ -465,7 +617,7 @@ static void test_moodlight_defaults_to_white_before_any_color() {
 }
 
 static void test_moodlight_empty_body_and_braces_turn_it_off() {
-  for (const char* body : {"", "{}"}) {
+  for (const char* body : {"", "{}", " { } "}) {
     Harness h;
     h.state.runtime().moodlightMode = true;
     Command c(CommandType::Moodlight);
@@ -620,8 +772,8 @@ static void test_sleep_missing_duration_is_ValidationError() {
 static void test_sound_not_found_is_NotFound() {
   Harness h;
   h.tone.melodyExists = false;
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::NotFound),
-                        rc(h.run(Harness::play(sound::Source::Auto, "missing"))));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::NotFound), rc(h.run(Harness::play("\"missing\""))));
+  TEST_ASSERT_TRUE(h.ctx.detail.message.c_str()[0] != '\0');
 }
 
 // A board with no buzzer is a fact about the hardware, not a mistake by the caller.
@@ -629,7 +781,7 @@ static void test_rtttl_without_a_buzzer_is_Unavailable() {
   Harness h;
   h.audio.setTone(nullptr);
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Unavailable),
-                        rc(h.run(Harness::play(sound::Source::Rtttl, "x:d=4,o=5,b=120:c"))));
+                        rc(h.run(Harness::play("{\"rtttl\":\"x:d=4,o=5,b=120:c\"}"))));
   TEST_ASSERT_EQUAL_STRING("", h.tone.rtttl.c_str());
 }
 
@@ -637,35 +789,34 @@ static void test_rtttl_without_a_buzzer_is_Unavailable() {
 static void test_bad_rtttl_is_ValidationError() {
   Harness h;
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError),
-                        rc(h.run(Harness::play(sound::Source::Rtttl, "not a melody"))));
+                        rc(h.run(Harness::play("{\"rtttl\":\"not a melody\"}"))));
   TEST_ASSERT_EQUAL_STRING("rtttl", h.ctx.detail.field.c_str());
   TEST_ASSERT_EQUAL_STRING("", h.tone.rtttl.c_str());
 
-  TEST_ASSERT_EQUAL_INT(
-      rc(DispatchResult::ValidationError),
-      rc(h.run(Harness::play(sound::Source::Rtttl, "d=4,o=5,b=120:c,e,g"))));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError),
+                        rc(h.run(Harness::play("{\"rtttl\":\"d=4,o=5,b=120:c,e,g\"}"))));
   TEST_ASSERT_TRUE(h.ctx.detail.message.find("offset") != std::string::npos);
 
-  TEST_ASSERT_EQUAL_INT(
-      rc(DispatchResult::ValidationError),
-      rc(h.run(Harness::play(sound::Source::Rtttl, "x:d=4,o=5,b=120:c,e,h"))));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError),
+                        rc(h.run(Harness::play("{\"rtttl\":\"x:d=4,o=5,b=120:c,e,h\"}"))));
   TEST_ASSERT_TRUE(h.ctx.detail.message.find("not a note") != std::string::npos);
 }
 
-static void test_muted_is_silent_ok() {
+// The reported station follows a stop that reaches the radio, and only such a stop.
+static void test_stop_radio_clears_the_reported_station() {
   Harness h;
-  h.audio.setMuted(true);
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
-                        rc(h.run(Harness::play(sound::Source::Auto, "ding"))));
-  TEST_ASSERT_EQUAL_STRING("", h.tone.melody.c_str());
-}
-
-static void test_stop_sound_ignores_the_mute() {
-  Harness h;
-  h.audio.setMuted(true);
-  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
-                        rc(h.run(Harness::stopAudio(sound::StopScope::Sounds))));
-  TEST_ASSERT_EQUAL_INT(1, h.tone.stops);
+  int audioEvents = 0;
+  h.state.subscribe([&audioEvents](StateEvent e) {
+    if (e == StateEvent::AudioChanged) ++audioEvents;
+  });
+  h.state.runtime().radioPlaying = true;
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(Harness::stopAudio(sound::Stop::App))));
+  TEST_ASSERT_TRUE(h.state.runtime().radioPlaying);
+  TEST_ASSERT_EQUAL_INT(0, audioEvents);
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(Harness::stopAudio(sound::Stop::All))));
+  TEST_ASSERT_FALSE(h.state.runtime().radioPlaying);
+  TEST_ASSERT_EQUAL_INT(1, audioEvents);
+  TEST_ASSERT_EQUAL_INT(1, h.pcm.streamStops);
 }
 
 static void test_system_actions() {
@@ -687,11 +838,15 @@ static void test_unknown_command() {
 
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_a_scripts_call_is_app_and_the_apis_alert);
+  RUN_TEST(test_the_sound_object_is_read_for_its_sender);
   RUN_TEST(test_radio_play_by_station_name);
-  RUN_TEST(test_radio_play_by_index_and_url);
+  RUN_TEST(test_radio_play_by_position_and_address);
+  RUN_TEST(test_a_script_starts_a_station);
+  RUN_TEST(test_a_refused_stream_address_names_the_station_key);
   RUN_TEST(test_radio_play_rejects_unknown_and_malformed);
   RUN_TEST(test_radio_stop_clears_the_title);
-  RUN_TEST(test_stop_sounds_leaves_the_station_reported);
+  RUN_TEST(test_stop_alert_leaves_the_station_reported);
   RUN_TEST(test_radio_without_hardware_fails_but_stations_still_work);
   RUN_TEST(test_notify_routes_payload_and_source);
   RUN_TEST(test_notify_parse_error_maps_to_ParseError);
@@ -703,6 +858,7 @@ int main(int, char**) {
   RUN_TEST(test_custom_capacity_maps_to_Capacity);
   RUN_TEST(test_custom_normal_routes);
   RUN_TEST(test_switch_not_found_is_NotFound);
+  RUN_TEST(test_app_switch_reads_a_bare_boolean);
   RUN_TEST(test_next_previous);
   RUN_TEST(test_settings_applies_to_state);
   RUN_TEST(test_settings_bad_json_is_ParseError);
@@ -713,6 +869,9 @@ int main(int, char**) {
   RUN_TEST(test_indicator_empty_body_and_braces_turn_it_off);
   RUN_TEST(test_indicator_unparseable_color_is_rejected);
   RUN_TEST(test_indicator_zero_and_null_still_turn_off);
+  RUN_TEST(test_indicator_color_alone_stops_blinking_and_fading);
+  RUN_TEST(test_indicator_animation_alone_keeps_color_and_state);
+  RUN_TEST(test_indicator_commands_leave_the_other_indicators_alone);
   RUN_TEST(test_moodlight_unparseable_color_is_rejected);
   RUN_TEST(test_moodlight_sets_runtime);
   RUN_TEST(test_moodlight_brightness_only_keeps_color);
@@ -735,8 +894,7 @@ int main(int, char**) {
   RUN_TEST(test_sound_not_found_is_NotFound);
   RUN_TEST(test_rtttl_without_a_buzzer_is_Unavailable);
   RUN_TEST(test_bad_rtttl_is_ValidationError);
-  RUN_TEST(test_muted_is_silent_ok);
-  RUN_TEST(test_stop_sound_ignores_the_mute);
+  RUN_TEST(test_stop_radio_clears_the_reported_station);
   RUN_TEST(test_system_actions);
   RUN_TEST(test_unknown_command);
   return UNITY_END();

@@ -152,7 +152,7 @@ void test_matrix_pin_conflict_names_the_matrix() {
   p.buzzer = p.matrix;
   std::string err;
   TEST_ASSERT_FALSE(pins::validate(p, esp32(), err));
-  TEST_ASSERT_TRUE(err.find("cannot be shared") != std::string::npos);
+  TEST_ASSERT_TRUE(err.find("move both pins") != std::string::npos);
 }
 
 void test_disabled_pins_do_not_conflict() {

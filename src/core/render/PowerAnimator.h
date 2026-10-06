@@ -22,6 +22,7 @@ class PowerAnimator {
   Phase phase() const { return phase_; }
   float progress() const { return p_; }
   bool busy() const { return phase_ == Phase::Out || phase_ == Phase::In; }
+  bool ready() const { return last_.valid() && scratch_.valid(); }
 
   void composeOut(Canvas& out);
   // Applies the fade-in if one is running and keeps this frame as the one to fade out from.
@@ -37,7 +38,6 @@ class PowerAnimator {
   float p_ = 0.0f;
   Canvas last_;
   Canvas scratch_;
-  Canvas black_;
 };
 
 }

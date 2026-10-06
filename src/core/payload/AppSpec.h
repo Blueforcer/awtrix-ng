@@ -6,38 +6,29 @@
 #include <vector>
 
 #include "core/payload/ScrollSpec.h"
+#include "core/memory/CheckedShared.h"
 #include "core/render/ColorRamp.h"
+#include "core/render/DrawProgram.h"
 #include "core/render/Font.h"
+#include "core/render/TextRenderer.h"
 
 namespace awtrix {
+class PageContent;
 
 enum class TextCase : uint8_t { Inherit, Upper, AsTyped };
+inline constexpr const char* kTextCaseNames[] = {"inherit", "upper", "asTyped"};
+
+enum class Align : uint8_t { Start, Center, End };
+inline constexpr const char* kAlignNames[] = {"start", "center", "end"};
+
+inline int aligned(Align align, int origin, int available, int used) {
+  return origin + (align == Align::Center ? (available - used) / 2 :
+                   align == Align::End ? available - used : 0);
+}
 
 enum class IconMode : uint8_t { Fixed, PushOnce, Push };
 
 enum class LifetimeExpiry : uint8_t { Remove, Mark };
-
-enum class DrawKind : uint8_t {
-  Pixel, Pixels, Line, Rect, FillRect, Circle, FillCircle, Text, Bitmap
-};
-
-struct DrawOp {
-  DrawKind kind = DrawKind::Pixel;
-  int x = 0, y = 0;
-  int x2 = 0, y2 = 0;
-  int w = 0, h = 0;
-  int r = 0;
-  uint32_t color = 0xFFFFFFu;
-  bool inheritColor = false;
-  std::string text;
-  std::vector<uint32_t> bitmap;
-  std::vector<int> points;
-};
-
-struct TextFragment {
-  std::string text;
-  uint32_t color = 0xFFFFFFu;
-};
 
 inline constexpr std::size_t kMaxPlacedIcons = 4;
 
@@ -49,6 +40,7 @@ struct PlacedIconSpec {
 
 // The rarely used half of AppSpec, kept behind a shared pointer so a plain text app stays small.
 struct AppSpecExtras {
+  std::shared_ptr<PageContent> content;
   std::vector<PlacedIconSpec> icons;
   render::ColorRamp palette;
   bool textUsesPalette = false;
@@ -67,9 +59,11 @@ struct AppSpecExtras {
 
   float effectSpeed = 1.0f;
   bool hasEffectSpeed = false;
-  std::vector<DrawOp> draw;
+  render::DrawProgram draw;
 
-  std::string rtttl;
+  // The script whose own folder `sound` is looked for in first; empty for a notification that
+  // came from outside.
+  std::string soundScript;
 };
 
 struct AppSpec {
@@ -77,11 +71,13 @@ struct AppSpec {
   bool isNotification = false;
 
   std::string text;
-  std::vector<TextFragment> fragments;
+  // Set when text came as a list of fragments: one coloured run per fragment over text.
+  std::vector<text::TextRun> fragments;
   TextCase textCase = TextCase::Inherit;
-  FontId font = FontId::Small;
+  // A font name from the catalog; empty means small.
+  std::string font;
   bool textInFront = false;
-  bool textCenter = true;
+  Align textAlign = Align::Center;
   bool hasTextColor = false;
   uint32_t textColor = 0xFFFFFFu;
   int textBlinkMs = 0;
@@ -108,8 +104,8 @@ struct AppSpec {
   bool hold = false;
   bool stack = true;
   bool wakeup = false;
+  // The notification's sound object as sent; empty for none.
   std::string sound;
-  bool loopSound = false;
 
   const AppSpecExtras& extras() const {
     static const AppSpecExtras kEmpty;
@@ -122,6 +118,13 @@ struct AppSpec {
     else if (extras_.use_count() > 1)
       extras_ = std::make_shared<AppSpecExtras>(*extras_);
     return *extras_;
+  }
+
+  // The extras to fill in, or null when they are shared or cannot be allocated.
+  AppSpecExtras* tryExtrasMut() {
+    if (extras_ && extras_.use_count() > 1) return nullptr;
+    if (!extras_) extras_ = checked::tryMakeShared<AppSpecExtras>();
+    return extras_.get();
   }
 
  private:

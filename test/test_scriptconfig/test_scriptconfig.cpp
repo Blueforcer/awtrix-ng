@@ -3,7 +3,7 @@
 #include <unity.h>
 
 #include "core/script/ScriptConfig.h"
-#include "core/script/ScriptHeapTesting.h"
+#include "platform/linux/host/HostScriptHeap.h"
 #include "core/script/ScriptMeta.h"
 
 using namespace awtrix;
@@ -68,6 +68,59 @@ static void test_quoted_attribute_keeps_its_spaces() {
   TEST_ASSERT_EQUAL_STRING("Where you live", s.fields[0].help.c_str());
 }
 
+static void test_optional_groups_keep_field_order_and_author_text() {
+  const ConfigSchema s = script::parseConfig(
+      "# @config city text default=Berlin group=\"Weather data\"\n"
+      "# @config plain bool default=true\n"
+      "# @config tint color GROUP=Display default=#FF8800\n"
+      "# @config metric bool group=\"Weather data\" default=true\n"
+      "# @config empty text group=\"\" default=x\n");
+  TEST_ASSERT_EQUAL_size_t(0, s.warnings.size());
+  TEST_ASSERT_EQUAL_size_t(5, s.fields.size());
+  TEST_ASSERT_EQUAL_STRING("city", s.fields[0].key.c_str());
+  TEST_ASSERT_EQUAL_STRING("Weather data", s.fields[0].group.c_str());
+  TEST_ASSERT_TRUE(s.fields[1].group.empty());
+  TEST_ASSERT_EQUAL_STRING("Display", s.fields[2].group.c_str());
+  TEST_ASSERT_EQUAL_STRING("Weather data", s.fields[3].group.c_str());
+  TEST_ASSERT_TRUE(s.fields[4].group.empty());
+}
+
+static void test_group_heading_is_bounded_like_a_label() {
+  const std::string heading(80, 'x');
+  const ConfigSchema s = script::parseConfig("# @config a text group=\"" + heading + "\"\n");
+  TEST_ASSERT_EQUAL_size_t(0, s.warnings.size());
+  TEST_ASSERT_EQUAL_size_t(1, s.fields.size());
+  TEST_ASSERT_EQUAL_STRING(std::string(48, 'x').c_str(), s.fields[0].group.c_str());
+}
+
+static void test_json_includes_only_nonempty_groups_and_escapes_them() {
+  const ConfigSchema s = script::parseConfig(
+      "# @config a text group=Display\\Details\n"
+      "# @config b bool\n"
+      "# @config c text group=\"\"\n");
+  std::string out;
+  TEST_ASSERT_TRUE(script::appendConfigJson(out, "S", s, "{}"));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"name\":\"S\",\"fields\":["
+      "{\"key\":\"a\",\"type\":\"text\",\"label\":\"a\",\"group\":\"Display\\\\Details\",\"default\":\"\",\"value\":\"\"},"
+      "{\"key\":\"b\",\"type\":\"bool\",\"label\":\"b\",\"default\":false,\"value\":false},"
+      "{\"key\":\"c\",\"type\":\"text\",\"label\":\"c\",\"default\":\"\",\"value\":\"\"}],\"warnings\":[]}",
+      out.c_str());
+}
+
+static void test_changing_a_group_preserves_values_and_patch_keys() {
+  const ConfigSchema before = script::parseConfig("# @config city text default=Berlin\n");
+  const ConfigSchema after = script::parseConfig(
+      "# @config city text default=Berlin group=\"Weather data\"\n");
+  const std::string store = "{\"city\":\"Rom\",\"hits\":7}";
+  std::string out;
+  TEST_ASSERT_FALSE(script::dropUndeclaredValues(before, after, store, out));
+  TEST_ASSERT_FALSE(script::seedConfigDefaults(after, store, out));
+  const script::StorePatch patch = script::applyConfigPatch(after, store, "{\"city\":\"Wien\"}");
+  TEST_ASSERT_TRUE(patch.ok);
+  TEST_ASSERT_EQUAL_STRING("{\"city\":\"Wien\",\"hits\":7}", patch.storeJson.c_str());
+}
+
 static void test_bad_lines_warn_and_do_not_stop_the_rest() {
   const ConfigSchema s = script::parseConfig(
       "# @config one boolean \"A\"\n"
@@ -78,8 +131,7 @@ static void test_bad_lines_warn_and_do_not_stop_the_rest() {
   TEST_ASSERT_EQUAL_size_t(1, s.fields.size());
   TEST_ASSERT_EQUAL_STRING("good", s.fields[0].key.c_str());
   TEST_ASSERT_EQUAL_size_t(4, s.warnings.size());
-  TEST_ASSERT_EQUAL_STRING("line 1: one: unknown type 'boolean', use bool, text, number, "
-                           "slider, select or color",
+  TEST_ASSERT_EQUAL_STRING("line 1: one: unknown type 'boolean'",
                            s.warnings[0].c_str());
 }
 
@@ -145,9 +197,11 @@ static void test_a_settings_list_that_cannot_be_built_still_names_its_reason() {
 // A module owns settings the same way an app does -- that is how several apps
 // come to share one value: they import the module that holds it.
 static void test_a_module_keeps_its_settings() {
-  const ConfigSchema s = script::parseConfig("# @module fmt\n# @config a text default=\"x\"\n");
+  const ConfigSchema s = script::parseConfig(
+      "# @module fmt\n# @config a text default=\"x\" group=\"Shared settings\"\n");
   TEST_ASSERT_EQUAL_size_t(1, s.fields.size());
   TEST_ASSERT_EQUAL_STRING("a", s.fields[0].key.c_str());
+  TEST_ASSERT_EQUAL_STRING("Shared settings", s.fields[0].group.c_str());
   TEST_ASSERT_EQUAL_size_t(0, s.warnings.size());
 }
 
@@ -260,7 +314,7 @@ static void test_json_falls_back_when_the_stored_type_is_wrong() {
 
 static void test_patch_merges_and_leaves_other_keys_alone() {
   const ConfigSchema s = script::parseConfig(kWeather);
-  const script::ConfigPatch r =
+  const script::StorePatch r =
       script::applyConfigPatch(s, "{\"city\":\"Berlin\",\"hits\":7,\"metric\":true}",
                                "{\"city\":\"Hamburg\",\"tint\":\"#00FF00\"}");
   TEST_ASSERT_TRUE(r.ok);
@@ -270,32 +324,32 @@ static void test_patch_merges_and_leaves_other_keys_alone() {
 
 static void test_patch_clamps_a_number_to_its_range() {
   const ConfigSchema s = script::parseConfig(kWeather);
-  const script::ConfigPatch r = script::applyConfigPatch(s, "{}", "{\"every\":900}");
+  const script::StorePatch r = script::applyConfigPatch(s, "{}", "{\"every\":900}");
   TEST_ASSERT_TRUE(r.ok);
   TEST_ASSERT_EQUAL_STRING("{\"every\":60}", r.storeJson.c_str());
 }
 
 static void test_patch_rejects_an_unknown_key() {
   const ConfigSchema s = script::parseConfig(kWeather);
-  const script::ConfigPatch r = script::applyConfigPatch(s, "{}", "{\"citty\":\"Rom\"}");
+  const script::StorePatch r = script::applyConfigPatch(s, "{}", "{\"citty\":\"Rom\"}");
   TEST_ASSERT_FALSE(r.ok);
   TEST_ASSERT_EQUAL_STRING("citty", r.field.c_str());
 }
 
 static void test_patch_rejects_a_wrong_type_and_an_unoffered_option() {
   const ConfigSchema s = script::parseConfig(kWeather);
-  const script::ConfigPatch bad = script::applyConfigPatch(s, "{}", "{\"metric\":\"yes\"}");
+  const script::StorePatch bad = script::applyConfigPatch(s, "{}", "{\"metric\":\"yes\"}");
   TEST_ASSERT_FALSE(bad.ok);
   TEST_ASSERT_EQUAL_STRING("metric", bad.field.c_str());
 
-  const script::ConfigPatch off = script::applyConfigPatch(s, "{}", "{\"mode\":\"yesterday\"}");
+  const script::StorePatch off = script::applyConfigPatch(s, "{}", "{\"mode\":\"yesterday\"}");
   TEST_ASSERT_FALSE(off.ok);
   TEST_ASSERT_EQUAL_STRING("mode", off.field.c_str());
 }
 
 static void test_patch_rejects_text_over_its_length() {
   const ConfigSchema s = script::parseConfig("# @config a text maxlen=4\n");
-  const script::ConfigPatch r = script::applyConfigPatch(s, "{}", "{\"a\":\"toolong\"}");
+  const script::StorePatch r = script::applyConfigPatch(s, "{}", "{\"a\":\"toolong\"}");
   TEST_ASSERT_FALSE(r.ok);
   TEST_ASSERT_EQUAL_STRING("a", r.field.c_str());
 }
@@ -325,33 +379,48 @@ static void test_a_declared_maxlen_above_the_default_is_honored() {
   const ConfigSchema s = script::parseConfig("# @config a text maxlen=4096\n");
   TEST_ASSERT_EQUAL_size_t(4096u, s.fields[0].maxLen);
   const std::string value(300, 'x');
-  const script::ConfigPatch r = script::applyConfigPatch(s, "{}", "{\"a\":\"" + value + "\"}");
+  const script::StorePatch r = script::applyConfigPatch(s, "{}", "{\"a\":\"" + value + "\"}");
   TEST_ASSERT_TRUE(r.ok);
 }
 
 static void test_text_without_maxlen_still_defaults_to_256() {
   const ConfigSchema s = script::parseConfig("# @config a text\n");
   TEST_ASSERT_EQUAL_size_t(0u, s.fields[0].maxLen);
-  const script::ConfigPatch ok =
+  const script::StorePatch ok =
       script::applyConfigPatch(s, "{}", "{\"a\":\"" + std::string(256, 'x') + "\"}");
   TEST_ASSERT_TRUE(ok.ok);
-  const script::ConfigPatch bad =
+  const script::StorePatch bad =
       script::applyConfigPatch(s, "{}", "{\"a\":\"" + std::string(257, 'x') + "\"}");
   TEST_ASSERT_FALSE(bad.ok);
 }
 
 static void test_patch_rejects_a_body_that_is_not_an_object() {
   const ConfigSchema s = script::parseConfig(kWeather);
-  TEST_ASSERT_FALSE(script::applyConfigPatch(s, "{}", "[1,2]").ok);
-  TEST_ASSERT_FALSE(script::applyConfigPatch(s, "{}", "{oops}").ok);
+  const script::StorePatch array = script::applyConfigPatch(s, "{}", "[1,2]");
+  TEST_ASSERT_FALSE(array.ok);
+  TEST_ASSERT_FALSE(array.malformed);
+  const script::StorePatch broken = script::applyConfigPatch(s, "{}", "{oops}");
+  TEST_ASSERT_FALSE(broken.ok);
+  TEST_ASSERT_TRUE(broken.malformed);
+}
+
+static void test_attribute_tokenizer_keeps_config_compatibility() {
+  const ConfigSchema s = script::parseConfig("# @config label text DeFaUlt= \"open value\n");
+  TEST_ASSERT_EQUAL_size_t(1, s.fields.size());
+  TEST_ASSERT_EQUAL_STRING("\"open value\"", s.fields[0].defJson.c_str());
 }
 
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_attribute_tokenizer_keeps_config_compatibility);
   RUN_TEST(test_parses_every_type);
   RUN_TEST(test_meta_flags_config_without_parsing_it);
   RUN_TEST(test_label_is_optional_and_falls_back_to_the_key);
   RUN_TEST(test_quoted_attribute_keeps_its_spaces);
+  RUN_TEST(test_optional_groups_keep_field_order_and_author_text);
+  RUN_TEST(test_group_heading_is_bounded_like_a_label);
+  RUN_TEST(test_json_includes_only_nonempty_groups_and_escapes_them);
+  RUN_TEST(test_changing_a_group_preserves_values_and_patch_keys);
   RUN_TEST(test_bad_lines_warn_and_do_not_stop_the_rest);
   RUN_TEST(test_a_typo_in_a_range_is_reported_not_swallowed);
   RUN_TEST(test_many_config_fields_are_all_kept);

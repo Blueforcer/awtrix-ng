@@ -17,7 +17,7 @@ enum class StateEvent : uint8_t {
   ButtonsChanged,
   MoodlightChanged,
   NotificationChanged,
-  RadioChanged
+  AudioChanged
 };
 
 class StateStore {

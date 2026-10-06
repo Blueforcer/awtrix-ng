@@ -1,6 +1,16 @@
 #include "core/notify/NotificationManager.h"
+#include "core/render/PageContent.h"
 
 namespace awtrix {
+
+void NotificationManager::invalidateContent(bool assets) {
+  for (auto& spec : queue_) {
+    if (const auto& prepared = spec.extras().content) {
+      if (assets) prepared->invalidateAssets();
+      else prepared->restart();
+    }
+  }
+}
 
 // A non-stacking notification replaces whatever is on screen and restarts its timer; a stacking
 // one queues behind it and is refused once the queue is full.

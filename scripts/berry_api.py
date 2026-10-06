@@ -6,11 +6,12 @@ _REGFUNC = re.compile(
     r'^\s*be_regfunc\(\s*\w+\s*,\s*"([A-Za-z_]\w*)"\s*,\s*\w+\s*\)\s*;'
     r'[ \t]*(?://[ \t]*(\S.*?))?[ \t]*$'
 )
+_MORE = re.compile(r"^\s*//\s*([A-Za-z_]\w*)\(.*\)\s*$")
 _DEF = re.compile(
     r"^\s*def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)"
     r"[ \t]*(?:#[ \t]*(\S.*?))?[ \t]*$"
 )
-_MODULE = re.compile(r"^\s*([A-Za-z_]\w*)\s*=\s*module\(\s*'([A-Za-z_]\w*)'\s*\)")
+_MODULE = re.compile(r"^\s*(?:var\s+)?([A-Za-z_]\w*)\s*=\s*module\(\s*'([A-Za-z_]\w*)'\s*\)")
 _MEMBER = re.compile(r"^\s*([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*$")
 _CONF_MODULE = re.compile(r"^\s*#define\s+BE_USE_([A-Z0-9_]+)_MODULE\s+(\d+)")
 
@@ -42,24 +43,34 @@ def _params(raw):
 
 
 def _device_builtins(src):
-    """be_regfunc entries from ScriptBindings.cpp, public ones only."""
+    """be_regfunc entries from ScriptBindings.cpp, public ones only.
+
+    A binding with more than one call shape lists the others on comment lines right below
+    it, each starting with the binding's name.
+    """
     out = []
+    last = None
     for line in src.splitlines():
         m = _REGFUNC.match(line)
-        if not m:
+        if m:
+            name, sig = m.group(1), m.group(2)
+            last = name if _public(name) else None
+            if last:
+                out.append(sig if sig else name + "()")
             continue
-        name, sig = m.group(1), m.group(2)
-        if not _public(name):
+        more = _MORE.match(line)
+        if last and more and more.group(1) == last:
+            out.append(more.group(0).strip()[2:].strip())
             continue
-        out.append(sig if sig else name + "()")
+        last = None
     return out
 
 
-def _prelude(src):
+def _prelude(src, inherited_modules=()):
     """The modules, module members and public functions the prelude defines."""
     defs = {}
     sigs = {}
-    modules = []
+    modules = list(inherited_modules)
     members = []
     for line in src.splitlines():
         m = _DEF.match(line)
@@ -111,11 +122,16 @@ def extract(project_dir):
         prelude = _read(p("src", "core", "script", "Prelude.h"))
         baselib = _read(p("lib", "berry", "src", "be_baselib.c"))
         conf = _read(p("lib", "berry", "berry_conf.h"))
+        layout = _read(p("src", "platform", "linux", "layout", "LayoutModule.h"))
+        audio = _read(p("src", "platform", "tc002", "audio", "AudioScriptModule.h"))
     except OSError as e:
         raise SystemExit("berry api: cannot read a source: %s" % e)
 
     builtins = _device_builtins(bindings)
     prelude_api, mods = _prelude(prelude)
+    linux_api, linux_mods = _prelude(layout)
+    audio_api, _ = _prelude(audio, mods)
+    linux_api = sorted(linux_api + audio_api)
     modbus_api = [
         "modbus.%s(host, address, count, callback, opts?)" % name
         for name in ("readHoldingRegisters", "readInputRegisters", "readCoils", "readDiscreteInputs")
@@ -123,6 +139,8 @@ def extract(project_dir):
     return {
         "api": sorted(builtins) + prelude_api + modbus_api,
         "mods": mods,
+        "linux_api": linux_api,
+        "linux_mods": linux_mods,
         "core": _berry_core(baselib, conf) + ["modbus"],
     }
 
@@ -132,7 +150,7 @@ def _js_array(names):
 
 
 def render_js(project_dir):
-    """The generated JS block, ready to be spliced into webui/index.html."""
+    """The generated editor API block."""
     t = extract(project_dir)
     for key in ("api", "mods", "core"):
         if not t[key]:
@@ -149,6 +167,10 @@ def render_js(project_dir):
             "const BERRY_API=%s;" % _js_array(t["api"]),
             "const BERRY_MODS=%s;" % _js_array(t["mods"]),
             "const BERRY_CORE=%s;" % _js_array(t["core"]),
+            "//linux:begin",
+            "BERRY_API.push(...%s);" % _js_array(t["linux_api"]),
+            "BERRY_MODS.push(...%s);" % _js_array(t["linux_mods"]),
+            "//linux:end",
         ]
     )
 
@@ -163,14 +185,8 @@ def block(project_dir):
 
 
 def inject(project_dir, path=None):
-    """Rewrites the generated region inside webui/index.html, in place.
-
-    Returns True when the file changed. The build calls this before gzipping;
-    writing it back rather than injecting into a throwaway copy is what lets the
-    SIMULATOR, which serves webui/index.html straight from disk, see the same
-    table the device does.
-    """
-    path = path or os.path.join(project_dir, "webui", "index.html")
+    """Refreshes the generated source fragment; returns whether it changed."""
+    path = path or os.path.join(project_dir, "webui", "src", "generated", "berry-api.js")
     with open(path, "r", encoding="utf-8", newline="") as f:
         html = f.read()
     start, end = html.find(BEGIN), html.find(END)
@@ -192,6 +208,9 @@ if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if a != "--inject"]
     root = args[0] if args else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if "--inject" in sys.argv:
-        print("berry api: %s" % ("regenerated webui/index.html" if inject(root) else "already current"))
+        import webui_source
+
+        webui_source.write(root)
+        print("berry api: fragment and webui/index.html current")
     else:
         print(render_js(root))

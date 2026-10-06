@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <cstring>
+#include <cstdlib>
 #include <string>
 
 #include "core/render/PowerAnimator.h"
@@ -12,12 +13,26 @@ using awtrix::render::PowerAnimator;
 using Phase = PowerAnimator::Phase;
 
 void setUp() {}
-void tearDown() {}
+void tearDown() { render::setFrameAllocator({std::malloc, std::free}); }
 
 namespace {
 
 constexpr int kW = 32;
 constexpr int kH = 8;
+
+std::size_t frameAllocations = 0;
+std::size_t failFrameAllocation = 0;
+
+void* allocateFrame(std::size_t bytes) {
+  if (++frameAllocations == failFrameAllocation) return nullptr;
+  return std::malloc(bytes);
+}
+
+void probeFrames(std::size_t failAt) {
+  frameAllocations = 0;
+  failFrameAllocation = failAt;
+  render::setFrameAllocator({allocateFrame, std::free});
+}
 
 uint32_t pattern(int x, int y) {
   uint32_t h = (static_cast<uint32_t>(x + 1) * 2654435761u) ^ (static_cast<uint32_t>(y + 1) * 40503u);
@@ -289,6 +304,25 @@ static void test_canvas_resize_is_absorbed() {
   TEST_ASSERT_TRUE(allBlack(wide));
 }
 
+static void test_failed_power_buffer_allocation_is_safe_and_can_recover() {
+  Canvas out(kW, kH);
+  for (std::size_t failAt : {1u, 2u}) {
+    probeFrames(failAt);
+    PowerAnimator a(kW, kH);
+    TEST_ASSERT_FALSE(a.ready());
+    failFrameAllocation = 0;
+    fillLive(out);
+    a.finish(out);
+    TEST_ASSERT_TRUE(a.ready());
+    a.update(false, 1000);
+    a.composeOut(out);
+    for (int y = 0; y < kH; ++y)
+      for (int x = 0; x < kW; ++x)
+        TEST_ASSERT_EQUAL_HEX32(pattern(x, y), out.getPixel(x, y));
+    render::setFrameAllocator({std::malloc, std::free});
+  }
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_steady_states_are_not_busy);
@@ -301,5 +335,6 @@ int main(int, char**) {
   RUN_TEST(test_immediate_reversal_settles);
   RUN_TEST(test_coarse_and_stalled_clocks);
   RUN_TEST(test_canvas_resize_is_absorbed);
+  RUN_TEST(test_failed_power_buffer_allocation_is_safe_and_can_recover);
   return UNITY_END();
 }

@@ -5,6 +5,7 @@
 #include <string_view>
 
 #include "core/WeekdayBarConfig.h"
+#include "platform_settings/Settings.h"
 #include "core/payload/ScrollSpec.h"
 
 namespace awtrix {
@@ -18,6 +19,17 @@ struct OptColor {
   uint32_t rgb = 0;
   bool set = false;
   uint32_t valueOr(uint32_t fallback) const { return set ? rgb : fallback; }
+};
+
+enum class SettingKind : uint8_t { Bool, Int, LongMs, Float, Enum, Color, ColorNull, Transition };
+
+// One flat setting as the settings table declares it: an Int accepts lo..hi, an Enum one of its
+// count names.
+struct SettingInfo {
+  SettingKind kind = SettingKind::Bool;
+  int lo = 0, hi = 0;
+  const char* const* names = nullptr;
+  int count = 0;
 };
 
 struct SettingValue {
@@ -63,7 +75,6 @@ constexpr int kDateOrderDMY = 0, kDateOrderMDY = 1, kDateOrderYMD = 2;
 constexpr int kDateSepDot = 0, kDateSepSlash = 1, kDateSepDash = 2;
 constexpr int kYearNone = 0, kYearTwoDigit = 1, kYearFourDigit = 2;
 constexpr int kTransitionNormal = 0, kTransitionReverse = 1;
-
 // The defaults below are also what a settings reset restores. JSON key names, ranges and the
 // validation rules for every field live in the Field table in Settings.cpp.
 struct Settings {
@@ -92,34 +103,44 @@ struct Settings {
   bool dateMonthNames = false;
   bool useCelsius = true;
   bool blockNavigation = false;
-  bool soundEnabled = true;
   bool uppercase = true;
+  // The clock's weekday bar and the Date app's.
   WeekdayBarConfig weekdayBar;
+  WeekdayBarConfig dateWeekdayBar;
   OptColor timeColor;
   OptColor dateColor;
   OptColor humidityColor;
   OptColor temperatureColor;
   OptColor batteryColor;
   ScrollDefaults scrollDefaults;
-  // One gain per output, all of them a percentage. The buzzer default is the old 25-of-30 in the
-  // new scale, so no device gets quieter across the update.
-  int buzzerVolume = 80;
-  int dfplayerVolume = 80;
-  // Stored MP3s sit above the stream on purpose: a doorbell has to carry over a station that was
-  // deliberately turned down, and files are mastered hotter than a stream anyway.
-  int mp3Volume = 70;
-  int radioVolume = 60;
-  bool radioMeta = true;
+  // The mixer, all in percent: the master multiplies each group.
+  int volume = 60;
+  int radioVolume = 80;
+  int appVolume = 100;
+  int alertVolume = 100;
   int saturation = 100;
   float gamma = 1.9f;
   OptColor colorCorrection;
   OptColor colorTint;
 
+#define SETTING_ENUM(member, initial, names, count) int member = initial;
+#define SETTING_BOOL(member, initial) bool member = initial;
+#include "platform_settings/Fields.inc"
+#undef SETTING_BOOL
+#undef SETTING_ENUM
+
   void writeMembers(api::JsonWriter& w) const;
   int applyRead(api::JsonReader r);
-  static bool validateRead(api::JsonReader r, SettingsError& err);
+  // Applies saved settings and fills fields added since earlier backup formats.
+  int applyStored(api::JsonReader r);
+  // Restoring skips keys this firmware does not know.
+  enum class UnknownKeys : uint8_t { Reject, Skip };
+  static bool validateRead(api::JsonReader r, SettingsError& err,
+                           UnknownKeys unknown = UnknownKeys::Reject);
   SettingValue read(std::string_view key) const;
   static const char* canonicalKey(std::string_view key);
+  // False for a key that is not a flat setting, such as the nested weekdayBar.
+  static bool describe(std::string_view key, SettingInfo& out);
 };
 
 }

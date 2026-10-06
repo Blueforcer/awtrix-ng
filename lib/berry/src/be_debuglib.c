@@ -108,9 +108,18 @@ static int m_caller(bvm *vm)
 {
     int depth = 1;
     if (be_top(vm) >= 1 && be_isint(vm, 1)) {
-        depth = be_toint(vm, 1);
-        if (depth < 0) {
-            depth = -depth;         /* take absolute value */
+        /* AWTRIX: backport of upstream 6e6e6213 (#546) */
+        int d = be_toint(vm, 1);
+        int count = be_stack_count(&vm->callstack);
+        /* clamp |d| to the live frame count. Comparing d against -count
+         * first lets us safely negate only values that fit, avoiding the
+         * -INT_MIN sign-flip undefined behavior. */
+        if (d < -count || d > count) {
+            depth = count;
+        } else if (d < 0) {
+            depth = -d;
+        } else {
+            depth = d;
         }
     }
     bcallframe *cf = (bcallframe*)be_stack_top(&vm->callstack) - depth;

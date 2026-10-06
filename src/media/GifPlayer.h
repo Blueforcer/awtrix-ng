@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "core/render/Canvas.h"
 #include "media/MicroGif.h"
@@ -18,12 +19,14 @@ class GifPlayer {
   };
 
   ~GifPlayer();
-  // iconId is either the stem of /ICONS/<id>.gif or, above 64 characters, a base64-encoded GIF
-  // sent inline by the API. Limits come from the panel; buffers follow the GIF's own size.
-  // maxResidentFrames 0 means "whatever the RAM budget allows".
-  OpenResult open(const std::string& iconId, int maxWidth, int maxHeight,
+  // icon is the name of /ICONS/<name>.gif or a data:image/gif;base64 URI. Limits come from the
+  // panel; buffers follow the GIF's own size. maxResidentFrames 0 means "whatever the RAM budget
+  // allows".
+  OpenResult open(std::string_view icon, int maxWidth, int maxHeight,
                   bool firstFrameOnly = false,
                   int maxResidentFrames = 0);
+  OpenResult openBytes(media::PodBuffer<uint8_t> bytes, int maxWidth, int maxHeight,
+                       bool firstFrameOnly = false, int maxResidentFrames = 1);
   void close();
   bool active() const { return active_; }
   int width() const { return w_; }
@@ -36,8 +39,15 @@ class GifPlayer {
   // destination for render(); the first render starts its delay without decoding it twice.
   bool takeInitialFrame(media::PodBuffer<uint32_t>& out);
 
+  enum class Frame : uint8_t { kStill, kPlaying, kOom };
+  // Hands an opened GIF over as the buffer to show. kStill: its only frame, and the player is done.
+  // kPlaying: the first frame, or a cleared buffer of its size, which render() keeps drawing
+  // into. kOom: no memory for that buffer; the player is unchanged.
+  Frame takeFrame(media::PodBuffer<uint32_t>& out);
+
  private:
   enum class PreDecode { kDone, kStream, kOom };
+  OpenResult decodeLoaded(int maxWidth, int maxHeight, bool firstFrameOnly, int maxResidentFrames);
   PreDecode preDecode(bool firstFrameOnly, int maxResidentFrames);
   void blitFrame(Canvas& dst, int frame) const;
 

@@ -1,13 +1,41 @@
 ﻿#include <unity.h>
 
+#include <string>
+#include <utility>
 
 #include "core/payload/PayloadParser.h"
+#include "core/payload/Base64.h"
+#include "core/payload/Crc.h"
 #include "core/render/PaletteStore.h"
 
 using namespace awtrix;
 
 void setUp() {}
 void tearDown() {}
+
+static void test_base64_encode_rfc4648() {
+  const char* text[] = {"", "f", "fo", "foo", "foob", "fooba", "foobar"};
+  const char* encoded[] = {"", "Zg==", "Zm8=", "Zm9v", "Zm9vYg==", "Zm9vYmE=", "Zm9vYmFy"};
+  for (unsigned i = 0; i < 7; ++i) {
+    const std::string input(text[i]);
+    TEST_ASSERT_EQUAL_STRING(encoded[i], base64::encode(input.data(), input.size()).c_str());
+  }
+  const uint8_t binary[] = {0xfb, 0xff, 0xff, 0x00};
+  TEST_ASSERT_EQUAL_STRING("+///AA==", base64::encode(binary, sizeof binary).c_str());
+  TEST_ASSERT_EQUAL_STRING("-___AA", base64::encode(binary, sizeof binary, true).c_str());
+  TEST_ASSERT_EQUAL_STRING("Zg", base64::encode("f", 1, true).c_str());
+}
+
+static void test_crc_known_vectors_and_streaming() {
+  constexpr uint8_t vector[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+  static_assert(~crc32Update(0xffffffffu, vector, 9) == 0xcbf43926u);
+  static_assert(crc16Ccitt(vector, 9) == 0x29b1);
+  const auto first = crc32Update(0xffffffffu, vector, 4);
+  TEST_ASSERT_EQUAL_HEX32(0xcbf43926u, ~crc32Update(first, vector + 4, 5));
+  TEST_ASSERT_EQUAL_HEX16(0x29b1, crc16Ccitt(vector + 4, 5, crc16Ccitt(vector, 4)));
+  TEST_ASSERT_EQUAL_HEX32(0x12345678u, crc32Update(0x12345678u, nullptr, 0));
+  TEST_ASSERT_EQUAL_HEX16(0xffff, crc16Ccitt(nullptr, 0));
+}
 
 static int dk(DrawKind k) { return static_cast<int>(k); }
 
@@ -27,7 +55,8 @@ static void test_text_fragments() {
   AppSpec s = parseApp(
       "{\"text\":[{\"text\":\"AB\",\"color\":\"#FF0000\"},{\"text\":\"CD\",\"color\":[0,255,0]}]}");
   TEST_ASSERT_EQUAL_UINT(2u, (unsigned)s.fragments.size());
-  TEST_ASSERT_EQUAL_STRING("AB", s.fragments[0].text.c_str());
+  TEST_ASSERT_EQUAL_STRING("ABCD", s.text.c_str());
+  TEST_ASSERT_EQUAL_UINT(2u, s.fragments[0].bytes);
   TEST_ASSERT_EQUAL_HEX32(0xFF0000u, s.fragments[0].color);
   TEST_ASSERT_EQUAL_HEX32(0x00FF00u, s.fragments[1].color);
 }
@@ -36,7 +65,7 @@ static void test_color_and_defaults() {
   AppSpec s = parseApp("{\"textColor\":\"#123456\"}");
   TEST_ASSERT_TRUE(s.hasTextColor);
   TEST_ASSERT_EQUAL_HEX32(0x123456u, s.textColor);
-  TEST_ASSERT_TRUE(s.textCenter);
+  TEST_ASSERT_TRUE(s.textAlign == Align::Center);
   TEST_ASSERT_FALSE(s.extras().textUsesPalette);
   TEST_ASSERT_EQUAL_INT(0, s.repeat);
   TEST_ASSERT_EQUAL_INT(-1, s.extrasMut().progress);
@@ -81,17 +110,18 @@ static void test_draw_array_form() {
       "[\"circleFill\",16,4,3,\"#0F0\"],"
       "[\"text\",9,1,\"HI\",\"#FFFFFF\"]]}",
       false, s, nullptr, nullptr, &err));
-  const std::vector<DrawOp>& d = s.extras().draw;
+  const render::DrawProgram& p = s.extras().draw;
+  const auto& d = p.commands;
   TEST_ASSERT_EQUAL_UINT(5u, (unsigned)d.size());
   TEST_ASSERT_EQUAL_INT(dk(DrawKind::Pixel), dk(d[0].kind));
   TEST_ASSERT_EQUAL_HEX32(0xFF0000u, d[0].color);
   TEST_ASSERT_EQUAL_INT(dk(DrawKind::Line), dk(d[1].kind));
-  TEST_ASSERT_EQUAL_INT(31, d[1].x2);
+  TEST_ASSERT_EQUAL_INT(31, d[1].a);
   TEST_ASSERT_EQUAL_INT(dk(DrawKind::FillRect), dk(d[2].kind));
   TEST_ASSERT_EQUAL_INT(dk(DrawKind::FillCircle), dk(d[3].kind));
-  TEST_ASSERT_EQUAL_INT(3, d[3].r);
+  TEST_ASSERT_EQUAL_INT(3, d[3].a);
   TEST_ASSERT_EQUAL_INT(dk(DrawKind::Text), dk(d[4].kind));
-  TEST_ASSERT_EQUAL_STRING("HI", d[4].text.c_str());
+  TEST_ASSERT_EQUAL_STRING("HI", std::string(p.text.view().substr(d[4].first, d[4].count)).c_str());
 }
 
 static void test_draw_order_follows_the_array() {
@@ -99,7 +129,7 @@ static void test_draw_order_follows_the_array() {
   TEST_ASSERT_TRUE(payload::parse(
       "{\"draw\":[[\"pixel\",0,0,\"#111111\"],[\"pixel\",1,0,\"#222222\"],"
       "[\"pixel\",2,0,\"#333333\"]]}", false, s));
-  const std::vector<DrawOp>& d = s.extras().draw;
+  const auto& d = s.extras().draw.commands;
   TEST_ASSERT_EQUAL_UINT(3u, (unsigned)d.size());
   TEST_ASSERT_EQUAL_HEX32(0x111111u, d[0].color);
   TEST_ASSERT_EQUAL_HEX32(0x333333u, d[2].color);
@@ -108,23 +138,24 @@ static void test_draw_order_follows_the_array() {
 static void test_draw_color_may_be_omitted() {
   AppSpec s;
   TEST_ASSERT_TRUE(payload::parse("{\"draw\":[[\"pixel\",1,2]]}", false, s));
-  TEST_ASSERT_TRUE(s.extras().draw[0].inheritColor);
+  TEST_ASSERT_TRUE(s.extras().draw.commands[0].inheritColor);
 }
 
 static void test_draw_pixels_command() {
   AppSpec s;
   TEST_ASSERT_TRUE(payload::parse("{\"draw\":[[\"pixels\",\"#0F0\",0,0,1,1,2,2]]}", false, s));
-  const DrawOp& op = s.extras().draw[0];
+  const render::DrawProgram& p = s.extras().draw;
+  const render::DrawCommand& op = p.commands[0];
   TEST_ASSERT_EQUAL_INT(dk(DrawKind::Pixels), dk(op.kind));
   TEST_ASSERT_EQUAL_HEX32(0x00FF00u, op.color);
-  TEST_ASSERT_EQUAL_UINT(6u, (unsigned)op.points.size());
-  TEST_ASSERT_EQUAL_INT(2, op.points[4]);
+  TEST_ASSERT_EQUAL_UINT(6u, op.count);
+  TEST_ASSERT_EQUAL_INT(2, static_cast<int>(p.data[op.first + 4]));
 }
 
 static void test_draw_pixels_inherits_color_on_null() {
   AppSpec s;
   TEST_ASSERT_TRUE(payload::parse("{\"draw\":[[\"pixels\",null,0,0,1,1]]}", false, s));
-  TEST_ASSERT_TRUE(s.extras().draw[0].inheritColor);
+  TEST_ASSERT_TRUE(s.extras().draw.commands[0].inheritColor);
 }
 
 static void test_draw_unknown_command_is_rejected() {
@@ -166,24 +197,72 @@ static void test_draw_non_numeric_coordinate_is_rejected() {
 
 static void test_draw_bitmap_base64() {
   AppSpec s = parseApp("{\"draw\":[[\"bitmap\",3,1,2,1,\"AAD/AP8A\"]]}");
-  TEST_ASSERT_EQUAL_UINT(1u, (unsigned)s.extrasMut().draw.size());
-  const DrawOp& op = s.extrasMut().draw[0];
+  const render::DrawProgram& p = s.extras().draw;
+  TEST_ASSERT_EQUAL_UINT(1u, (unsigned)p.commands.size());
+  const render::DrawCommand& op = p.commands[0];
   TEST_ASSERT_EQUAL_INT(dk(DrawKind::Bitmap), dk(op.kind));
   TEST_ASSERT_EQUAL_INT(3, op.x);
-  TEST_ASSERT_EQUAL_INT(2, op.w);
-  TEST_ASSERT_EQUAL_UINT(2u, (unsigned)op.bitmap.size());
-  TEST_ASSERT_EQUAL_HEX32(0x0000FFu, op.bitmap[0]);
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, op.bitmap[1]);
+  TEST_ASSERT_EQUAL_INT(2, op.a);
+  TEST_ASSERT_EQUAL_UINT(2u, op.count);
+  TEST_ASSERT_EQUAL_HEX32(0x0000FFu, p.data[op.first]);
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, p.data[op.first + 1]);
+}
+
+static void test_bitmap_base64_escapes_and_partial_pixels() {
+  AppSpec s;
+  TEST_ASSERT_TRUE(payload::parse(
+      R"({"draw":[["bitmap",0,0,1,1,["#112233"]],["bitmap",1,0,2,1,"A\u0041D\/AP8A/w=="]]})",
+      false, s));
+  const auto& draw = s.extras().draw;
+  TEST_ASSERT_EQUAL_UINT(3, draw.data.size());
+  TEST_ASSERT_EQUAL_HEX32(0x112233, draw.data[0]);
+  TEST_ASSERT_EQUAL_HEX32(0x0000FF, draw.data[1]);
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00, draw.data[2]);
+}
+
+static std::string largeBitmap() {
+  std::string json = R"({"draw":[["bitmap",0,0,64,64,")";
+  for (int i = 0; i < 4096; ++i) json += "EjRW";
+  return json + R"("]]})";
+}
+
+static void test_bitmap_base64_large_and_malformed() {
+  std::string json = largeBitmap();
+  AppSpec s;
+  TEST_ASSERT_TRUE(payload::parse(json, false, s));
+  TEST_ASSERT_EQUAL_UINT(4096, s.extras().draw.data.size());
+  TEST_ASSERT_EQUAL_HEX32(0x123456, s.extras().draw.data.front());
+  TEST_ASSERT_EQUAL_HEX32(0x123456, s.extras().draw.data.back());
+  json[json.size() - 5] = '!';
+  AppSpec rejected;
+  DispatchDetail err;
+  TEST_ASSERT_FALSE(payload::parse(json, false, rejected, nullptr, nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("draw[0]", err.field.c_str());
+}
+
+static void test_bitmap_base64_reports_allocation_failure() {
+  const std::string json = largeBitmap();
+  const auto previous = checked::storage::allocator();
+  checked::storage::setAllocator({[](std::size_t bytes) -> void* {
+    return bytes >= 4096 ? nullptr : std::malloc(bytes);
+  }, std::free});
+  AppSpec s;
+  DispatchDetail err;
+  const bool parsed = payload::parse(json, false, s, nullptr, nullptr, &err);
+  checked::storage::setAllocator(previous);
+  TEST_ASSERT_FALSE(parsed);
+  TEST_ASSERT_EQUAL_STRING("draw[0]", err.field.c_str());
 }
 
 static void test_bitmap_array_takes_normal_colors() {
   AppSpec s;
   TEST_ASSERT_TRUE(payload::parse(
       "{\"draw\":[[\"bitmap\",0,0,2,1,[\"#FF0000\",[0,255,0]]]]}", false, s));
-  const DrawOp& op = s.extras().draw[0];
-  TEST_ASSERT_EQUAL_UINT(2u, (unsigned)op.bitmap.size());
-  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, op.bitmap[0]);
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, op.bitmap[1]);
+  const render::DrawProgram& p = s.extras().draw;
+  const render::DrawCommand& op = p.commands[0];
+  TEST_ASSERT_EQUAL_UINT(2u, op.count);
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, p.data[op.first]);
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, p.data[op.first + 1]);
 }
 
 static void test_bitmap_array_rejects_a_bad_color() {
@@ -228,11 +307,11 @@ static void test_icon_gap_rejects_negative_fractional_oversized_and_non_numeric_
 }
 
 static void test_notification_fields() {
-  AppSpec s = parseApp("{\"text\":\"x\",\"hold\":true,\"sound\":5}", true);
+  AppSpec s = parseApp("{\"text\":\"x\",\"hold\":true,\"sound\":\"ding\"}", true);
   TEST_ASSERT_TRUE(s.isNotification);
   TEST_ASSERT_TRUE(s.hold);
   TEST_ASSERT_TRUE(s.stack);
-  TEST_ASSERT_EQUAL_STRING("5", s.sound.c_str());
+  TEST_ASSERT_EQUAL_STRING("\"ding\"", s.sound.c_str());
 }
 
 static void test_text_case_words() {
@@ -269,6 +348,21 @@ static void test_unknown_mode_is_rejected() {
   TEST_ASSERT_EQUAL_STRING("iconMode", err.field.c_str());
 }
 
+static void test_text_align_parses_and_text_center_maps_onto_it() {
+  AppSpec s;
+  TEST_ASSERT_TRUE(payload::parse("{\"textAlign\":\"end\"}", false, s));
+  TEST_ASSERT_TRUE(s.textAlign == Align::End);
+  TEST_ASSERT_TRUE(payload::parse("{\"textAlign\":\"end\",\"textCenter\":\"yes\"}", false, s));
+  TEST_ASSERT_TRUE(s.textAlign == Align::End);
+  TEST_ASSERT_TRUE(payload::parse("{\"textCenter\":false}", false, s));
+  TEST_ASSERT_TRUE(s.textAlign == Align::Start);
+  TEST_ASSERT_TRUE(payload::parse("{\"textCenter\":true}", false, s));
+  TEST_ASSERT_TRUE(s.textAlign == Align::Center);
+  DispatchDetail err;
+  TEST_ASSERT_FALSE(payload::parse("{\"textAlign\":\"right\"}", false, s, nullptr, nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("textAlign", err.field.c_str());
+}
+
 static void test_numeric_mode_is_rejected() {
   AppSpec s;
   DispatchDetail err;
@@ -287,7 +381,7 @@ static void test_renamed_keys_parse() {
       false, s));
   TEST_ASSERT_EQUAL_HEX32(0xFF0000u, s.textColor);
   TEST_ASSERT_EQUAL_HEX32(0x101010u, s.backgroundColor);
-  TEST_ASSERT_FALSE(s.textCenter);
+  TEST_ASSERT_TRUE(s.textAlign == Align::Start);
   TEST_ASSERT_TRUE(s.extras().palette.valid());
   TEST_ASSERT_TRUE(s.textInFront);
   TEST_ASSERT_EQUAL_INT(3, s.textOffsetX);
@@ -306,7 +400,7 @@ static void test_fragment_keys_are_spelled_out() {
   TEST_ASSERT_TRUE(payload::parse(
       "{\"text\":[{\"text\":\"AB\",\"color\":\"#FF0000\"}]}", false, s));
   TEST_ASSERT_EQUAL_UINT(1u, (unsigned)s.fragments.size());
-  TEST_ASSERT_EQUAL_STRING("AB", s.fragments[0].text.c_str());
+  TEST_ASSERT_EQUAL_STRING("AB", s.text.c_str());
   TEST_ASSERT_EQUAL_HEX32(0xFF0000u, s.fragments[0].color);
 }
 
@@ -323,7 +417,7 @@ static void test_wrong_optional_types_keep_their_defaults() {
   TEST_ASSERT_TRUE(payload::parse(
       "{\"textCenter\":\"yes\",\"textInFront\":1,\"repeat\":\"many\",\"text\":42}",
       false, s));
-  TEST_ASSERT_TRUE(s.textCenter);
+  TEST_ASSERT_TRUE(s.textAlign == Align::Center);
   TEST_ASSERT_FALSE(s.textInFront);
   TEST_ASSERT_EQUAL_INT(0, s.repeat);
   TEST_ASSERT_TRUE(s.text.empty());
@@ -339,36 +433,56 @@ static void test_notification_key_on_an_app_is_rejected() {
 static void test_notification_keys_pass_on_a_notification() {
   AppSpec s;
   TEST_ASSERT_TRUE(payload::parse(
-      "{\"wakeup\":true,\"hold\":true,\"soundLoop\":true,"
-      "\"soundRtttl\":\"a:d=4,o=5,b=120:c\"}",
+      "{\"wakeup\":true,\"hold\":true,\"sound\":{\"rtttl\":\"a:d=4,o=5,b=120:c\",\"loop\":true}}",
       true, s));
   TEST_ASSERT_TRUE(s.wakeup);
   TEST_ASSERT_TRUE(s.hold);
-  TEST_ASSERT_TRUE(s.loopSound);
-  TEST_ASSERT_EQUAL_STRING("a:d=4,o=5,b=120:c", s.extras().rtttl.c_str());
+  TEST_ASSERT_EQUAL_STRING("{\"rtttl\":\"a:d=4,o=5,b=120:c\",\"loop\":true}", s.sound.c_str());
 }
 
-// A melody that cannot be played is a mistake in the request, not something to discover as
-// silence once the notification is already on screen.
-static void test_an_unparsable_sound_rtttl_is_rejected() {
+// A notification's sound is one sound object, checked on arrival and kept as sent.
+static void test_notification_sound_is_one_sound_object() {
+  AppSpec s;
+  DispatchDetail err;
+  TEST_ASSERT_TRUE(payload::parse("{\"text\":\"x\",\"sound\":[{\"speech\":\"Hi\"},\"ding\"]}", true,
+                                  s, nullptr, nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("[{\"speech\":\"Hi\"},\"ding\"]", s.sound.c_str());
+  AppSpec looped;
+  TEST_ASSERT_TRUE(payload::parse("{\"sound\":{\"file\":\"siren\",\"loop\":true}}", true, looped,
+                                  nullptr, nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("{\"file\":\"siren\",\"loop\":true}", looped.sound.c_str());
+  AppSpec none;
+  TEST_ASSERT_TRUE(payload::parse("{\"sound\":\"\"}", true, none, nullptr, nullptr, &err));
+  TEST_ASSERT_TRUE(none.sound.empty());
+  TEST_ASSERT_TRUE(payload::parse("{\"sound\":null}", true, none, nullptr, nullptr, &err));
+  TEST_ASSERT_TRUE(none.sound.empty());
+}
+
+static void test_a_bad_notification_sound_is_refused_with_its_field() {
   AppSpec s;
   DispatchDetail err;
   TEST_ASSERT_FALSE(
-      payload::parse("{\"soundRtttl\":\"a:d=4;\"}", true, s, nullptr, nullptr, &err));
-  TEST_ASSERT_EQUAL_STRING("soundRtttl", err.field.c_str());
-  TEST_ASSERT_FALSE(err.message.empty());
+      payload::parse("{\"sound\":{\"rtttl\":\"broken\"}}", true, s, nullptr, nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("sound.rtttl", err.field.c_str());
+  TEST_ASSERT_FALSE(payload::parse("{\"sound\":5}", true, s, nullptr, nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("sound", err.field.c_str());
+  TEST_ASSERT_FALSE(payload::parse("{\"sound\":{\"station\":\"SWR3\"}}", true, s, nullptr, nullptr,
+                                   &err));
+  TEST_ASSERT_EQUAL_STRING("sound.station", err.field.c_str());
+  for (const char* key : {"soundRtttl", "soundLoop", "speech"}) {
+    const std::string body = std::string("{\"") + key + "\":\"x\"}";
+    TEST_ASSERT_FALSE_MESSAGE(payload::parse(body, true, s, nullptr, nullptr, &err), key);
+    TEST_ASSERT_EQUAL_STRING("unknown field", err.message.c_str());
+  }
 }
 
-// Clients that serialise their whole schema send every field they know about, empty ones
-// included; an empty melody is the absence of one, not a malformed one.
-static void test_an_empty_sound_rtttl_is_accepted() {
+// A pushed app plays no sound.
+static void test_an_app_takes_no_sound() {
   AppSpec s;
   DispatchDetail err;
-  TEST_ASSERT_TRUE(payload::parse("{\"text\":\"A\",\"soundRtttl\":\"\",\"sound\":\"\"}", true, s,
-                                  nullptr, nullptr, &err));
-  TEST_ASSERT_EQUAL_STRING("A", s.text.c_str());
-  TEST_ASSERT_TRUE(s.extras().rtttl.empty());
-  TEST_ASSERT_TRUE(s.sound.empty());
+  TEST_ASSERT_FALSE(payload::parse("{\"sound\":\"ding\"}", false, s, nullptr, nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("sound", err.field.c_str());
+  TEST_ASSERT_EQUAL_STRING("unknown field", err.message.c_str());
 }
 
 static void test_effect_overlay_names() {
@@ -410,19 +524,21 @@ static void test_utf8_escapes_decode_to_the_same_bytes() {
 }
 
 static void test_font_defaults_to_small() {
-  TEST_ASSERT_EQUAL_INT(0, (int)parseApp("{\"text\":\"hi\"}").font);
+  TEST_ASSERT_TRUE(parseApp("{\"text\":\"hi\"}").font.empty());
 }
 
 static void test_font_is_selectable() {
-  TEST_ASSERT_EQUAL_INT((int)FontId::Large, (int)parseApp("{\"font\":\"large\"}").font);
-  TEST_ASSERT_EQUAL_INT((int)FontId::Small, (int)parseApp("{\"font\":\"small\"}").font);
+  TEST_ASSERT_EQUAL_STRING("large", parseApp("{\"font\":\"large\"}").font.c_str());
+  TEST_ASSERT_EQUAL_STRING("matrix-light6", parseApp("{\"font\":\"matrix-light6\"}").font.c_str());
 }
 
-static void test_an_unknown_font_name_is_rejected() {
-  AppSpec s;
-  DispatchDetail err;
-  TEST_ASSERT_FALSE(payload::parse("{\"font\":\"huge\"}", false, s, nullptr, nullptr, &err));
-  TEST_ASSERT_EQUAL_STRING("font", err.field.c_str());
+static void test_a_font_must_be_a_name() {
+  for (const char* json : {"{\"font\":1}", "{\"font\":\"\"}"}) {
+    AppSpec s;
+    DispatchDetail err;
+    TEST_ASSERT_FALSE(payload::parse(json, false, s, nullptr, nullptr, &err));
+    TEST_ASSERT_EQUAL_STRING("font", err.field.c_str());
+  }
 }
 
 static void test_overlay_lowercased() {
@@ -489,6 +605,17 @@ static void test_bad_positioned_stops_are_rejected() {
       payload::parse("{\"palette\":[{\"color\":\"#FF0000\",\"pos\":101}]}", false, s));
   TEST_ASSERT_FALSE(payload::parse("{\"palette\":[{\"pos\":50}]}", false, s));
   TEST_ASSERT_FALSE(payload::parse("{\"palette\":[{\"color\":\"#FF0000\"}]}", false, s));
+}
+
+static void test_palette_takes_at_most_sixteen_stops() {
+  std::string list;
+  for (int i = 0; i < 16; ++i) list += std::string(list.empty() ? "" : ",") + "\"#FF0000\"";
+  AppSpec s;
+  TEST_ASSERT_TRUE(payload::parse("{\"palette\":[" + list + "]}", false, s));
+  DispatchDetail err;
+  TEST_ASSERT_FALSE(payload::parse("{\"palette\":[" + list + ",\"#0000FF\"]}", false, s, nullptr,
+                                   nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("palette", err.field.c_str());
 }
 
 static void test_unknown_palette_is_rejected() {
@@ -659,6 +786,45 @@ static void test_positioned_icons_validate_types_coordinates_and_unknown_propert
   }
 }
 
+static void test_icon_accepts_names_and_gif_or_jpeg_data_uris() {
+  const char* accepted[] = {
+      "{\"icon\":\"\"}",
+      "{\"icon\":\"1234\"}",
+      "{\"icon\":\"data:image/gif;base64,R0lGODlhAQABAAAAACw=\"}",
+      "{\"icon\":\"data:image/jpeg;base64,/9j/4AAQSkZJRg==\"}",
+      "{\"icons\":[{\"icon\":\"data:image/gif;base64,R0lGODlh\"}]}"};
+  for (const char* json : accepted) {
+    AppSpec s;
+    DispatchDetail err;
+    TEST_ASSERT_TRUE_MESSAGE(payload::parse(json, true, s, nullptr, nullptr, &err), json);
+  }
+  AppSpec s;
+  TEST_ASSERT_TRUE(payload::parse("{\"icon\":\"data:image/gif;base64,R0lGODlh\"}", false, s));
+  TEST_ASSERT_EQUAL_STRING("data:image/gif;base64,R0lGODlh", s.icon.c_str());
+}
+
+static void test_icon_rejects_raw_base64_and_other_data_uris() {
+  const std::string raw(80, 'A');
+  const std::string invalid[] = {
+      "{\"icon\":\"" + raw + "\"}",
+      "{\"icon\":\"data:image/png;base64,iVBORw0KGgo=\"}",
+      "{\"icon\":\"data:image/gif;base64,R0l GOD\"}",
+      "{\"icon\":\"../secret\"}"};
+  for (const auto& json : invalid) {
+    AppSpec s;
+    DispatchDetail err;
+    TEST_ASSERT_FALSE_MESSAGE(payload::parse(json, true, s, nullptr, nullptr, &err), json.c_str());
+    TEST_ASSERT_EQUAL_STRING("icon", err.field.c_str());
+    TEST_ASSERT_FALSE(err.message.empty());
+    TEST_ASSERT_TRUE(s.icon.empty());
+  }
+  AppSpec s;
+  DispatchDetail err;
+  TEST_ASSERT_FALSE(payload::parse("{\"icons\":[{\"icon\":\"" + raw + "\"}]}", false, s,
+                                   nullptr, nullptr, &err));
+  TEST_ASSERT_EQUAL_STRING("icons[0].icon", err.field.c_str());
+}
+
 static void test_positioned_icon_count_is_bounded_without_partial_updates() {
   std::string json = "{\"icons\":[";
   for (std::size_t i = 0; i < kMaxPlacedIcons; ++i) {
@@ -677,12 +843,30 @@ static void test_positioned_icon_count_is_bounded_without_partial_updates() {
   TEST_ASSERT_EQUAL_UINT(0, s.extras().icons.size());
 }
 
+static void test_unregistered_layout_is_an_unknown_field() {
+  payload::setKeyHandlers(nullptr);
+  AppSpec spec;
+  spec.text = "unchanged";
+  DispatchDetail error;
+  TEST_ASSERT_FALSE(payload::parse(R"({"layout":{"version":1,"regions":[]}})",
+                                  false, spec, nullptr, nullptr, &error));
+  TEST_ASSERT_EQUAL_STRING("layout", error.field.c_str());
+  TEST_ASSERT_EQUAL_STRING("unknown field", error.message.c_str());
+  TEST_ASSERT_EQUAL_STRING("unchanged", spec.text.c_str());
+  TEST_ASSERT_NULL(spec.extras().content.get());
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_base64_encode_rfc4648);
+  RUN_TEST(test_crc_known_vectors_and_streaming);
+  RUN_TEST(test_unregistered_layout_is_an_unknown_field);
   RUN_TEST(test_valid_but_oversized_payload_is_not_reported_as_malformed);
   RUN_TEST(test_positioned_icons_are_additive_on_apps_and_notifications);
   RUN_TEST(test_positioned_icons_validate_types_coordinates_and_unknown_properties);
   RUN_TEST(test_positioned_icon_count_is_bounded_without_partial_updates);
+  RUN_TEST(test_icon_accepts_names_and_gif_or_jpeg_data_uris);
+  RUN_TEST(test_icon_rejects_raw_base64_and_other_data_uris);
   RUN_TEST(test_icon_gap_defaults_to_one_and_takes_any_width_up_to_the_widest_panel);
   RUN_TEST(test_icon_gap_rejects_negative_fractional_oversized_and_non_numeric_values);
 
@@ -692,6 +876,7 @@ int main(int, char**) {
   RUN_TEST(test_end_positions_match_the_plain_list);
   RUN_TEST(test_stops_out_of_order_are_sorted);
   RUN_TEST(test_bad_positioned_stops_are_rejected);
+  RUN_TEST(test_palette_takes_at_most_sixteen_stops);
   RUN_TEST(test_unknown_palette_is_rejected);
   RUN_TEST(test_palette_loader_resolves_user_name);
   RUN_TEST(test_a_file_shadows_the_builtin_of_the_same_name);
@@ -707,7 +892,7 @@ int main(int, char**) {
   RUN_TEST(test_utf8_escapes_decode_to_the_same_bytes);
   RUN_TEST(test_font_defaults_to_small);
   RUN_TEST(test_font_is_selectable);
-  RUN_TEST(test_an_unknown_font_name_is_rejected);
+  RUN_TEST(test_a_font_must_be_a_name);
   RUN_TEST(test_overlay_lowercased);
   RUN_TEST(test_text_fragments);
   RUN_TEST(test_color_and_defaults);
@@ -727,6 +912,9 @@ int main(int, char**) {
   RUN_TEST(test_draw_non_array_element_is_rejected);
   RUN_TEST(test_draw_non_numeric_coordinate_is_rejected);
   RUN_TEST(test_draw_bitmap_base64);
+  RUN_TEST(test_bitmap_base64_escapes_and_partial_pixels);
+  RUN_TEST(test_bitmap_base64_large_and_malformed);
+  RUN_TEST(test_bitmap_base64_reports_allocation_failure);
   RUN_TEST(test_bitmap_array_takes_normal_colors);
   RUN_TEST(test_bitmap_array_rejects_a_bad_color);
   RUN_TEST(test_bad_color_is_rejected);
@@ -738,13 +926,15 @@ int main(int, char**) {
   RUN_TEST(test_unknown_mode_is_rejected);
   RUN_TEST(test_numeric_mode_is_rejected);
   RUN_TEST(test_renamed_keys_parse);
+  RUN_TEST(test_text_align_parses_and_text_center_maps_onto_it);
   RUN_TEST(test_fragment_keys_are_spelled_out);
   RUN_TEST(test_unknown_key_is_rejected);
   RUN_TEST(test_wrong_optional_types_keep_their_defaults);
   RUN_TEST(test_notification_key_on_an_app_is_rejected);
   RUN_TEST(test_notification_keys_pass_on_a_notification);
-  RUN_TEST(test_an_unparsable_sound_rtttl_is_rejected);
-  RUN_TEST(test_an_empty_sound_rtttl_is_accepted);
+  RUN_TEST(test_notification_sound_is_one_sound_object);
+  RUN_TEST(test_a_bad_notification_sound_is_refused_with_its_field);
+  RUN_TEST(test_an_app_takes_no_sound);
   RUN_TEST(test_effect_overlay_names);
   RUN_TEST(test_bad_json_returns_false);
   RUN_TEST(test_array_payload_parses_first);

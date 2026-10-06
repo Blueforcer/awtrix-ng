@@ -18,8 +18,11 @@ class SharedState {
 
   struct Value {
     Type type = Type::Int;
-    int64_t i = 0;
-    double r = 0.0;
+    // type says which number is live; s is always set.
+    union {
+      int64_t i = 0;
+      double r;
+    };
     std::string s;
     int64_t writtenMs = 0;
 

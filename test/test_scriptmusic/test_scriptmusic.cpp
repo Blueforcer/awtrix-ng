@@ -1,4 +1,5 @@
 #include <unity.h>
+#include "../ScriptApplication.h"
 
 #include <string>
 
@@ -13,6 +14,7 @@
 using namespace awtrix;
 
 static script::ScriptServices g_svc;
+static awtrix::test::ScriptApplication application;
 static RuntimeState g_rt;
 static std::string g_log;
 static audio::FrameStats g_stats;
@@ -26,6 +28,8 @@ void setUp() {
   g_fresh = true;
   g_calls = 0;
   g_svc = script::ScriptServices{};
+  application = {};
+  g_svc.application = &application;
   g_svc.log = [](const std::string& s) { g_log += s; };
   g_svc.audioStats = [](int64_t, audio::FrameStats& out) {
     ++g_calls;
@@ -95,10 +99,17 @@ static void test_beat_level_and_active_pass_through() {
   TEST_ASSERT_TRUE(logged("4/[0, 0, 0, 0]/200/true/true"));
 }
 
-static void test_active_follows_mp3_playback_too() {
-  g_rt.mp3Playing = true;
+static void test_active_follows_any_other_sound_too() {
+  application.audioPlayingFn = [] { return true; };
   run("log(str(music.playing()))");
   TEST_ASSERT_TRUE(logged("true"));
+  TEST_ASSERT_EQUAL_INT(0, g_calls);
+}
+
+static void test_playback_query_does_not_start_microphone_analysis() {
+  run("log(str(music.playing()))");
+  TEST_ASSERT_TRUE(logged("false"));
+  TEST_ASSERT_EQUAL_INT(0, g_calls);
 }
 
 static void test_one_fetch_per_frame() {
@@ -108,6 +119,21 @@ static void test_one_fetch_per_frame() {
   TEST_ASSERT_EQUAL_INT(2, g_calls);
   run(kAll, 24);
   TEST_ASSERT_EQUAL_INT(2, g_calls);
+}
+
+static void test_station_and_title_follow_the_playing_station() {
+  g_rt.radioPlaying = true;
+  g_rt.radioStation = "SWR3";
+  g_rt.radioTitle = "Kraftwerk - Das Model";
+  run("log(music.station() + '|' + music.title())");
+  TEST_ASSERT_TRUE(logged("SWR3|Kraftwerk - Das Model"));
+}
+
+static void test_station_and_title_are_empty_once_the_radio_stops() {
+  g_rt.radioStation = "SWR3";
+  g_rt.radioTitle = "Kraftwerk - Das Model";
+  run("log('[' + music.station() + '|' + music.title() + ']')");
+  TEST_ASSERT_TRUE(logged("[|]"));
 }
 
 static void test_bar_chart_takes_bands_directly() {
@@ -127,8 +153,11 @@ int main(int, char**) {
   RUN_TEST(test_bands_merge_by_max_and_scale);
   RUN_TEST(test_stale_service_zeroes_everything);
   RUN_TEST(test_beat_level_and_active_pass_through);
-  RUN_TEST(test_active_follows_mp3_playback_too);
+  RUN_TEST(test_active_follows_any_other_sound_too);
+  RUN_TEST(test_playback_query_does_not_start_microphone_analysis);
   RUN_TEST(test_one_fetch_per_frame);
+  RUN_TEST(test_station_and_title_follow_the_playing_station);
+  RUN_TEST(test_station_and_title_are_empty_once_the_radio_stops);
   RUN_TEST(test_bar_chart_takes_bands_directly);
   return UNITY_END();
 }

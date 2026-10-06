@@ -1,133 +1,182 @@
+---
+only: [esp32, esp32-s3]
+---
+
 # GPIO & boards
 
-AWTRIX NG ships **one firmware per chip**, not per board. A commercial 32×8 clock, an AWTRIX 2
-mainboard conversion and a panel you wired yourself all run the same binary; what differs is the pin map,
-which is runtime configuration stored on AWTRIX and editable through the API or the web UI.
+<!-- only esp32 -->
+This page tells you which ESP32 pins AWTRIX NG can use, how to enter your own pin map, and what
+happens when a pin is not allowed.
 
-There are three images: `awtrix` for the ESP32, `awtrix_s3_octal` and `awtrix_s3_quad` for
-the ESP32-S3 - see
-[Rules come from the chip](#rules-come-from-the-chip).
+There is one firmware per chip, not per board. A Ulanzi TC001, an AWTRIX 2 mainboard and a panel
+you wired yourself all run the same firmware file. Only the pin map is different, and you set it
+in the web UI or through the API.
+<!-- /only -->
+<!-- only esp32-s3 -->
+This page tells you which ESP32-S3 pins AWTRIX NG can use, how to enter your own pin map, and what
+happens when a pin is not allowed.
 
-The pin map lives in [system configuration](system.md) alongside Wi-Fi, MQTT and calibration -
-it is read and written with `GET`/`PUT /api/v1/system`. This page is the complete GPIO
-reference.
+There is one firmware for every ESP32-S3 board. Only the pin map is different, and you set it in
+the web UI or through the API. The firmware comes in an `-s3-octal-` and an `-s3-quad-` variant.
+Which file you need is explained in
+[Install AWTRIX NG](../getting-started/flashing.md#which-of-the-two-s3-images).
+<!-- /only -->
 
 !!! warning "Changes apply after a reboot"
-    Writing a new pin map stores it and returns `200`, but AWTRIX keeps using the old map until
-    you restart it.
+    When you save a new pin map, AWTRIX stores it and answers `200`. It keeps using the old map
+    until you restart it.
+
+## Set the pin map
+
+1. Open the web UI and go to **System → GPIO**.
+2. Pick a pin for each part you have wired. Choose **not connected** for parts you do not have.
+3. Save.
+4. Restart AWTRIX.
+
+The dropdowns only offer pins that work for that part on your chip. See
+[The web UI's pin dropdowns](#the-web-uis-pin-dropdowns).
+
+To do the same through the API, see [Reading and writing the map](#reading-and-writing-the-map).
 
 ## Rules come from the chip
 
-An ESP32 and an ESP32-S3 do not agree on a single one of the rules below:
+<!-- only esp32 -->
+The ESP32 has these pin rules:
 
-| | ESP32 | ESP32-S3 |
-|---|---|---|
-| GPIO numbers | 0–39 | 0–48, but 22–25 are not bonded out |
-| Input-only | 34–39 | **none** - every pin can drive an output |
-| ADC1 | 32–39 | 1–10 |
-| Reserved | 6–11 (SPI flash) | 19–20 (USB-JTAG), 26–37 (flash + octal PSRAM), 43–44 (UART0) |
-| Matrix drivers | 2, 4, 5, 13, 14, 15, 16, 18, 21, 25, 26, 27, 32, 33 | 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47 |
-| Strapping | 0, 2, 5, 12, 15 | 0, 3, 45, 46 |
-| Wake from deep sleep | 0, 2, 4, 12–15, 25–27, 32–39 | 0–21 |
+| | ESP32 |
+|---|---|
+| GPIO numbers | 0–39 |
+| Input-only | 34–39 |
+| ADC1 (analog input) | 32–39 |
+| Reserved | 6–11 (SPI flash) |
+| LED matrix data | 2, 4, 5, 13, 14, 15, 16, 18, 21, 25, 26, 27, 32, 33 |
+| Strapping | 0, 2, 5, 12, 15 |
+| Wake from deep sleep | 0, 2, 4, 12–15, 25–27, 32–39 |
 
-So GPIO 34 is a perfectly good battery tap on an ESP32 and a flash pin on an S3; GPIO 38 is
-input-only on an ESP32 and a usable output on an S3.
+For example, GPIO 34 is a good battery input, but it cannot drive a button or the buzzer.
+<!-- /only -->
+<!-- only esp32-s3 -->
+The ESP32-S3 has these pin rules:
 
-The **strapping** row is the one entry in that table AWTRIX never enforces. Those pins are
-sampled by the chip during reset to decide how it boots, so wiring something to them that holds
-them high or low can stop the board from starting. Assigning one is accepted.
+| | ESP32-S3 |
+|---|---|
+| GPIO numbers | 0–48, but 22–25 do not exist |
+| Input-only | **none** – every pin can drive an output |
+| ADC1 (analog input) | 1–10 |
+| Reserved | 19–20 (USB-JTAG), 26–37 (flash + octal PSRAM), 43–44 (UART0) |
+| LED matrix data | 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47 |
+| Strapping | 0, 3, 45, 46 |
+| Wake from deep sleep | 0–21 |
 
-The **wake** row is the other one AWTRIX never enforces, and it applies to a single field.
-`pinBtnSelect` is wired to the deep-sleep wakeup, so a select button on one of those pins ends a
-[`POST /api/v1/device/sleep`](http.md#post-apiv1devicesleep) on a press. Any other pin is accepted
-and the button keeps working normally while AWTRIX is awake - it just cannot bring it back, and
-the sleep then runs its full `durationMs`. The other two buttons never wake AWTRIX.
+GPIO 26–37 are reserved even on a board without PSRAM.
+<!-- /only -->
 
-**Do not hardcode this table.** AWTRIX reports its own rules under `gpio` in
-[`GET /api/v1/capabilities`](http.md#gpio-what-the-chip-can-do), and which chip it is as `soc` in
-[device state](device.md).
+**Strapping pins** are read by the chip at power-on to decide how it starts. If you connect
+something that pulls such a pin high or low, the board may not start. AWTRIX accepts these pins,
+so the choice is yours.
+
+**Wake pins** matter only for the select button (`pinBtnSelect`). If the select button is on a
+wake pin, pressing it ends a [`POST /api/v1/device/sleep`](http.md#post-apiv1devicesleep) early.
+On any other pin the button works normally while AWTRIX is awake, but it cannot wake it up. The
+sleep then runs for its full `durationMs`. The left and right buttons never wake AWTRIX.
+
+AWTRIX reports the rules for its own chip under `gpio` in
+[`GET /api/v1/capabilities`](http.md#gpio-what-the-chip-can-do), and the chip type as `soc` in
+[device state](device.md). Use those values in your own tools instead of copying this table.
 
 ## The pin map
 
-Fourteen fields describe the whole board. All are plain integers naming a **GPIO number** (not a
-silkscreen label, not a Dx pin name), and `-1` disables the peripheral.
+Each field holds a **GPIO number** – not a label printed on the board and not a `Dx` pin name.
+`-1` means "not connected".
 
-Defaults below are per chip: the ESP32 column is the Ulanzi TC001 wiring, the ESP32-S3 column is
-a generic DIY layout with analog inputs on ADC1 and the Arduino-S3 default I²C bus.
+<!-- only esp32 -->
+The defaults are the Ulanzi TC001 wiring.
 
-| Key | Type | ESP32 | ESP32-S3 | `-1` allowed | Meaning |
-|---|---|---|---|---|---|
-| `pinMatrix` | int | `32` | `21` | **no** | LED matrix data line. Must come from the [matrix driver list](#1-matrix-pin-whitelist). |
-| `pinBtnLeft` | int | `26` | `11` | yes | Left button, `INPUT_PULLUP`, active LOW. |
-| `pinBtnSelect` | int | `27` | `12` | yes | Middle/select button, `INPUT_PULLUP`, active LOW. Also the deep-sleep wake button - see the wake row [above](#rules-come-from-the-chip). |
-| `pinBtnRight` | int | `14` | `13` | yes | Right button, `INPUT_PULLUP`, active LOW. |
-| `pinBattery` | int | `34` | `1` | yes | Battery voltage divider tap. Must be ADC1. |
-| `pinLdr` | int | `35` | `2` | yes | Light sensor (LDR) tap. Must be ADC1. |
-| `pinBuzzer` | int | `15` | `7` | yes | Passive buzzer. |
-| `pinI2cSda` | int | `21` | `8` | yes | I²C data for the temperature/humidity sensor bus. |
-| `pinI2cScl` | int | `22` | `9` | yes | I²C clock. |
-| `pinDfRx` | int | `23` | `17` | yes | DFPlayer Mini serial RX. Used only while `dfplayer` is `true`, but validated whenever it is assigned. |
-| `pinDfTx` | int | `18` | `18` | yes | DFPlayer Mini serial TX. Used only while `dfplayer` is `true`, but validated whenever it is assigned. |
-| `pinI2sBclk` | int | `-1` | `5` | yes | I²S bit clock to an external DAC such as the MAX98357A. |
-| `pinI2sLrclk` | int | `-1` | `6` | yes | I²S word-select (left/right) clock. |
-| `pinI2sDout` | int | `-1` | `4` | yes | I²S serial data out. |
-| `pinI2sMclk` | int | `-1` | `-1` | yes | Master clock, for DACs that need one. |
-| `pinAmpEnable` | int | `-1` | `-1` | yes | Switches the amplifier on. Goes high at startup and stays high. |
+| Key | Type | Default | `-1` allowed | Meaning |
+|---|---|---|---|---|
+| `pinMatrix` | int | `32` | **no** | LED matrix data line. Must be on the [LED matrix list](#1-matrix-pin-whitelist). |
+| `pinBtnLeft` | int | `26` | yes | Left button. Wire it to ground; pressed = LOW. AWTRIX turns on the internal pull-up. |
+| `pinBtnSelect` | int | `27` | yes | Select (middle) button, wired like the left one. Also wakes AWTRIX from deep sleep – see the wake row [above](#rules-come-from-the-chip). |
+| `pinBtnRight` | int | `14` | yes | Right button, wired like the left one. |
+| `pinBattery` | int | `34` | yes | Battery voltage divider tap. Must be ADC1. |
+| `pinLdr` | int | `35` | yes | Light sensor (LDR) tap. Must be ADC1. |
+| `pinBuzzer` | int | `15` | yes | Passive buzzer. |
+| `pinI2cSda` | int | `21` | yes | I²C data line for the temperature/humidity sensor. |
+| `pinI2cScl` | int | `22` | yes | I²C clock line. |
+| `pinDfRx` | int | `23` | yes | DFPlayer Mini serial RX. Used only while `dfplayer` is `true`, but always checked when set. |
+| `pinDfTx` | int | `18` | yes | DFPlayer Mini serial TX. Used only while `dfplayer` is `true`, but always checked when set. |
 
-The three `pinI2s*` lines are a single bus and are checked as a set: all three assigned, or all
-three `-1`. A partial set is rejected with `422 validationFailed`, naming the one you left out:
+The ESP32 has no I²S audio output. Leave `pinI2sBclk`, `pinI2sLrclk`, `pinI2sDout`, `pinI2sMclk`
+and `pinAmpEnable` at `-1`. The web UI does not show them.
+<!-- /only -->
+<!-- only esp32-s3 -->
+The defaults are a generic DIY layout with the analog inputs on ADC1 and the usual ESP32-S3 I²C
+pins.
+
+| Key | Type | Default | `-1` allowed | Meaning |
+|---|---|---|---|---|
+| `pinMatrix` | int | `21` | **no** | LED matrix data line. Must be on the [LED matrix list](#1-matrix-pin-whitelist). |
+| `pinBtnLeft` | int | `11` | yes | Left button. Wire it to ground; pressed = LOW. AWTRIX turns on the internal pull-up. |
+| `pinBtnSelect` | int | `12` | yes | Select (middle) button, wired like the left one. Also wakes AWTRIX from deep sleep – see the wake row [above](#rules-come-from-the-chip). |
+| `pinBtnRight` | int | `13` | yes | Right button, wired like the left one. |
+| `pinBattery` | int | `1` | yes | Battery voltage divider tap. Must be ADC1. |
+| `pinLdr` | int | `2` | yes | Light sensor (LDR) tap. Must be ADC1. |
+| `pinBuzzer` | int | `7` | yes | Passive buzzer. |
+| `pinI2cSda` | int | `8` | yes | I²C data line for the temperature/humidity sensor. |
+| `pinI2cScl` | int | `9` | yes | I²C clock line. |
+| `pinDfRx` | int | `17` | yes | DFPlayer Mini serial RX. Used only while `dfplayer` is `true`, but always checked when set. |
+| `pinDfTx` | int | `18` | yes | DFPlayer Mini serial TX. Used only while `dfplayer` is `true`, but always checked when set. |
+| `pinI2sBclk` | int | `5` | yes | I²S bit clock to an external amplifier/DAC such as the MAX98357A. |
+| `pinI2sLrclk` | int | `6` | yes | I²S word-select (left/right) clock. |
+| `pinI2sDout` | int | `4` | yes | I²S data out. |
+| `pinI2sMclk` | int | `-1` | yes | Master clock, for DACs that need one. |
+| `pinAmpEnable` | int | `-1` | yes | Amplifier enable. Goes high at startup and stays high. |
+
+The three I²S lines (`pinI2sBclk`, `pinI2sLrclk`, `pinI2sDout`) work as a set: set all three, or
+set all three to `-1`. If you set only some of them, AWTRIX answers `422 validationFailed` and
+names the missing one:
 
 ```json
-{"error":{"code":"validationFailed","message":"the I2S pins work as a set: give all three, or -1 for all three","field":"pinI2sDout"}}
+{"error":{"code":"validationFailed","message":"set all three I2S pins or none","field":"pinI2sDout"}}
 ```
 
-`pinI2sMclk` and `pinAmpEnable` are optional extras, each set on its own. Both require the three
-lines above; assigning either while they are `-1` is rejected with the same `422`.
+`pinI2sMclk` and `pinAmpEnable` are optional. You can set each one alone, but only when the three
+I²S lines are set. Otherwise you get the same `422`.
+<!-- /only -->
 
-The ESP32 has no I²S audio output. There these fields stay `-1`, and the web UI's GPIO form shows
-eleven pins without the I²S rows.
-
-The related non-pin field:
+One more field belongs to the pin map:
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `dfplayer` | bool | `false` | Selects the sound backend. `true` **and** `pinDfRx >= 0` **and** `pinDfTx >= 0` picks the DFPlayer Mini; otherwise the passive buzzer on `pinBuzzer`. It does **not** affect pin validation - the DF pins follow the same rules as every other pin. |
+| `dfplayer` | bool | `false` | Switches the DFPlayer Mini on. With `true` **and** both `pinDfRx` and `pinDfTx` set, AWTRIX plays numbered tracks on the DFPlayer Mini. The passive buzzer on `pinBuzzer` keeps working either way. The DF pins are checked the same way whether this is on or off. |
 
-### What `-1` actually does
+### What `-1` does
 
-Each disabled peripheral has a defined consequence.
-
-| Field | Effect of `-1` |
+| Field | What happens with `-1` |
 |---|---|
-| `pinMatrix` | **Rejected.** The matrix cannot be disabled; `-1` is not in the driver list and fails validation. |
-| `pinBtnLeft` / `pinBtnSelect` / `pinBtnRight` | The button always reads as not-pressed. No pull-up is configured. |
-| `pinBattery` | Battery support switches off entirely: the `batteryPercent`, `batteryVoltage`, `batteryPinMillivolts` and `lowBattery` keys are omitted from device state altogether, the battery entities disappear from the Home Assistant discovery, and the built-in Battery app is removed from the rotation. |
-| `pinLdr` | Light sensing switches off: the `lightLevel` and `ldrRaw` keys are omitted from device state altogether and the light-level entity disappears from the Home Assistant discovery. Auto-brightness keeps running and reads as pitch dark - see the warning below. |
-| `pinBuzzer` | No buzzer. Combined with `dfplayer: false`, AWTRIX is silent. |
-| `pinI2cSda` / `pinI2cScl` | No sensor bus; temperature and humidity are never populated. |
-| `pinDfRx` / `pinDfTx` | The DFPlayer backend is not selected; AWTRIX falls back to the buzzer. |
-| `pinI2sBclk` / `pinI2sLrclk` / `pinI2sDout` | No I²S output. Internet radio is unavailable and its API answers `503 unavailable`. |
+| `pinMatrix` | **Rejected.** You cannot switch off the matrix. |
+| `pinBtnLeft` / `pinBtnSelect` / `pinBtnRight` | The button always reads as not pressed. |
+| `pinBattery` | No battery support: `batteryPercent`, `batteryVoltage`, `batteryPinMillivolts` and `lowBattery` are left out of device state, the battery entities disappear from Home Assistant, and the Battery app leaves the rotation. |
+| `pinLdr` | No light sensor: `lightLevel` and `ldrRaw` are left out of device state, and the Light level and Brightness mode entities disappear from Home Assistant. `autoBrightness` has no effect – the panel uses `brightness` – and the web UI hides the auto-brightness switch. |
+| `pinBuzzer` | No buzzer. Melodies and RTTTL tunes make no sound. |
+| `pinI2cSda` / `pinI2cScl` | No sensor. Temperature and humidity stay empty. |
+| `pinDfRx` / `pinDfTx` | No DFPlayer. The buzzer is not affected. |
+<!-- only esp32-s3 -->
+| `pinI2sBclk` / `pinI2sLrclk` / `pinI2sDout` | No I²S output. MP3s and internet radio are not available; their API answers `503 unavailable`. |
 | `pinI2sMclk` | No master clock. |
-| `pinAmpEnable` | The amplifier is never switched on. Boards with an enable input stay silent. |
+| `pinAmpEnable` | The amplifier is never switched on. Amplifiers with an enable input stay silent. |
+<!-- /only -->
 
-!!! warning "Switch off `autoBrightness` when `pinLdr` is `-1`"
-    With no light sensor the raw reading is `0`, which is indistinguishable from pitch darkness.
-    With `autoBrightness` on, the panel then pins to one end of its range and stays there:
-    `minBrightness` with `ldrOnGround: false` (the default), `maxBrightness` with
-    `ldrOnGround: true`.
-
+<!-- only esp32 -->
 ## Board presets
 
-The web UI's **System → GPIO** section carries two preset buttons. They fill the form fields and
-leave them unsaved, so you review the values before anything reaches AWTRIX.
-
-Both presets are ESP32 boards, so the row is hidden on an ESP32-S3 build, and neither touches the
-I²S fields.
+**System → GPIO** in the web UI has two preset buttons. A preset fills in the form but does not
+save it, so you can check the values first.
 
 === "Ulanzi TC001"
 
-    The stock hardware, and the ESP32 build's default for every field. A factory-fresh AWTRIX, or
-    one whose stored map failed validation, boots on exactly this map.
+    The stock Ulanzi hardware. These are also the defaults: a new AWTRIX, or one whose stored map
+    is not valid, starts with exactly this map.
 
     | Field | Value |
     |---|---|
@@ -146,9 +195,9 @@ I²S fields.
 
 === "AWTRIX 2 mainboard"
 
-    An AWTRIX 2 mainboard carrying a **WeMos D1 mini32**. The board's silkscreen uses D-labels;
-    AWTRIX wants GPIO numbers, so both are shown. No battery, no buzzer - a DFPlayer Mini
-    provides the sound.
+    An AWTRIX 2 mainboard with a **WeMos D1 mini32**. The board is labeled with D-names, but
+    AWTRIX needs GPIO numbers, so the table shows both. There is no battery and no buzzer; a
+    DFPlayer Mini plays the sound.
 
     | Field | Value | Board label |
     |---|---|---|
@@ -156,151 +205,188 @@ I²S fields.
     | `pinBtnLeft` | `26` | D0 |
     | `pinBtnSelect` | `16` | D4 |
     | `pinBtnRight` | `5` | D8 |
-    | `pinBattery` | `-1` | - (no battery) |
+    | `pinBattery` | `-1` | – (no battery) |
     | `pinLdr` | `36` | A0 |
-    | `pinBuzzer` | `-1` | - (DFPlayer instead) |
+    | `pinBuzzer` | `-1` | – (DFPlayer instead) |
     | `pinI2cSda` | `17` | D3 |
     | `pinI2cScl` | `22` | D1 |
     | `pinDfRx` | `23` | |
     | `pinDfTx` | `18` | |
     | `dfplayer` | `true` | |
 
-    `pinMatrix: 21` collides with the default `pinI2cSda: 21`, so a `PUT` that sets only
-    `pinMatrix` is rejected. Both have to move in the same request - send the whole map, as
-    shown under [Write a complete map](#write-a-complete-map).
+    `pinMatrix: 21` is the same pin as the default `pinI2cSda: 21`. If you change only
+    `pinMatrix`, the request is rejected. Change both in the same request – send the whole map
+    as shown in [Write a complete map](#write-a-complete-map).
 
+<!-- /only -->
 ## Validation rules
 
-Validation happens in three stages, all of them before anything is persisted.
+AWTRIX checks every pin map before it stores anything. A rejected request changes nothing – not
+even the other fields in the same request.
 
-Every rule below is evaluated against the running chip's profile, so the numbers in the examples
-are the ESP32 ones. On an ESP32-S3 the same rules produce different limits and different
-messages; the authoritative values for your own board are in `gpio` from
+The exact values for your chip are under `gpio` in
 [`GET /api/v1/capabilities`](http.md#gpio-what-the-chip-can-do).
 
-First, each `pin*` value in the request body must be an integer that is `-1` (disabled) or a GPIO
-within the chip's range - `0`–`39` on an ESP32, `0`–`48` on an ESP32-S3. A value that is not gets
-`422 validationFailed` naming the field:
+AWTRIX combines the fields you send with the stored map and checks the result in this order:
 
-```json
-{"error":{"code":"validationFailed","message":"must be -1 (disabled) or a GPIO in 0..39","field":"pinLdr"}}
-```
+1. **Each value on its own.** Every `pin*` value must be an integer: `-1` or a GPIO from `0` to
+   <!-- only esp32 -->`39`<!-- /only --><!-- only esp32-s3 -->`48`<!-- /only -->. If not, you get `422 validationFailed` with the field name:
 
-Second, the I²S trio is checked as a set on the **merged** map - your fields applied on top of
-the stored ones - and answers `422 validationFailed` on a partial set, as shown above.
+<!-- only esp32 -->
+    ```json
+    {"error":{"code":"validationFailed","message":"must be -1 or 0..39","field":"pinLdr"}}
+    ```
+<!-- /only -->
+<!-- only esp32-s3 -->
+    ```json
+    {"error":{"code":"validationFailed","message":"must be -1 or 0..48","field":"pinLdr"}}
+    ```
+<!-- /only -->
 
-Then the structural rules run against that same merged map, and the **first** failure returns:
+<!-- only esp32-s3 -->
+2. **The I²S set.** A partial I²S set gets `422 validationFailed`, as shown above.
+3. **The rules 1 to 6 below.** The first failure is returned as `400 invalidPinConfig`:
 
-```json
-{"error":{"code":"invalidPinConfig","message":"pinBtnLeft: GPIO 34-39 are input-only"}}
-```
+    ```json
+    {"error":{"code":"invalidPinConfig","message":"pinLdr: must be ADC1 (GPIO 1-10)"}}
+    ```
+<!-- /only -->
+<!-- only esp32 -->
+2. **The rules 1 to 6 below.** The first failure is returned as `400 invalidPinConfig`:
 
-Rule 1 is checked first, for the whole map. Rules 2-4 (range, reserved, input-only) are then
-checked **one pin at a time**, in field order - `pinMatrix`, `pinBtnLeft`, `pinBtnSelect`,
-`pinBtnRight`, `pinBattery`, `pinLdr`, `pinBuzzer`, `pinI2cSda`, `pinI2cScl`, `pinDfRx`,
-`pinDfTx`, `pinI2sBclk`, `pinI2sLrclk`, `pinI2sDout`, `pinI2sMclk`, `pinAmpEnable` - each pin
-fully checked before the next
-one is looked at. An earlier field's reserved-pin error therefore comes back before a later
-field's out-of-range one. Rules 5 and 6 run last, across the whole map.
+    ```json
+    {"error":{"code":"invalidPinConfig","message":"pinBuzzer: GPIO 34-39 are input-only"}}
+    ```
+<!-- /only -->
+
+Rule 1 is checked first. Rules 2 to 4 are then checked pin by pin in the order of the table
+above, starting with `pinMatrix`. Rules 5 and 6 come last. So you always see only one problem at
+a time; fix it and send again.
 
 ### 1. Matrix pin whitelist
 
-`pinMatrix` must come from the list the running image compiled drivers for - the **Matrix
-drivers** row of the [chip table](#rules-come-from-the-chip). Anything else, including `-1`, is
-rejected with the list in the message:
+`pinMatrix` must be on the **LED matrix data** list in the [chip table](#rules-come-from-the-chip).
+Any other value, including `-1`, is rejected, and the message lists the allowed pins:
 
+<!-- only esp32 -->
 ```
-pinMatrix: unsupported pin (compiled drivers: 2,4,5,13,14,15,16,18,21,25,26,27,32,33)
+pinMatrix: unsupported pin (use 2,4,5,13,14,15,16,18,21,25,26,27,32,33)
 ```
+<!-- /only -->
+<!-- only esp32-s3 -->
+```
+pinMatrix: unsupported pin (use 13,14,15,16,17,18,21,38,39,40,41,42,47)
+```
+<!-- /only -->
 
 ### 2. Valid GPIO range
 
-Each **enabled** pin must exist on the chip. The ESP32-S3 additionally has a hole: GPIO `22`–`25`
-are not bonded out.
+Each pin that is not `-1` must exist on the chip.<!-- only esp32-s3 --> GPIO `22`–`25` do not exist.<!-- /only -->
 
+<!-- only esp32 -->
 ```
-<field>: not a valid ESP32 GPIO (0-39, or -1 = disabled)
-<field>: not a valid ESP32-S3 GPIO (0-48 except 22-25, or -1 = disabled)
+<field>: invalid ESP32 GPIO (0-39, or -1)
 ```
+<!-- /only -->
+<!-- only esp32-s3 -->
+```
+<field>: invalid ESP32-S3 GPIO (0-48 except 22-25, or -1)
+```
+<!-- /only -->
 
 ### 3. Reserved pins
 
-Pins the chip needs for itself. The message names what took them:
+The chip uses these pins itself. The message says what for:
 
-| Chip | Range | Reserved for |
-|---|---|---|
-| ESP32 | `6`–`11` | the SPI flash |
-| ESP32-S3 | `19`–`20` | the USB-JTAG interface |
-| ESP32-S3 | `26`–`37` | the SPI flash and PSRAM |
-| ESP32-S3 | `43`–`44` | the UART0 console |
+<!-- only esp32 -->
+| Range | Reserved for |
+|---|---|
+| `6`–`11` | the SPI flash |
 
 ```
 <field>: GPIO 6-11 are reserved for the SPI flash
+```
+<!-- /only -->
+<!-- only esp32-s3 -->
+| Range | Reserved for |
+|---|---|
+| `19`–`20` | the USB-JTAG interface |
+| `26`–`37` | the SPI flash and PSRAM |
+| `43`–`44` | the UART0 console |
+
+```
 <field>: GPIO 26-37 are reserved for the SPI flash and PSRAM
 ```
+<!-- /only -->
 
 ### 4. Input-only pins
 
-On the ESP32, GPIO `34`–`39` have no output driver and no internal pull-ups. Fields that need to
-drive a line - or need `INPUT_PULLUP` - are rejected on them.
+<!-- only esp32 -->
+GPIO `34`–`39` cannot drive an output and have no internal pull-up. Fields that must drive a line
+or need a pull-up are rejected on these pins.
 
 ```
 <field>: GPIO 34-39 are input-only
 ```
-
-**The ESP32-S3 has no input-only pins**, so this rule never fires there.
 
 | Field | Needs output? | Why |
 |---|---|---|
 | `pinMatrix` | yes | Drives the LED data line. |
 | `pinBtnLeft`, `pinBtnSelect`, `pinBtnRight` | yes | Need the internal pull-up. |
 | `pinBuzzer` | yes | Drives the buzzer. |
-| `pinI2cSda`, `pinI2cScl` | yes | I²C needs bidirectional drive. |
-| `pinDfTx` | yes | AWTRIX transmits on it. |
-| `pinI2sBclk` / `pinI2sLrclk` / `pinI2sDout` | yes | All three drive the DAC. |
-| `pinI2sMclk` | yes | Clocks the DAC. |
-| `pinAmpEnable` | yes | Holds the amplifier's enable input high. |
-| `pinBattery` | no | Read-only ADC. |
-| `pinLdr` | no | Read-only ADC. |
+| `pinI2cSda`, `pinI2cScl` | yes | I²C drives both lines. |
+| `pinDfTx` | yes | AWTRIX sends on it. |
+| `pinBattery` | no | Analog input only. |
+| `pinLdr` | no | Analog input only. |
 | `pinDfRx` | no | AWTRIX receives on it. |
+<!-- /only -->
+<!-- only esp32-s3 -->
+The ESP32-S3 has no input-only pins, so this rule never applies.
+<!-- /only -->
 
 ### 5. ADC1 requirement
 
-`pinBattery` and `pinLdr` must be ADC1 channels - GPIO `32`–`39` on an ESP32, GPIO `1`–`10` on an
-ESP32-S3. ADC2 is unusable while Wi-Fi is active on both.
+`pinBattery` and `pinLdr` must be ADC1 pins: GPIO <!-- only esp32 -->`32`–`39`<!-- /only --><!-- only esp32-s3 -->`1`–`10`<!-- /only -->. ADC2 pins
+cannot be read while Wi-Fi is on.
 
+<!-- only esp32 -->
 ```
-pinBattery: must be an ADC1 pin (GPIO 32-39, usable while WiFi is on)
-pinLdr: must be an ADC1 pin (GPIO 32-39, usable while WiFi is on)
+pinBattery: must be ADC1 (GPIO 32-39)
+pinLdr: must be ADC1 (GPIO 32-39)
 ```
-
-An ESP32-S3 names its own range, `GPIO 1-10`, in the same message.
+<!-- /only -->
+<!-- only esp32-s3 -->
+```
+pinBattery: must be ADC1 (GPIO 1-10)
+pinLdr: must be ADC1 (GPIO 1-10)
+```
+<!-- /only -->
 
 ### 6. No duplicates
 
-Every **enabled** pin must be unique across the whole map.
+Each pin that is not `-1` may be used only once.
 
 ```
 duplicate pin <n> (<fieldA>, <fieldB>)
 ```
 
-When one of the two fields is `pinMatrix`, the message goes on to name the fix - the matrix pin
-is the one that cannot move freely:
+If one of the two fields is `pinMatrix`, the message also tells you how to fix it:
 
 ```
-duplicate pin 21 (pinMatrix, pinI2cSda) - the matrix pin cannot be shared; move the
-other pin in the SAME request (AWTRIX 2: set pinI2cSda to 17 together with pinMatrix 21)
+duplicate pin 21 (pinMatrix, pinI2cSda) - move both pins in one request
 ```
 
-Disabled pins (`-1`) are skipped entirely - four fields can all be `-1` without conflicting.
-That is the only exemption: an assigned pin is checked whether or not the peripheral behind it
-is switched on, so `pinDfTx: 34` is rejected as input-only even while `dfplayer` is `false`, and
-`pinBuzzer: 23` collides with the default `pinDfRx`. Set the DF pins to `-1` if you are not
-wiring a DFPlayer.
+Both changes have to be in the same request, because either one on its own still collides.
+<!-- only esp32 -->Coming from AWTRIX 2, set `pinI2cSda` to `17` together with `pinMatrix` `21`.<!-- /only -->
+
+Any number of fields can be `-1` at the same time. A pin that is set is always checked, even when
+the part behind it is switched off. <!-- only esp32 -->For example, `pinDfTx: 34` is rejected as input-only even
+with `dfplayer: false`, and `pinBuzzer: 23` collides with the default `pinDfRx`.<!-- /only --><!-- only esp32-s3 -->For example, `pinBuzzer: 17` collides with the default
+`pinDfRx`, even with `dfplayer: false`.<!-- /only --> If you have no DFPlayer, set both DF pins to `-1`.
 
 ## Reading and writing the map
 
-The pin fields are ordinary keys of the system configuration resource.
+The pin fields are normal keys of the [system configuration](system.md).
 
 ### Read the current map
 
@@ -310,9 +396,10 @@ curl http://<awtrix-ip>/api/v1/system
 
 ### Write a complete map
 
-Send the whole map in one request so cross-field rules are evaluated against the values you
-intend, not a mixture of new and stored ones.
+Send the whole map in one request. Then every rule is checked against the values you want, not a
+mix of new and stored values.
 
+<!-- only esp32 -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/system \
   -H "Content-Type: application/json" \
@@ -331,17 +418,41 @@ curl -X PUT http://<awtrix-ip>/api/v1/system \
         "dfplayer": true
       }'
 ```
+<!-- /only -->
+<!-- only esp32-s3 -->
+```bash
+curl -X PUT http://<awtrix-ip>/api/v1/system \
+  -H "Content-Type: application/json" \
+  -d '{
+        "pinMatrix": 21,
+        "pinBtnLeft": 11,
+        "pinBtnSelect": 12,
+        "pinBtnRight": 13,
+        "pinBattery": -1,
+        "pinLdr": 2,
+        "pinBuzzer": 7,
+        "pinI2cSda": 8,
+        "pinI2cScl": 9,
+        "pinDfRx": -1,
+        "pinDfTx": -1,
+        "pinI2sBclk": 5,
+        "pinI2sLrclk": 6,
+        "pinI2sDout": 4,
+        "pinI2sMclk": -1,
+        "pinAmpEnable": -1,
+        "dfplayer": false
+      }'
+```
+<!-- /only -->
 
-On success the response is `200` with the resulting configuration.
-
-Then reboot to apply it:
+On success AWTRIX answers `200` with the new configuration. Then restart it:
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/device/reboot
 ```
 
-The `Content-Type` header is
-[mandatory on every `PUT`](conventions.md#content-type-is-mandatory).
+Always send `Content-Type: application/json`. Without it, `curl -d` marks the body as a form, and
+AWTRIX refuses the `PUT` with `415` ([Content-Type](conventions.md#content-type-is-mandatory)).
 
 ### A rejected write
 
@@ -351,101 +462,115 @@ curl -X PUT http://<awtrix-ip>/api/v1/system \
   -d '{"pinBattery": 25}'
 ```
 
+<!-- only esp32 -->
 ```json
-{"error":{"code":"invalidPinConfig","message":"pinBattery: must be an ADC1 pin (GPIO 32-39, usable while WiFi is on)"}}
+{"error":{"code":"invalidPinConfig","message":"pinBattery: must be ADC1 (GPIO 32-39)"}}
 ```
+<!-- /only -->
+<!-- only esp32-s3 -->
+```json
+{"error":{"code":"invalidPinConfig","message":"pinBattery: must be ADC1 (GPIO 1-10)"}}
+```
+<!-- /only -->
 
-Nothing was stored. The merged map is validated **before** anything reaches flash, so a rejected
-request leaves AWTRIX exactly as it was, including any non-pin fields in the same body.
+Nothing was stored. AWTRIX stays exactly as it was, including any other fields in the same
+request.
 
-Every message a rejected pin map can carry, and the other statuses this route answers, are in
-[Errors - GPIO validation](errors.md#gpio-validation-invalidpinconfig).
+All messages a rejected pin map can return, and the other answers of this route, are listed in
+[Errors – GPIO validation](errors.md#gpio-validation-invalidpinconfig).
 
 ## Recovery from a bad map
 
-You cannot brick AWTRIX with a pin map.
+A pin map cannot make AWTRIX unusable.
 
-Validation runs a second time at boot, on whatever is stored. If the stored map does not
-validate - a hand-edited file, or an ESP32 map on an ESP32-S3 - the board falls back to the
-running chip's defaults. AWTRIX comes up, the web UI is reachable, and you can fix the map. The
-stored map is *not* rewritten, so the same fallback repeats until you save a valid one.
+AWTRIX checks the stored map again at every start. If it is not valid, for example a map saved on
+a board with a different chip, AWTRIX starts with the default pins. The web UI is reachable and
+you can fix the map. The stored map stays as it is, so AWTRIX keeps using the defaults until you
+save a valid map.
 
-A map that is *valid* but *wrong* for your hardware boots normally with a dead panel or dead
-buttons. If that happens and you cannot reach the web UI, a [factory reset](system.md) restores
-the chip's defaults along with everything else.
+A map can be valid but wrong for your hardware. Then AWTRIX starts, but the panel or the buttons
+do nothing. If you cannot reach the web UI, a [factory reset](system.md#persistence-and-resets)
+restores the default pins together with all other settings.
 
 ## Panel layout
 
-A panel you wired yourself also needs describing: how wide one panel is, how many panels the
-cable runs through, which corner it enters, whether the strip runs along rows or columns, and
-whether every second run comes back the other way.
+A panel you built yourself also needs a description: the width of one panel, how many panels the
+cable runs through, the corner where the data enters, whether the LED strip runs along rows or
+columns, and whether every second row runs back the other way.
 
-The panel **height is fixed at 8 pixels**; the width is `panelWidth × panels` and must come to
-between 32 and 128 (so 32 × 8 = 256 LEDs by default).
+Every panel is 8 pixels high and `panelWidth × panels` is 32–128. The default is 32×8.
 
-The keys, their ranges and the settings for the common builds are documented once, under
-[Panel and orientation](system.md#panel-and-orientation). They live on `PUT /api/v1/system` only,
-and every one except the total width takes effect on the next frame.
+All panel keys, their ranges and the values for common builds are in
+[Panel and orientation](system.md#panel-and-orientation). They are set with `PUT /api/v1/system`.
+A new total width needs a restart; wiring and orientation changes apply at once.
 
 ## Wiring your own board
 
-A checklist, in the order to work through it:
+Work through this list in order:
 
-1. **Read the chip's rules first**: `curl http://<awtrix-ip>/api/v1/capabilities` and look at
-   `gpio`. Every number in the steps below is the ESP32 value; an ESP32-S3 answers differently
-   on all of them.
-2. **Pick a matrix pin from the whitelist.** This constrains your layout more than anything else
-   - decide it first.
-3. **Battery and LDR need ADC1** (`32`–`39` on an ESP32, `1`–`10` on an ESP32-S3). If you only
-   have one ADC1 pin free, prefer the battery: a missing LDR degrades badly (see the warning
-   above), a missing battery degrades cleanly.
-4. **Buttons need pull-ups**, so on an ESP32 they cannot live on `34`–`39`. Wire them to ground;
-   `INPUT_PULLUP` is configured for you and LOW is pressed. An ESP32-S3 has no input-only pins,
-   so any existing pin works. If you want the select button to end a deep sleep, take it from the
-   wake row of the [chip table](#rules-come-from-the-chip).
-5. **Avoid the reserved ranges** - `6`–`11` on an ESP32 is your flash; on an ESP32-S3 it is
-   `26`–`37` for flash and PSRAM, plus `19`–`20` and `43`–`44` for USB and the console.
-6. **Disable what you do not have** with `-1` rather than leaving a plausible-looking pin.
-7. **Send the whole map at once** and reboot.
-8. **Calibrate the analog inputs afterwards.** The pin map only says *where* to read; what the
-   readings *mean* is separate configuration - `batteryDividerRatio` for the battery divider,
-   `ldrFactor` / `ldrGamma` / `ldrOnGround` for the light sensor. Defaults match the stock wiring
-   and will be wrong for your divider. See [Brightness & sensors](../guides/brightness.md) and
+1. **Read your chip's rules**: run `curl http://<awtrix-ip>/api/v1/capabilities` and look at
+   `gpio`.
+2. **Pick the matrix pin first**, from the LED matrix list. It limits your layout more than any
+   other pin.
+3. **Battery and LDR need ADC1** (<!-- only esp32 -->`32`–`39`<!-- /only --><!-- only esp32-s3 -->`1`–`10`<!-- /only -->). If you have
+   only one ADC1 pin free, use it for the LDR: without it, auto-brightness is not available.
+   Without a battery pin, only the battery display is missing.
+4. **Buttons need a pull-up**<!-- only esp32 -->, so they cannot use `34`–`39`<!-- /only -->. Wire each button between
+   the pin and ground. AWTRIX turns on the internal pull-up; LOW means pressed.<!-- only esp32-s3 --> Any existing
+   pin works.<!-- /only --> If the select button should wake AWTRIX from deep sleep, pick a pin
+   from the wake row of the [chip table](#rules-come-from-the-chip).
+5. **Avoid reserved pins**: <!-- only esp32 -->`6`–`11` (flash).<!-- /only --><!-- only esp32-s3 -->`26`–`37` (flash and PSRAM), `19`–`20`
+   (USB) and `43`–`44` (console).<!-- /only -->
+6. **Set parts you do not have to `-1`** instead of leaving a pin that looks right.
+7. **Send the whole map at once** and restart.
+8. **Calibrate the analog inputs.** The pin map only says *where* to read. What the readings
+   *mean* is set separately: `batteryDividerRatio` for the battery divider, and `ldrFactor`,
+   `ldrGamma` and `ldrOnGround` for the light sensor. <!-- only esp32 -->The defaults match the Ulanzi wiring and
+   will be wrong for your divider.<!-- /only --><!-- only esp32-s3 -->The defaults are general values and may be
+   wrong for your divider.<!-- /only --> See [Brightness & sensors](../guides/brightness.md) and
    [Power & battery](../guides/power.md).
 
-A differently-assembled panel may also need `rotate` or `mirror`, under
-[Panel and orientation](system.md#panel-and-orientation), and `swapButtons`, under
+If your panel is mounted differently, you may also need `rotate` or `mirror` under
+[Panel and orientation](system.md#panel-and-orientation), and `swapButtons` under
 [Buttons](system.md#buttons).
 
 ## Sensor bus
 
-I²C sensors are **auto-detected** at boot, not configured. Only `pinI2cSda` and `pinI2cScl` are
-yours to set; which chip is on the bus is discovered.
+AWTRIX finds I²C sensors by itself at startup. You only set `pinI2cSda` and `pinI2cScl`.
 
-Recognised, in the order they are probed: **BME280** (`0x76`, then `0x77`), **BMP280** (the same two
-addresses), **HTU21DF** (its own fixed address), **SHT31** (`0x44`). The first chip that answers
-wins, so a BME280 and an SHT31 on one bus leaves the SHT31 unused.
+AWTRIX looks for these sensors in this order: **BME280** (`0x76`, then `0x77`), **BMP280** (same
+two addresses), **HTU21DF** (its fixed address), **SHT31** (`0x44`). It uses the first one that
+answers. If a BME280 and an SHT31 share the bus, the SHT31 is ignored.
 
-Which readings you get depends on the chip that answers: all four report temperature, the BME280,
-HTU21DF and SHT31 add humidity, and the BME280 and BMP280 add air pressure.
+| Sensor | Temperature | Humidity | Air pressure |
+|---|---|---|---|
+| BME280 | yes | yes | yes |
+| BMP280 | yes | – | yes |
+| HTU21DF | yes | yes | – |
+| SHT31 | yes | yes | – |
 
-Whatever the sensor does not measure - and everything, when there is no sensor or no bus - is
-never populated in device state, and `tempOffset` / `humOffset` are then not applied to
-anything.
+Values the sensor does not measure are left out of device state. With no sensor, all of them
+are left out, and `tempOffset` / `humOffset` have no effect.
 
 ## The web UI's pin dropdowns
 
-Each pin field in the web UI is a dropdown, and it lists only what the running chip can actually
-do with that peripheral: analog-capable pins for the battery and light-sensor taps, output-capable
-pins for the buttons, buzzer, I²C and the outgoing serial line, the compiled driver list for the
-matrix, and **not connected** wherever `-1` is allowed. Pins the chip needs for flash, PSRAM, USB
-or its console are not offered at all. A number the list cannot offer - a map saved on a different
-board, for example - is shown as its own entry marked as the stored value, so it is never
-overwritten by accident.
+Each pin field in the web UI is a dropdown. It lists only the pins your chip can use for that
+part:
 
-The dropdown is a convenience, not the rule: the same limits are enforced on every request, so a
-direct API call cannot bypass them.
+- analog pins for the battery and light sensor,
+- output pins for the buttons, buzzer, I²C and the DFPlayer TX line,
+- the LED matrix list for the matrix,
+- **not connected** wherever `-1` is allowed.
 
-Wi-Fi, MQTT, NTP, auth, sensor calibration and everything else `PUT /api/v1/system` accepts -
-including the range checks on its other numeric fields - are documented in
-[System configuration](system.md).
+Pins the chip needs for flash<!-- only esp32-s3 -->, PSRAM, USB or its console<!-- /only --> are never offered. If the stored map
+contains a pin the list cannot offer – for example a map saved on a different board – that pin
+is shown as its own entry marked as the stored value, so it is not overwritten by accident.
+
+The API checks the same rules, so a direct API call cannot get around them.
+
+## Related
+
+- [System configuration](system.md) – Wi-Fi, MQTT, time, calibration and every other key of
+  `PUT /api/v1/system`.
+- [DIY build](../advanced/diy-build.md) – parts, power and wiring for your own clock.
+- [Errors – GPIO validation](errors.md#gpio-validation-invalidpinconfig)

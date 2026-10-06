@@ -11,7 +11,10 @@ bool apply(DeviceConfig& cfg, api::JsonReader obj, int& applied, ApplyError& err
   // A restore is allowed to write empty strings to clear a field; an interactive edit is not,
   // because a blank box in the UI means "leave it alone".
   const bool allowEmptyClears = origin == Origin::Restore;
-  if (!cfgrules::validateSystemRead(obj, cerr, allowEmptyClears)) {
+  // Fields the platform does not offer are dropped unread, so a backup from a device that has
+  // them restores everything else.
+  if (!cfgrules::validateSystemRead(obj, cerr, allowEmptyClears, PlatformConfig::ignoredFields(),
+                                  static_cast<const PlatformConfig*>(&cfg))) {
     err = {422, "validationFailed", cerr.message, cerr.field};
     return false;
   }
@@ -32,18 +35,24 @@ bool apply(DeviceConfig& cfg, api::JsonReader obj, int& applied, ApplyError& err
     merged.subnet = split.subnet;
     ++applied;
   }
-  if (!cfgrules::validateMatrixGeometry(merged.panelWidth, merged.panels, cerr) ||
+  // Panel and pin fields a platform does not offer keep what is stored, which nobody can change,
+  // so only the fields a request can reach are checked.
+  if ((merged.panelConfigurable &&
+       !cfgrules::validateMatrixGeometry(merged.panelWidth, merged.panels, cerr)) ||
       !cfgrules::validateBrightnessWindow(merged.minBrightness, merged.maxBrightness, cerr) ||
-      !cfgrules::validateStaticNet(merged.netStatic, merged.ip, merged.subnet, cerr) ||
+      !cfgrules::validateStaticNet(merged.netStatic, merged.ip, merged.subnet, merged.gateway, merged.dns1,
+                                   merged.dns2, cerr) ||
       !cfgrules::validateMqttGate(merged.mqttEnabled, merged.mqttHost, cerr) ||
       !cfgrules::validateAuthGate(merged.authEnabled, merged.authUser, merged.authPass, cerr) ||
-      !cfgrules::validateAudioPins(merged.pinI2sBclk, merged.pinI2sLrclk, merged.pinI2sDout,
-                                   merged.pinI2sMclk, merged.pinAmpEnable, cerr)) {
+      !merged.validate(cerr) ||
+      (merged.gpioConfigurable &&
+       !cfgrules::validateAudioPins(merged.pinI2sBclk, merged.pinI2sLrclk, merged.pinI2sDout,
+                                    merged.pinI2sMclk, merged.pinAmpEnable, cerr))) {
     err = {422, "validationFailed", cerr.message, cerr.field};
     return false;
   }
   std::string pinErr;
-  if (!merged.validatePins(pinErr)) {
+  if (merged.gpioConfigurable && !merged.validatePins(pinErr)) {
     err = {400, "invalidPinConfig", pinErr, ""};
     return false;
   }

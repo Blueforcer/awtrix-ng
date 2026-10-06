@@ -104,13 +104,8 @@ def block():
 
 
 def inject(project_dir, path=None):
-    """Rewrites the generated region inside webui/index.html, in place.
-
-    Same contract as scripts/berry_api.py: writing it back rather than patching
-    a throwaway copy is what lets the simulator, which serves the file straight
-    from disk, see the table the device sees.
-    """
-    path = path or os.path.join(project_dir, "webui", "index.html")
+    """Refreshes the generated timezone source fragment."""
+    path = path or os.path.join(project_dir, "webui", "src", "generated", "timezones.js")
     with open(path, "r", encoding="utf-8", newline="") as f:
         html = f.read()
     start, end = html.find(BEGIN), html.find(END)
@@ -132,6 +127,10 @@ if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if a != "--inject"]
     root = args[0] if args else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if "--inject" in sys.argv:
-        print("tz data: %s" % ("regenerated webui/index.html" if inject(root) else "already current"))
+        import webui_source
+
+        inject(root)
+        webui_source.write(root)
+        print("tz data: fragment and webui/index.html current")
     else:
         print(render_js())

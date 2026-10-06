@@ -86,12 +86,12 @@ class str_build:
     def writefile(self, filename, text):
         buf = ""
         try:
-            with open(filename) as f:
+            with open(filename, encoding="utf-8", newline="") as f:
                 buf = f.read()
         except FileNotFoundError:
             pass
         if buf != text:
-            with open(filename, "w") as f:
+            with open(filename, "w", encoding="utf-8", newline="\n") as f:
                 f.write(text)
 
     def build_table_def(self):

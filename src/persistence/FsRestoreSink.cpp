@@ -47,12 +47,12 @@ bool FsRestoreSink::applySettings(const std::string& json, std::string& err) {
     return false;
   }
   SettingsError se;
-  if (!Settings::validateRead(api::JsonReader(json), se)) {
+  if (!Settings::validateRead(api::JsonReader(json), se, Settings::UnknownKeys::Skip)) {
     err = se.message;
     return false;
   }
   Settings s;
-  s.applyRead(api::JsonReader(json));
+  s.applyStored(api::JsonReader(json));
   nvs::saveSettings(s);
   if (state_) {
     state_->settings() = s;

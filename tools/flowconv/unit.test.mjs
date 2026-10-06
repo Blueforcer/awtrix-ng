@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import {
   maskTemplates, lexShell, parseTformat, parseDformat,
   transformAppPayload, transformBody, convertJsonIslandText,
-  rewriteTopicValue, rewriteUrl, detectInputType, convert,
+  rewriteTopicValue, rewriteUrl, detectInputType, convert, convertN8n,
 } from "../../docs/assets/flow-converter/engine.js";
 
 function ctx() {
@@ -101,6 +101,39 @@ test("float seconds round to whole milliseconds", () => {
   assert.equal(transformAppPayload({ duration: 1.5 }, "app", c).durationMs, 1500);
 });
 
+test("center becomes textAlign", () => {
+  assert.equal(transformAppPayload({ center: false }, "app", ctx()).textAlign, "start");
+  assert.equal(transformAppPayload({ center: true }, "app", ctx()).textAlign, "center");
+});
+
+test("numeric and boolean strings become JSON numbers and booleans", () => {
+  const out = transformAppPayload({ scrollSpeed: "70", noScroll: "false", blinkText: "500" }, "app", ctx());
+  assert.deepEqual(out.scroll, { speed: 70 });
+  assert.equal(out.textBlinkMs, 500);
+});
+
+test("a templated center keeps working as textCenter", () => {
+  const r = convertJsonIslandText('{"text":"x","duration":5,"center":{{ c }}}', null, ctx(), "w");
+  assert.ok(r.text.includes('"textCenter":{{ c }}'), r.text);
+});
+
+test("an n8n center parameter becomes textAlign", () => {
+  const doc = {
+    nodes: [{
+      type: "n8n-nodes-base.httpRequest",
+      parameters: {
+        requestMethod: "POST",
+        url: "http://192.168.1.2/api/custom",
+        queryParametersUi: { parameter: [{ name: "name", value: "a" }] },
+        bodyParametersUi: { parameter: [{ name: "text", value: "x" }, { name: "center", value: "false" }] },
+      },
+    }],
+    connections: {},
+  };
+  const out = JSON.parse(convertN8n(JSON.stringify(doc), ctx()));
+  assert.deepEqual(out.nodes[0].parameters.bodyParametersUi.parameter[1], { name: "textAlign", value: "start" });
+});
+
 test("enum out of range keeps the key and warns", () => {
   const c = ctx();
   const out = transformAppPayload({ pushIcon: 7 }, "app", c);
@@ -124,8 +157,43 @@ test("hold true with a duration draws the note", () => {
 test("notification-only keys on an app warn but still convert", () => {
   const c = ctx();
   const out = transformAppPayload({ rtttl: "x:d=4:c" }, "app", c);
-  assert.equal(out.soundRtttl, "x:d=4:c");
+  assert.deepEqual(out.sound, { rtttl: "x:d=4:c" });
   assert.ok(c.warnings.some((w) => w.code === "notificationOnlyKey"));
+});
+
+test("sound, rtttl and loopSound become one sound object in place", () => {
+  const named = transformAppPayload({ text: "x", sound: "bell", loopSound: true, hold: true },
+    "notification", ctx());
+  assert.deepEqual(Object.keys(named), ["text", "sound", "hold"]);
+  assert.deepEqual(named.sound, { file: "bell", loop: true });
+
+  const melody = transformAppPayload({ loopSound: true, rtttl: "s:d=8:c" }, "notification", ctx());
+  assert.deepEqual(melody, { sound: { rtttl: "s:d=8:c", loop: true } });
+
+  const c = ctx();
+  const both = transformAppPayload({ sound: "bell", rtttl: "s:d=8:c" }, "notification", c);
+  assert.deepEqual(both.sound, { rtttl: "s:d=8:c" });
+  assert.ok(c.changes.some((ch) => ch.kind === "strip" && ch.before === "sound"));
+
+  const alone = transformAppPayload({ text: "x", loopSound: true }, "notification", ctx());
+  assert.deepEqual(alone, { text: "x" });
+});
+
+test("an NG sound passes through unchanged", () => {
+  const c = ctx();
+  const sound = [{ speech: "Door" }, { file: "bell", loop: true }];
+  assert.deepEqual(transformAppPayload({ sound }, "notification", c).sound, sound);
+  assert.deepEqual(transformAppPayload({ sound: "bell" }, "notification", c).sound, "bell");
+  assert.deepEqual(c.changes, []);
+});
+
+test("VOL becomes the master volume, rescaled from 0-30", () => {
+  assert.deepEqual(transformBody("settings", { VOL: 15 }, ctx()), { volume: 50 });
+  assert.deepEqual(transformBody("settings", { VOL: 30 }, ctx()), { volume: 100 });
+});
+
+test("the sound endpoint's name becomes file", () => {
+  assert.deepEqual(transformBody("sound", { sound: "alarm" }, ctx()), { file: "alarm" });
 });
 
 test("unknown draw code stays an object and warns", () => {

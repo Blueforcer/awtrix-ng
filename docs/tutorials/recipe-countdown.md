@@ -1,19 +1,39 @@
 # Recipe: Countdown
 
-Days until a date you pick, in a colour that changes when the date gets close.
+This app shows the days until a date you pick. It does not use the network, so it works on any
+AWTRIX as soon as you paste it in.
 
-Nothing here touches the network, so it works on any AWTRIX the moment you paste it in.
-It is also the shortest useful app in these tutorials, which makes it a good one to
-take apart.
+---
+
+## What you get
+
+One line with the days left and your label, in your color. In the last week before the date,
+the color turns red. A line that fits stands still in the middle. A longer one moves through
+the display.
+
+This short script paints the same line the app shows with the default settings, 79 days
+before 24 December:
+
+<!-- panel -->
+```berry
+class Countdown
+  def draw()
+    clear()
+    scroll_text("79 XMAS", 0xFFAA00)
+  end
+end
+
+return Countdown()
+```
 
 ---
 
 ## The script
 
 In the web UI, open the **Scripts** tab, create a script called `Countdown`, paste this in and
-save. The settings declared at the top of the file then appear under **Apps**, the `⋯`
-menu on that app's row, then **Settings**. New to all this?
-[Tutorial 1](first-draw.md) takes it slowly.
+save. The settings declared at the top of the file then appear under **Apps**: press **⚙**
+on that app's row. New to all this?
+[Tutorial 1: Draw something](first-draw.md) takes it slowly.
 
 ```berry
 # @name    Countdown
@@ -23,14 +43,15 @@ menu on that app's row, then **Settings**. New to all this?
 # @config  target text   "Target date" default="2026-12-24" help="YYYY-MM-DD"
 # @config  label  text   "Label"       default="XMAS" maxlen=12
 # @config  soon   number "Warn under"  default=7 min=0 max=365 unit=days
-# @config  tint   color  "Colour"      default=#FFAA00
+# @config  tint   color  "Color"       default=#FFAA00
 # @config  warn   color  "Close"       default=#FF3000
 
 class Countdown
   var target        # the target date as a day number
   var label, soon   # from the settings
   var tint, warn
-  var line, colour  # what draw() paints
+  var msg, color    # what draw() paints
+  var once          # scroll options, built once
   var ticks
 
   def init()
@@ -39,11 +60,13 @@ class Countdown
     self.tint = store.get("tint")
     self.warn = store.get("warn")
     self.ticks = 0
-    self.line = nil
+    self.msg = nil
+    self.color = self.tint
+    self.once = {"repeat": 1}
     self.target = nil
 
     var p = re.matchall("\\d+", store.get("target"))
-    if p != nil && size(p) >= 3
+    if size(p) >= 3
       self.target = self.day_number(int(p[0]), int(p[1]), int(p[2]))
     end
   end
@@ -69,8 +92,8 @@ class Countdown
         if left < 0
           left = 0
         end
-        self.line = str(left) + " " + self.label
-        self.colour = left <= self.soon ? self.warn : self.tint
+        self.msg = str(left) + " " + self.label
+        self.color = left <= self.soon ? self.warn : self.tint
       end
     end
     self.ticks -= 1
@@ -78,11 +101,11 @@ class Countdown
 
   def draw()
     clear()
-    if self.line == nil
+    if self.msg == nil
       text(1, 6, "...", 0x444444)
       return
     end
-    scroll_text(self.line, self.colour)
+    scroll_text(self.msg, self.color, self.once)
   end
 end
 
@@ -96,59 +119,62 @@ picks the new date up immediately.
 
 ## How it works
 
-**The date arrives as text, so it has to be parsed.** `re.matchall("\\d+", …)` pulls
-every run of digits out of `2026-12-24` and hands back three strings, which `int()`
-turns into numbers. This is deliberately forgiving: `2026/12/24` and `24.12.2026` would
-both produce three numbers too, though only the first of those is in the right order.
-Being clear in the `help=` text is cheaper than being clever in the parser.
+**The date is text, so the app reads the numbers out of it.** `re.matchall("\\d+", …)`
+takes every group of digits from `2026-12-24` and returns three strings. `int()` turns them
+into numbers. `2026/12/24` also works. `24.12.2026` gives three numbers in the wrong order,
+so the `help=` text tells the user the format.
 
-**Date arithmetic without a date library.** Berry on AWTRIX has no `time` module, so
-`day_number()` does the work. It converts a calendar date into a plain count of days,
-using the standard civil calendar formula. Leap years, century rules and the four
-hundred year cycle are all in those five lines. Subtract two of its answers and you
-have the days between two dates, correctly, with no special cases.
+**Date calculation without a date library.** Berry on AWTRIX has no `time` module, so
+`day_number()` does the work. It turns a calendar date into a plain count of days. Leap
+years are included. Subtract two of its results and you get the days between two dates.
+Copy it into any app that needs to compare dates.
 
-It looks cryptic and it is. It is also short, exact and something you write once and
-never think about again. Copy it into any app that needs to compare dates.
+**The calculation runs once a minute, in `loop()`.** A countdown in days changes at most
+once a day, so there is no reason to calculate it forty times a second in `draw()`.
+`loop()` builds the text and picks the color. `draw()` only paints them.
 
-**The recalculation runs once a minute, in `loop()`.** A countdown in days changes at
-most once a day, so recomputing forty times a second in `draw()` would be forty
-thousand times more work than the problem deserves. `loop()` builds the finished string
-and picks the colour, and `draw()` does nothing but paint them.
+**`year() > 0` is needed.** Every wall-clock call returns `-1` until the device has fetched
+the time, shortly after boot. Without the check, the app would count down to a wrong date
+for up to a minute.
 
-**`year() > 0` is a real guard, not a formality.** Every wall-clock call returns `-1`
-until the device has fetched the time, which happens a little after boot. Without that
-check the app would compute a countdown to a date thousands of years away and store it
-in `self.line` before correcting itself a minute later.
-
-**`scroll_text()` decides whether the text fits.** Give it the line and a colour, and
-short text stands still and centred while long text travels across the panel. You never
-have to guess how many characters fit at 32 pixels, and the app keeps the panel until
-the line has finished its run, so there is no duration to calculate either.
+**`scroll_text()` decides whether the text fits.** Short text stands still and centered.
+Long text moves across the display. `{"repeat": 1}` keeps the app on the display until the text
+has finished its run, so you do not need to set a duration.
 
 ---
 
 ## Making it yours
 
-**Count hours instead of days.** Add `hour()` to the comparison and the same subtraction
-gives you hours: `(self.target - today) * 24 - hour()`.
+**Count hours instead of days.** Multiply the days by 24 and subtract the hours already
+gone today: `(self.target - self.day_number(year(), month(), day())) * 24 - hour()`.
 
-**Count up instead of down.** Swap the subtraction. "Days since" is the same app with
-the operands the other way round, and dropping the `if left < 0` clamp is what makes it
-work.
+**Count up instead of down.** For "days since", swap the two sides of the subtraction and
+remove the `if left < 0` check.
 
-**Hide the app once the date has passed.** Add a `should_show()` returning
-`self.line != nil && left > 0`, keeping `left` in a member. The rotation then skips
-straight past it instead of showing a permanent zero.
+**Hide the app once the date has passed.** Keep `left` in a member: add `var left`, set
+`self.left = 0` in `init()` and `self.left = left` in `loop()`. Then add a `should_show()`
+that returns `self.msg != nil && self.left > 0`. The rotation then skips the app instead of
+showing zero.
 
-**Add an icon.** `icon(name, 0, 0)` draws an icon from the device's icon folder, and
-the text starts at `x = 9` next to an 8 px wide one. Icon IDs differ from device to device, so
-make it a `# @config … text` field rather than picking one for the user.
+**Add an icon.** Pick an icon on the [AWTRIX Hub](../guides/icons.md#install-from-the-awtrix-hub)
+and note its name. Put that name in a `# @icons` line in the header, for example
+`# @icons calendar`. When someone installs the script from the Hub, the icon comes with it. For
+a script you pasted in yourself, the web UI offers a button that installs it. See
+[The icons your script needs](../guides/scripting/drawing.md#the-icons-your-script-needs). Draw the
+icon in `draw()` and start the text to the right of it:
+
+```berry
+    icon("calendar", 0, 0)
+    scroll_text(9, 6, width() - 9, self.msg, self.color, self.once)
+```
+
+Use your icon's name in both places, the `# @icons` line and the `icon()` call. An 8 px wide
+icon plus a gap of one pixel puts the text at `x = 9`.
 
 ---
 
 ## Related
 
-- [2. Give it a memory](state-and-time.md) for the lifecycle and `@config` in full
-- [App scripting](../guides/scripting.md) for the time calls and `scroll_text()` options
-- [Icons & assets](../guides/icons.md) for what `icon()` can draw
+- [Tutorial 2: Give it a memory](state-and-time.md) – app methods and `@config`
+- [Scripting guide](../guides/scripting/index.md) – the time calls and `scroll_text()` options
+- [Icons](../guides/icons.md) – what `icon()` can draw

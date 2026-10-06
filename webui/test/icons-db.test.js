@@ -45,7 +45,7 @@ async function testSubmit() {
   const grid = ownGrid(window);
   const tile = grid.querySelector('.tile');
   const actions = openMenu(tile);
-  assert(actions.length === 3, 'the menu offers edit, publish and delete');
+  assert(actions.length === 4, 'the menu offers edit, publish, rename and delete');
   assert(!/Copy for script/.test(tile.textContent), 'installed icons no longer offer the script-copy action');
 
   actions[1].click();
@@ -157,7 +157,7 @@ async function testUnknownError() {
   await flush(80);
 
   const toast = [...window.document.querySelectorAll('.toast')].map(t => t.textContent).join(' ');
-  assert(/could not be published/.test(toast) && !/somethingNew|idbe_|HTTP/.test(toast),
+  assert(/Publishing failed/.test(toast) && !/somethingNew|idbe_|HTTP/.test(toast),
     'an unknown code gets a helpful message without internal codes');
 }
 
@@ -204,8 +204,11 @@ async function testSegments() {
   assert(!!addPane.querySelector('.drop'), 'Add contains local file upload');
   assert(!addPane.querySelector('.lam') && !/LaMetric/.test(addPane.textContent), 'the LaMetric downloader is gone');
   const hubLink = addPane.querySelector('.hub-source a');
-  assert(hubLink?.href === 'https://awtrix.de/icons/' && hubLink.target === '_blank',
-    'Add links to the full AWTRIX Hub icon gallery');
+  const hubUrl = hubLink && new URL(hubLink.href);
+  assert(hubUrl?.origin + hubUrl?.pathname === 'https://awtrix.de/icons' && hubLink.target === '_blank',
+    'Add links to the AWTRIX Hub icon gallery');
+  assert(hubUrl?.searchParams.get('panel') === '32x8',
+    'the gallery link carries this device, so the Hub shows what fits');
   assert(!window.document.querySelector('.idb'), 'the embedded Hub gallery is gone');
 }
 
@@ -278,7 +281,7 @@ async function testKeyboardNavigationAndUpload() {
 }
 
 async function main() {
-  await testSameIdReload();
+  await testRename();
   await testDescriptivePublicationName();
   await testContentAndOrigins();
   await testConflictProtection();
@@ -296,22 +299,29 @@ async function main() {
   console.log(`icons-db: ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 }
-async function testSameIdReload(){
-  const {window,store}=await withGallery(ctx=>{ctx.store.files['/ICONS'].set('mail.gif',100);ctx.store.localIconBytes['mail.gif']='GIF89a-mail';});
-  const uploads=[];stubXhr(window,uploads,store);
-  const original=(await window.iconInventory()).find(f=>f.name==='mail.gif');
-  store.iconBytes.mail='GIF89a-mail-v2';
-  await window.reloadHubIcon(original);
-  assert(store.localIconBytes['mail.gif']==='GIF89a-mail-v2','reload replaces changed Hub bytes under the same public ID');
-  assert(store.iconOrigins.get('mail.gif').sha256===window.iconSha256(new window.TextEncoder().encode('GIF89a-mail-v2')),'reload records the latest version hash');
-  const linked=(await window.iconInventory()).find(f=>f.name==='mail.gif');
-  store.localIconBytes['mail.gif']='my edited cloud';store.iconBytes.mail='GIF89a-mail-v3';
-  let conflict=false;try{await window.reloadHubIcon(linked);}catch(e){conflict=e.code==='iconConflict';}
-  assert(conflict&&store.localIconBytes['mail.gif']==='my edited cloud','reload rechecks and protects local edits made after the list opened');
-  await window.reloadHubIcon(linked,{replace:true});
-  assert(store.localIconBytes['mail.gif']==='GIF89a-mail-v3','explicit override replaces local edits');
-  const count=uploads.length;await window.reloadHubIcon((await window.iconInventory()).find(f=>f.name==='mail.gif'));
-  assert(uploads.length===count,'unchanged remote version avoids another flash write');
+async function testRename(){
+  const {window,store}=await withGallery(ctx=>{
+    ctx.store.files['/ICONS'].set('mail.gif',100);
+    ctx.store.files['/ICONS'].set('sun.jpg',100);
+    ctx.store.localIconBytes['mail.gif']='GIF89a-mail';
+  });
+  await flush(60);
+  const tileOf=name=>[...ownGrid(window).querySelectorAll('.tile')].find(t=>t.querySelector('.nm').textContent===name);
+  const rename=name=>{const tile=tileOf(name);openMenu(tile).find(b=>b.textContent==='Rename').click();return tile.querySelector('.ft');};
+  let footer=rename('mail');
+  footer.querySelector('input').value='sun';
+  footer.querySelector('button.pri').click();
+  await flush(40);
+  assert(store.files['/ICONS'].has('mail.gif')&&footer.querySelector('input'),'a taken name keeps the icon and the name field');
+  footer.querySelector('input').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape'}));
+  assert(!footer.querySelector('input'),'Escape leaves the name as it was');
+  footer=rename('mail');
+  footer.querySelector('input').value='letter';
+  footer.querySelector('button.pri').click();
+  await flush(80);
+  assert(!store.files['/ICONS'].has('mail.gif')&&store.files['/ICONS'].has('letter.gif'),'rename keeps the extension');
+  assert(!store.iconOrigins.has('mail.gif')&&store.iconOrigins.get('letter.gif')?.slug==='mail','the Hub link follows the icon');
+  assert(!!tileOf('letter'),'the list shows the new name');
 }
 async function testContentAndOrigins(){
   const {createHash}=require('node:crypto');
@@ -330,7 +340,7 @@ async function testContentAndOrigins(){
   store.localIconBytes['mail.gif']='different pixels, unchanged filename and listed size';
   await goto(window,'#/apps');await goto(window,'#/icons');await flush(80);
   const changed=[...ownGrid(window).querySelectorAll('.tile')].find(t=>t.querySelector('.nm').textContent==='mail');
-  assert(changed.querySelector('[data-state=modified]')?.textContent==='Changed on AWTRIX','same-size edits are detected after page navigation');
+  assert(changed.querySelector('[data-state=modified]')?.textContent==='Changed on the clock','same-size edits are detected after page navigation');
   assert(openMenu(changed)[1].textContent==='Share as a new icon','changed Hub copy offers publishing a variant');
   assert(!window.validIconOrigin({name:'../mail.gif',slug:'mail',hub:'https://awtrix.de/icons/',sha256:hash('x')}),'origin cannot escape icon folder');
   assert(!window.validIconOrigin({name:'mail.gif',slug:'mail',hub:'javascript:alert(1)',sha256:hash('x')}),'origin cannot create an executable link');
@@ -345,14 +355,14 @@ async function testConflictProtection(){
     ctx.store.localIconBytes['mail.gif']='private drawing';
   });
   const uploads=[];stubXhr(window,uploads,store);
-  let conflict=false;try{await window.idbInstall('mail');}catch(e){conflict=e.code==='iconConflict';}
-  assert(conflict&&uploads.length===0&&store.localIconBytes['mail.gif']==='private drawing','Hub install never overwrites different same-name contents implicitly');
-  await window.idbInstall('mail',{replace:true});
-  assert(uploads.length===1&&store.localIconBytes['mail.gif']==='GIF89a-mail','explicit replacement installs requested Hub original');
-  assert(!!store.iconOrigins.get('mail.gif'),'replacement records origin');
+  let conflict=false;try{await window.idbInstall('mail');}catch(e){conflict=true;}
+  assert(conflict&&uploads.length===0&&store.localIconBytes['mail.gif']==='private drawing','Hub install never overwrites different same-name contents');
+  store.localIconBytes['mail.gif']='GIF89a-mail';
+  await window.idbInstall('mail');
+  assert(uploads.length===0&&!!store.iconOrigins.get('mail.gif'),'an identical copy is linked without another flash write');
   store.localIconBytes['mail.gif']='edited after script page opened';
   const count=await window.installScriptIcons(['mail'],new Set(['mail']));
-  assert(count===0&&uploads.length===1,'script installer rechecks bytes despite stale installed-name set');
+  assert(count===0&&uploads.length===0,'script installer rechecks bytes despite stale installed-name set');
   assert(store.localIconBytes['mail.gif']==='edited after script page opened','script installation preserves local changes');
 }
 async function testResolvedPublication(){
@@ -421,15 +431,15 @@ async function testDescriptivePublicationName(){
   openMenu(tile)[1].click();
   const field=tile.querySelector('.ft input'),button=tile.querySelector('.ft button');
   assert(field.value==='','a LaMetric number is not prefilled as a publication name');
-  assert(tile.querySelector('.ft').textContent.includes('Numbers alone'),'numeric icon explains that a descriptive name is needed');
+  assert(tile.querySelector('.ft').textContent.includes('not just numbers'),'numeric icon explains that a descriptive name is needed');
   for(const value of ['', '34334', ' 123 456 ', '123-456', '１２３']){
     field.value=value;button.click();await flush(20);
     assert(store.submitted.length===0,'publication rejects an empty or numeric-only name: '+JSON.stringify(value));
   }
   assert(field.getAttribute('aria-invalid')==='true'&&window.document.activeElement===field,'invalid publication name is marked and focused');
-  field.value='Grüne Wolke 2';field.dispatchEvent(new window.Event('input',{bubbles:true}));
+  field.value='Café cloud 2';field.dispatchEvent(new window.Event('input',{bubbles:true}));
   button.click();await flush(100);
-  assert(store.submitted.length===1&&store.submitted[0].get('name')==='Grüne Wolke 2','actively entered descriptive Unicode name is published');
+  assert(store.submitted.length===1&&store.submitted[0].get('name')==='Café cloud 2','actively entered descriptive Unicode name is published');
   assert(store.files['/ICONS'].has('34334.gif'),'publishing under a meaningful name preserves the local filename and script references');
 }
 main();

@@ -29,11 +29,12 @@ class IEffect {
 
   virtual void setSettings(const EffectSettings& s) { settings_ = s; }
   const EffectSettings& settings() const { return settings_; }
+  float speed() const { return settings_.hasSpeed ? settings_.speed : 1.0f; }
 
   // The frame counter handed to render(): wall-clock ms scaled by the effect's own rate and the
   // user's speed setting, in units of kBaseStepMs.
   int64_t animationStep(int64_t nowMs) const {
-    const float f = rate() * (settings_.hasSpeed ? settings_.speed : 1.0f);
+    const float f = rate() * speed();
     return static_cast<int64_t>(nowMs * static_cast<double>(f) / kBaseStepMs);
   }
 

@@ -2,6 +2,7 @@
 
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "core/AssetPaths.h"
 #include "core/icons/IconOrigins.h"
@@ -17,6 +18,14 @@ bool startsWith(const std::string& s, const char* prefix) { return s.rfind(prefi
 
 RestoreApplier::RestoreApplier(RestoreSink& sink) : sink_(sink) {}
 
+RestoreApplier::~RestoreApplier() {
+  if (fileOpen_) sink_.abortFile();
+}
+
+void RestoreApplier::abort(const std::string& reason) {
+  if (!completed_) fail(reason.empty() ? "backup upload aborted" : reason);
+}
+
 RestoreApplier::Kind RestoreApplier::classify(const std::string& name) {
   if (name == "manifest.json") return Kind::Manifest;
   if (name == "config/wifi.json") return Kind::Wifi;
@@ -29,7 +38,10 @@ RestoreApplier::Kind RestoreApplier::classify(const std::string& name) {
   if (startsWith(name, "MELODIES/")) return Kind::Melody;
   if (startsWith(name, "PALETTES/")) return Kind::Palette;
   if (startsWith(name, "MP3/")) return Kind::Mp3;
-  if (startsWith(name, "SCRIPTS/")) return Kind::Script;
+  // A script's sound is checked and counted like any other MP3; the path check that follows keeps
+  // everything else under SCRIPTS/ flat.
+  if (startsWith(name, "SCRIPTS/"))
+    return sound::isScriptMp3Path("/" + name) ? Kind::Mp3 : Kind::Script;
   return Kind::Unknown;
 }
 
@@ -43,21 +55,36 @@ void RestoreApplier::fail(const std::string& message) {
   }
 }
 
-void RestoreApplier::onEntryStart(const std::string& name, uint32_t) {
-  if (fatal_) return;
+void RestoreApplier::skip(std::string message) {
+  ++result_.skipped;
+  if (result_.warnings.size() < kMaxRestoreWarnings)
+    result_.warnings.push_back(std::move(message));
+  else if (result_.warnings.size() == kMaxRestoreWarnings)
+    result_.warnings.push_back("more warnings omitted");
+}
+
+void RestoreApplier::onEntryStart(const std::string& name, uint32_t size) {
+  if (fatal_ || completed_) return;
+  if (fileOpen_) {
+    fail("entry before previous file ended");
+    return;
+  }
   name_ = name;
   kind_ = classify(name);
   buffering_ = false;
   buf_.clear();
   fileOpen_ = false;
   fileRejected_ = false;
-  contentChecked_ = false;
-  originsTooLarge_ = false;
+  validateContent_ = false;
+  metadataTooLarge_ = false;
+  metadataLimit_ = kind_ == Kind::Manifest ? kMaxRestoreManifestBytes
+                   : kind_ == Kind::IconOrigins ? iconorigins::kMaxBytes
+                                              : kMaxRestoreMetadataBytes;
 
   // One forward pass over the archive, so the manifest cannot be looked up later: it has to be
   // the first entry, and the exporter always writes it first.
   if (!manifestOk_ && kind_ != Kind::Manifest) {
-    fail("not an awtrix backup (manifest.json must be the first entry)");
+    fail("not an awtrix backup");
     return;
   }
 
@@ -70,6 +97,10 @@ void RestoreApplier::onEntryStart(const std::string& name, uint32_t) {
     case Kind::RadioStations:
     case Kind::IconOrigins:
       buffering_ = true;
+      if (size > metadataLimit_) {
+        metadataTooLarge_ = true;
+        if (kind_ == Kind::Manifest) fail("manifest over 4 KiB");
+      }
       return;
     case Kind::Icon:
     case Kind::Melody:
@@ -79,23 +110,23 @@ void RestoreApplier::onEntryStart(const std::string& name, uint32_t) {
       const std::string path = "/" + name_;
       // Keeps a hand-made archive from writing outside the asset directories.
       if (!assets::isBackupWritable(path)) {
-        ++result_.skipped;
-        result_.warnings.push_back("skipped unsafe path '" + name_ + "'");
+        skip("skipped unsafe path '" + name_ + "'");
         fileRejected_ = true;
         return;
       }
+      validateContent_ = kind_ != Kind::Script;
+      if (validateContent_) contentValidator_.reset(path);
       std::string err;
       if (sink_.beginFile(path, err)) {
         fileOpen_ = true;
       } else {
         fileRejected_ = true;
-        result_.warnings.push_back("could not write " + path + (err.empty() ? "" : ": " + err));
+        skip("write failed " + path + (err.empty() ? "" : ": " + err));
       }
       return;
     }
     case Kind::Unknown:
-      ++result_.skipped;
-      result_.warnings.push_back("skipped unknown entry '" + name_ + "'");
+      skip("skipped unknown entry '" + name_ + "'");
       return;
   }
 }
@@ -103,10 +134,10 @@ void RestoreApplier::onEntryStart(const std::string& name, uint32_t) {
 void RestoreApplier::onEntryData(const uint8_t* data, std::size_t n) {
   if (fatal_) return;
   if (buffering_) {
-    if (kind_ == Kind::IconOrigins &&
-        (originsTooLarge_ || n > iconorigins::kMaxBytes - buf_.size())) {
-      originsTooLarge_ = true;
+    if (metadataTooLarge_ || n > metadataLimit_ - buf_.size()) {
+      metadataTooLarge_ = true;
       buf_.clear();
+      if (kind_ == Kind::Manifest) fail("manifest over 4 KiB");
       return;
     }
     buf_.append(reinterpret_cast<const char*>(data), n);
@@ -114,29 +145,18 @@ void RestoreApplier::onEntryData(const uint8_t* data, std::size_t n) {
   }
   if (!fileOpen_) return;
 
-  // Sniff the first chunk against the format the directory expects, so a mislabelled file is
-  // dropped early. Only the first chunk is checked; asset files stream past too fast to buffer.
-  const bool sniffable = kind_ == Kind::Icon || kind_ == Kind::Melody ||
-                         kind_ == Kind::Palette || kind_ == Kind::Mp3;
-  if (sniffable && !contentChecked_ && n > 0) {
-    contentChecked_ = true;
-    // From the kind the entry was already classified as, rather than parsing its name a second
-    // time: two answers to the same question drift apart the moment a folder is renamed.
-    const assets::AssetKind ak = kind_ == Kind::Icon      ? assets::AssetKind::Icon
-                                 : kind_ == Kind::Melody  ? assets::AssetKind::Melody
-                                 : kind_ == Kind::Palette ? assets::AssetKind::Palette
-                                                          : assets::AssetKind::Mp3;
-    if (!assets::contentLooksValid(ak, data, static_cast<unsigned>(n))) {
-      result_.warnings.push_back("skipped /" + name_ + ": content does not match " +
-                                 assets::acceptedFormats(ak));
-      sink_.abortFile();
-      fileOpen_ = false;
-      fileRejected_ = true;
-      return;
-    }
+  // Prefixes may span HTTP chunks. The shared validator retains only four prefix bytes or
+  // bounded RTTTL text, and checks palettes through their final byte.
+  if (validateContent_ && !contentValidator_.append(data, n)) {
+    skip("skipped /" + name_ + ": expected " +
+        assets::acceptedFormats(assets::kindFor("/" + name_)));
+    sink_.abortFile();
+    fileOpen_ = false;
+    fileRejected_ = true;
+    return;
   }
   if (!sink_.writeFile(data, n)) {
-    result_.warnings.push_back("write failed for /" + name_);
+    skip("write failed /" + name_);
     sink_.abortFile();
     fileOpen_ = false;
     fileRejected_ = true;
@@ -151,21 +171,22 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
     // warning, so one bad icon does not cost the user their config.
     if (!crcOk) {
       if (kind_ == Kind::Manifest) {
-        fail("backup manifest is corrupt (CRC mismatch)");
+        fail("manifest CRC mismatch");
         return;
       }
-      result_.warnings.push_back("skipped " + name_ + ": CRC mismatch");
+      skip("skipped " + name_ + ": CRC mismatch");
       return;
     }
-    if (originsTooLarge_) {
-      result_.warnings.push_back("skipped icon origins: exceeds 16 KiB");
+    if (metadataTooLarge_) {
+      skip(kind_ == Kind::IconOrigins ? "skipped icon origins: over 16 KiB"
+                                     : "skipped " + name_ + ": over 64 KiB");
       return;
     }
     std::string err;
     switch (kind_) {
       case Kind::Manifest: {
         if (!api::isWellFormed(buf_)) {
-          fail("backup manifest is not valid JSON");
+          fail("manifest invalid JSON");
           return;
         }
         std::string app;
@@ -173,7 +194,7 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
         const int fmt = api::coerceInt<int>(api::memberValue(api::JsonReader(buf_),
                                                              "backupFormat"));
         if (app != "awtrix-ng") {
-          fail("not an awtrix-ng backup (manifest app=\"" + app + "\")");
+          fail("not an awtrix-ng backup");
           return;
         }
         if (fmt < 1 || fmt > kBackupFormat) {
@@ -186,7 +207,7 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
       case Kind::IconOrigins: {
         std::vector<iconorigins::Record> records;
         if (!iconorigins::parseCollection(buf_, records)) {
-          result_.warnings.push_back("skipped icon origins: invalid JSON or origin record");
+          skip("skipped icon origins: invalid");
           return;
         }
         pendingIconOrigins_ = std::move(buf_);
@@ -194,7 +215,7 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
       }
       case Kind::Wifi: {
         if (!api::isWellFormed(buf_)) {
-          result_.warnings.push_back("skipped wifi: invalid JSON");
+          skip("skipped wifi: invalid JSON");
           return;
         }
         std::string ssid, pass;
@@ -209,7 +230,7 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
         if (sink_.applyWifi(ssid, pass, err)) {
           ++result_.wifi;
         } else {
-          result_.warnings.push_back("wifi not applied: " + err);
+          skip("wifi not applied: " + err);
         }
         return;
       }
@@ -217,28 +238,28 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
         if (sink_.applySystem(buf_, err)) {
           ++result_.system;
         } else {
-          result_.warnings.push_back("system config not applied: " + err);
+          skip("system config not applied: " + err);
         }
         return;
       case Kind::Settings:
         if (sink_.applySettings(buf_, err)) {
           ++result_.settings;
         } else {
-          result_.warnings.push_back("settings not applied: " + err);
+          skip("settings not applied: " + err);
         }
         return;
       case Kind::AppLoop:
         if (sink_.applyAppLoop(buf_, err)) {
           ++result_.appLoop;
         } else {
-          result_.warnings.push_back("app order not applied: " + err);
+          skip("app order not applied: " + err);
         }
         return;
       case Kind::RadioStations:
         if (sink_.applyRadioStations(buf_, err)) {
           ++result_.radioStations;
         } else {
-          result_.warnings.push_back("radio stations not applied: " + err);
+          skip("radio stations not applied: " + err);
         }
         return;
       default:
@@ -248,7 +269,14 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
 
   if (fileRejected_ || !fileOpen_) return;
   if (!crcOk) {
-    result_.warnings.push_back("skipped /" + name_ + ": CRC mismatch");
+    skip("skipped /" + name_ + ": CRC mismatch");
+    sink_.abortFile();
+    fileOpen_ = false;
+    return;
+  }
+  if (validateContent_ && !contentValidator_.finish()) {
+    skip("skipped /" + name_ + ": expected " +
+        assets::acceptedFormats(assets::kindFor("/" + name_)));
     sink_.abortFile();
     fileOpen_ = false;
     return;
@@ -263,28 +291,32 @@ void RestoreApplier::onEntryEnd(bool crcOk) {
       default: break;
     }
   } else {
-    result_.warnings.push_back("could not finalize /" + name_);
+    skip("finalize failed /" + name_);
+    sink_.abortFile();
   }
   fileOpen_ = false;
 }
 
 void RestoreApplier::onArchiveEnd() {
+  if (completed_) return;
+  if (fileOpen_) fail("truncated archive");
   if (fatal_) {
     result_.ok = false;
     return;
   }
   if (!manifestOk_) {
     result_.ok = false;
-    if (result_.error.empty()) result_.error = "backup has no manifest.json";
+    if (result_.error.empty()) result_.error = "no manifest.json";
     return;
   }
   if (!pendingIconOrigins_.empty()) {
     std::string err;
     if (sink_.applyIconOrigins(pendingIconOrigins_, err)) ++result_.iconOrigins;
-    else result_.warnings.push_back("icon origins not applied: " + err);
+    else skip("icon origins not applied: " + err);
   }
   sink_.commit();
   result_.ok = true;
+  completed_ = true;
 }
 
 std::string RestoreResult::toJson() const {

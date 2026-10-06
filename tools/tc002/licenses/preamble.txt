@@ -1,0 +1,15 @@
+AWTRIX NG for the Ulanzi TC002: licences
+
+AWTRIX NG is licensed under the PolyForm Noncommercial License 1.0.0. The other software in this
+release keeps its own licence. Each section below names a component, its licence and the files
+of the release it is in, followed by the licence text.
+
+BusyBox, wpa_supplicant and libnl are built unchanged from the upstream releases named in their
+sections. The aic8800 Wi-Fi driver is built from the AICSemi GPL source with the patches in the
+AWTRIX NG source, and awtrix_pcm is part of the AWTRIX NG source. The AWTRIX NG source holds the
+exact versions, SHA-256 checksums and build recipes under tools/tc002/.
+
+The GCC runtime libraries (libstdc++, libgcc) in the programs are covered by the GCC Runtime
+Library Exception, which places no conditions on them.
+
+Contents:

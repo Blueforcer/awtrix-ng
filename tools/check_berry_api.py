@@ -9,7 +9,7 @@ Two failures this catches, both of which are silent otherwise:
    and completion, which reads as a styling choice rather than a broken build.
 
 2. The table checked into webui/index.html is stale. The build regenerates it in
-   place, so a commit that adds a binding without building leaves the simulator
+   place, so a commit that adds a binding without building leaves awtrix-linux
    -- which serves that file straight from disk -- offering an API that no longer
    matches the firmware.
 
@@ -23,6 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
 import berry_api
+import webui_source
 
 BEGIN = berry_api.BEGIN
 END = berry_api.END
@@ -39,6 +40,13 @@ def main():
     table = berry_api.extract(ROOT)
     api, mods, core = table["api"], table["mods"], table["core"]
     names = {entry.split("(", 1)[0] for entry in api}
+    check("layout" in table["linux_mods"] and "layout.prepare(spec)" in table["linux_api"],
+          "Linux layout module missing from editor API")
+    check("layout" not in mods and "layout.prepare" not in names,
+          "layout leaked into the shared editor API")
+    for entry in ("sound.effect(x)", "sound.beat()", "music.pitch()"):
+        check(entry in table["linux_api"] and entry not in api,
+              "%s must be offered only by the TC002 editor" % entry)
 
     check(api, "no device API entries extracted from ScriptBindings.cpp/Prelude.h")
     check(mods, "no modules extracted from Prelude.h")
@@ -62,6 +70,8 @@ def main():
     src = os.path.join(ROOT, "webui", "index.html")
     with open(src, "r", encoding="utf-8", newline="") as f:
         html = f.read()
+    check(html.encode("utf-8") == webui_source.assemble(ROOT),
+          "webui/index.html is stale -- run python scripts/webui_source.py")
     start, end = html.find(BEGIN), html.find(END)
     if start < 0 or end < 0 or end < start:
         failures.append("the %s / %s markers are missing from webui/index.html" % (BEGIN, END))
@@ -69,7 +79,7 @@ def main():
         current = html[start:end + len(END)]
         check(current == berry_api.block(ROOT),
               "the Berry API table in webui/index.html is stale -- run `pio run -e awtrix` "
-              "(or `python scripts/berry_api.py`) and commit the result")
+              "(or `python scripts/webui_source.py`) and commit the result")
 
     if failures:
         for f in failures:

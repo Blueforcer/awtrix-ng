@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  <meta name="awtrix-variant" content="{{ config.extra.variant }}">
+  {% set clocks = page.meta.clocks if page and page.meta else none %}
+  {% if clocks %}
+    <meta name="robots" content="noindex">
+    <script>
+      (function () {
+        var have = {{ clocks.have | tojson }}, path = {{ clocks.path | tojson }};
+        var stored = null, pick = null;
+        try { stored = localStorage.getItem("awtrix-docs-variant"); } catch (e) {}
+        if (have.length === 1) pick = have[0];
+        else if (have.indexOf(stored) >= 0) pick = stored;
+        if (pick) {
+          location.replace({{ (base_url ~ "/") | tojson }} + pick + "/" + path + location.search + location.hash);
+        } else if (location.hash) {
+          document.addEventListener("DOMContentLoaded", function () {
+            var links = document.querySelectorAll(".clock-card");
+            for (var i = 0; i < links.length; i++) links[i].href += location.hash;
+          });
+        }
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

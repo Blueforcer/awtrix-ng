@@ -91,12 +91,12 @@ bool read(api::JsonReader r, ScrollSpec& out, Error& err) {
   if (r.isNull()) return true;
   if (r.isString()) return readEnum(kModeNames, r, out.mode, out.hasMode, "scroll", err);
   if (!r.isObject()) {
-    err = {"scroll", "must be an object or a mode string"};
+    err = {"scroll", "must be a mode or an object"};
     return false;
   }
 
   if (!r.enterObject()) {
-    err = {"scroll", "must be an object or a mode string"};
+    err = {"scroll", "must be a mode or an object"};
     return false;
   }
   while (r.nextMember()) {

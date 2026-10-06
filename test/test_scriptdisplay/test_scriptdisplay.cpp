@@ -1,4 +1,5 @@
 #include <unity.h>
+#include "../ScriptApplication.h"
 
 #include <string>
 
@@ -12,6 +13,7 @@
 using namespace awtrix;
 
 static script::ScriptServices g_svc;
+static awtrix::test::ScriptApplication application;
 static RuntimeState g_runtime;
 static int g_powerCalls;
 static bool g_lastPower;
@@ -19,12 +21,14 @@ static bool g_powerAccepted;
 
 void setUp() {
   g_svc = script::ScriptServices{};
+  application = {};
+  g_svc.application = &application;
   g_runtime = RuntimeState{};
   g_powerCalls = 0;
   g_lastPower = true;
   g_powerAccepted = true;
-  g_svc.runtime = [] { return &g_runtime; };
-  g_svc.setDisplayPower = [](bool on) {
+  application.runtimeFn = [] { return &g_runtime; };
+  application.setDisplayPowerFn = [](bool on) {
     ++g_powerCalls;
     g_lastPower = on;
     return g_powerAccepted;

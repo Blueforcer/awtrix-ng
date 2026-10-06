@@ -1,0 +1,4 @@
+# Locally calculated from the immutable upstream release commit archive.
+# https://github.com/Densaugeo/base64_arduino/commit/ac168f5fa2865de855384f6a2d61444ce7d92c27
+sha256  acb182019e908a0d21c4a110d87a732da184daa793489a60871ed957c129b616  base64_arduino-ac168f5fa2865de855384f6a2d61444ce7d92c27.tar.gz
+sha256  dce584239dbb753c429f0caf7f536096c73cb06e0a6222fc9c4d15c51d236b48  LICENSE

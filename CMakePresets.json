@@ -1,0 +1,79 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "host",
+      "displayName": "Host",
+      "description": "awtrix-linux and every regression test, for this Linux machine or WSL",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "tc002",
+      "displayName": "TC002 programs",
+      "description": "The TC002 programs, static musl armv7 (TC002_MUSL_PREFIX), and their ARM contracts under qemu-arm; awtrix-linux takes the OpenSSL of tools/tc002/openssl as OPENSSL_INCLUDE_DIR, OPENSSL_CRYPTO_LIBRARY and OPENSSL_SSL_LIBRARY",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/tc002-musl.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
+        "CMAKE_C_FLAGS_MINSIZEREL": "-Os -DNDEBUG -fno-pie -ffunction-sections -fdata-sections -ffile-prefix-map=${sourceDir}=awtrix-ng",
+        "CMAKE_CXX_FLAGS_MINSIZEREL": "-Os -DNDEBUG -fno-pie -ffunction-sections -fdata-sections -ffile-prefix-map=${sourceDir}=awtrix-ng",
+        "CMAKE_EXE_LINKER_FLAGS": "-static -Wl,--gc-sections -Wl,--defsym=_ZN9__gnu_cxx27__verbose_terminate_handlerEv=abort",
+        "OPENSSL_USE_STATIC_LIBS": "ON",
+        "AWTRIX_TC002_BUNDLE": "ON"
+      }
+    },
+    {
+      "name": "tc002-loader",
+      "displayName": "TC002 loader",
+      "description": "libawtrix-loader.so, the plugin the stock zkgui loads, glibc armhf (TC002_GLIBC_PREFIX)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/tc002-glibc.cmake",
+      "cacheVariables": {
+        "AWTRIX_TC002_LOADER": "ON",
+        "CMAKE_BUILD_TYPE": "MinSizeRel",
+        "CMAKE_C_FLAGS_MINSIZEREL": "-Os -ffunction-sections -fdata-sections -ffile-prefix-map=${sourceDir}=awtrix-ng"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "host",
+      "configurePreset": "host"
+    },
+    {
+      "name": "tc002",
+      "configurePreset": "tc002"
+    },
+    {
+      "name": "tc002-loader",
+      "configurePreset": "tc002-loader"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "host",
+      "configurePreset": "host",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tc002",
+      "configurePreset": "tc002",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

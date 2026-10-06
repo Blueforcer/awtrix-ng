@@ -5,12 +5,27 @@
 
 #include "core/StrCase.h"
 #include "core/render/PanelColorOrder.h"
+#include "core/render/DisplayProfile.h"
 
 namespace awtrix {
 
 inline constexpr int kMatrixHeight = 8;
 inline constexpr int kMatrixWidthMin = 32;
 inline constexpr int kMatrixWidthMax = 128;
+
+// What an ESP32 build drives: one row of panels, 8 pixels high and 32 to 128 wide.
+inline constexpr DisplayLimits kEspDisplayLimits{
+    kMatrixWidthMin, kMatrixWidthMax, kMatrixHeight, kMatrixHeight,
+    static_cast<std::size_t>(kMatrixWidthMax) * kMatrixHeight};
+
+// The width a row of `panels` panels, each `panelWidth` wide, gives, or 0 outside the envelope.
+// Overflow-safe for any stored value.
+inline constexpr int espMatrixWidth(int panelWidth, int panels) {
+  return panelWidth > 0 && panels > 0 && panelWidth <= kEspDisplayLimits.maxWidth / panels &&
+                 kEspDisplayLimits.accepts(panelWidth * panels, kMatrixHeight)
+             ? panelWidth * panels
+             : 0;
+}
 
 enum class PanelStart : uint8_t { TopLeft = 0, TopRight, BottomLeft, BottomRight };
 enum class Wiring : uint8_t { Rows = 0, Columns };

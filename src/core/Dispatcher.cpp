@@ -3,6 +3,7 @@
 #include <cctype>
 #include <climits>
 #include <string_view>
+#include <utility>
 
 #include "core/JsonColor.h"
 #include "core/StateStore.h"
@@ -11,6 +12,8 @@
 #include "core/effects/EffectRegistry.h"
 #include "core/payload/PayloadParser.h"
 #include "core/render/Color.h"
+#include "core/sound/SoundMp3.h"
+#include "core/sound/SoundSpec.h"
 
 namespace awtrix {
 
@@ -29,7 +32,20 @@ DispatchResult applySettings(const std::string& payload, CommandContext& ctx) {
     ctx.detail = {err.field, err.message};
     return DispatchResult::ValidationError;
   }
-  ctx.state.settings().applyRead(api::JsonReader(payload));
+  Settings& settings = ctx.state.settings();
+  settings.applyRead(api::JsonReader(payload));
+  // weekdayBar sets the Date app's bar too; dateWeekdayBar wins wherever it stands.
+  for (const char* key : {"weekdayBar", "dateWeekdayBar"}) {
+    api::JsonReader reader(payload);
+    if (!reader.enterObject()) continue;
+    while (reader.nextMember()) {
+      if (reader.keyEquals(key)) {
+        weekdaybar::Error ignored;
+        weekdaybar::read(reader, settings.dateWeekdayBar, ignored);
+      }
+      if (!reader.skipValue()) break;
+    }
+  }
   ctx.state.emit(StateEvent::SettingsChanged);
   return DispatchResult::Ok;
 }
@@ -87,10 +103,12 @@ DispatchResult applyDisplay(const std::string& payload, CommandContext& ctx) {
 }
 
 // idx is the 1..3 the API speaks; the indicators are stored 0-based. An empty body or {} clears.
+// Each command states the whole animation: blinkMs and fadeMs left out mean 0, as on AWTRIX 3.
+// Without color the on/off state and the color stay; null and black switch off and keep the color.
 DispatchResult applyIndicator(int idx, const std::string& payload, bool clear, CommandContext& ctx) {
   if (idx < 1 || idx > 3) return DispatchResult::Failed;
   Indicator& ind = ctx.state.runtime().indicators[idx - 1];
-  if (clear || payload.empty() || payload == "{}") {
+  if (clear || api::isEmptyObject(payload)) {
     ind = Indicator{};
     ctx.state.emit(StateEvent::IndicatorChanged);
     return DispatchResult::Ok;
@@ -102,14 +120,11 @@ DispatchResult applyIndicator(int idx, const std::string& payload, bool clear, C
 
   if (api::present(atColor)) {
     uint32_t col = 0;
-    // null and black both mean "off", and both leave the stored colour alone so blinkMs and fadeMs
-    // survive until the indicator is switched back on.
     if (atColor.isNull()) {
       ind.on = false;
     } else if (!color::readColor(atColor, col)) {
       ctx.detail = {"color",
-                    "must be a color (\"#RGB\", \"#RRGGBB\", [r,g,b], [\"HSV\",h,s,v] or a "
-                    "packed integer)"};
+                    "must be a color"};
       return DispatchResult::ValidationError;
     } else if (col == 0) {
       ind.on = false;
@@ -118,15 +133,15 @@ DispatchResult applyIndicator(int idx, const std::string& payload, bool clear, C
       ind.on = true;
     }
   }
-  if (api::present(atBlink)) ind.blinkMs = api::coerceInt<uint16_t>(atBlink);
-  if (api::present(atFade)) ind.fadeMs = api::coerceInt<uint16_t>(atFade);
+  ind.blinkMs = api::present(atBlink) ? api::coerceInt<uint16_t>(atBlink) : 0;
+  ind.fadeMs = api::present(atFade) ? api::coerceInt<uint16_t>(atFade) : 0;
   ctx.state.emit(StateEvent::IndicatorChanged);
   return DispatchResult::Ok;
 }
 
 DispatchResult applyMoodlight(const std::string& payload, bool clear, CommandContext& ctx) {
   RuntimeState& rt = ctx.state.runtime();
-  if (clear || payload.empty() || payload == "{}") {
+  if (clear || api::isEmptyObject(payload)) {
     rt.moodlightMode = false;
     ctx.state.emit(StateEvent::MoodlightChanged);
     return DispatchResult::Ok;
@@ -144,8 +159,7 @@ DispatchResult applyMoodlight(const std::string& payload, bool clear, CommandCon
     uint32_t col = 0;
     if (!color::readColor(atColor, col)) {
       ctx.detail = {"color",
-                    "must be a color (\"#RGB\", \"#RRGGBB\", [r,g,b], [\"HSV\",h,s,v] or a "
-                    "packed integer)"};
+                    "must be a color"};
       return DispatchResult::ValidationError;
     }
     rt.moodlightColor = col;
@@ -165,7 +179,7 @@ DispatchResult applySleep(const std::string& payload, CommandContext& ctx) {
   long long ms = 0;
   if (!atDuration.isNumber() || !atDuration.isInteger() || !atDuration.asLong(ms) || ms <= 0 ||
       ms > LONG_MAX) {
-    ctx.detail = {"durationMs", "must be a positive integer (milliseconds)"};
+    ctx.detail = {"durationMs", "must be an integer > 0"};
     return DispatchResult::ValidationError;
   }
   ctx.state.runtime().matrixOff = true;
@@ -174,64 +188,41 @@ DispatchResult applySleep(const std::string& payload, CommandContext& ctx) {
   return DispatchResult::Ok;
 }
 
-DispatchResult applyRadioPlay(const Command& cmd, CommandContext& ctx) {
+// A station is a name from the list, a position in it, or a stream address.
+DispatchResult applyRadioPlay(const sound::Spec& spec, CommandContext& ctx) {
   if (!ctx.audio.caps().radio || !ctx.stations) {
-    ctx.detail = {"", "this build has no audio output"};
+    ctx.detail = {"", "no audio output"};
     return DispatchResult::Unavailable;
   }
-
-  api::JsonReader atStation, atIndex, atUrl;
-  if (!api::readMembers(cmd.payload,
-                        {{"station", &atStation}, {"index", &atIndex}, {"url", &atUrl}}))
-    return DispatchResult::ParseError;
-
-  // A station name wins, then an index into the station list, then a bare url; only one is used.
   std::string url;
   std::string label;
-  std::string station, direct;
-  const bool hasStation = atStation.isString() && atStation.appendString(station);
-  const bool hasUrl = atUrl.isString() && atUrl.appendString(direct);
-  if (hasStation) {
-    url = ctx.stations->stationUrl(station);
+  if (spec.text.empty()) {
+    label = ctx.stations->stationNameAt(spec.number);
+    if (label.empty()) {
+      ctx.detail = {"station", "no station at that position"};
+      return DispatchResult::NotFound;
+    }
+    url = ctx.stations->stationUrl(label);
+  } else if (sound::isUrl(spec.text)) {
+    url = spec.text;
+    label = spec.text;
+  } else {
+    url = ctx.stations->stationUrl(spec.text);
     if (url.empty()) {
       ctx.detail = {"station", "unknown station"};
       return DispatchResult::NotFound;
     }
-    label = station;
-  } else if (api::present(atIndex)) {
-    long long v = 0;
-    if (!atIndex.isNumber() || !atIndex.isInteger() || !atIndex.asLong(v) || v < INT_MIN ||
-        v > INT_MAX) {
-      ctx.detail = {"index", "must be an integer"};
-      return DispatchResult::ValidationError;
-    }
-    const int index = static_cast<int>(v);
-    label = ctx.stations->stationNameAt(index);
-    if (label.empty()) {
-      ctx.detail = {"index", "no station at that position"};
-      return DispatchResult::NotFound;
-    }
-    url = ctx.stations->stationUrl(label);
-  } else if (hasUrl) {
-    url = direct;
-    if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) {
-      ctx.detail = {"url", "must start with http:// or https://"};
-      return DispatchResult::ValidationError;
-    }
-    label = url;
-  } else {
-    ctx.detail = {"station", "give a station name, an index or a url"};
-    return DispatchResult::ValidationError;
+    label = spec.text;
   }
-
   const DispatchResult result = ctx.audio.playStream(url, label, ctx.detail);
+  if (!ctx.detail.field.empty()) ctx.detail.field = "station";
   if (result == DispatchResult::Ok) {
     RuntimeState& runtime = ctx.state.runtime();
     runtime.radioPlaying = true;
     runtime.radioStation = label;
     runtime.radioTitle.clear();
     runtime.radioError.clear();
-    ctx.state.emit(StateEvent::RadioChanged);
+    ctx.state.emit(StateEvent::AudioChanged);
   }
   return result;
 }
@@ -240,7 +231,7 @@ DispatchResult applyRadioPlay(const Command& cmd, CommandContext& ctx) {
 
 // The one place a Command becomes an effect. Holds no state of its own: everything it touches
 // arrives through the CommandContext that CoreEngine fills in per call.
-DispatchResult Dispatcher::dispatch(const Command& cmd, CommandContext& ctx) {
+DispatchResult Dispatcher::dispatch(Command& cmd, CommandContext& ctx) {
   ctx.detail.clear();
   switch (cmd.type) {
     case CommandType::Notify:
@@ -252,17 +243,26 @@ DispatchResult Dispatcher::dispatch(const Command& cmd, CommandContext& ctx) {
       }
       return ctx.notify.dismissNamed(cmd.name) ? DispatchResult::Ok : DispatchResult::NotFound;
     case CommandType::SetPushedApp:
-      if (cmd.clear || cmd.payload.empty() || cmd.payload == "{}") {
+      if (cmd.clear || api::isEmptyObject(cmd.payload)) {
         ctx.apps.deletePushedApp(cmd.name);
         return DispatchResult::Ok;
       }
       return ctx.apps.setPushedApp(cmd.name, cmd.payload, ctx.detail);
     case CommandType::SetAppOrder:
       return ctx.apps.setAppOrder(cmd.payload) ? DispatchResult::Ok : DispatchResult::ParseError;
+    case CommandType::SetAppEnabled: {
+      api::JsonReader value{std::string_view(cmd.payload)};
+      api::JsonReader rest = value;
+      bool on = false;
+      if (!value.asBool(on) || !rest.skipValue() || !rest.atEnd()) {
+        ctx.detail.message = "must be true or false";
+        return DispatchResult::ValidationError;
+      }
+      ctx.apps.setAppEnabled(cmd.name, on);
+      return DispatchResult::Ok;
+    }
     case CommandType::SwitchApp:
-      return ctx.apps.switchApp(cmd.name.empty() ? cmd.payload : cmd.name)
-                 ? DispatchResult::Ok
-                 : DispatchResult::NotFound;
+      return ctx.apps.switchApp(cmd.name.empty() ? cmd.payload : cmd.name, ctx.detail);
     case CommandType::NextApp:
       ctx.apps.nextApp();
       return DispatchResult::Ok;
@@ -279,11 +279,22 @@ DispatchResult Dispatcher::dispatch(const Command& cmd, CommandContext& ctx) {
       return applyDisplay(cmd.payload, ctx);
     case CommandType::Sleep:
       return applySleep(cmd.payload, ctx);
-    // The router owns the muting and writes its own detail message.
-    case CommandType::PlayAudio:
-      switch (ctx.audio.play(static_cast<sound::Source>(cmd.arg), cmd.payload, ctx.detail)) {
+    // Who asked decides the group: a script's own call is App, anything else an Alert.
+    case CommandType::PlayAudio: {
+      const bool script = cmd.source == Source::Internal && !cmd.name.empty();
+      const sound::Origin origin = script ? sound::Origin::Script : sound::Origin::Play;
+      sound::Choices choices;
+      if (!sound::parse(cmd.payload, origin, choices, ctx.detail))
+        return DispatchResult::ValidationError;
+      if (choices.isStation()) return applyRadioPlay(choices.items[0], ctx);
+      if (!ctx.audio.check(choices, origin, ctx.detail)) return DispatchResult::ValidationError;
+      const sound::PlayResult result =
+          static_cast<sound::PlayAs>(cmd.arg) == sound::PlayAs::Effect
+              ? ctx.audio.playEffect(choices, cmd.name, ctx.detail)
+              : ctx.audio.play(choices, script ? sound::Group::App : sound::Group::Alert,
+                               cmd.name, ctx.detail);
+      switch (result) {
         case sound::PlayResult::Ok:
-        case sound::PlayResult::Muted:
           return DispatchResult::Ok;
         case sound::PlayResult::NotFound:
           return DispatchResult::NotFound;
@@ -293,25 +304,23 @@ DispatchResult Dispatcher::dispatch(const Command& cmd, CommandContext& ctx) {
           return DispatchResult::ValidationError;
       }
       return DispatchResult::Failed;
+    }
     case CommandType::SetRadioStations:
       if (!ctx.stations) return DispatchResult::Failed;
       return ctx.stations->setStations(cmd.payload, ctx.detail);
-    case CommandType::PlayStream:
-      return applyRadioPlay(cmd, ctx);
     case CommandType::StopAudio: {
-      const sound::StopScope scope = static_cast<sound::StopScope>(cmd.arg);
-      ctx.audio.stop(scope);
-      // Silencing one-shots leaves the stream, so the reported station survives too.
-      if (scope != sound::StopScope::Sounds) {
+      const sound::Stop what = static_cast<sound::Stop>(cmd.arg);
+      ctx.audio.stop(what, cmd.name);
+      if (what == sound::Stop::All || what == sound::Stop::Radio) {
         ctx.state.runtime().radioPlaying = false;
         ctx.state.runtime().radioTitle.clear();
-        ctx.state.emit(StateEvent::RadioChanged);
+        ctx.state.emit(StateEvent::AudioChanged);
       }
       return DispatchResult::Ok;
     }
     case CommandType::ScriptSet:
       if (!ctx.scripts) {
-        ctx.detail = {"", "scripting is disabled (scriptingEnabled is off)"};
+        ctx.detail = {"", "scripting is off"};
         return DispatchResult::Failed;
       }
       return ctx.scripts->setScript(cmd.name, cmd.payload, ctx.detail);
@@ -320,13 +329,21 @@ DispatchResult Dispatcher::dispatch(const Command& cmd, CommandContext& ctx) {
       return ctx.scripts->updateScript(cmd.name, cmd.payload, ctx.detail);
     case CommandType::ScriptConfigSet:
       if (!ctx.scripts) {
-        ctx.detail = {"", "scripting is disabled (scriptingEnabled is off)"};
+        ctx.detail = {"", "scripting is off"};
         return DispatchResult::Failed;
       }
       return ctx.scripts->setScriptConfig(cmd.name, cmd.payload, ctx.detail);
+    case CommandType::BuiltinAppConfigSet:
+      return ctx.apps.setBuiltinAppConfig(cmd.name, cmd.payload, ctx.detail);
+    case CommandType::ScriptDataSet:
+      if (!ctx.scripts) {
+        ctx.detail = {"", "scripting is off"};
+        return DispatchResult::Failed;
+      }
+      return ctx.scripts->setScriptData(cmd.name, cmd.payload, ctx.detail);
     case CommandType::ScriptRemove:
       if (!ctx.scripts) {
-        ctx.detail = {"", "scripting is disabled (scriptingEnabled is off)"};
+        ctx.detail = {"", "scripting is off"};
         return DispatchResult::Failed;
       }
       ctx.scripts->removeScript(cmd.name);

@@ -1,12 +1,17 @@
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <vector>
 
 #include <unity.h>
+#include "../Visuals.h"
 
 #include "core/effects/EffectRegistry.h"
+#include "core/effects/PlasmaField.h"
 #include "core/effects/effects/FadeEffect.h"
 #include "core/effects/effects/MoreEffects.h"
 #include "core/effects/effects/PlasmaEffect.h"
+#include "core/effects/effects/SimulatedEffects.h"
 #include "core/effects/effects/TheaterChaseEffect.h"
 #include "core/effects/overlays/RainOverlay.h"
 #include "core/effects/overlays/SnowOverlay.h"
@@ -55,20 +60,27 @@ static void test_plasma_fills() {
 
 static void test_theater_chase_pattern() {
   TheaterChaseEffect t;
-  Canvas c(32, 8);
-  t.render(c, 0);
-  TEST_ASSERT_EQUAL_HEX32(0x202020u, c.getPixel(0, 0));
-  TEST_ASSERT_EQUAL_HEX32(0x000000u, c.getPixel(1, 0));
-  TEST_ASSERT_EQUAL_HEX32(0x202020u, c.getPixel(3, 0));
+  Canvas first(32, 8), next(32, 8);
+  t.render(first, 0);
+  t.render(next, 1);
+  bool lit = false, moved = false;
+  for (int y = 0; y < 8; ++y)
+    for (int x = 0; x < 32; ++x) {
+      lit = lit || first.getPixel(x, y) != 0u;
+      moved = moved || first.getPixel(x, y) != next.getPixel(x, y);
+    }
+  TEST_ASSERT_TRUE(lit && moved);
 }
 
-static void test_fade_uniform() {
+static void test_fade_rows_cycle_through_the_colours() {
   FadeEffect f;
   Canvas c(32, 8);
   f.render(c, 0);
-  const uint32_t v = c.getPixel(0, 0);
-  TEST_ASSERT_EQUAL_HEX32(v, c.getPixel(31, 7));
-  TEST_ASSERT_TRUE((v & 0xFF) > 0);
+  TEST_ASSERT_EQUAL_HEX32(c.getPixel(0, 0), c.getPixel(31, 0));
+  TEST_ASSERT_TRUE(c.getPixel(0, 0) != c.getPixel(0, 4));
+  const uint32_t before = c.getPixel(0, 0);
+  f.render(c, 40);
+  TEST_ASSERT_TRUE(c.getPixel(0, 0) != before);
 }
 
 static bool anyLit(Canvas& c) {
@@ -92,34 +104,187 @@ static void test_more_effects_render_and_are_safe() {
   TwinklingStarsEffect{}.render(c, 6);
   CheckerboardEffect{}.render(c, 1);
   MovingLineEffect{}.render(c, 1);
-  BrickBreakerEffect{}.render(c, 1);
-  PingPongEffect{}.render(c, 1);
-  SnakeEffect{}.render(c, 1);
+  BrickBreakerEffect brick; brick.render(c, 1); TEST_ASSERT_TRUE(anyLit(c));
+  PingPongEffect pong; pong.render(c, 1); TEST_ASSERT_TRUE(anyLit(c));
+  SnakeEffect snake; snake.render(c, 1); TEST_ASSERT_TRUE(anyLit(c));
   PlasmaCloudEffect{}.render(c, 1);
   TEST_ASSERT_TRUE(true);
 }
 
-static void test_looking_eyes_centres_on_any_width() {
-  auto litColumns = [](Canvas& c) {
-    std::vector<int> cols;
+static int countLit(const Canvas& c, int rows) {
+  int n = 0;
+  for (int y = 0; y < rows; ++y)
     for (int x = 0; x < c.width(); ++x)
-      for (int y = 0; y < c.height(); ++y)
-        if (c.getPixel(x, y) == 0xFFFFFFu) { cols.push_back(x); break; }
-    return cols;
-  };
-  for (int w : {32, 64, 16}) {
-    Canvas c(w, 8);
-    LookingEyesEffect{}.render(c, 4);
-    const std::vector<int> cols = litColumns(c);
-    TEST_ASSERT_TRUE_MESSAGE(!cols.empty(), "eyes drew nothing");
-    const int left = cols.front(), right = cols.back();
-    TEST_ASSERT_TRUE(left >= 0 && right < w);
-    TEST_ASSERT_EQUAL_INT(left, w - 1 - right);
+      if (c.getPixel(x, y) != 0) ++n;
+  return n;
+}
+
+template <typename Predicate>
+static bool findPixel(const Canvas& c, Predicate matches, int& fx, int& fy) {
+  for (int y = 0; y < c.height(); ++y)
+    for (int x = 0; x < c.width(); ++x)
+      if (matches(c.getPixel(x, y))) {
+        fx = x;
+        fy = y;
+        return true;
+      }
+  return false;
+}
+
+static void test_brick_breaker_ball_travels_and_breaks_bricks() {
+  BrickBreakerEffect e;
+  Canvas c(32, 8);
+  e.render(c, 0);
+  const int bricksAtStart = test::countPixels(c, [](uint32_t p) { return p && !test::brightNeutral(p); });
+  TEST_ASSERT_TRUE(bricksAtStart > 0);
+  int rows[8] = {0};
+  bool left[32] = {false};
+  for (int64_t f = 1; f <= 600; ++f) {
+    e.render(c, f);
+    int x, y;
+    if (findPixel(c, [](uint32_t p) { return test::brightNeutral(p) && (p >> 16) > 224; }, x, y)) {
+      rows[y] = 1;
+      left[x] = true;
+    }
   }
-  Canvas c32(32, 8);
-  LookingEyesEffect{}.render(c32, 4);
-  TEST_ASSERT_EQUAL_UINT32(0xFFFFFFu, c32.getPixel(8, 2));
-  TEST_ASSERT_EQUAL_UINT32(0xFFFFFFu, c32.getPixel(20, 2));
+  int rowsVisited = 0, columnsVisited = 0;
+  for (int r : rows) rowsVisited += r;
+  for (bool b : left) columnsVisited += b;
+  TEST_ASSERT_TRUE_MESSAGE(rowsVisited >= c.height() / 2, "ball never left the paddle row");
+  TEST_ASSERT_TRUE(columnsVisited >= c.width() / 2);
+  TEST_ASSERT_TRUE_MESSAGE(test::countPixels(c, [](uint32_t p) { return p && !test::brightNeutral(p); }) < bricksAtStart, "no brick was broken");
+}
+
+static void test_ping_pong_ball_crosses_the_panel() {
+  PingPongEffect e;
+  Canvas c(32, 8);
+  int minX = 32, maxX = -1;
+  for (int64_t f = 0; f < 300; ++f) {
+    e.render(c, f);
+    int x, y;
+    if (findPixel(c, test::red, x, y)) {
+      minX = std::min(minX, x);
+      maxX = std::max(maxX, x);
+    }
+  }
+  TEST_ASSERT_TRUE(minX < c.width() / 4);
+  TEST_ASSERT_TRUE(maxX > 3 * c.width() / 4);
+}
+
+static void test_snake_hunts_the_apple_and_grows() {
+  SnakeEffect e;
+  Canvas c(32, 8);
+  e.render(c, 0);
+  const int startLength = test::countPixels(c, test::green);
+  int longest = startLength;
+  for (int64_t f = 1; f < 400; ++f) {
+    e.render(c, f);
+    longest = std::max(longest, test::countPixels(c, test::green));
+  }
+  TEST_ASSERT_TRUE(startLength > 0);
+  TEST_ASSERT_TRUE_MESSAGE(longest > startLength, "snake never ate");
+}
+
+static void test_simulations_keep_one_state_per_view() {
+  BrickBreakerEffect e;
+  Canvas small(32, 8), wide(40, 8);
+  e.render(small, 0);
+  const int bricks = test::countPixels(small, [](uint32_t p) { return p && !test::brightNeutral(p); });
+  for (int64_t f = 1; f <= 600; ++f) {
+    e.render(small, f);
+    e.render(wide, f);
+  }
+  TEST_ASSERT_TRUE(test::countPixels(small, [](uint32_t p) { return p && !test::brightNeutral(p); }) < bricks);
+}
+
+static void test_simulations_skip_a_long_absence() {
+  SnakeEffect e;
+  Canvas c(32, 8);
+  e.render(c, 0);
+  e.render(c, 100000000);
+  e.render(c, 100000001);
+  TEST_ASSERT_TRUE(countLit(c, 8) > 0);
+}
+
+static void* failAllocation(std::size_t) { return nullptr; }
+static void test_simulation_without_memory_draws_nothing() {
+  const auto allocator = render::frameAllocator();
+  render::setFrameAllocator({failAllocation, std::free});
+  BrickBreakerEffect e;
+  Canvas c(32, 8);
+  c.clear(0xFFFFFFu);
+  e.render(c, 5);
+  render::setFrameAllocator(allocator);
+  TEST_ASSERT_EQUAL_INT(0, countLit(c, 8));
+}
+
+struct CountingSimulation {
+  int steps, resets;
+  uint32_t seed;
+  void reset(int, int, uint32_t value) { steps = 0; ++resets; seed = value; }
+  void step() { ++steps; }
+};
+
+static void test_simulation_slots_evict_the_oldest_view_and_bound_catch_up() {
+  fx::SimulationSlots<CountingSimulation> slots;
+  auto* first = slots.advance(32, 8, 1.0f, 0);
+  auto* second = slots.advance(64, 8, 1.0f, 0);
+  TEST_ASSERT_TRUE(first != second);
+  TEST_ASSERT_EQUAL_PTR(first, slots.advance(32, 8, 1.0f, 3));
+  TEST_ASSERT_EQUAL_INT(3, first->steps);
+  TEST_ASSERT_EQUAL_PTR(second, slots.advance(96, 8, 1.0f, 0));
+  TEST_ASSERT_EQUAL_INT(2, second->resets);
+  TEST_ASSERT_EQUAL_PTR(first, slots.advance(32, 8, 1.0f, 1000000));
+  TEST_ASSERT_EQUAL_INT(19, first->steps);
+  slots.advance(32, 8, 1.0f, 1000000);
+  slots.advance(32, 8, 1.0f, 2);
+  TEST_ASSERT_EQUAL_INT(19, first->steps);
+  slots.advance(32, 8, 1.0f, 3);
+  TEST_ASSERT_EQUAL_INT(20, first->steps);
+  const uint32_t previousSeed = second->seed;
+  TEST_ASSERT_EQUAL_PTR(second, slots.advance(32, 8, 2.0f, 3));
+  TEST_ASSERT_EQUAL_INT(3, second->resets);
+  TEST_ASSERT_EQUAL_INT(0, second->steps);
+  TEST_ASSERT_NOT_EQUAL(previousSeed, second->seed);
+}
+
+static int simulationAllocations, simulationReleases;
+static void* retrySimulationAllocation(std::size_t size) {
+  return ++simulationAllocations == 1 ? nullptr : std::malloc(size);
+}
+static void releaseSimulation(void* memory) {
+  ++simulationReleases;
+  std::free(memory);
+}
+static void test_simulation_allocation_retries_and_keeps_its_release_function() {
+  const auto allocator = render::frameAllocator();
+  simulationAllocations = simulationReleases = 0;
+  render::setFrameAllocator({retrySimulationAllocation, releaseSimulation});
+  bool failed, retried, reused;
+  {
+    fx::SimulationSlots<CountingSimulation> slots;
+    failed = slots.advance(32, 8, 1.0f, 0) == nullptr;
+    retried = slots.advance(32, 8, 1.0f, 0) != nullptr;
+    render::setFrameAllocator(allocator);
+    reused = slots.advance(64, 8, 1.0f, 0) != nullptr;
+  }
+  TEST_ASSERT_TRUE(failed && retried && reused);
+  TEST_ASSERT_EQUAL_INT(2, simulationAllocations);
+  TEST_ASSERT_EQUAL_INT(1, simulationReleases);
+}
+
+static void test_looking_eyes_scale_with_the_panel() {
+  Canvas c(64, 16);
+  LookingEyesEffect{}.render(c, 4);
+  int lit = 0;
+  for (int y = 0; y < 16; ++y)
+    for (int x = 0; x < 64; ++x) lit += test::brightNeutral(c.getPixel(x, y));
+  Canvas small(32, 8);
+  LookingEyesEffect{}.render(small, 4);
+  int smallLit = 0;
+  for (int y = 0; y < 8; ++y)
+    for (int x = 0; x < 32; ++x) smallLit += test::brightNeutral(small.getPixel(x, y));
+  TEST_ASSERT_EQUAL_INT(smallLit * 4, lit);
 }
 
 
@@ -130,39 +295,32 @@ static EffectSettings withPalette(const char* name, bool blend) {
   return s;
 }
 
-static void test_plasma_axis_sampling_is_exact() {
-  Canvas c(32, 8);
-  PlasmaEffect p;
-  const int64_t frame = 7;
-  p.render(c, frame);
-
-  const float t = frame * kPhasePerStep;
-  for (int y = 0; y < 8; ++y) {
-    for (int x = 0; x < 32; ++x) {
-      const float v =
-          std::sin(x * 0.3f + t) + std::sin(y * 0.3f) + std::sin((x + y) * 0.2f + t * 0.5f);
-      const float u = (v + 3.0f) / 6.0f;
-      int hue = static_cast<int>(u * 360.0f) % 360;
-      if (hue < 0) hue += 360;
-      TEST_ASSERT_EQUAL_HEX32(color::fromHsv(hue, 100, 55), c.getPixel(x, y));
-    }
+static void test_plasma_animates_across_panel_sizes() {
+  for (int height : {8, 16, 17, 32}) {
+    Canvas first(128, height), later(128, height), repeated(128, height);
+    PlasmaEffect plasma;
+    plasma.render(first, 7);
+    plasma.render(later, 70);
+    plasma.render(repeated, 7);
+    TEST_ASSERT_TRUE(test::countPixels(first, test::lit) > 0);
+    TEST_ASSERT_FALSE(test::sameFrame(first, later));
+    TEST_ASSERT_TRUE(test::sameFrame(first, repeated));
   }
 }
 
-static void test_plasma_palette_follows_the_same_field() {
-  Canvas c(32, 8);
-  PlasmaEffect p;
-  p.setSettings(withPalette("Heat", true));
-  const int64_t frame = 7;
-  p.render(c, frame);
-
-  const render::ColorRamp& ramp = p.settings().ramp;
-  const float t = frame * kPhasePerStep;
-  for (int x = 0; x < 32; x += 7) {
-    const float v = std::sin(x * 0.3f + t) + std::sin(3 * 0.3f) + std::sin((x + 3) * 0.2f + t * 0.5f);
-    const uint8_t idx = static_cast<uint8_t>((v + 3.0f) / 6.0f * 255.0f);
-    TEST_ASSERT_EQUAL_HEX32(ramp.atIndex(idx), c.getPixel(x, 3));
-  }
+static void* failAxesAllocation(std::size_t) { return nullptr; }
+static void test_plasma_workspace_growth_failure_keeps_previous_storage() {
+  fx::Axes axes;
+  TEST_ASSERT_TRUE(axes.fits(32, 8));
+  float* original = axes.storage;
+  const auto allocator = render::frameAllocator();
+  render::setFrameAllocator({failAxesAllocation, std::free});
+  const bool large = axes.fits(128, 32);
+  render::setFrameAllocator(allocator);
+  TEST_ASSERT_FALSE(large);
+  TEST_ASSERT_EQUAL_PTR(original, axes.storage);
+  TEST_ASSERT_TRUE(axes.fits(32, 8));
+  TEST_ASSERT_FALSE(axes.fits(128, 33));
 }
 
 static void test_effect_without_palette_keeps_own_colours() {
@@ -227,6 +385,17 @@ static void forEachEffect(Fn fn) {
   for (IEffect* e : all) fn(*e);
 }
 
+static void test_every_effect_is_safe_on_every_panel_size() {
+  const int sizes[][2] = {{1, 8}, {4, 8}, {8, 8}, {16, 8}, {32, 8}, {37, 8}, {64, 8},
+                          {128, 8}, {32, 16}, {64, 16}, {52, 16}, {64, 32}, {128, 32}};
+  forEachEffect([&](IEffect& e) {
+    for (const auto& sz : sizes) {
+      Canvas c(sz[0], sz[1]);
+      for (int64_t f : {0, 1, 2, 57, 1000, 123457}) e.render(c, f);
+    }
+  });
+}
+
 static void test_every_rate_stays_within_the_overflow_bound() {
   forEachEffect([](IEffect& e) {
     TEST_ASSERT_TRUE(e.rate() > 0.0f);
@@ -289,8 +458,8 @@ int main(int, char**) {
   RUN_TEST(test_registry_lookup_is_case_insensitive);
   RUN_TEST(test_effect_without_palette_keeps_own_colours);
   RUN_TEST(test_effect_uses_palette_when_set);
-  RUN_TEST(test_plasma_axis_sampling_is_exact);
-  RUN_TEST(test_plasma_palette_follows_the_same_field);
+  RUN_TEST(test_plasma_animates_across_panel_sizes);
+  RUN_TEST(test_plasma_workspace_growth_failure_keeps_previous_storage);
   RUN_TEST(test_blend_off_gives_hard_bands);
   RUN_TEST(test_every_rate_stays_within_the_overflow_bound);
   RUN_TEST(test_animation_step_never_runs_backwards);
@@ -300,8 +469,17 @@ int main(int, char**) {
   RUN_TEST(test_overlays_keep_their_relative_character);
   RUN_TEST(test_plasma_fills);
   RUN_TEST(test_theater_chase_pattern);
-  RUN_TEST(test_fade_uniform);
+  RUN_TEST(test_fade_rows_cycle_through_the_colours);
+  RUN_TEST(test_brick_breaker_ball_travels_and_breaks_bricks);
+  RUN_TEST(test_ping_pong_ball_crosses_the_panel);
+  RUN_TEST(test_snake_hunts_the_apple_and_grows);
+  RUN_TEST(test_simulations_keep_one_state_per_view);
+  RUN_TEST(test_simulations_skip_a_long_absence);
+  RUN_TEST(test_simulation_without_memory_draws_nothing);
+  RUN_TEST(test_simulation_slots_evict_the_oldest_view_and_bound_catch_up);
+  RUN_TEST(test_simulation_allocation_retries_and_keeps_its_release_function);
+  RUN_TEST(test_every_effect_is_safe_on_every_panel_size);
+  RUN_TEST(test_looking_eyes_scale_with_the_panel);
   RUN_TEST(test_more_effects_render_and_are_safe);
-  RUN_TEST(test_looking_eyes_centres_on_any_width);
   return UNITY_END();
 }

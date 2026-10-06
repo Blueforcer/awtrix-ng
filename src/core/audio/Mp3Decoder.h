@@ -43,8 +43,8 @@ class Decoder {
                   const int* scalefactors, int channel);
   void applyStereo(const FrameHeader& header, const SideInfo& side, int granule);
   void reorderShortBlocks(const FrameHeader& header, const GranuleInfo& granule, int channel);
-  void reduceAliasing(const GranuleInfo& granule, int channel);
-  void inverseMdct(const GranuleInfo& granule, int channel);
+  void reduceAliasing(const GranuleInfo& granule, int longSubbands, int channel);
+  void inverseMdct(const GranuleInfo& granule, int longSubbands, int channel);
   void synthesise(int channel, int granule, int16_t* pcm, int channels);
 
   float spectrum_[kMaxChannels][kSamplesPerGranule];
@@ -53,7 +53,9 @@ class Decoder {
   float synthesis_[kMaxChannels][1024];
   int synthesisOffset_[kMaxChannels];
   int scalefactors_[kMaxChannels][39];
-  int intensityPosition_[kMaxChannels][39];
+  // MPEG-2 intensity stereo: per band of the right channel, the position value that means "not
+  // intensity coded".
+  int intensityLimit_[39];
 
   // 511 is the largest main_data_begin a 9-bit field can express, i.e. how far back a frame may
   // reach into earlier frames' bytes; the extra 1536 holds the current frame's own main data.

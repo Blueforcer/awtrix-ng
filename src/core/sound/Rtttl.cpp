@@ -82,13 +82,13 @@ bool parseDefaults(const std::string& s, size_t begin, size_t end, Defaults& out
     const size_t keyAt = i;
     const char key = lower(s[i]);
     if (key != 'd' && key != 'o' && key != 'b') {
-      err = fail("unknown default; expected 'd', 'o' or 'b'", keyAt);
+      err = fail("unknown default", keyAt);
       return false;
     }
     ++i;
     skipSpace(s, i, end);
     if (i >= end || s[i] != '=') {
-      err = fail("expected '=' after the default key", i);
+      err = fail("expected '='", i);
       return false;
     }
     ++i;
@@ -96,7 +96,7 @@ bool parseDefaults(const std::string& s, size_t begin, size_t end, Defaults& out
     const size_t valAt = i;
     uint32_t v = 0;
     if (!readUInt(s, i, end, v)) {
-      err = fail("expected a number after '='", valAt);
+      err = fail("expected a number", valAt);
       return false;
     }
     switch (key) {
@@ -117,7 +117,7 @@ bool parseDefaults(const std::string& s, size_t begin, size_t end, Defaults& out
         break;
       default:
         if (seenB) { err = fail("'b' is set twice", keyAt); return false; }
-        if (!validBeat(v)) { err = fail("'b' must be between 10 and 300", valAt); return false; }
+        if (!validBeat(v)) { err = fail("'b' must be 10..300", valAt); return false; }
         out.beat = static_cast<uint16_t>(v);
         seenB = true;
         break;
@@ -125,7 +125,7 @@ bool parseDefaults(const std::string& s, size_t begin, size_t end, Defaults& out
     skipSpace(s, i, end);
     if (i >= end) break;
     if (s[i] != ',') {
-      err = fail("expected ',' between defaults", i);
+      err = fail("expected ','", i);
       return false;
     }
     ++i;
@@ -152,7 +152,7 @@ bool parseNote(const std::string& s, size_t begin, size_t end, const Defaults& d
     uint32_t v = 0;
     readUInt(s, i, end, v);
     if (!validDuration(v)) {
-      err = fail("note length must be 1, 2, 4, 8, 16 or 32", at);
+      err = fail("length must be 1, 2, 4, 8, 16 or 32", at);
       return false;
     }
     duration = static_cast<uint16_t>(v);
@@ -178,7 +178,7 @@ bool parseNote(const std::string& s, size_t begin, size_t end, const Defaults& d
       return false;
     }
     if (letter == 'b' || letter == 'e') {
-      err = fail(std::string("'") + letter + "#' is not a note; use the next letter", i);
+      err = fail(std::string("'") + letter + "#' is not a note", i);
       return false;
     }
     ++semitone;
@@ -242,22 +242,22 @@ std::string Parse::describe() const {
 
 Parse parse(const std::string& in) {
   if (in.size() > kMaxLength)
-    return fail("melody is longer than " + std::to_string(kMaxLength) + " characters",
+    return fail("at most " + std::to_string(kMaxLength) + " characters",
                 kMaxLength);
 
   const size_t c1 = in.find(':');
   if (c1 == std::string::npos)
-    return fail("missing ':' after the melody name", in.size());
+    return fail("missing ':'", in.size());
   const size_t c2 = in.find(':', c1 + 1);
   if (c2 == std::string::npos)
-    return fail("missing ':' before the notes", in.size());
+    return fail("missing ':'", in.size());
 
   size_t ts = 0, te = c1;
   skipSpace(in, ts, te);
   while (te > ts && isSpace(in[te - 1])) --te;
-  if (ts == te) return fail("the melody name is empty", 0);
+  if (ts == te) return fail("empty name", 0);
   if (te - ts > kMaxTitle)
-    return fail("the melody name is longer than " + std::to_string(kMaxTitle) + " characters",
+    return fail("name over " + std::to_string(kMaxTitle) + " characters",
                 ts + kMaxTitle);
 
   Parse p;
@@ -281,7 +281,7 @@ Parse parse(const std::string& in) {
     i = comma + 1;
   }
 
-  if (p.notes.empty()) return fail("the melody has no notes", c2 + 1);
+  if (p.notes.empty()) return fail("no notes", c2 + 1);
 
   p.ok = true;
   p.error.clear();

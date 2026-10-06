@@ -139,7 +139,8 @@ int be_code_allocregs(bfuncinfo *finfo, int count)
 {
     int base = finfo->freereg;
     allocstack(finfo, count);
-    finfo->freereg += (char)count;
+    /* AWTRIX: backport of upstream 6e6e6213 (#546) */
+    finfo->freereg += count;
     return base;
 }
 
@@ -147,6 +148,10 @@ static void setjump(bfuncinfo *finfo, int pc, int dst)
 {
     binstruction *p = be_vector_at(&finfo->code, pc);
     int offset = dst - (pc + 1);
+    /* AWTRIX: backport of upstream 6e6e6213 (#546) */
+    if (offset < IsBx_MIN || offset > IsBx_MAX) {
+        be_lexerror(finfo->lexer, "jump too far");
+    }
     /* instruction edit jump destination */
     *p = (*p & ~IBx_MASK) | ISET_sBx(offset);
 }
@@ -492,6 +497,12 @@ static int exp2reg(bfuncinfo *finfo, bexpdesc *e, int dst)
         pct = code_bool(finfo, reg, 1, 0);
         patchlistaux(finfo, e->f, finfo->pc, pcf);
         patchlistaux(finfo, e->t, finfo->pc, pct);
+        /* AWTRIX: backport of upstream 66d2d0f9 (#549) */
+        /* the LDBOOL pair wrote the value to `reg`; record that in `e`, so that
+         * callers which re-read the descriptor instead of using the return
+         * value do not pick up the register of the last operand */
+        e->type = ETREG;
+        e->v.idx = reg;
         e->t = NO_JUMP;
         e->f = NO_JUMP;
         e->not = 0;
@@ -542,7 +553,7 @@ static void binaryexp(bfuncinfo *finfo, bopcode op, bexpdesc *e1, bexpdesc *e2, 
     e1->v.idx = dst; /* update register as output */
 }
 
-void be_code_prebinop(bfuncinfo *finfo, int op, bexpdesc *e)
+void be_code_prebinop(bfuncinfo *finfo, int op, bexpdesc *e, int dst)
 {
     switch (op) {
     case OptAnd:
@@ -552,7 +563,7 @@ void be_code_prebinop(bfuncinfo *finfo, int op, bexpdesc *e)
         be_code_jumpbool(finfo, e, btrue);
         break;
     default:
-        exp2anyreg(finfo, e);
+        exp2reg(finfo, e, dst);
         break;
     }
 }
@@ -861,8 +872,28 @@ void be_code_ret(bfuncinfo *finfo, bexpdesc *e)
 /* Both expdesc are materialized in kregs */
 static void package_suffix(bfuncinfo *finfo, bexpdesc *c, bexpdesc *k)
 {
-    c->v.ss.obj = exp2anyreg(finfo, c);
-    int key = exp2anyreg(finfo, k);
+    int key;
+    /* AWTRIX: backport of upstream 66d2d0f9 (#549) and 4bf803a5 (#551) */
+    if (hasjump(k) || k->type == ETINDEX || k->type == ETMEMBER) {
+        /* Materialize the key before the object in two cases:
+         * - The key still carries open short-circuit jumps. Loading the object
+         *   first would place that load between those jumps, where it is
+         *   skipped whenever the short circuit is taken.
+         * - The key is itself an index or member expression that is not
+         *   materialized yet, as in `a[b[i+1]]` or `a[o.(n)]`. Loading the
+         *   object first puts it in a register above the key's own object and
+         *   index, and suffix_destreg() then releases it together with them
+         *   although it is still in use; an assignment then leaves freereg
+         *   below the number of active locals.
+         * Materializing the object first is what 2785c08 changed in order to
+         * save a register in `self.a[128]`, so keep that order for every
+         * other key. */
+        key = exp2anyreg(finfo, k);
+        c->v.ss.obj = exp2anyreg(finfo, c);
+    } else {
+        c->v.ss.obj = exp2anyreg(finfo, c);
+        key = exp2anyreg(finfo, k);
+    }
     c->v.ss.tt = c->type;
     c->v.ss.idx = key;
 }

@@ -1,0 +1,20 @@
+{
+  "name": "awtrix-ng-tc002-installer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "USB installer for AWTRIX NG on the Ulanzi TC002",
+  "author": "Stephan Mühl (Blueforcer)",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.*",
+    "stage": "node build.mjs --stage-only",
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.0"
+  }
+}

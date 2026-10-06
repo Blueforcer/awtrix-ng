@@ -68,54 +68,12 @@ std::string firstOption(const std::string& list) {
   return comma == std::string::npos ? list : list.substr(0, comma);
 }
 
-bool blank(char c) { return c == ' ' || c == '\t'; }
-
-void skipBlank(const std::string& s, std::size_t& i) {
-  while (i < s.size() && blank(s[i])) ++i;
-}
-
-// Reads one bare or "quoted" word and leaves i just past it. `quoted` is how the caller
-// tells `text` the type from "text" the label, which is why it is reported and not dropped.
-bool readWord(const std::string& s, std::size_t& i, std::string& out, bool& quoted) {
-  skipBlank(s, i);
-  out.clear();
-  if (i >= s.size()) return false;
-  quoted = s[i] == '"';
-  if (quoted) {
-    ++i;
-    const std::size_t start = i;
-    while (i < s.size() && s[i] != '"') ++i;
-    out.assign(s, start, i - start);
-    if (i < s.size()) ++i;
-    return true;
-  }
-  const std::size_t start = i;
-  while (i < s.size() && !blank(s[i])) ++i;
-  out.assign(s, start, i - start);
-  return !out.empty();
-}
-
-bool readAttr(const std::string& s, std::size_t& i, std::string& name, std::string& value) {
-  skipBlank(s, i);
-  if (i >= s.size()) return false;
-  const std::size_t start = i;
-  while (i < s.size() && !blank(s[i]) && s[i] != '=') ++i;
-  name.assign(s, start, i - start);
-  value.clear();
-  if (i < s.size() && s[i] == '=') {
-    ++i;
-    bool quoted = false;
-    readWord(s, i, value, quoted);
-  }
-  return !name.empty();
-}
-
-enum class Attr : uint8_t { Default, Help, Unit, Options, Min, Max, Step, MaxLen, Unknown };
+enum class Attr : uint8_t { Default, Help, Unit, Options, Min, Max, Step, MaxLen, Group, Unknown };
 
 Attr attrOf(const std::string& name) {
   static constexpr const char* kNames[] = {"default", "help",  "unit", "options",
-                                           "min",     "max",   "step", "maxlen"};
-  for (std::size_t i = 0; i < 8; ++i)
+                                           "min",     "max",   "step", "maxlen", "group"};
+  for (std::size_t i = 0; i < sizeof(kNames) / sizeof(kNames[0]); ++i)
     if (ieq(name, kNames[i])) return static_cast<Attr>(i);
   return Attr::Unknown;
 }
@@ -275,7 +233,7 @@ bool coerce(const ConfigField& f, const JsonReader& r, std::string& out, std::st
         return false;
       }
       if (f.type == ConfigType::Select && !offers(f, s)) {
-        why = "not one of the offered options";
+        why = "not an option";
         return false;
       }
       out = stringJson(s);
@@ -293,7 +251,7 @@ bool coerce(const ConfigField& f, const JsonReader& r, std::string& out, std::st
     case ConfigType::Color: {
       uint32_t c = 0;
       if (!color::readColor(r, c)) {
-        why = "expected a colour like \"#FF8800\", a number or [r,g,b]";
+        why = "expected a color";
         return false;
       }
       out = colorJson(c);
@@ -415,8 +373,7 @@ void parseLine(const std::string& value, int line, ConfigSchema& schema) {
     return;
   }
   if (!readWord(value, at, word, quoted) || quoted || !parseType(word, f.type)) {
-    warn(schema, line, f.key, ": unknown type '", word,
-         "', use bool, text, number, slider, select or color");
+    warn(schema, line, f.key, ": unknown type '", word, "'");
     return;
   }
 
@@ -442,6 +399,10 @@ void parseLine(const std::string& value, int line, ConfigSchema& schema) {
       case Attr::Unit:
         f.unit = attr;
         clip(f.unit, kMaxUnitLen);
+        break;
+      case Attr::Group:
+        f.group = attr;
+        clip(f.group, kMaxLabelLen);
         break;
       case Attr::Options:
         f.options = splitOptions(attr);
@@ -475,7 +436,7 @@ void parseLine(const std::string& value, int line, ConfigSchema& schema) {
     f.hasMin = f.hasMax = false;
   }
   if (f.type == ConfigType::Select && f.options.empty()) {
-    warn(schema, line, f.key, ": select needs options=a,b,c");
+    warn(schema, line, f.key, ": select needs options");
     return;
   }
   // A slider without a range has no meaning, so give it a percentage rather than warn.
@@ -489,6 +450,10 @@ void parseLine(const std::string& value, int line, ConfigSchema& schema) {
   schema.fields.push_back(std::move(f));
 }
 
+}
+
+bool declares(const ConfigSchema& schema, std::string_view key) {
+  return indexOf(schema, key) != schema.fields.size();
 }
 
 ConfigSchema parseConfig(const std::string& source) {
@@ -598,6 +563,7 @@ bool appendConfigJson(std::string& out, const std::string& name, const ConfigSch
     w.member("label", f.label);
     if (!f.help.empty()) w.member("help", f.help);
     if (!f.unit.empty()) w.member("unit", f.unit);
+    if (!f.group.empty()) w.member("group", f.group);
     if (f.hasMin) w.member("min", f.min);
     if (f.hasMax) w.member("max", f.max);
     if (f.step != 0) w.member("step", f.step);
@@ -627,21 +593,21 @@ bool appendConfigJson(std::string& out, const std::string& name, const ConfigSch
   return true;
 }
 
-ConfigPatch applyConfigPatch(const ConfigSchema& schema, const std::string& storeJson,
+StorePatch applyConfigPatch(const ConfigSchema& schema, const std::string& storeJson,
                              const std::string& patchJson) {
-  ConfigPatch res;
+  StorePatch res;
 
   if (!api::isWellFormed(patchJson)) {
-    res.message = "body is not valid JSON";
+    res.malformed = true;
     return res;
   }
   JsonReader probe(patchJson);
   if (!probe.isObject()) {
-    res.message = "body must be a JSON object of setting keys";
+    res.message = "expected an object";
     return res;
   }
   if (schema.fields.empty()) {
-    res.message = "this script has no settings";
+    res.message = "no settings";
     return res;
   }
 
@@ -652,7 +618,7 @@ ConfigPatch applyConfigPatch(const ConfigSchema& schema, const std::string& stor
     const std::size_t i = indexOf(schema, r.key());
     if (i == schema.fields.size()) {
       res.field.assign(r.key());
-      res.message = "'" + res.field + "' is not a setting of this script";
+      res.message = "unknown setting";
       return res;
     }
     std::string why;
@@ -664,7 +630,7 @@ ConfigPatch applyConfigPatch(const ConfigSchema& schema, const std::string& stor
     if (!r.skipValue()) break;
   }
   if (!r.ok()) {
-    res.message = "body is not valid JSON";
+    res.malformed = true;
     return res;
   }
 
@@ -673,27 +639,35 @@ ConfigPatch applyConfigPatch(const ConfigSchema& schema, const std::string& stor
   return res;
 }
 
-int configResponse(const std::string& name, const ConfigTextFn& readSource,
-                   const ConfigTextFn& readStore, std::string& body) {
+int readScriptForResponse(const std::string& name, const ConfigTextFn& readSource,
+                          const ConfigTextFn& readStore, std::string& source,
+                          std::string& storeJson, std::string& body) {
   if (!readSource) {
-    body = api::errorJson("unavailable", "scripting is not available");
+    body = api::errorJson("unavailable", "no scripting");
     return 503;
   }
   if (!api::isValidAppName(name)) {
-    body = api::errorJson("invalidName", "name must match [A-Za-z0-9_-]{1,32}", "name");
+    body = api::errorJson("invalidName", "invalid name", "name");
     return 400;
   }
-  std::string source;
   if (!readSource(name, source)) {
     body = api::errorJson("notFound", "no such script");
     return 404;
   }
-  std::string storeJson;
   if (readStore) readStore(name, storeJson);
+  return 0;
+}
+
+int configResponse(const std::string& name, const ConfigTextFn& readSource,
+                   const ConfigTextFn& readStore, std::string& body) {
+  std::string source, storeJson;
+  if (const int status =
+          readScriptForResponse(name, readSource, readStore, source, storeJson, body))
+    return status;
   body.clear();
   if (!appendConfigJson(body, name, parseConfig(source), storeJson)) {
     body = api::errorJson("insufficientStorage",
-                          "not enough free memory to build the settings list", "name");
+                          "not enough memory", "name");
     return 507;
   }
   return 200;

@@ -20,8 +20,8 @@ _http_cbs = {}
 _http_next = 1
 
 # Headers travel to C as one block of "Name: value" entries joined by \x1f. C
-# parses and validates it -- one implementation shared by the device and the
-# simulator, and the only place that knows the caps. The separator is a control
+# parses and validates it -- one implementation shared by the ESP32 and Linux
+# builds, and the only place that knows the caps. The separator is a control
 # character precisely because a header value may not contain one: a value with an
 # embedded newline is caught there instead of quietly becoming a second header.
 def _http_headers(opts)
@@ -219,12 +219,15 @@ end
 # drops every value it receives. type() is the primitive-safe test, and this
 # helper is the one place that has to know that.
 #
-# Accepted: ints and reals (returned as-is), strings holding a bare JSON
-# number ("876.6"), and strings holding a JSON-quoted number ("\"876.6\"" --
-# what a broker publishing string-typed states emits). Everything else --
-# units ("876.6 W"), decimal commas ("876,6"), maps, bools, garbage -- yields
-# the default. json.load is the parser on purpose: it is strict, and a strict
-# nil beats number()'s silent 0-for-garbage and 876-for-"876,6".
+# Accepted: ints and reals (returned as-is), and strings holding one decimal
+# number: an optional sign, digits with leading zeros allowed ("07" is 7, as
+# clock settings write hours), an optional fraction and exponent, and spaces
+# or line breaks around it. A JSON-quoted number ("\"876.6\"" -- what a broker
+# publishing string-typed states emits) is unwrapped once. Everything else --
+# units ("876.6 W"), decimal commas ("876,6"), hex, maps, bools, garbage --
+# yields the default. The pattern decides what a number is; number() only
+# converts text the pattern accepted, because on its own it reads garbage as 0
+# and "876,6" as 876.
 # round/clamp/min/max are the arithmetic every second script hand-rolls, so
 # they live here once. round() is half-away-from-zero -- what a human reading
 # a sensor value expects -- via int()'s truncation toward zero, so it needs no
@@ -257,27 +260,28 @@ def max(a, b) # max(a, b)
   return a > b ? a : b
 end
 
+def _num_text(s)
+  var m = _native_re_search("^[ \t\r\n]*([-+]?[0-9]+(\\.[0-9]+)?([eE][-+]?[0-9]+)?)[ \t\r\n]*$", s, 0, 1)
+  return m == nil ? nil : number(m[2])
+end
+
 def num(v, dflt) # num(v, dflt?)
   var t = type(v)
   if t == 'int' || t == 'real' return v end
   if t == 'string'
-    v = json.load(v)
-    t = type(v)
-    if t == 'int' || t == 'real' return v end
-    if t == 'string'
-      # One unwrap only: the payload was a JSON string whose content may
-      # itself be a number. "\"876.6\"" passes; "\"\\\"876.6\\\"\"" does not.
-      v = json.load(v)
-      t = type(v)
-      if t == 'int' || t == 'real' return v end
+    var n = _num_text(v)
+    if n == nil
+      var quoted = json.load(v)
+      if type(quoted) == 'string' n = _num_text(quoted) end
     end
+    if n != nil return n end
   end
   return dflt
 end
 
 # ---- notify ----------------------------------------------------------------
 # notify(spec) posts a notification. `spec` is a map in the notification-payload
-# schema (text, icon, textColor, sound, soundRtttl, hold, stack, wakeup, effect, ...) --
+# schema (text, icon, textColor, sound, hold, stack, wakeup, effect, ...) --
 # the same object a pushed app or POST /api/v1/notifications takes -- so a script
 # reaches the whole notification pipeline, interruption and wakeup included, that
 # its own canvas cannot. Colours may be plain 0xRRGGBB integers (rgb()/hsv() return
@@ -328,61 +332,50 @@ display.power = _display_power
 display.is_on = _display_is_on
 
 # ---- sound -----------------------------------------------------------------
-# Queued for the device to play, not played inside your draw call: the request
-# takes the same route POST /api/v1/audio/play does, so the "sound is switched
-# off" rule is the device's, decided once.
-# True means the request was accepted, not that a file of that name exists.
-# The action numbers are script::SoundAction (Play, Mp3, Melody, Track, Rtttl,
-# Stop) in that order.
+# Every call takes the sound object POST /api/v1/audio/play takes: a name, a map with one of
+# 'file', 'rtttl', 'song', 'speech', 'track' or 'station' (plus 'loop' and 'nextBar'), or a list
+# whose first entry this clock can play wins. It starts within the call. True means the device
+# took the request, false that this clock can play none of it; a mistake raises value_error.
+# The action numbers are script::SoundAction (Play, Effect, Stop, StopMusic) in that order.
 sound = module('sound')
-# A name, and the device decides: a stored MP3 first, then a melody, then a
-# DFPlayer track if the name is a plain number.
-def _sound_play(name) # sound.play(name)
-  return _native_sound(0, str(name))
+def _sound_send(action, x)
+  var r = _native_sound(action, json.dump(x))
+  if type(r) == 'string' raise 'value_error', r end
+  return r
 end
-# The three explicit ones never fall back -- a name that is not there stays
-# silent instead of turning into something else.
-def _sound_mp3(name) # sound.mp3(name)
-  return _native_sound(1, str(name))
+def _sound_play(x) # sound.play(x)
+  return _sound_send(0, x)
 end
-def _sound_melody(name) # sound.melody(name)
-  return _native_sound(2, str(name))
+# This script's sounds only: everything, or with 'loop' its music.
+def _sound_stop(what) # sound.stop(what?)
+  if what == nil
+    _native_sound(2, '')
+  elif what == 'loop'
+    _native_sound(3, '')
+  else
+    raise 'value_error', "must be nil or 'loop'"
+  end
 end
-def _sound_track(number) # sound.track(number)
-  return _native_sound(3, str(number))
-end
-def _sound_rtttl(melody) # sound.rtttl(melody)
-  return _native_sound(4, str(melody))
-end
-# Stops the one-shots only. A radio stream the user started keeps playing.
-def _sound_stop() # sound.stop()
-  return _native_sound(5, '')
-end
-# Whether the device is making sound right now -- an MP3, a melody or a
-# DFPlayer track alike. Lets a script wait for one sound before the next.
 def _sound_playing() # sound.playing()
   return _native_sound_playing()
 end
-# Which outputs this board has, so a script can pick a sound it can actually
-# make: {'buzzer': bool, 'track': bool, 'mp3': bool, 'radio': bool}.
-def _sound_sinks() # sound.sinks()
-  var b = _native_sound_sinks()
-  return {'buzzer': (b & 1) != 0, 'track': (b & 2) != 0,
-          'mp3': (b & 4) != 0, 'radio': (b & 8) != 0}
+def _sound_can(key) # sound.can(key?)
+  var b = _native_sound_caps()
+  var m = {'mp3': (b & 1) != 0, 'rtttl': (b & 2) != 0, 'song': (b & 4) != 0,
+           'speech': (b & 8) != 0, 'track': (b & 16) != 0, 'radio': (b & 32) != 0,
+           'url': (b & 64) != 0, 'effect': (b & 128) != 0, 'clip': (b & 256) != 0}
+  if key == nil return m end
+  return m.find(key, false)
 end
 sound.play = _sound_play
-sound.mp3 = _sound_mp3
-sound.melody = _sound_melody
-sound.track = _sound_track
-sound.rtttl = _sound_rtttl
 sound.stop = _sound_stop
 sound.playing = _sound_playing
-sound.sinks = _sound_sinks
+sound.can = _sound_can
 
 # ---- music -----------------------------------------------------------------
 # The music the device itself is playing -- a station or a stored MP3 -- as
-# numbers timed to the speaker. Never nil: a board without an audio output, or
-# silence, answers zeros and false.
+# numbers timed to the speaker, plus the station and song title. Never nil: a board
+# without an audio output, or silence, answers zeros, false and "".
 music = module('music')
 def _music_bands(n, hi) # music.bands(n?, max?)
   return _native_music_bands(n, hi)
@@ -396,10 +389,18 @@ end
 def _music_playing() # music.playing()
   return _native_music_playing()
 end
+def _music_station() # music.station()
+  return _native_music_station()
+end
+def _music_title() # music.title()
+  return _native_music_title()
+end
 music.bands = _music_bands
 music.level = _music_level
 music.beat = _music_beat
 music.playing = _music_playing
+music.station = _music_station
+music.title = _music_title
 
 # ---- sensor ----------------------------------------------------------------
 # What the device measures, straight from the reading the built-in apps draw.
@@ -444,6 +445,9 @@ sensor.battery_volts = _sensor_battery_volts
 # to say does not have to wait for its turn. It can only summon itself: the
 # caller's name comes from the binding, not from an argument. Any pause you set
 # survives it. Returns false when the app is not in the rotation at all.
+# rotation.close() ends a started @ondemand app from its own code, as holding
+# select does: the current call finishes, on_hide() runs, then it is unloaded.
+# Returns false for any other app.
 rotation = module('rotation')
 def _rotation_next() # rotation.next()
   _native_rotation_next()
@@ -460,11 +464,15 @@ end
 def _rotation_show() # rotation.show()
   return _native_rotation_show()
 end
+def _rotation_close() # rotation.close()
+  return _native_rotation_close()
+end
 rotation.next = _rotation_next
 rotation.previous = _rotation_previous
 rotation.pause = _rotation_pause
 rotation.resume = _rotation_resume
 rotation.show = _rotation_show
+rotation.close = _rotation_close
 
 # ---- store -----------------------------------------------------------------
 # Per-app whole-map write-behind: every set() re-serialises the calling app's

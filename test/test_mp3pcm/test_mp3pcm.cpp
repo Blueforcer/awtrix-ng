@@ -124,6 +124,87 @@ void test_clicks_stereo_128k() {
         mp3vectors::kclicks_stereo_128k_rate, mp3vectors::kclicks_stereo_128k_channels);
 }
 
+// The low-rate vectors must really be MPEG-2 or 2.5 frames, or their tests prove nothing new.
+void checkLowRate(const char* name, const uint8_t* mp3, std::size_t mp3Bytes,
+                  const int16_t* reference, int rate, int channels, mp3::Version version) {
+  std::size_t at = 0;
+  mp3::FrameHeader header{};
+  TEST_ASSERT_TRUE_MESSAGE(mp3::findSync(mp3, mp3Bytes, 0, at), name);
+  TEST_ASSERT_TRUE_MESSAGE(mp3::parseHeader(mp3 + at, mp3Bytes - at, header), name);
+  TEST_ASSERT_EQUAL_INT_MESSAGE(static_cast<int>(version), static_cast<int>(header.version), name);
+  check(name, mp3, mp3Bytes, reference, rate, channels);
+}
+
+void test_sine_mono_24khz_48k() {
+  checkLowRate("sine_mono_24khz_48k", mp3vectors::ksine_mono_24khz_48k_mp3,
+               sizeof(mp3vectors::ksine_mono_24khz_48k_mp3), mp3vectors::ksine_mono_24khz_48k_pcm,
+               mp3vectors::ksine_mono_24khz_48k_rate, mp3vectors::ksine_mono_24khz_48k_channels,
+               mp3::Version::Mpeg2);
+}
+
+void test_noise_stereo_22khz() {
+  checkLowRate("noise_stereo_22khz", mp3vectors::knoise_stereo_22khz_mp3,
+               sizeof(mp3vectors::knoise_stereo_22khz_mp3), mp3vectors::knoise_stereo_22khz_pcm,
+               mp3vectors::knoise_stereo_22khz_rate, mp3vectors::knoise_stereo_22khz_channels,
+               mp3::Version::Mpeg2);
+}
+
+void test_clicks_stereo_24khz() {
+  checkLowRate("clicks_stereo_24khz", mp3vectors::kclicks_stereo_24khz_mp3,
+               sizeof(mp3vectors::kclicks_stereo_24khz_mp3), mp3vectors::kclicks_stereo_24khz_pcm,
+               mp3vectors::kclicks_stereo_24khz_rate, mp3vectors::kclicks_stereo_24khz_channels,
+               mp3::Version::Mpeg2);
+}
+
+void test_clicks_mono_16khz() {
+  checkLowRate("clicks_mono_16khz", mp3vectors::kclicks_mono_16khz_mp3,
+               sizeof(mp3vectors::kclicks_mono_16khz_mp3), mp3vectors::kclicks_mono_16khz_pcm,
+               mp3vectors::kclicks_mono_16khz_rate, mp3vectors::kclicks_mono_16khz_channels,
+               mp3::Version::Mpeg2);
+}
+
+void test_noise_stereo_12khz() {
+  checkLowRate("noise_stereo_12khz", mp3vectors::knoise_stereo_12khz_mp3,
+               sizeof(mp3vectors::knoise_stereo_12khz_mp3), mp3vectors::knoise_stereo_12khz_pcm,
+               mp3vectors::knoise_stereo_12khz_rate, mp3vectors::knoise_stereo_12khz_channels,
+               mp3::Version::Mpeg2_5);
+}
+
+void test_sine_mono_8khz() {
+  checkLowRate("sine_mono_8khz", mp3vectors::ksine_mono_8khz_mp3,
+               sizeof(mp3vectors::ksine_mono_8khz_mp3), mp3vectors::ksine_mono_8khz_pcm,
+               mp3vectors::ksine_mono_8khz_rate, mp3vectors::ksine_mono_8khz_channels,
+               mp3::Version::Mpeg2_5);
+}
+
+int shortGranules(const uint8_t* data, std::size_t bytes) {
+  int count = 0;
+  std::size_t at = 0;
+  std::size_t from = 0;
+  while (mp3::findSync(data, bytes, from, at)) {
+    mp3::FrameHeader header{};
+    if (!mp3::parseHeader(data + at, bytes - at, header) || header.frameBytes() <= 0) break;
+    const std::size_t sideAt = at + 4 + (header.hasCrc ? 2 : 0);
+    const std::size_t sideBytes = static_cast<std::size_t>(mp3::sideInfoBytes(header));
+    if (sideAt + sideBytes > bytes) break;
+    mp3::BitReader bits(data + sideAt, sideBytes);
+    mp3::SideInfo side{};
+    if (mp3::parseSideInfo(bits, header, side))
+      for (int gr = 0; gr < mp3::granules(header); ++gr)
+        for (int ch = 0; ch < header.channels(); ++ch)
+          if (side.granules[gr][ch].blockType == 2) ++count;
+    from = at + static_cast<std::size_t>(header.frameBytes());
+  }
+  return count;
+}
+
+void test_low_rate_clicks_exercise_short_blocks() {
+  TEST_ASSERT_GREATER_THAN_INT(0, shortGranules(mp3vectors::kclicks_stereo_24khz_mp3,
+                                                sizeof(mp3vectors::kclicks_stereo_24khz_mp3)));
+  TEST_ASSERT_GREATER_THAN_INT(0, shortGranules(mp3vectors::kclicks_mono_16khz_mp3,
+                                                sizeof(mp3vectors::kclicks_mono_16khz_mp3)));
+}
+
 void test_decoder_survives_truncation() {
   mp3::Decoder decoder;
   std::vector<int16_t> block(mp3::kMaxPcmPerFrame);
@@ -182,6 +263,13 @@ int main(int, char**) {
   RUN_TEST(test_sweep_stereo_128k_48k);
   RUN_TEST(test_noise_stereo_32khz);
   RUN_TEST(test_clicks_stereo_128k);
+  RUN_TEST(test_sine_mono_24khz_48k);
+  RUN_TEST(test_noise_stereo_22khz);
+  RUN_TEST(test_clicks_stereo_24khz);
+  RUN_TEST(test_clicks_mono_16khz);
+  RUN_TEST(test_noise_stereo_12khz);
+  RUN_TEST(test_sine_mono_8khz);
+  RUN_TEST(test_low_rate_clicks_exercise_short_blocks);
   RUN_TEST(test_decoder_survives_truncation);
   RUN_TEST(test_garbage_does_not_produce_audio);
   RUN_TEST(test_joins_a_high_bitrate_stream_mid_file);

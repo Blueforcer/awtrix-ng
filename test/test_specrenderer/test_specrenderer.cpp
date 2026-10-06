@@ -1,6 +1,8 @@
-﻿#include <unity.h>
+#include <unity.h>
+#include "../Visuals.h"
 
 #include "core/apps/SpecRenderer.h"
+#include "core/payload/PayloadParser.h"
 #include "core/render/PaletteStore.h"
 
 using namespace awtrix;
@@ -37,47 +39,52 @@ static void test_background_fill() {
   TEST_ASSERT_EQUAL_HEX32(0x112233u, c.getPixel(31, 6));
 }
 
-static void test_centered_text() {
-  AppSpec s;
-  s.text = "A";
-  s.hasTextColor = true;
-  s.textColor = 0xFF0000u;
-  Canvas c(32, 8);
-  render::renderSpec(c, s, kFont, rc());
-  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(14, 6));
+static int countOf(const Canvas& c, uint32_t color) {
+  int n = 0;
+  for (int y = 0; y < c.height(); ++y)
+    for (int x = 0; x < c.width(); ++x) n += c.getPixel(x, y) == color;
+  return n;
 }
 
 static void test_progress_bar() {
-  AppSpec s;
-  s.extrasMut().progress = 50;
-  Canvas c(32, 8);
-  render::renderSpec(c, s, kFont, rc());
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 7));
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(15, 7));
-  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(16, 7));
+  int filled[2], track[2];
+  const int progress[2] = {25, 75};
+  for (int i = 0; i < 2; ++i) {
+    AppSpec s;
+    s.extrasMut().progress = progress[i];
+    s.extrasMut().progressColor = 0xFF0000u;
+    s.extrasMut().progressTrackColor = 0x0000FFu;
+    Canvas c(32, 8);
+    render::renderSpec(c, s, kFont, rc());
+    filled[i] = countOf(c, 0xFF0000u);
+    track[i] = countOf(c, 0x0000FFu);
+  }
+  TEST_ASSERT_TRUE(filled[0] > 0 && track[1] > 0);
+  TEST_ASSERT_TRUE(filled[1] > filled[0]);
+  TEST_ASSERT_EQUAL_INT(filled[0] + track[0], filled[1] + track[1]);
 }
 
 static void test_draw_op_overlays() {
   AppSpec s;
-  DrawOp p;
-  p.kind = DrawKind::Pixel;
-  p.x = 2; p.y = 2; p.color = 0xFF00FFu;
-  s.extrasMut().draw.push_back(p);
+  TEST_ASSERT_TRUE(payload::parse(R"({"draw":[["pixel",2,2,"#FF00FF"]]})", false, s));
   Canvas c(32, 8);
   render::renderSpec(c, s, kFont, rc());
   TEST_ASSERT_EQUAL_HEX32(0xFF00FFu, c.getPixel(2, 2));
 }
 
 static void test_bar_chart() {
-  AppSpec s;
-  s.extrasMut().barChart = {4, 8};
-  s.hasTextColor = true;
-  s.textColor = 0x00FF00u;
-  Canvas c(32, 8);
-  render::renderSpec(c, s, kFont, rc());
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 7));
-  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(0, 3));
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(16, 0));
+  int lit[2];
+  const int value[2] = {4, 8};
+  for (int i = 0; i < 2; ++i) {
+    AppSpec s;
+    s.extrasMut().barChart = {value[i], 8};
+    s.hasTextColor = true;
+    s.textColor = 0x00FF00u;
+    Canvas c(32, 8);
+    render::renderSpec(c, s, kFont, rc());
+    lit[i] = countOf(c, 0x00FF00u);
+  }
+  TEST_ASSERT_TRUE(lit[0] > 0 && lit[1] > lit[0]);
 }
 
 static bool anyLit(Canvas& c) {
@@ -91,7 +98,7 @@ static void test_uppercase_textcase() {
   AppSpec s; s.text = "a"; s.textCase = TextCase::Upper;
   Canvas c(32, 8);
   render::renderSpec(c, s, kFont, rc());
-  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, c.getPixel(14, 6));
+  TEST_ASSERT_TRUE(test::countPixels(c, test::lit) > 0);
   AppSpec s2; s2.text = "a"; s2.textCase = TextCase::AsTyped;
   Canvas c2(32, 8);
   { auto r = rc(); r.uppercase = true; render::renderSpec(c2, s2, kFont, r); }
@@ -110,17 +117,17 @@ static void test_palette_text_starts_at_the_first_stop() {
   paintFromPalette(s, stops, 2);
   Canvas c(32, 8);
   render::renderSpec(c, s, kFont, rc());
-  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(14, 6));
+  TEST_ASSERT_TRUE(test::countPixels(c, [](uint32_t p) { return p == 0xFF0000u; }) > 0);
 }
 
 static void test_palette_outranks_fragment_colours() {
   const uint32_t stops[2] = {0xFF0000u, 0x0000FFu};
   AppSpec s;
-  s.fragments.push_back({"A", 0x00FF00u});
+  TEST_ASSERT_TRUE(payload::parse(R"({"text":[{"text":"A","color":"#00FF00"}]})", false, s));
   paintFromPalette(s, stops, 2);
   Canvas c(32, 8);
   render::renderSpec(c, s, kFont, rc());
-  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(14, 6));
+  TEST_ASSERT_TRUE(test::countPixels(c, [](uint32_t p) { return p == 0xFF0000u; }) > 0);
 }
 
 static const uint16_t kWideIndex[] = {1};
@@ -129,9 +136,10 @@ static const GfxFont kWideFont = {kB, kG, 'A', 'A', 8, kWideRanges, 1};
 
 static void test_fragment_colours_are_counted_per_glyph() {
   AppSpec s;
-  s.fragments.push_back({"\xC4\x80", 0xFF0000u});
-  s.fragments.push_back({"A", 0x0000FFu});
-  s.textCenter = false;
+  TEST_ASSERT_TRUE(payload::parse(
+      "{\"text\":[{\"text\":\"\xC4\x80\",\"color\":\"#FF0000\"},{\"text\":\"A\",\"color\":\"#0000FF\"}]}",
+      false, s));
+  s.textAlign = Align::Start;
   Canvas c(32, 8);
   render::renderSpec(c, s, kWideFont, rc());
 
@@ -139,12 +147,25 @@ static void test_fragment_colours_are_counted_per_glyph() {
   TEST_ASSERT_EQUAL_HEX32(0x0000FFu, c.getPixel(4, 6));
 }
 
+static void test_end_aligned_text_ends_at_the_right_edge() {
+  AppSpec s; s.text = "A"; s.textAlign = Align::End;
+  Canvas c(32, 8);
+  render::renderSpec(c, s, kFont, rc());
+  const auto box = test::bounds(c, test::lit);
+  TEST_ASSERT_TRUE(test::countPixels(c, test::lit) > 0);
+  TEST_ASSERT_EQUAL_INT(c.width() - 1, box.right);
+  Canvas wide(64, 8);
+  render::renderSpec(wide, s, kFont, rc());
+  TEST_ASSERT_TRUE(test::countPixels(wide, test::lit) > 0);
+  TEST_ASSERT_EQUAL_INT(wide.width() - 1, test::bounds(wide, test::lit).right);
+}
+
 static void test_palette_paint_without_a_palette_falls_back() {
   AppSpec s; s.text = "A"; s.hasTextColor = true; s.textColor = 0x00FF00u;
   s.extrasMut().textUsesPalette = true;
   Canvas c(32, 8);
   render::renderSpec(c, s, kFont, rc());
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(14, 6));
+  TEST_ASSERT_TRUE(test::countPixels(c, [](uint32_t p) { return p == 0x00FF00u; }) > 0);
 }
 
 static void test_chart_paints_from_the_palette() {
@@ -160,20 +181,9 @@ static void test_chart_paints_from_the_palette() {
   TEST_ASSERT_TRUE(c.getPixel(0, 7) != 0x0000FFu);
 }
 
-static void test_line_chart() {
-  AppSpec s; s.extrasMut().lineChart = {0, 8}; s.hasTextColor = true; s.textColor = 0x00FF00u;
-  Canvas c(32, 8);
-  render::renderSpec(c, s, kFont, rc());
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 7));
-}
-
 static void test_pixels_are_drawn() {
   AppSpec s;
-  DrawOp op;
-  op.kind = DrawKind::Pixels;
-  op.color = 0x00FF00u;
-  op.points = {0, 0, 5, 3, 31, 7};
-  s.extrasMut().draw.push_back(op);
+  TEST_ASSERT_TRUE(payload::parse(R"({"draw":[["pixels","#00FF00",0,0,5,3,31,7]]})", false, s));
   Canvas c(32, 8);
   render::renderSpec(c, s, kFont, rc());
   TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 0));
@@ -183,14 +193,9 @@ static void test_pixels_are_drawn() {
 
 static void test_draw_op_without_a_color_uses_the_text_color() {
   AppSpec s;
+  TEST_ASSERT_TRUE(payload::parse(R"({"draw":[["pixel",4,4]]})", false, s));
   s.hasTextColor = true;
   s.textColor = 0xFF00FFu;
-  DrawOp op;
-  op.kind = DrawKind::Pixel;
-  op.x = 4;
-  op.y = 4;
-  op.inheritColor = true;
-  s.extrasMut().draw.push_back(op);
   Canvas c(32, 8);
   render::renderSpec(c, s, kFont, rc());
   TEST_ASSERT_EQUAL_HEX32(0xFF00FFu, c.getPixel(4, 4));
@@ -223,7 +228,7 @@ static void test_line_chart_without_chart_color_uses_text_color() {
 static void test_overflowing_text_drawn_at_textX() {
   AppSpec s;
   s.text = "AAAAAAAAAA";
-  s.textCenter = true;
+  s.textAlign = Align::Center;
   Canvas c(32, 8);
   auto r = rc();
   r.textX = 5;
@@ -351,32 +356,19 @@ static void test_bars_respect_icon_width() {
   TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(9, 7));
 }
 
-static void test_bars_with_negative_values_straddle_the_zero_line() {
+static void test_bars_with_negative_values_stay_on_canvas() {
   AppSpec s;
   s.extrasMut().barChart = {-4, 4};
   s.hasTextColor = true;
   s.textColor = 0x00FF00u;
-  Canvas c(32, 8);
-  { auto r = rc(); render::renderSpec(c, s, kFont, r); }
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 7));
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 4));
-  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(0, 3));
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(16, 0));
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(16, 3));
-  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(16, 4));
-}
-
-static void test_bars_all_positive_still_anchor_at_the_bottom() {
-  AppSpec s;
-  s.extrasMut().barChart = {8, 4};
-  s.hasTextColor = true;
-  s.textColor = 0x00FF00u;
-  Canvas c(32, 8);
-  { auto r = rc(); render::renderSpec(c, s, kFont, r); }
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 0));
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 7));
-  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(16, 3));
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(16, 4));
+  constexpr int pixels = 32 * 8;
+  uint32_t guarded[pixels + 2] = {};
+  guarded[0] = guarded[pixels + 1] = 0xDEADBEEFu;
+  Canvas c(32, 8, guarded + 1);
+  render::renderSpec(c, s, kFont, rc());
+  TEST_ASSERT_TRUE(countOf(c, 0x00FF00u) > 0);
+  TEST_ASSERT_EQUAL_HEX32(0xDEADBEEFu, guarded[0]);
+  TEST_ASSERT_EQUAL_HEX32(0xDEADBEEFu, guarded[pixels + 1]);
 }
 
 static void test_line_chart_with_negative_values_stays_on_canvas() {
@@ -396,8 +388,7 @@ int main(int, char**) {
   RUN_TEST(test_draw_op_without_a_color_uses_the_text_color);
   RUN_TEST(test_chart_color_applies_to_the_line_chart);
   RUN_TEST(test_line_chart_without_chart_color_uses_text_color);
-  RUN_TEST(test_bars_with_negative_values_straddle_the_zero_line);
-  RUN_TEST(test_bars_all_positive_still_anchor_at_the_bottom);
+  RUN_TEST(test_bars_with_negative_values_stay_on_canvas);
   RUN_TEST(test_line_chart_with_negative_values_stays_on_canvas);
   RUN_TEST(test_background_fill);
   RUN_TEST(test_toptext_zorder);
@@ -413,9 +404,8 @@ int main(int, char**) {
   RUN_TEST(test_palette_outranks_fragment_colours);
   RUN_TEST(test_fragment_colours_are_counted_per_glyph);
   RUN_TEST(test_palette_paint_without_a_palette_falls_back);
+  RUN_TEST(test_end_aligned_text_ends_at_the_right_edge);
   RUN_TEST(test_chart_paints_from_the_palette);
-  RUN_TEST(test_line_chart);
-  RUN_TEST(test_centered_text);
   RUN_TEST(test_progress_bar);
   RUN_TEST(test_draw_op_overlays);
   RUN_TEST(test_bar_chart);

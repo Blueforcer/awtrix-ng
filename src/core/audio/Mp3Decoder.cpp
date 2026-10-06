@@ -6,6 +6,7 @@
 #include "core/audio/Mp3Bitstream.h"
 #include "core/audio/Mp3Huffman.h"
 #include "core/audio/Mp3Tables.h"
+#include "core/audio/Mp3TablesLsf.h"
 #include "core/audio/Mp3Window.h"
 
 namespace awtrix {
@@ -106,22 +107,44 @@ float powerOfFourThirds(int magnitude) {
   return std::pow(static_cast<float>(magnitude), 4.0f / 3.0f);
 }
 
-const uint8_t* bandWidths(const FrameHeader& header, const GranuleInfo& granule) {
-  const int rate = rateIndex(header.sampleRateHz);
-  if (granule.blockType != 2) return kBandsLong[rate];
-  return granule.mixedBlock ? kBandsMixed[rate] : kBandsShort[rate];
+// Row into the band tables for this frame's rate, or -1 for a rate the decoder does not play.
+int bandRow(const FrameHeader& header) {
+  return header.lsf() ? lsfRateIndex(header.sampleRateHz) : rateIndex(header.sampleRateHz);
 }
 
-// Splits the big-values area into the three Huffman-table regions. Short blocks use a fixed split
-// at line 36; long blocks derive theirs from region0_count/region1_count in the side info.
+const uint8_t* longWidths(const FrameHeader& header) {
+  return header.lsf() ? kLsfBandsLong[bandRow(header)] : kBandsLong[bandRow(header)];
+}
+
+const uint8_t* bandWidths(const FrameHeader& header, const GranuleInfo& granule) {
+  const int row = bandRow(header);
+  if (granule.blockType != 2) return longWidths(header);
+  if (header.lsf()) return granule.mixedBlock ? kLsfBandsMixed[row] : kLsfBandsShort[row];
+  return granule.mixedBlock ? kBandsMixed[row] : kBandsShort[row];
+}
+
+// A mixed block codes its lowest bands long: eight of them in MPEG-1, six in MPEG-2. They end at
+// line 36, or 72 at 8 kHz.
+int mixedLongBands(const FrameHeader& header) { return header.lsf() ? kLsfMixedLongBands : 8; }
+
+int mixedLongLines(const FrameHeader& header) {
+  const uint8_t* widths = longWidths(header);
+  int lines = 0;
+  for (int band = 0; band < mixedLongBands(header); ++band) lines += widths[band];
+  return lines;
+}
+
+// Splits the big-values area into the three Huffman-table regions. Short blocks split where their
+// long part would end (line 36, or 72 for a mixed block at 8 kHz); long blocks derive theirs from
+// region0_count/region1_count in the side info.
 void regionBoundaries(const FrameHeader& header, const GranuleInfo& granule, int& region1,
                       int& region2) {
   if (granule.windowSwitching && granule.blockType == 2) {
-    region1 = 36;
+    region1 = granule.mixedBlock ? mixedLongLines(header) : 36;
     region2 = kSamplesPerGranule;
     return;
   }
-  const uint8_t* widths = kBandsLong[rateIndex(header.sampleRateHz)];
+  const uint8_t* widths = longWidths(header);
   int start = 0;
   int line = 0;
   for (int band = 0; widths[band] != 0; ++band) {
@@ -144,7 +167,7 @@ void Decoder::reset() {
   std::memset(overlap_, 0, sizeof(overlap_));
   std::memset(synthesis_, 0, sizeof(synthesis_));
   std::memset(scalefactors_, 0, sizeof(scalefactors_));
-  std::memset(intensityPosition_, 0, sizeof(intensityPosition_));
+  std::memset(intensityLimit_, 0, sizeof(intensityLimit_));
   for (int ch = 0; ch < kMaxChannels; ++ch) synthesisOffset_[ch] = 0;
   reservoirFill_ = 0;
 }
@@ -185,6 +208,66 @@ int readScalefactors(BitReader& bits, const SideInfo& side, int granule, int cha
     for (int band = kGroupStart[group]; band < kGroupStart[group + 1]; ++band) {
       if (granule == 1 && side.scfsi[channel][group]) continue;
       out[band] = static_cast<int>(bits.read(width));
+    }
+  }
+  return static_cast<int>(bits.bitPos() - start);
+}
+
+// MPEG-2 and 2.5 (ISO/IEC 13818-3 2.4.3.2): scalefac_compress packs up to four field widths and
+// picks how many scalefactors each width covers. Intensity-stereo positions have their own
+// ranges. limit receives each position's reserved value, all ones in its width, which marks a band
+// as not intensity coded.
+int readLsfScalefactors(BitReader& bits, const GranuleInfo& g, bool intensity, int* out,
+                        int* limit) {
+  int compress = g.scalefacCompress;
+  int slen[4] = {0, 0, 0, 0};
+  int table = 0;
+  if (!intensity) {
+    if (compress < 400) {
+      slen[0] = (compress >> 4) / 5;
+      slen[1] = (compress >> 4) % 5;
+      slen[2] = (compress & 15) >> 2;
+      slen[3] = compress & 3;
+    } else if (compress < 500) {
+      compress -= 400;
+      slen[0] = (compress >> 2) / 5;
+      slen[1] = (compress >> 2) % 5;
+      slen[2] = compress & 3;
+      table = 1;
+    } else {
+      compress -= 500;
+      slen[0] = compress / 3;
+      slen[1] = compress % 3;
+      table = 2;
+    }
+  } else {
+    compress >>= 1;
+    if (compress < 180) {
+      slen[0] = compress / 36;
+      slen[1] = (compress % 36) / 6;
+      slen[2] = compress % 6;
+      table = 3;
+    } else if (compress < 244) {
+      compress -= 180;
+      slen[0] = (compress & 63) >> 4;
+      slen[1] = (compress & 15) >> 2;
+      slen[2] = compress & 3;
+      table = 4;
+    } else {
+      compress -= 244;
+      slen[0] = compress / 3;
+      slen[1] = compress % 3;
+      table = 5;
+    }
+  }
+
+  const int kind = g.blockType == 2 ? (g.mixedBlock ? 2 : 1) : 0;
+  const std::size_t start = bits.bitPos();
+  int index = 0;
+  for (int part = 0; part < 4; ++part) {
+    for (int i = 0; i < kLsfPartitions[table][kind][part]; ++i, ++index) {
+      out[index] = static_cast<int>(bits.read(slen[part]));
+      limit[index] = (1 << slen[part]) - 1;
     }
   }
   return static_cast<int>(bits.bitPos() - start);
@@ -244,7 +327,7 @@ void Decoder::requantize(const FrameHeader& header, const GranuleInfo& granule,
   const uint8_t* widths = bandWidths(header, granule);
   const float multiplier = granule.scalefacScale ? 1.0f : 0.5f;
   const bool shortBlock = granule.blockType == 2;
-  const int longBandsInMixed = granule.mixedBlock ? 8 : 0;
+  const int longBandsInMixed = granule.mixedBlock ? mixedLongBands(header) : 0;
 
   int line = 0;
   for (int band = 0; widths[band] != 0 && line < kSamplesPerGranule; ++band) {
@@ -305,21 +388,34 @@ void Decoder::applyStereo(const FrameHeader& header, const SideInfo& side, int g
     }
   }
 
+  // MPEG-2 scales one side by io^n, io being 2^-1/4 or, with the right channel's
+  // intensity_scale bit, 2^-1/2.
+  const float lsfStep =
+      (side.granules[granule][1].scalefacCompress & 1) != 0 ? -0.5f : -0.25f;
+
   int line = 0;
   for (int band = 0; widths[band] != 0 && line < kSamplesPerGranule; ++band) {
     const int width = widths[band];
-    const bool useIntensity = intensity && line >= intensityStart;
+    const int position = scalefactors_[1][band];
+    // A position at its reserved value leaves the band to mid/side or plain stereo.
+    const bool useIntensity = intensity && line >= intensityStart &&
+                              (header.lsf() ? position != intensityLimit_[band] : position < 7);
 
     if (useIntensity) {
-      const int position = scalefactors_[1][band];
-      if (position < 7) {
-        const float left = kIntensityPan[position][0];
-        const float right = kIntensityPan[position][1];
-        for (int i = 0; i < width && line + i < kSamplesPerGranule; ++i) {
-          const float value = spectrum_[0][line + i];
-          spectrum_[0][line + i] = value * left;
-          spectrum_[1][line + i] = value * right;
-        }
+      float left = 1.0f;
+      float right = 1.0f;
+      if (!header.lsf()) {
+        left = kIntensityPan[position][0];
+        right = kIntensityPan[position][1];
+      } else if (position & 1) {
+        left = std::exp2(lsfStep * static_cast<float>((position + 1) / 2));
+      } else {
+        right = std::exp2(lsfStep * static_cast<float>(position / 2));
+      }
+      for (int i = 0; i < width && line + i < kSamplesPerGranule; ++i) {
+        const float value = spectrum_[0][line + i];
+        spectrum_[0][line + i] = value * left;
+        spectrum_[1][line + i] = value * right;
       }
     } else if (midSide) {
       constexpr float kInverseRootTwo = 0.70710678f;
@@ -345,9 +441,9 @@ void Decoder::reorderShortBlocks(const FrameHeader& header, const GranuleInfo& g
   float scratch[kSamplesPerGranule];
   std::memcpy(scratch, spectrum_[channel], sizeof(scratch));
 
-  const int longLines = granule.mixedBlock ? 36 : 0;
+  const int longLines = granule.mixedBlock ? mixedLongLines(header) : 0;
   int source = longLines;
-  int band = granule.mixedBlock ? 8 : 0;
+  int band = granule.mixedBlock ? mixedLongBands(header) : 0;
   int frequency = longLines / 3;
 
   for (; widths[band] != 0 && source < kSamplesPerGranule; band += 3) {
@@ -365,10 +461,11 @@ void Decoder::reorderShortBlocks(const FrameHeader& header, const GranuleInfo& g
 }
 
 // Butterflies over the 8 lines either side of each subband boundary, cancelling the aliasing the
-// encoder's hybrid filterbank left behind. Pure short blocks have no boundary to fix.
-void Decoder::reduceAliasing(const GranuleInfo& granule, int channel) {
+// encoder's hybrid filterbank left behind. Pure short blocks have no boundary to fix, a mixed one
+// only those inside its long part.
+void Decoder::reduceAliasing(const GranuleInfo& granule, int longSubbands, int channel) {
   if (granule.blockType == 2 && !granule.mixedBlock) return;
-  const int boundaries = (granule.blockType == 2 && granule.mixedBlock) ? 1 : kSubbands - 1;
+  const int boundaries = granule.blockType == 2 ? longSubbands - 1 : kSubbands - 1;
 
   float* x = spectrum_[channel];
   for (int boundary = 0; boundary < boundaries; ++boundary) {
@@ -383,7 +480,7 @@ void Decoder::reduceAliasing(const GranuleInfo& granule, int channel) {
 }
 
 
-void Decoder::inverseMdct(const GranuleInfo& granule, int channel) {
+void Decoder::inverseMdct(const GranuleInfo& granule, int longSubbands, int channel) {
   const CosineTables& table = cosines();
   float* x = spectrum_[channel];
 
@@ -407,8 +504,8 @@ void Decoder::inverseMdct(const GranuleInfo& granule, int channel) {
 
     float output[36];
 
-    const bool shortBlock =
-        granule.blockType == 2 && !(granule.mixedBlock && subband < 2);
+    const bool mixedLong = granule.mixedBlock && subband < longSubbands;
+    const bool shortBlock = granule.blockType == 2 && !mixedLong;
     if (shortBlock) {
       std::memset(output, 0, sizeof(output));
       for (int window = 0; window < 3; ++window) {
@@ -434,7 +531,7 @@ void Decoder::inverseMdct(const GranuleInfo& granule, int channel) {
           output[6 + window * 6 + i] += raw[i] * kBlockWindow[2][i];
       }
     } else {
-      const int windowType = (granule.mixedBlock && subband < 2) ? 0 : granule.blockType;
+      const int windowType = mixedLong ? 0 : granule.blockType;
       if (lines <= 6)
         imdctRows<6>(input, table.imdct36, output);
       else if (lines <= 12)
@@ -517,8 +614,16 @@ bool Decoder::decodeGranule(const FrameHeader& header, const SideInfo& side, int
 
     if (granule == 0 || g.blockType == 2)
       std::memset(scalefactors_[channel], 0, sizeof(scalefactors_[channel]));
-    const int scalefactorBits = readScalefactors(bits, side, granule, channel,
-                                                 scalefactors_[channel]);
+    int scalefactorBits = 0;
+    if (header.lsf()) {
+      const bool intensity = intensityChannel(header, channel);
+      int unused[39];
+      if (intensity) std::memset(intensityLimit_, 0, sizeof(intensityLimit_));
+      scalefactorBits = readLsfScalefactors(bits, g, intensity, scalefactors_[channel],
+                                            intensity ? intensityLimit_ : unused);
+    } else {
+      scalefactorBits = readScalefactors(bits, side, granule, channel, scalefactors_[channel]);
+    }
     const std::size_t huffmanEnd = granuleStart + g.part2_3Length;
     if (scalefactorBits > g.part2_3Length) return false;
 
@@ -531,11 +636,12 @@ bool Decoder::decodeGranule(const FrameHeader& header, const SideInfo& side, int
   }
 
   applyStereo(header, side, granule);
+  const int longSubbands = mixedLongLines(header) / kSamplesPerSubband;
   for (int channel = 0; channel < channels; ++channel) {
     const GranuleInfo& g = side.granules[granule][channel];
     reorderShortBlocks(header, g, channel);
-    reduceAliasing(g, channel);
-    inverseMdct(g, channel);
+    reduceAliasing(g, longSubbands, channel);
+    inverseMdct(g, longSubbands, channel);
     synthesise(channel, granule, pcm, channels);
   }
   return true;
@@ -572,7 +678,7 @@ DecodeResult Decoder::decode(const uint8_t* data, std::size_t bytes, int16_t* pc
   }
 
   result.bytesConsumed = at + frameBytes;
-  if (!isSupported(header) || rateIndex(header.sampleRateHz) < 0) {
+  if (!isSupported(header) || bandRow(header) < 0) {
     result.status = DecodeStatus::Unsupported;
     return result;
   }
@@ -621,7 +727,7 @@ DecodeResult Decoder::decode(const uint8_t* data, std::size_t bytes, int16_t* pc
 
   BitReader bits(reservoir_ + start, available - start);
   bool ok = true;
-  for (int granule = 0; granule < kGranules && ok; ++granule)
+  for (int granule = 0; granule < granules(header) && ok; ++granule)
     ok = decodeGranule(header, side, granule, bits, pcm);
 
   // Keep only the last 511 bytes; that is as far back as any following frame can reach.

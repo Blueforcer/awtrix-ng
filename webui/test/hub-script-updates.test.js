@@ -48,7 +48,7 @@ async function scenario({ modified = false, conflict = false, draft = false, net
     window.document.querySelector('.ftitem').click();
     await flush();
     const panel = window.document.querySelector('.script-hub-panel');
-    assert.equal(panel.querySelector('a').textContent, 'Hub publication 2');
+    assert.equal(panel.querySelector('a').textContent, 'Hub version 2');
     assert.equal(panel.querySelectorAll('img').length, 0, 'release notes are plain text');
     assert.ok(panel.querySelector('button'), 'an available update has an action');
     panel.querySelector('button').click();
@@ -66,7 +66,7 @@ async function scenario({ modified = false, conflict = false, draft = false, net
       assert.equal(writes.length, 0, 'a failed source download never writes the script');
       assert.equal(store.scripts.get('Demo'), current, 'a failed source download keeps the installed script');
       const message = [...window.document.querySelectorAll('.toast')].at(-1).textContent;
-      assert.match(message, /Hub check unavailable/, 'network failures use the translated Hub message');
+      assert.match(message, /Hub not reachable/, 'network failures use the Hub message');
       return;
     }
     assert.equal(writes.length, 1);
@@ -127,7 +127,38 @@ async function unlinkedScenario() {
   } finally { window.close(); }
 }
 
+async function integrityScenario() {
+  const { window } = await boot();
+  try {
+    window.AbortSignal = AbortSignal;
+    const old = window.hubScriptLink(id, 'def draw() end\r\n');
+    assert.equal(window.hubScriptOrigin(old).id, id);
+    assert.equal(window.hubScriptOrigin(old).code, 'def draw() end\r\n');
+    const release = { id, sha256: hash(next) };
+    assert.equal((await window.prepareHubScriptUpdate(old, release, async () => next)).modified, false);
+    assert.equal((await window.prepareHubScriptUpdate(old + '# custom', release, async () => next)).modified, true);
+    const translate = window.eval('t');
+    const message = key => error => error.message === translate(key);
+    await assert.rejects(window.prepareHubScriptUpdate('old', { id }), message('suChanged'));
+    await assert.rejects(window.prepareHubScriptUpdate(old, { id: 'another' }), message('suChanged'));
+    await assert.rejects(window.prepareHubScriptUpdate(old, release, async () => 'changed'), message('suIntegrity'));
+    assert.equal(window.hubScriptOrigin('# @hub https://evil.test/x hash\ncode'), null);
+    window.fetch = async (url, options) => {
+      assert.equal(url, 'https://awtrix.de/api/v1/scripts/' + id + '/release');
+      assert.equal(options.credentials, 'omit');
+      assert.equal(options.redirect, 'error');
+      assert.equal(options.headers.Authorization, undefined);
+      return new Response(JSON.stringify({ id, sha256: 'a'.repeat(64), revision: 2, notes: 'Fix' }));
+    };
+    assert.equal((await window.hubScriptRelease(id)).revision, 2);
+    await assert.rejects(window.hubScriptRelease('../account'), message('suIntegrity'));
+    window.fetch = async () => new Response('', { status: 404 });
+    await assert.rejects(window.hubScriptRelease(id), message('suMissing'));
+  } finally { window.close(); }
+}
+
 (async () => {
+  await integrityScenario();
   await unlinkedScenario();
   await tokenRequiredScenario();
   await scenario();
@@ -135,5 +166,5 @@ async function unlinkedScenario() {
   await scenario({ conflict: true });
   await scenario({ draft: true });
   await scenario({ network: true });
-  console.log('hub-script-updates: 7 workflows passed (unlinked, token gate, update, copy, conflict, in-flight draft, network failure)');
+  console.log('hub-script-updates: 3 integrity cases and 7 workflows passed (unlinked, token gate, update, copy, conflict, in-flight draft, network failure)');
 })().catch(error => { console.error(error); process.exitCode = 1; });

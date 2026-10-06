@@ -7,13 +7,12 @@
 ## How it was verified
 
 <!--
-Say what you actually ran. "Simulator only" is a useful answer, not an
+Say what you actually ran. "Host tests only" is a useful answer, not an
 apology. If you tested on hardware, name the board.
 -->
 
 - [ ] `python scripts/test_native.py` passes
 - [ ] `pio run -e awtrix`, `pio run -e awtrix_s3_octal` and `pio run -e awtrix_s3_quad` build
-- [ ] Tested in the simulator (`pio run -e native_sim`)
 - [ ] Tested on hardware — board:
 
 ## Checklist
