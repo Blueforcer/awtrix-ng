@@ -1,7 +1,5 @@
 #include "transport/mqtt/MqttLink.h"
 
-#include <WiFi.h>
-
 #include "system/Log.h"
 
 namespace awtrix {
@@ -20,14 +18,22 @@ constexpr uint16_t kMqttBufferBytes = 8192;
 constexpr uint16_t kHandshakeSeconds = 2;
 
 std::string endpointOf(const IPAddress& ip, uint16_t port) {
-  return std::string(ip.toString().c_str()) + ":" + std::to_string(port);
+  std::string endpoint(ip.toString().c_str());
+  endpoint += ':';
+  endpoint += std::to_string(port);
+  return endpoint;
 }
 
+}
+
+MqttLink::~MqttLink() {
+  socket_.shutdown();
+  delete client_;
 }
 
 void MqttLink::begin(const DeviceConfig& cfg, const std::string& clientId,
                      const std::string& prefix, net::IHostResolver* resolver,
-                     net::LinkStatus* status) {
+                     net::LinkStatus* status, MqttSocket::Options transport) {
   status_ = status;
   resolver_ = resolver;
   enabled_ = cfg.mqttEnabled;
@@ -44,7 +50,8 @@ void MqttLink::begin(const DeviceConfig& cfg, const std::string& clientId,
 
   if (!enabled_) return;
 
-  client_ = new PubSubClient(wifi_);
+  socket_.begin(transport, host_);
+  client_ = new PubSubClient(socket_.socket());
   if (!client_->setBufferSize(kMqttBufferBytes))
     logf("mqtt: could not allocate a %u-byte packet buffer; large commands will be dropped",
          static_cast<unsigned>(kMqttBufferBytes));
@@ -54,10 +61,14 @@ void MqttLink::begin(const DeviceConfig& cfg, const std::string& clientId,
 
 // Drives one step of the connect state machine and returns whether the link is usable right now.
 // Everything here is non-blocking except the connect attempt itself.
-bool MqttLink::tick(uint32_t nowMs) {
+bool MqttLink::tick(uint32_t nowMs, bool networkConnected) {
   if (!client_) return false;
 
-  if (!WiFi.isConnected()) {
+  if (!networkConnected) {
+    if (sawWifi_) {
+      socket_.shutdown();
+      wasConnected_ = false;
+    }
     sawWifi_ = false;
     haveServer_ = false;
     status_->phase = LinkPhase::Offline;
@@ -75,7 +86,7 @@ bool MqttLink::tick(uint32_t nowMs) {
     backoff_.reset();
   }
 
-  if (client_->connected()) {
+  if (!socket_.connecting() && client_->connected()) {
     client_->loop();
     status_->retryInMs = 0;
     return true;
@@ -104,14 +115,17 @@ bool MqttLink::tick(uint32_t nowMs) {
       noteFailure(nowMs, resolver_->error(), 0);
       return false;
     }
-    address_ = resolver_->address();
-    client_->setServer(address_, port_);
-    status_->endpoint = endpointOf(address_, port_);
+    const uint32_t resolvedAddress = resolver_->address();
+    const IPAddress address(resolvedAddress >> 24, resolvedAddress >> 16, resolvedAddress >> 8, resolvedAddress);
+    client_->setServer(address, port_);
+    status_->endpoint = endpointOf(address, port_);
     haveServer_ = true;
   }
 
   status_->phase = LinkPhase::Connecting;
-  if (!connectNow()) {
+  const auto result = socket_.connectStep([this] { return connectNow(); });
+  if (result == ResolveState::Pending) return false;
+  if (result == ResolveState::Failed) {
     const int state = client_->state();
     // A cached address that keeps refusing is usually stale (broker moved, DHCP lease changed), so
     // drop it and resolve again rather than retrying the same IP forever.

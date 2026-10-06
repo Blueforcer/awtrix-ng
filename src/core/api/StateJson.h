@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@ class ScriptHost;
 namespace awtrix {
 class CoreEngine;
 class Canvas;
+struct DeviceCapabilities;
 namespace api {
 class JsonWriter;
 }
@@ -23,18 +25,20 @@ std::string buildSettingsJson(CoreEngine& engine);
 std::string buildDisplayJson(CoreEngine& engine);
 std::string buildScreenJson(const Canvas& canvas);
 std::string buildAudioJson(CoreEngine& engine);
-std::string buildAppsJson(CoreEngine& engine, const script::ScriptHost* scripts = nullptr);
 std::string buildSharedStateJson(const std::vector<script::SharedEntry>& entries);
 
 void appendAudioJson(std::string& out, CoreEngine& engine);
+// device, when given, lets each script's @needs and @display report whether this device has it.
 void appendAppsJson(std::string& out, CoreEngine& engine,
                     const script::ScriptHost* scripts = nullptr,
-                    const std::vector<script::StoredScript>* stored = nullptr);
+                    const std::vector<script::StoredScript>* stored = nullptr,
+                    const DeviceCapabilities* device = nullptr);
 void appendSharedStateJson(std::string& out, const std::vector<script::SharedEntry>& entries);
 
 void writeLinkStatus(api::JsonWriter& w, const net::LinkStatus& status);
 
 // Platform facts the core cannot read for itself; the port fills these in before /device is built.
+// A member the platform cannot measure is left out through its has flag, never sent as zero.
 struct DeviceFacts {
   std::string boardType;
   std::string soc;
@@ -42,14 +46,16 @@ struct DeviceFacts {
   std::string hostname;
   int wifiRssi = 0;
   long uptimeSeconds = 0;
-  uint32_t freeHeapBytes = 0;
-  uint32_t minFreeHeapBytes = 0;
-  uint32_t largestFreeBlockBytes = 0;
+  uint64_t freeHeapBytes = 0;
+  uint64_t minFreeHeapBytes = 0;
+  uint64_t largestFreeBlockBytes = 0;
   uint32_t psramTotalBytes = 0;
   uint32_t psramFreeBytes = 0;
   std::string resetReason;
   std::string updateImage;
+  bool hasLargestFreeBlock = false;
   bool hasBattery = false;
+  bool hasBatteryDivider = false;
   bool hasLightSensor = false;
   bool hasTemperature = false;
   bool hasHumidity = false;
@@ -57,6 +63,10 @@ struct DeviceFacts {
   bool scriptingRunning = false;
 };
 
-std::string buildDeviceJson(CoreEngine& engine, const std::string& uid, const DeviceFacts& facts);
+// Adds members of the platform's own after the shared ones, such as the TC002's update status.
+using DeviceMembersFn = std::function<void(api::JsonWriter&)>;
+
+std::string buildDeviceJson(CoreEngine& engine, const std::string& uid, const DeviceFacts& facts,
+                            const DeviceMembersFn& platformMembers = nullptr);
 
 }

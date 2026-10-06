@@ -36,20 +36,9 @@ class BatteryApp : public IApp {
   static constexpr int kCells = 6;
   static constexpr int kIconWidth = 8;
 
-  static uint32_t levelColor(int pct, bool low) {
-    if (low || pct < 20) return 0xFF2000u;
-    if (pct < 40) return 0xFFA000u;
-    return 0x00E000u;
-  }
-
-  static uint32_t dim(uint32_t rgb, uint8_t s) {
-    return color::pack(color::scale8(color::red(rgb), s), color::scale8(color::green(rgb), s),
-                       color::scale8(color::blue(rgb), s));
-  }
-
   static void drawGauge(Canvas& c, int x0, int pct, bool low) {
-    const uint32_t col = levelColor(pct, low);
-    const uint32_t shell = dim(col, 76);
+    const uint32_t col = batteryLevelColor(pct, low);
+    const uint32_t shell = color::scale8(col, 76);
     c.fillRect(x0 + 2, 0, 3, 1, shell);
     c.setPixel(x0 + 2, 1, shell);
     c.setPixel(x0 + 4, 1, shell);
@@ -65,7 +54,7 @@ class BatteryApp : public IApp {
     // jumping.
     const float frac = cells - static_cast<float>(full);
     if (full < kCells && frac > 0.001f) {
-      const uint32_t part = dim(col, static_cast<uint8_t>(128.0f + frac * 127.0f));
+      const uint32_t part = color::scale8(col, static_cast<uint8_t>(128.0f + frac * 127.0f));
       c.fillRect(x0 + kRows[full].x, kRows[full].y, kRows[full].w, 1, part);
     }
   }

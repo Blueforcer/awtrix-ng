@@ -1,0 +1,19 @@
+AIC source selection and license evidence
+
+Repository: https://github.com/kendryte/k230_linux_sdk
+Commit: dd73e713829ab31029e371bc3fb67b367b8ae2eb
+Original src tree: 3ff4a299165d4bce65bb91e6f8924a7ca3dbe9fb
+Included in full: aic8800_bsp/ and aic8800_fdrv/, the exact directories exported by
+tools/tc002/kernel/build_aic8800.sh before applying the AWTRIX patches.
+Excluded: fw/ (including 43 radio-firmware .bin files), unused aic8800_btlpm/ and
+top-level deployment files that the AWTRIX module recipe never exports or compiles.
+
+The two module entry points aic8800_bsp/aic_bsp_main.c and
+aic8800_fdrv/rwnx_main.c declare MODULE_LICENSE("GPL"). Files aic_br_ext.c/.h
+expressly state GPL version 2; other files retain AICSemi, RivieraWaves and
+Neratec copyright notices. This source tree has no separate LICENSE/COPYING.
+The kernel GPL text is supplied in licenses/GPL-2.0-kernel-COPYING. Module metadata
+does not by itself establish a license grant for every file or unrelated firmware;
+this companion preserves the available source notices and makes no broader
+third-party rights clearance. The original source remains unmodified in the archive;
+all AWTRIX patches and their order are in the application source archive.

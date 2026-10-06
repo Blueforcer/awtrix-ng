@@ -1,11 +1,33 @@
 #include <unity.h>
 
 #include "core/sensing/BatteryModel.h"
+#include "core/apps/SensorFormat.h"
+#include "core/net/SignalStrength.h"
 
 using namespace awtrix;
 
 namespace {
 
+
+void test_battery_thresholds() {
+  TEST_ASSERT_FALSE(isLowBattery(0, 0));
+  TEST_ASSERT_FALSE(isLowBattery(0, -1));
+  TEST_ASSERT_TRUE(isLowBattery(19, 20));
+  TEST_ASSERT_FALSE(isLowBattery(20, 20));
+  TEST_ASSERT_EQUAL_HEX32(batteryLevelColor(0, false), batteryLevelColor(100, true));
+  TEST_ASSERT_NOT_EQUAL(batteryLevelColor(19, false), batteryLevelColor(20, false));
+  TEST_ASSERT_NOT_EQUAL(batteryLevelColor(39, false), batteryLevelColor(40, false));
+}
+
+void test_wifi_quality_boundaries() {
+  TEST_ASSERT_EQUAL_INT(0, net::signalBars(0));
+  TEST_ASSERT_EQUAL_INT(4, net::signalBars(-55));
+  TEST_ASSERT_EQUAL_INT(3, net::signalBars(-56));
+  TEST_ASSERT_EQUAL_INT(3, net::signalBars(-65));
+  TEST_ASSERT_EQUAL_INT(2, net::signalBars(-66));
+  TEST_ASSERT_EQUAL_INT(2, net::signalBars(-75));
+  TEST_ASSERT_EQUAL_INT(1, net::signalBars(-76));
+}
 
 void test_cell_volts_applies_divider() {
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 4.15f, cellVoltsFromPinMillivolts(2075, 2.0f));
@@ -59,6 +81,8 @@ void tearDown() {}
 
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_battery_thresholds);
+  RUN_TEST(test_wifi_quality_boundaries);
   RUN_TEST(test_cell_volts_applies_divider);
   RUN_TEST(test_cell_volts_ratio_zero_falls_back_to_default);
   RUN_TEST(test_cell_volts_no_battery_pin_is_zero);

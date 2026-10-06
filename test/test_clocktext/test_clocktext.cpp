@@ -94,8 +94,20 @@ static void test_date_weekday_and_month_names() {
   TEST_ASSERT_EQUAL_STRING("Dec 31 25", buildDateText(s, 3, 31, 12, 2025).c_str());
 }
 
+static void test_short_names() {
+  TEST_ASSERT_EQUAL_STRING("Sun", weekdayShortName(0));
+  TEST_ASSERT_EQUAL_STRING("Wed", weekdayShortName(3));
+  TEST_ASSERT_EQUAL_STRING("Sat", weekdayShortName(6));
+  TEST_ASSERT_EQUAL_STRING("?", weekdayShortName(7));
+  TEST_ASSERT_EQUAL_STRING("Jan", monthShortName(1));
+  TEST_ASSERT_EQUAL_STRING("Sep", monthShortName(9));
+  TEST_ASSERT_EQUAL_STRING("Dec", monthShortName(12));
+  TEST_ASSERT_EQUAL_STRING("?", monthShortName(0));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_short_names);
   RUN_TEST(test_time_24h_default);
   RUN_TEST(test_time_no_leading_zero);
   RUN_TEST(test_time_12h_conversion_and_ampm);

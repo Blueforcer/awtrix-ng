@@ -1,24 +1,91 @@
 #include "core/render/Canvas.h"
 
 #include <cstdlib>
+#include <cstring>
+#include <utility>
+#include <algorithm>
+#include <limits>
 
 namespace awtrix {
 
-Canvas::Canvas(int width, int height)
-    : width_(width > 0 ? width : 0),
-      height_(height > 0 ? height : 0),
-      clipRight_(width_ - 1),
-      pixels_(static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_), 0u) {}
+Canvas::Canvas(int width, int height) {
+  if (width <= 0 || height <= 0 || static_cast<std::size_t>(width) >
+      std::numeric_limits<std::size_t>::max() / sizeof(uint32_t) / height) return;
+  const auto allocator = render::frameAllocator();
+  pixels_ = static_cast<uint32_t*>(allocator.allocate(
+      static_cast<std::size_t>(width) * height * sizeof(uint32_t)));
+  if (!pixels_) return;
+  release_ = allocator.release;
+  width_ = width;
+  height_ = height;
+  clipRight_ = width_ - 1;
+  clipBottom_ = height_ - 1;
+  clear();
+}
 
 Canvas::Canvas(int width, int height, uint32_t* pixels)
     : width_(pixels && width > 0 && height > 0 ? width : 0),
       height_(width_ > 0 ? height : 0),
       clipRight_(width_ - 1),
+      clipBottom_(height_ - 1),
       externalPixels_(width_ > 0 ? pixels : nullptr) {}
+
+Canvas::~Canvas() { releasePixels(); }
+void Canvas::releasePixels() {
+  if (pixels_ && release_) release_(pixels_);
+  pixels_ = nullptr;
+  release_ = nullptr;
+}
+Canvas::Canvas(const Canvas& other) : Canvas(0, 0) { *this = other; }
+Canvas& Canvas::operator=(const Canvas& other) {
+  if (this == &other) return *this;
+  if (other.externalPixels_) {
+    releasePixels();
+    externalPixels_ = other.externalPixels_;
+  } else if (!pixels_ || width_ != other.width_ || height_ != other.height_) {
+    Canvas replacement(other.width_, other.height_);
+    // A failed copy clears the destination rather than pretending to contain the requested frame.
+    *this = std::move(replacement);
+    if (other.size() && !valid()) return *this;
+  }
+  width_ = other.width_;
+  height_ = other.height_;
+  clipLeft_ = other.clipLeft_;
+  clipRight_ = other.clipRight_;
+  clipTop_ = other.clipTop_;
+  clipBottom_ = other.clipBottom_;
+  if (!other.externalPixels_ && other.size()) {
+    externalPixels_ = nullptr;
+    std::memcpy(pixels_, other.data(), other.size() * sizeof(uint32_t));
+  }
+  return *this;
+}
+Canvas::Canvas(Canvas&& other) noexcept : Canvas(0, 0) { *this = std::move(other); }
+Canvas& Canvas::operator=(Canvas&& other) noexcept {
+  if (this == &other) return *this;
+  releasePixels();
+  width_ = other.width_; height_ = other.height_;
+  clipLeft_ = other.clipLeft_; clipRight_ = other.clipRight_;
+  clipTop_ = other.clipTop_; clipBottom_ = other.clipBottom_;
+  pixels_ = other.pixels_; release_ = other.release_; externalPixels_ = other.externalPixels_;
+  other.width_ = other.height_ = 0;
+  other.pixels_ = other.externalPixels_ = nullptr;
+  other.release_ = nullptr;
+  return *this;
+}
 
 void Canvas::setClipX(int left, int right) {
   clipLeft_ = left > 0 ? left : 0;
   clipRight_ = right < width_ - 1 ? right : width_ - 1;
+}
+
+void Canvas::setClipRect(int x, int y, int width, int height) {
+  clipLeft_ = std::max(x, 0);
+  clipTop_ = std::max(y, 0);
+  const int64_t right = static_cast<int64_t>(x) + width - 1;
+  const int64_t bottom = static_cast<int64_t>(y) + height - 1;
+  clipRight_ = width > 0 ? static_cast<int>(std::max<int64_t>(-1, std::min<int64_t>(width_ - 1, right))) : -1;
+  clipBottom_ = height > 0 ? static_cast<int>(std::max<int64_t>(-1, std::min<int64_t>(height_ - 1, bottom))) : -1;
 }
 
 void Canvas::clear(uint32_t rgb) {

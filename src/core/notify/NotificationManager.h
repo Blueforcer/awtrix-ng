@@ -31,6 +31,7 @@ class NotificationManager {
               bool passesDone = false);
 
   void clear() { queue_.clear(); }
+  void invalidateContent(bool assets);
 
  private:
   std::deque<AppSpec> queue_;

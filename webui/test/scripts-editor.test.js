@@ -7,9 +7,9 @@
    reads and what fires the "unsaved changes" toast on "+"/open-another.
 
    Run:  node scripts-editor.test.js         (in-memory mock, offline)
-         node scripts-editor.test.js --sim   (against a sim on :8080) */
-const { boot, bootSim, goto, flush, stubXhr } = require('./harness');
-const USE_SIM = !!process.env.SIM || process.argv.includes('--sim');
+         node scripts-editor.test.js --live  (against awtrix-linux on :8080) */
+const { boot, bootLive, goto, flush, stubXhr } = require('./harness');
+const LIVE = !!process.env.LIVE || process.argv.includes('--live');
 
 let failures = 0;
 function assert(cond, msg) {
@@ -17,7 +17,7 @@ function assert(cond, msg) {
   else { console.log('  FAIL: ' + msg); failures++; }
 }
 
-const start = () => (USE_SIM ? bootSim() : boot());
+const start = () => (LIVE ? bootLive() : boot());
 const q = window => (s => window.document.querySelector(s));
 const isDirty = window => window.document.querySelector('.edtop').classList.contains('mod');
 
@@ -81,7 +81,7 @@ async function scenarioDirtySurvives() {
 
 async function scenarioIconButton() {
   console.log('\nScenario C: the @icons button installs what the clock is missing');
-  if (USE_SIM) { console.log('  SKIP: needs the mocked icon database'); return; }
+  if (LIVE) { console.log('  SKIP: needs the mocked icon database'); return; }
   const { window, store } = await boot();
   const $ = q(window);
   window.localStorage.awtrixHubToken = 'script-test-token';
@@ -138,7 +138,7 @@ async function scenarioCrLfScriptStaysClean() {
 }
 
 async function main() {
-  console.log('Backend: ' + (USE_SIM ? 'SIMULATOR (http://localhost:8080)' : 'in-memory mock'));
+  console.log('Backend: ' + (LIVE ? 'live (http://localhost:8080)' : 'in-memory mock'));
   await scenarioStaysClean();
   await scenarioDirtySurvives();
   await scenarioIconButton();

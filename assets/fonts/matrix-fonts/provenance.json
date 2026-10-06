@@ -1,0 +1,52 @@
+{
+  "repository": "https://github.com/trip5/Matrix-Fonts",
+  "commit": "894dddc5e1b158e43483ffbf31c7629f69391124",
+  "files": [
+    {
+      "path": "6-series/MatrixChunky6.bdf",
+      "sha256": "aa6f4ddd1b5c3a1dabf82bdd486f14be1e757d02e0efdf206d55165218664a6c"
+    },
+    {
+      "path": "6-series/MatrixChunky6X.bdf",
+      "sha256": "216eeddaee641c4025e12a04b5b9b9ea108ad8a542085f0ef6c0d9b3b1856289"
+    },
+    {
+      "path": "6-series/MatrixLight6.bdf",
+      "sha256": "d7232bd886c963b0f87e786fd870ee0648ce2db20a55d6d4b74eb5e47bd5598a"
+    },
+    {
+      "path": "6-series/MatrixLight6X.bdf",
+      "sha256": "918001068e8493fe9df23b18edf6be3d620439e71e48f2d62b76f909452b6fc5"
+    },
+    {
+      "path": "8-series/MatrixChunky8.bdf",
+      "sha256": "7cc365091c871b0471cd0adcdb749d63be73ce4ec0fefabcfecfcb881831b32b"
+    },
+    {
+      "path": "8-series/MatrixChunky8X.bdf",
+      "sha256": "20f01083886a06cd0085d5120d9cba5350aa8fb6de42399a163c008b67d10fb3"
+    },
+    {
+      "path": "8-series/MatrixChunky8x6.bdf",
+      "sha256": "1aacdb6cf924384b9b510c4c26754e223ea45d1863f6f81686de1fc2f705212f"
+    },
+    {
+      "path": "8-series/MatrixLight8.bdf",
+      "sha256": "6ab66dfed4fe5ddb162c1bb01011132fdecac59c4786c3aad26c29c513d393a1"
+    },
+    {
+      "path": "8-series/MatrixLight8X.bdf",
+      "sha256": "c7cdb67e37d387e8d0cb5e102d0eafbcf6e25a73d8d88d635368526a516d3642"
+    },
+    {
+      "path": "8-series/MatrixLight8x6.bdf",
+      "sha256": "3e2e4a743a1366d28a5cf7e4a2f770de1218dec73c3d5abe0a028c7b4c9eaa35"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "252edd1ee9f4256fe4f7abb723c405916b7cd6b4d58f1b80bb2a0b6238200e46"
+    }
+  ],
+  "transforms": "Lossless conversion from BDF to packed 1-bit glyphs. No scaling, glyph reshaping, baseline reseating or coverage reduction.",
+  "license_note": "The pinned root LICENSE declares MIT (2026 Trip5). The original BDFs retain COMMENT CC-BY and a repository URL as COPYRIGHT. Preserve both notices; this metadata discrepancy remains recorded for provenance review."
+}

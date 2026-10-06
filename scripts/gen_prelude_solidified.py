@@ -237,12 +237,14 @@ def main():
 
     gen = build_generator()
     solidified = subprocess.run([gen, names_file], input=source, check=True,
-                                stdout=subprocess.PIPE).stdout.decode("utf-8")
+                                stdout=subprocess.PIPE).stdout.decode("utf-8").replace("\r\n", "\n")
     if "be_local_closure" not in solidified:
         sys.exit("gen_prelude_solidified: generator produced no closure")
 
     solidified = solidified.replace("be_local_closure(main,",
                                     "be_local_closure(awtrix_prelude,", 1)
+    solidified = re.sub(r"const struct bproto\s*\*\s*\[", "const struct bproto* const[",
+                       solidified)
     with open(OUT_HEADER, "w", encoding="utf-8", newline="\n") as f:
         f.write(BANNER)
         f.write(STAMP_PREFIX + fingerprint + "\n\n")

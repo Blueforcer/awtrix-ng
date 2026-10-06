@@ -24,6 +24,10 @@ struct FrameHeader {
 
   int samplesPerFrame() const { return version == Version::Mpeg1 ? 1152 : 576; }
 
+  // MPEG-2 or 2.5, the low sample rates: one granule, and the side info and scalefactors of
+  // ISO/IEC 13818-3.
+  bool lsf() const { return version != Version::Mpeg1; }
+
   int frameBytes() const;
 };
 

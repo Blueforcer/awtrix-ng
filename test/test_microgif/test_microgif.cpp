@@ -75,6 +75,7 @@ void operator delete[](void* p, const std::nothrow_t&) noexcept { releaseAllocat
 #include "../../src/media/MicroGif.cpp"
 
 #include "../test_gifplayer/gif_fixtures.h"
+#include "../test_gifplayer/sized_gif_fixture.h"
 
 void setUp() { s_trackMediaAllocs = false; }
 void tearDown() { s_trackMediaAllocs = false; }
@@ -770,6 +771,51 @@ void test_webui_converted_icon_decodes_exactly() {
   TEST_ASSERT_TRUE(g.nextFrame(c, delayMs) == MicroGif::Step::kEnd);
 }
 
+static int decodedFrames(MicroGif& gif) {
+  Canvas canvas(8, 8);
+  int delayMs = 0;
+  int frames = 0;
+  while (gif.nextFrame(canvas, delayMs) == MicroGif::Step::kFrame) ++frames;
+  return frames;
+}
+
+// GifPlayer sizes its frame cache from the count, so every frame nextFrame() decodes is counted,
+// including a truncated last image.
+static void test_frame_count_bounds_the_decodable_frames() {
+  const auto single = sizedGif(8, 8, false);
+  const auto animation = sizedGif(8, 8);
+  auto commented = single;
+  commented.insert(commented.end() - 1, {0x21, 0xfe, 3, 'a', 'b', 'c', 0});
+  auto noTrailer = commented;
+  noTrailer.pop_back();
+  auto partialDescriptor = single;
+  partialDescriptor.resize(35);
+  auto openImage = single;
+  openImage.resize(openImage.size() - 2);
+  auto truncatedSecond = animation;
+  truncatedSecond.resize(truncatedSecond.size() - 3);
+  // The second image's first 3-bit code is 7, undefined before any dictionary entry.
+  auto corruptSecond = animation;
+  corruptSecond[45 + single.size() - 26] |= 7;
+  const struct {
+    const std::vector<uint8_t>& gif;
+    int counted;
+    int decoded;
+  } cases[] = {{single, 1, 1},           {commented, 1, 1},       {noTrailer, 1, 1},
+               {partialDescriptor, 0, 0}, {openImage, 1, 1},       {animation, 2, 2},
+               {truncatedSecond, 2, 2},   {corruptSecond, 2, 1}};
+  for (const auto& c : cases) {
+    MicroGif gif;
+    TEST_ASSERT_TRUE(gif.begin(c.gif.data(), c.gif.size(), 8, 8));
+    TEST_ASSERT_EQUAL_INT(c.counted, gif.countFrames(8));
+    TEST_ASSERT_EQUAL_INT(c.decoded, decodedFrames(gif));
+  }
+  MicroGif gif;
+  TEST_ASSERT_TRUE(gif.begin(animation.data(), animation.size(), 8, 8));
+  TEST_ASSERT_EQUAL_INT(1, gif.countFrames(0));
+  TEST_ASSERT_EQUAL_INT(2, gif.countFrames(1));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_restore_to_previous_recovers_pixels_under_transparent_delta);
@@ -800,5 +846,6 @@ int main(int, char**) {
   RUN_TEST(test_panel_limits_reject_each_oversized_axis_before_allocating);
   RUN_TEST(test_invalid_panel_limits_and_overflowing_screen_rejected_without_allocating);
   RUN_TEST(test_large_frame_fills_4096_entry_dictionary_and_keeps_decoding);
+  RUN_TEST(test_frame_count_bounds_the_decodable_frames);
   return UNITY_END();
 }

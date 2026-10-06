@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "core/audio/AudioStats.h"
+#include "core/audio/StampedRing.h"
 
 namespace awtrix {
 namespace audio {
@@ -18,89 +19,66 @@ class StatsRing {
   static constexpr int kInterestMs = 2000;
 
   void publish(const FrameStats& stats, int64_t audibleAtMs) {
-    const uint32_t id = head_.load(std::memory_order_relaxed) + 1;
-    Slot& s = slots_[id % kSlots];
-    const uint32_t v = s.seq.load(std::memory_order_relaxed);
-    s.seq.store(v + 1, std::memory_order_relaxed);
-    std::atomic_thread_fence(std::memory_order_seq_cst);
-    s.id = id;
-    s.audibleAtMs = audibleAtMs;
-    s.stats = stats;
-    std::atomic_thread_fence(std::memory_order_seq_cst);
-    s.seq.store(v + 2, std::memory_order_relaxed);
-    head_.store(id, std::memory_order_release);
+    frames_.publish(stats, audibleAtMs);
   }
 
-  bool wanted(int64_t nowMs) const {
-    const uint32_t until = wantedUntil_.load(std::memory_order_relaxed);
-    return static_cast<int32_t>(until - static_cast<uint32_t>(nowMs)) > 0;
+  // 0 is "nobody asked". A deadline that ran out is cleared here, on the audio task that asks every
+  // block, so the 32-bit comparison never meets a deadline half the clock's range old.
+  bool wanted(int64_t nowMs) {
+    uint32_t until = wantedUntil_.load(std::memory_order_relaxed);
+    if (until == 0) return false;
+    if (static_cast<int32_t>(until - static_cast<uint32_t>(nowMs)) > 0) return true;
+    wantedUntil_.compare_exchange_strong(until, 0, std::memory_order_relaxed);
+    return false;
   }
 
   void markInterest(int64_t nowMs) {
-    wantedUntil_.store(static_cast<uint32_t>(nowMs) + kInterestMs, std::memory_order_relaxed);
+    const uint32_t until = static_cast<uint32_t>(nowMs) + kInterestMs;
+    wantedUntil_.store(until ? until : 1, std::memory_order_relaxed);
   }
 
   // The newest frame audible at nowMs. The reader state lives here, so it must be asked exactly
   // once per rendered frame: a beat is reported once, and beats in frames that came and went
   // between two calls are folded into the next answer.
   bool latestAudibleAt(int64_t nowMs, FrameStats& out) {
-    const uint32_t head = head_.load(std::memory_order_acquire);
-    if (head == 0) return false;
+    const uint32_t head = frames_.head();
+    bool found = false;
     uint32_t bestId = 0;
     int64_t bestAt = 0;
     FrameStats best;
-    for (uint32_t id = head; id > 0 && id + kSlots > head; --id) {
-      uint32_t rid;
+    for (uint32_t offset = 0; offset < kSlots; ++offset) {
+      const uint32_t id = head - offset;
       int64_t at;
       FrameStats st;
-      if (!read(slots_[id % kSlots], rid, at, st) || rid != id) continue;
+      if (!frames_.read(id, at, st)) continue;
       if (at <= nowMs) {
+        found = true;
         bestId = id;
         bestAt = at;
         best = st;
         break;
       }
     }
-    if (bestId == 0) return false;
+    if (!found) return false;
     if (nowMs - bestAt > kStaleMs) {
       consumedId_ = bestId;
       return false;
     }
     bool beat = best.beat && bestId != consumedId_;
-    for (uint32_t id = bestId - 1; id > consumedId_ && id + kSlots > head; --id) {
-      uint32_t rid;
+    for (uint32_t id = bestId - 1; static_cast<int32_t>(id - consumedId_) > 0 && head - id < kSlots; --id) {
       int64_t at;
       FrameStats st;
-      if (read(slots_[id % kSlots], rid, at, st) && rid == id && at >= nowMs - kStaleMs && st.beat)
+      if (frames_.read(id, at, st) && at >= nowMs - kStaleMs && st.beat)
         beat = true;
     }
-    if (bestId > consumedId_) consumedId_ = bestId;
+    if (static_cast<int32_t>(bestId - consumedId_) > 0) consumedId_ = bestId;
     out = best;
     out.beat = beat;
     return true;
   }
 
  private:
-  struct Slot {
-    std::atomic<uint32_t> seq{0};
-    uint32_t id = 0;
-    int64_t audibleAtMs = 0;
-    FrameStats stats;
-  };
-
-  static bool read(const Slot& s, uint32_t& id, int64_t& at, FrameStats& st) {
-    const uint32_t v1 = s.seq.load(std::memory_order_relaxed);
-    if (v1 & 1) return false;
-    std::atomic_thread_fence(std::memory_order_seq_cst);
-    id = s.id;
-    at = s.audibleAtMs;
-    st = s.stats;
-    std::atomic_thread_fence(std::memory_order_seq_cst);
-    return s.seq.load(std::memory_order_relaxed) == v1;
-  }
-
-  Slot slots_[kSlots];
-  std::atomic<uint32_t> head_{0};
+  StampedRing<FrameStats, kSlots> frames_;
   std::atomic<uint32_t> wantedUntil_{0};
   uint32_t consumedId_ = 0;
 };

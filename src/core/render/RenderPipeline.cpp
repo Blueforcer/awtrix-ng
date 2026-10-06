@@ -19,25 +19,62 @@ namespace {
 const std::string kNoIcon;
 constexpr long kDefaultTransMs = 1000;
 constexpr long kIconRetryMs = 5000;
+
 }
 
 RenderPipeline::RenderPipeline(int width, int height, const RenderPipelineDeps& deps)
     : d_(deps), width_(width), height_(height) {
   slotA_.icon = d_.icons;
   slotB_.icon = d_.iconsB;
+  if (d_.engine) d_.engine->setFontCatalog(d_.fonts);
 }
 
-const AppSpec* RenderPipeline::pageSpec(const std::string& id, bool isNotif) const {
-  if (isNotif) return &d_.engine->notifications().current();
+bool RenderPipeline::prepareFrames() {
+  if (!transA_) transA_.reset(new (std::nothrow) Canvas(width_, height_));
+  if (!transB_) transB_.reset(new (std::nothrow) Canvas(width_, height_));
+  return transA_ && transB_ && transA_->valid() && transB_->valid();
+}
+
+void RenderPipeline::invalidateIcons() {
+  ++iconGeneration_;
+  if (d_.engine) d_.engine->invalidateContentAssets();
+}
+
+const AppSpec* RenderPipeline::pageSpec(const std::string& id, PageKind kind) const {
+  switch (kind) {
+    case PageKind::Notification: return &d_.engine->notifications().current();
+    case PageKind::External: return nullptr;
+    case PageKind::App: break;
+  }
   if (d_.engine->isScriptApp(id)) return nullptr;
   return d_.engine->pushedApp(id);
+}
+
+PageKind RenderPipeline::pageKind() const {
+  if (d_.engine->hasNotification()) return PageKind::Notification;
+  if (d_.external && d_.external->active()) return PageKind::External;
+  return PageKind::App;
+}
+
+// Synthetic ids for notifications and the external page: a control-character prefix
+// followed by the generation.
+std::string RenderPipeline::pageId(PageKind kind) const {
+  switch (kind) {
+    case PageKind::Notification:
+      return "\x01notif:" + std::to_string(d_.engine->notifications().generation());
+    case PageKind::External: return "\x02" "external";
+    case PageKind::App: break;
+  }
+  return d_.engine->currentAppId();
 }
 
 void RenderPipeline::loadIcon(PageSlot& slot, const std::string& pageId, const AppSpec* spec,
                               int64_t nowMs) {
   const std::string& wanted = spec ? spec->icon : kNoIcon;
   const uint32_t generation = iconGeneration_.load();
-  const bool reloadAll = slot.pageId != pageId || slot.iconGeneration != generation;
+  const bool enlarged = enlargeFor(spec, generation);
+  const bool reloadAll =
+      slot.pageId != pageId || slot.iconGeneration != generation || slot.enlarged != enlarged;
   if (reloadAll) {
     // Release the outgoing page before opening any incoming image, so its resident pixels
     // cannot force an otherwise unnecessary allocation failure and five-second retry.
@@ -48,13 +85,14 @@ void RenderPipeline::loadIcon(PageSlot& slot, const std::string& pageId, const A
   const bool same = !reloadAll && slot.iconId == wanted;
   slot.pageId = pageId;
   slot.iconGeneration = generation;
+  slot.enlarged = enlarged;
   if (slot.icon &&
       !(same && (slot.valid || slot.missing || wanted.empty() || nowMs < slot.retryAtMs))) {
     slot.iconId = wanted;
     slot.valid = slot.missing = false;
     slot.icon->clear();
     if (!wanted.empty()) {
-      const IconLoad result = slot.icon->begin(wanted, width_, height_);
+      const IconLoad result = slot.icon->begin(wanted, pageWidth(slot), pageHeight(slot));
       slot.valid = result == IconLoad::kGood;
       slot.missing = result == IconLoad::kMissing;
       iconLoadedThisFrame_ = true;
@@ -99,7 +137,7 @@ void RenderPipeline::loadPlacedIcons(PageSlot& slot, const AppSpec* spec, int64_
     }
     if (!icon.player) icon.player = slot.icon->create();
     if (icon.player) {
-      const IconLoad result = icon.player->begin(icon.iconId, width_, height_);
+      const IconLoad result = icon.player->begin(icon.iconId, pageWidth(slot), pageHeight(slot));
       icon.valid = result == IconLoad::kGood;
       icon.missing = result == IconLoad::kMissing;
       iconLoadedThisFrame_ = true;
@@ -124,9 +162,14 @@ bool RenderPipeline::iconIsFullScreen(const PageSlot* slot, int canvasWidth) con
 // The columns an icon keeps free of text: its own width plus the page's gap. A missing or
 // full-screen icon keeps none.
 int RenderPipeline::iconColumn(const AppSpec& spec, const PageSlot* slot) const {
-  if (spec.icon.empty() || !slot || !slot->valid || !slot->icon || iconIsFullScreen(slot, width_))
+  if (spec.icon.empty() || !slot || !slot->valid || !slot->icon ||
+      iconIsFullScreen(slot, pageWidth(*slot)))
     return 0;
-  return std::min(slot->icon->width() + spec.iconGap, width_);
+  return std::min(slot->icon->width() + spec.iconGap, pageWidth(*slot));
+}
+
+bool RenderPipeline::enlargeFor(const AppSpec* spec, uint32_t assets) const {
+  return d_.zoom && spec && d_.zoom->enlarges(d_.engine->state().settings(), *spec, assets);
 }
 
 // How far left the icon is dragged by scrolling text. The icon rides along with the text until it
@@ -142,8 +185,14 @@ int RenderPipeline::iconShift(const AppSpec& spec, const PageSlot& slot) const {
   return std::max(shift, -column);
 }
 
-void RenderPipeline::renderPage(Canvas& dst, const std::string& id, int64_t nowMs, bool isNotif,
+void RenderPipeline::renderPage(Canvas& dst, const std::string& id, int64_t nowMs, PageKind kind,
                                 PageSlot* slot) {
+  if (kind == PageKind::External) {
+    dst.clear(0x000000u);
+    d_.external->draw(dst);
+    return;
+  }
+  const bool isNotif = kind == PageKind::Notification;
   const Settings& s = d_.engine->state().settings();
   const RuntimeState& rt = d_.engine->state().runtime();
 
@@ -156,15 +205,35 @@ void RenderPipeline::renderPage(Canvas& dst, const std::string& id, int64_t nowM
   };
 
   auto drawSpec = [&](const AppSpec& spec) {
+    if (spec.extras().content) {
+      auto& native = *spec.extras().content;
+      PageFrameContext frame;
+      frame.nowMs = nowMs;
+      frame.defaultColor = s.textColor;
+      frame.repeat = spec.repeat;
+      frame.scrollDefaults = s.scrollDefaults;
+      frame.parkAfterPasses = d_.engine->endsOnScrollPasses(spec, isNotif);
+      frame.uppercase = s.uppercase;
+      const auto result = native.draw(dst, frame);
+      if (slot) slot->contentFrame = result;
+      if (spec.lifeTimeEnd) dst.drawRect(0, 0, dst.width(), dst.height(), 0x6e0700u);
+      if (!result.hasOverlay) drawOverlay("", EffectSettings{});
+      return;
+    }
+    const bool enlarged = slot && slot->enlarged;
+    Canvas& page = enlarged ? d_.zoom->stage() : dst;
     // An icon as wide as the panel is treated as the background instead of a left-hand tile, so it
     // reserves no columns and the text draws straight on top of it.
-    const bool fullScreen = iconIsFullScreen(slot, dst.width());
+    const bool fullScreen = iconIsFullScreen(slot, page.width());
     const int column = iconColumn(spec, slot);
     render::SpecRender r;
     r.defaultTextColor = s.textColor;
     r.iconWidth = column ? slot->icon->width() : 0;
     r.iconGap = column - r.iconWidth;
     r.textClipLeft = column ? column + iconShift(spec, *slot) : 0;
+    const FontEntry& font = fontFor(&spec);
+    r.baseline = pageBaseline(font, page.height());
+    r.drawBaseline = pageBaseline(font);
     r.backgroundDrawn = fullScreen;
     r.nowMs = nowMs;
     r.textX = slot ? slot->scroll.x() : 0.0f;
@@ -176,16 +245,18 @@ void RenderPipeline::renderPage(Canvas& dst, const std::string& id, int64_t nowM
     es.hasSpeed = spec.extras().hasEffectSpeed;
     es.ramp = spec.extras().palette;
     if (r.effect) r.effect->setSettings(es);
-    if (fullScreen) slot->icon->blit(dst, 0);
-    render::renderSpec(dst, spec, fontFor(&spec), r);
+    const int iconY = slot && slot->icon ? std::max(0, (page.height() - slot->icon->height()) / 2) : 0;
+    if (fullScreen) slot->icon->blit(page, 0, iconY);
+    render::renderSpec(page, spec, *font.font, r);
     if (r.iconWidth && slot && slot->valid)
-      slot->icon->blit(dst, spec.iconOffsetX + iconShift(spec, *slot));
+      slot->icon->blit(page, spec.iconOffsetX + iconShift(spec, *slot), iconY);
     if (slot) {
       for (std::size_t i = 0; i < slot->placedIconCount; ++i) {
         const auto& icon = slot->placedIcons[i];
-        if (icon.valid) icon.player->blit(dst, icon.x, icon.y);
+        if (icon.valid) icon.player->blit(page, icon.x, icon.y);
       }
     }
+    if (enlarged) d_.zoom->present(dst);
     drawOverlay(spec.overlay, es);
   };
 
@@ -193,17 +264,17 @@ void RenderPipeline::renderPage(Canvas& dst, const std::string& id, int64_t nowM
     drawSpec(d_.engine->notifications().current());
     return;
   }
-  const AppSpec* pushed = pageSpec(id, false);
+  const AppSpec* pushed = pageSpec(id, PageKind::App);
   IApp* app = pushed ? nullptr : d_.apps->find(id);
   if (app) {
     dst.clear(0x000000u);
     RenderCtx ctx;
     ctx.settings = &s;
     ctx.runtime = &rt;
-    ctx.font = &fontFor(nullptr);
-    ctx.fonts[0] = d_.fonts[0];
-    ctx.fonts[1] = d_.fonts[1];
+    ctx.font = d_.fonts->small().font;
+    ctx.fonts = d_.fonts;
     d_.clock->fill(ctx, nowMs);
+    ctx.shownSinceMs = slot == &slotB_ ? -1 : shownSinceMs_;
     app->render(dst, ctx);
     drawOverlay("", EffectSettings{});
   } else if (pushed) {
@@ -213,10 +284,9 @@ void RenderPipeline::renderPage(Canvas& dst, const std::string& id, int64_t nowM
   }
 }
 
-const GfxFont& RenderPipeline::fontFor(const AppSpec* spec) const {
-  const uint8_t i = static_cast<uint8_t>(spec ? spec->font : FontId::Small);
-  const GfxFont* f = i < kFontCount ? d_.fonts[i] : nullptr;
-  return *(f ? f : d_.fonts[0]);
+const FontEntry& RenderPipeline::fontFor(const AppSpec* spec) const {
+  const FontEntry* named = spec && !spec->font.empty() ? d_.fonts->find(spec->font) : nullptr;
+  return named ? *named : d_.fonts->small();
 }
 
 render::ScrollLayout RenderPipeline::scrollLayoutFor(const AppSpec* spec, int canvasWidth,
@@ -227,7 +297,7 @@ render::ScrollLayout RenderPipeline::scrollLayoutFor(const AppSpec* spec, int ca
   if (!spec) return layout;
 
   const Settings& s = d_.engine->state().settings();
-  layout.text = render::textMetricsFor(*spec, fontFor(spec), s.uppercase);
+  layout.text = render::textMetricsFor(*spec, *fontFor(spec).font, s.uppercase);
   layout.startX = column;
   layout.availWidth = canvasWidth - column;
   layout.textOffset = spec->textOffsetX;
@@ -236,11 +306,12 @@ render::ScrollLayout RenderPipeline::scrollLayoutFor(const AppSpec* spec, int ca
 
 void RenderPipeline::applyScroll(PageSlot& slot, const AppSpec* spec, int64_t nowMs) {
   slot.scroll.set(spec ? spec->scroll : ScrollSpec{}, d_.engine->state().settings().scrollDefaults,
-                  scrollLayoutFor(spec, width_, spec ? iconColumn(*spec, &slot) : 0), nowMs);
+                  scrollLayoutFor(spec, pageWidth(slot), spec ? iconColumn(*spec, &slot) : 0), nowMs);
 }
 
-int RenderPipeline::scrollParkAfter(const AppSpec* spec, bool isNotif) const {
-  return spec && d_.engine->endsOnScrollPasses(*spec, isNotif) ? spec->repeat : 0;
+int RenderPipeline::scrollParkAfter(const AppSpec* spec, PageKind kind) const {
+  return spec && d_.engine->endsOnScrollPasses(*spec, kind == PageKind::Notification) ? spec->repeat
+                                                                                      : 0;
 }
 
 void RenderPipeline::advanceScroll(PageSlot& slot, const AppSpec* spec, int64_t nowMs,
@@ -252,14 +323,14 @@ void RenderPipeline::advanceScroll(PageSlot& slot, const AppSpec* spec, int64_t 
   }
 }
 
-void RenderPipeline::refreshPageContent(int64_t nowMs, bool isNotif) {
-  const AppSpec* sp = pageSpec(lastRenderId_, isNotif);
+void RenderPipeline::refreshPageContent(int64_t nowMs, PageKind kind) {
+  const AppSpec* sp = pageSpec(lastRenderId_, kind);
   loadIcon(slotA_, lastRenderId_, sp, nowMs);
   applyScroll(slotA_, sp, nowMs);
 }
 
-void RenderPipeline::onPageChanged(int64_t nowMs, bool isNotif) {
-  const AppSpec* sp = pageSpec(lastRenderId_, isNotif);
+void RenderPipeline::onPageChanged(int64_t nowMs, PageKind kind) {
+  const AppSpec* sp = pageSpec(lastRenderId_, kind);
   const bool handover = slotB_.icon && slotB_.pageId == lastRenderId_;
   if (handover) std::swap(slotA_, slotB_);
   loadIcon(slotA_, lastRenderId_, sp, nowMs);
@@ -267,15 +338,22 @@ void RenderPipeline::onPageChanged(int64_t nowMs, bool isNotif) {
   if (!handover) {
     slotA_.scroll.restart(nowMs);
     slotA_.iconPushed = false;
+    if (sp && sp->extras().content) sp->extras().content->restart();
   }
-  if (isNotif) playPageSound(d_.engine->notifications().current());
+  // A looping sound belongs to the notification that started it; one without loop plays out.
+  d_.audio->stopRepeatingAlert(alertRepeat_);
+  alertRepeat_ = 0;
+  if (kind == PageKind::Notification) playPageSound(d_.engine->notifications().current());
 }
 
 void RenderPipeline::playPageSound(const AppSpec& spec) {
-  const sound::Request req = sound::requestForSpec(spec);
-  if (!req.present) return;
+  if (spec.sound.empty()) return;
+  sound::Choices choices;
   DispatchDetail detail;
-  d_.audio->play(req.source, req.value, detail);
+  if (!sound::parse(spec.sound, sound::Origin::Notification, choices, detail)) return;
+  if (d_.audio->play(choices, sound::Group::Alert, spec.extras().soundScript, detail) ==
+      sound::PlayResult::Ok)
+    alertRepeat_ = d_.audio->repeatingAlert();
 }
 
 // The three status indicators are fixed pixel clusters on the right-hand edge: top corner, middle
@@ -307,35 +385,36 @@ void RenderPipeline::drawIndicators(Canvas& out, int64_t nowMs) const {
 void RenderPipeline::renderFrame(Canvas& out, int64_t nowMs) {
   iconLoadedThisFrame_ = false;
   const Settings& s = d_.engine->state().settings();
-  const bool isNotif = d_.engine->hasNotification();
-  // Notifications get a synthetic page id: the \x01 prefix cannot collide with a real app name,
-  // and folding in the generation makes every new notification look like a page change.
-  const std::string renderId =
-      isNotif ? "\x01notif:" + std::to_string(d_.engine->notifications().generation())
-              : d_.engine->currentAppId();
+  const PageKind kind = pageKind();
+  const bool isNotif = kind == PageKind::Notification;
+  const bool isApp = kind == PageKind::App;
+  const std::string renderId = pageId(kind);
   if (renderId != lastRenderId_) {
     lastRenderId_ = renderId;
-    onPageChanged(nowMs, isNotif);
+    onPageChanged(nowMs, kind);
+    shownSinceMs_ = nowMs;
   } else {
-    refreshPageContent(nowMs, isNotif);
+    refreshPageContent(nowMs, kind);
+    if (skipped_) shownSinceMs_ = nowMs;
   }
+  skipped_ = false;
 
-  if (isNotif && !d_.audio->isPlaying()) {
-    const AppSpec& n = d_.engine->notifications().current();
-    if (n.loopSound) playPageSound(n);
-  }
-
-  const AppSpec* spec = pageSpec(renderId, isNotif);
-  advanceScroll(slotA_, spec, nowMs, scrollParkAfter(spec, isNotif));
+  const AppSpec* spec = pageSpec(renderId, kind);
+  advanceScroll(slotA_, spec, nowMs, scrollParkAfter(spec, kind));
 
   advanceIcons(slotA_, nowMs);
 
   AppHost& ah = d_.engine->appHost();
   const bool inTransition =
-      !isNotif && ah.inTransition() && ah.transitionTarget() >= 0 && ah.count() > 1;
+      isApp && ah.inTransition() && ah.transitionTarget() >= 0 && ah.count() > 1;
+  shown_.kind = kind;
+  if (isApp) shown_.app = renderId;
+  else shown_.app.clear();
+  if (inTransition) shown_.incoming = ah.idAt(ah.transitionTarget());
+  else shown_.incoming.clear();
   if (inTransition) {
     const std::string& toId = ah.idAt(ah.transitionTarget());
-    const AppSpec* toSpec = pageSpec(toId, false);
+    const AppSpec* toSpec = pageSpec(toId, PageKind::App);
     const bool entered = slotB_.pageId != toId;
     loadIcon(slotB_, toId, toSpec, nowMs);
     slotB_.pageId = toId;
@@ -343,16 +422,14 @@ void RenderPipeline::renderFrame(Canvas& out, int64_t nowMs) {
     if (entered) {
       slotB_.scroll.restart(nowMs);
       slotB_.iconPushed = false;
+      if (toSpec && toSpec->extras().content) toSpec->extras().content->restart();
     }
     advanceScroll(slotB_, toSpec, nowMs, 0);
     advanceIcons(slotB_, nowMs);
 
-    if (!transA_) {
-      transA_.reset(new Canvas(width_, height_));
-      transB_.reset(new Canvas(width_, height_));
-    }
-    renderPage(*transA_, ah.idAt(ah.currentIndex()), nowMs, false, &slotA_);
-    renderPage(*transB_, toId, nowMs, false, &slotB_);
+    if (!prepareFrames()) { renderPage(out, renderId, nowMs, kind, &slotA_); return; }
+    renderPage(*transA_, ah.idAt(ah.currentIndex()), nowMs, kind, &slotA_);
+    renderPage(*transB_, toId, nowMs, kind, &slotB_);
     const long perTrans = s.transitionDurationMs > 0 ? s.transitionDurationMs : kDefaultTransMs;
     const float p = static_cast<float>(nowMs - ah.phaseStartMs()) / perTrans;
     // Seeding on the phase start keeps a Random transition on one pick for its whole run.
@@ -362,8 +439,6 @@ void RenderPipeline::renderFrame(Canvas& out, int64_t nowMs) {
         s.transitionDirection == kTransitionReverse ? -ah.direction() : ah.direction();
     render::composeTransition(out, *transA_, *transB_, effect, p, direction);
   } else {
-    transA_.reset();
-    transB_.reset();
     if (slotB_.icon && (!slotB_.pageId.empty() || !slotB_.iconId.empty() || slotB_.valid))
       slotB_.icon->clear();
     slotB_.pageId.clear();
@@ -373,7 +448,7 @@ void RenderPipeline::renderFrame(Canvas& out, int64_t nowMs) {
     slotB_.placedIcons.reset();
     slotB_.placedIconCount = 0;
     slotB_.placedRetryAtMs = 0;
-    renderPage(out, renderId, nowMs, isNotif, &slotA_);
+    renderPage(out, renderId, nowMs, kind, &slotA_);
   }
 
   drawIndicators(out, nowMs);
@@ -382,13 +457,15 @@ void RenderPipeline::renderFrame(Canvas& out, int64_t nowMs) {
     drawLinkStatus(out, rt.wifi, rt.mqtt, nowMs);
   }
 
-  const bool repeating = spec && slotA_.scroll.wantsMoreTime(spec->repeat);
-  const bool passesDone = spec && slotA_.scroll.passesDone(spec->repeat);
-  d_.engine->setRotationHold(!isNotif && repeating);
+  const bool native = spec && spec->extras().content;
+  const bool repeating = spec && (native ? slotA_.contentFrame.wantsMoreTime : slotA_.scroll.wantsMoreTime(spec->repeat));
+  const bool passesDone = spec && (native ? slotA_.contentFrame.passesDone : slotA_.scroll.passesDone(spec->repeat));
+  d_.engine->setRotationHold(isApp && repeating);
   d_.engine->setNotificationHold(isNotif && repeating);
   d_.engine->setNotificationPassesDone(d_.engine->notifications().generation(),
                                        isNotif && passesDone);
-  d_.engine->setRotationPassesDone(renderId, !isNotif && passesDone);
+  d_.engine->setRotationPassesDone(renderId, isApp && passesDone,
+                                  native ? spec->extras().content->revision() : 0);
 }
 
 }

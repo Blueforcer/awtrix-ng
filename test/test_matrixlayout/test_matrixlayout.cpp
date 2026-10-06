@@ -388,12 +388,30 @@ static void test_sanitize_keeps_a_valid_layout() {
   TEST_ASSERT_FALSE(out.panelSerpentine);
 }
 
-static void test_height_is_always_eight() {
+static void test_every_layout_is_eight_high() {
   MatrixLayout wide;
   wide.panelWidth = 64;
   TEST_ASSERT_EQUAL_INT(8, wide.height());
   TEST_ASSERT_EQUAL_INT(512, wide.ledCount());
   TEST_ASSERT_EQUAL_INT(8, tiles8x8().height());
+}
+
+static void test_the_widest_chain_is_128_by_8() {
+  TEST_ASSERT_EQUAL_INT(32, kEspDisplayLimits.minWidth);
+  TEST_ASSERT_EQUAL_INT(128, kEspDisplayLimits.maxWidth);
+  TEST_ASSERT_EQUAL_INT(8, kEspDisplayLimits.minHeight);
+  TEST_ASSERT_EQUAL_INT(8, kEspDisplayLimits.maxHeight);
+  TEST_ASSERT_EQUAL_UINT32(1024u, static_cast<uint32_t>(kEspDisplayLimits.maxPixels));
+
+  MatrixLayout layout;
+  layout.panelWidth = 64;
+  layout.panels = 2;
+  bool changed = true;
+  TEST_ASSERT_EQUAL_INT(1024, sanitizeMatrixLayout(layout, &changed).ledCount());
+  TEST_ASSERT_FALSE(changed);
+  layout.panels = 3;
+  assertIsDefault(sanitizeMatrixLayout(layout, &changed));
+  TEST_ASSERT_TRUE(changed);
 }
 
 static void test_sanitize_rejects_a_width_outside_the_envelope() {
@@ -475,7 +493,8 @@ int main(int, char**) {
   RUN_TEST(test_chain_serpentine_parity_follows_the_cable);
   RUN_TEST(test_all_chain_combinations_are_bijections);
   RUN_TEST(test_sanitize_keeps_a_valid_layout);
-  RUN_TEST(test_height_is_always_eight);
+  RUN_TEST(test_every_layout_is_eight_high);
+  RUN_TEST(test_the_widest_chain_is_128_by_8);
   RUN_TEST(test_sanitize_rejects_a_width_outside_the_envelope);
   RUN_TEST(test_sanitize_clamps_nonsense_fields);
   RUN_TEST(test_sanitize_keeps_the_display_transforms);

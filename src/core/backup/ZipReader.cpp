@@ -1,3 +1,4 @@
+#include "core/payload/Crc.h"
 #include "core/backup/ZipReader.h"
 
 #include <algorithm>
@@ -28,24 +29,6 @@ uint32_t rd32(const std::string& b, std::size_t off) {
          static_cast<uint32_t>(static_cast<uint8_t>(b[off + 3])) << 24;
 }
 
-// Standard reflected CRC-32 (poly 0xEDB88320), computed at compile time so the table stays in
-// flash. A lazily filled static array still reserves its full size in RAM at boot.
-constexpr std::array<uint32_t, 256> makeCrcTable() {
-  std::array<uint32_t, 256> table{};
-  for (uint32_t i = 0; i < table.size(); ++i) {
-    uint32_t c = i;
-    for (int k = 0; k < 8; ++k) c = (c & 1u) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
-    table[i] = c;
-  }
-  return table;
-}
-
-constexpr auto kCrcTable = makeCrcTable();
-
-uint32_t crcUpdate(uint32_t crc, const uint8_t* data, std::size_t n) {
-  for (std::size_t i = 0; i < n; ++i) crc = kCrcTable[(crc ^ data[i]) & 0xffu] ^ (crc >> 8);
-  return crc;
-}
 
 }
 
@@ -62,11 +45,11 @@ bool ZipReader::fail(const char* message) {
 // 18 compressed size, 26 name length, 28 extra length.
 void ZipReader::parseFixedHeader() {
   if (rd16(hdr_, 6) & kFlagDataDescriptor) {
-    fail("data descriptor not supported (sizes must be in the local header)");
+    fail("data descriptors unsupported");
     return;
   }
   if (rd16(hdr_, 8) != 0) {
-    fail("compressed entry (only the stored method is supported)");
+    fail("compressed entries unsupported");
     return;
   }
   expectedCrc_ = rd32(hdr_, 14);
@@ -75,11 +58,11 @@ void ZipReader::parseFixedHeader() {
   nameLen_ = rd16(hdr_, 26);
   extraLen_ = rd16(hdr_, 28);
   if (nameLen_ == 0 || nameLen_ > kMaxNameLen) {
-    fail("implausible file-name length in local header");
+    fail("bad file name length");
     return;
   }
   if (extraLen_ > kMaxExtraLen) {
-    fail("implausible extra-field length in local header");
+    fail("bad extra field length");
     return;
   }
 }
@@ -102,7 +85,7 @@ void ZipReader::consumeData(const uint8_t*& p, const uint8_t* end) {
   const std::size_t avail = static_cast<std::size_t>(end - p);
   const std::size_t take = std::min(static_cast<std::size_t>(dataRemaining_), avail);
   if (take) {
-    crc_ = crcUpdate(crc_, p, take);
+    crc_ = crc32Update(crc_, p, take);
     visitor_.onEntryData(p, take);
     p += take;
     dataRemaining_ -= static_cast<uint32_t>(take);
@@ -138,7 +121,7 @@ bool ZipReader::feed(const uint8_t* data, std::size_t n) {
         phase_ = Phase::End;
         visitor_.onArchiveEnd();
       } else {
-        return fail("not a zip (unexpected signature)");
+        return fail("not a zip");
       }
     } else if (phase_ == Phase::HeaderFixed) {
       parseFixedHeader();
@@ -162,7 +145,7 @@ bool ZipReader::finish() {
       phase_ = Phase::End;
       visitor_.onArchiveEnd();
     } else {
-      return fail("truncated archive (ended mid-entry)");
+      return fail("truncated archive");
     }
   }
   return ok_;

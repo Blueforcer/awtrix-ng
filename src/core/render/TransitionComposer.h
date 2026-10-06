@@ -17,7 +17,7 @@ inline Transition resolveTransition(int effect, uint32_t seed) {
 }
 
 // Writes the blend of from -> to at progress p (0..1) into out. dir < 0 plays the direction-aware
-// effects backwards. All three canvases must have the same dimensions.
+// effects backwards. from and to have out's dimensions or are empty, which reads as black.
 void composeTransition(Canvas& out, const Canvas& from, const Canvas& to, Transition effect, float p,
                        int dir);
 

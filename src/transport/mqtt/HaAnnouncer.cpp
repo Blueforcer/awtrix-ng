@@ -22,8 +22,9 @@ class PubSubSink : public ha::IByteSink {
 
 }
 
-void HaAnnouncer::configure(const DeviceConfig& cfg, IBoard& board, const std::string& uid,
-                            const std::string& prefix, const std::string& hostname) {
+void HaAnnouncer::configure(const DeviceConfig& cfg, IBoard& board, const sound::Caps& audio,
+                            const std::string& uid, const std::string& prefix,
+                            const std::string& hostname) {
   enabled_ = cfg.haDiscovery;
   ISensorBus& sensors = board.sensors();
   ctx_.prefix = prefix;
@@ -36,6 +37,8 @@ void HaAnnouncer::configure(const DeviceConfig& cfg, IBoard& board, const std::s
   ctx_.hasTemperature = sensors.hasSensor();
   ctx_.hasHumidity = sensors.hasHumidity();
   ctx_.hasPressure = sensors.hasPressure();
+  ctx_.hasSound = audio.mp3 || audio.rtttl || audio.track;
+  ctx_.hasRadio = audio.radio;
 }
 
 void HaAnnouncer::announce(PubSubClient& client) {

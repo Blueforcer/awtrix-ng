@@ -1,0 +1,5 @@
+config BR2_PACKAGE_AWTRIX_BASE64
+	bool
+	help
+	  Pinned base64 headers used by the AWTRIX host application.
+	  Installed in the build sysroot only.

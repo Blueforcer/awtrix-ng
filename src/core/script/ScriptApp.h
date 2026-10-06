@@ -52,6 +52,11 @@ class ScriptApp : public IApp {
                     const RenderCtx* ctx);
   void dispatchMqtt(const std::string& filter, const std::string& topic,
                     const std::string& payload, const RenderCtx* ctx);
+  // Runs the VM global `function` with three string arguments as a callback of this app; what
+  // names the callback in an error report.
+  void dispatch(const char* what, const char* function, const std::string& a, const std::string& b,
+                const std::string& c, const RenderCtx* ctx);
+  bool dispatchHook(const char* hook, const std::string& event, const RenderCtx* ctx);
 
   long takePeakDrawUs() {
     const long p = peakDrawUs_;
@@ -69,6 +74,7 @@ class ScriptApp : public IApp {
  private:
   bool has(Hook h) const { return (hooks_ & (1u << h)) != 0; }
   void enter(const char* what, bool okResult);
+  void markBroken();
   void refreshDuration(const RenderCtx* ctx);
 
   // Shared with every other app on the device; this class owns nothing but its entry in the

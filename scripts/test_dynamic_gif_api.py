@@ -114,7 +114,7 @@ class Api:
                 raise RuntimeError(f"{method} {path}: expected JSON response") from None
 
     def upload(self, name: str, payload: bytes):
-        boundary = "codex_gif_probe_" + secrets.token_hex(8)
+        boundary = "awtrix_gif_probe_" + secrets.token_hex(8)
         body = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; '
                 f'filename="{name}.gif"\r\nContent-Type: image/gif\r\n\r\n').encode()
         body += payload + f"\r\n--{boundary}--\r\n".encode()
@@ -264,7 +264,7 @@ def observe_tiles(api: Api, route: str, case: str, panel: tuple[int, int],
 
 def run(args) -> int:
     api = Api(args.url)
-    namespace = "codex_gif_probe_" + secrets.token_hex(4)
+    namespace = "awtrix_gif_probe_" + secrets.token_hex(4)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     directory = ROOT / ".pio" / "gif-device-test" / (stamp + "_" + namespace)
     directory.mkdir(parents=True)
@@ -311,9 +311,9 @@ def run(args) -> int:
             raise RuntimeError("Display must already be powered on without global overlay/moodlight")
         apps = api.request("GET", "/api/v1/apps")
         files = api.request("GET", "/api/v1/files?dir=/ICONS")["files"]
-        if any(app["name"].startswith("codex_gif_probe") for app in apps) or any(
-                entry["name"].rsplit("/", 1)[-1].startswith("codex_gif_probe") for entry in files):
-            raise RuntimeError("Existing codex_gif_probe app/icon found; refusing to alter it")
+        if any(app["name"].startswith("awtrix_gif_probe") for app in apps) or any(
+                entry["name"].rsplit("/", 1)[-1].startswith("awtrix_gif_probe") for entry in files):
+            raise RuntimeError("Existing awtrix_gif_probe app/icon found; refusing to alter it")
         original = {"currentApp": device.get("currentApp", ""),
                     "settings": {key: settings[key] for key in
                                  ("autoTransition", "transitionDurationMs")}}

@@ -13,8 +13,10 @@ action:
           "icon": "23404",
           "durationMs": {{ ( ring_time | int ) * 1000 }},
           "palette": "Rainbow",
-          "sound": "doorbell",
-          "soundLoop": true,
+          "sound": {
+            "file": "doorbell",
+            "loop": true
+          },
           "textColor": "palette"
         }
 mode: single

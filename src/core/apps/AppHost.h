@@ -40,6 +40,8 @@ class AppHost {
 
   void next(int64_t nowMs);
   void previous(int64_t nowMs);
+  // The app on screen gets its full time again; a transition already running is left alone.
+  void restartTurn(int64_t nowMs);
 
   bool switchTo(const std::string& id, int64_t nowMs);
   bool transitionTo(const std::string& id, int64_t nowMs);

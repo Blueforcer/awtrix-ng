@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "core/render/Color.h"
+#include "core/render/Motion.h"
 #include "core/render/ColorRamp.h"
 #include "core/render/TextRenderer.h"
 
@@ -13,6 +14,7 @@ namespace render {
 
 namespace {
 constexpr int kBaselineY = 6;
+constexpr int kTextRowH = 8;
 constexpr long kScrollPxPerSec = 30;
 constexpr float kPi = 3.14159265f;
 const char kLogo[] = "AWTRIX";
@@ -36,7 +38,6 @@ constexpr uint8_t kGlyphN[kNgHeight] = {0b10001, 0b11001, 0b11001, 0b10101,
                                         0b10101, 0b10011, 0b10011, 0b10001};
 constexpr uint8_t kGlyphG[kNgHeight] = {0b01110, 0b10001, 0b10000, 0b10000,
                                         0b10111, 0b10001, 0b10001, 0b01110};
-constexpr int kAddressGapPx = 12;
 
 constexpr float kOvershootPx = 1.0f;
 constexpr float kOvershootFrom = 0.6f;
@@ -79,6 +80,8 @@ int ngRestX(const Canvas& c) { return (c.width() - kNgWidth) / 2; }
 
 int ngRestY(const Canvas& c) { return (c.height() - kNgHeight) / 2; }
 
+int logoBaseline(const Canvas& c) { return (c.height() - kTextRowH) / 2 + kBaselineY; }
+
 int logoX(const Canvas& c, const GfxFont& font) {
   return (c.width() - text::width(font, kLogo)) / 2;
 }
@@ -93,10 +96,6 @@ int64_t spawnDelay(int x, int y, int inkLeft, int inkRight) {
   return static_cast<int64_t>(col) * kColumnSweepMs / span + (x * 7 + y * 13) % (kJitterMs + 1);
 }
 
-float easeOutCubic(float t) {
-  const float u = 1.0f - t;
-  return 1.0f - u * u * u;
-}
 
 float overshootPx(float t) {
   if (t <= kOvershootFrom) return 0.0f;
@@ -105,15 +104,10 @@ float overshootPx(float t) {
 }
 
 uint32_t sparkColor(float t) {
-  static const Palette& heat = namedPalette("Heat");
-  return colorFromPalette(heat, static_cast<uint8_t>(40.0f + 200.0f * t), true);
+  static const Palette* const heat = findStockPalette("Heat");
+  return colorFromPalette(*heat, static_cast<uint8_t>(40.0f + 200.0f * t), true);
 }
 
-uint32_t scaled(uint32_t rgb, uint8_t scale) {
-  return color::pack(color::scale8(color::red(rgb), scale),
-                     color::scale8(color::green(rgb), scale),
-                     color::scale8(color::blue(rgb), scale));
-}
 
 int luma(uint32_t c) { return color::red(c) + color::green(c) + color::blue(c); }
 
@@ -125,7 +119,7 @@ void plotBrightest(Canvas& c, int x, int y, uint32_t rgb) {
 
 void renderLogo(Canvas& out, const GfxFont& font) {
   out.clear(color::kBlack);
-  text::drawText(out, font, logoX(out, font), kBaselineY, kLogo, 0xFFFFFFu);
+  text::drawText(out, font, logoX(out, font), logoBaseline(out), kLogo, 0xFFFFFFu);
 }
 
 struct Point {
@@ -136,7 +130,7 @@ struct Point {
 // Position of one spark at p (0..1) of its flight, easing into its target pixel and overshooting
 // slightly outward near the end so it settles back rather than stopping dead.
 Point sparkAt(float p, float spawnX, float spawnY, int targetX, int targetY) {
-  const float e = easeOutCubic(p);
+  const float e = motion::easeOutCubic(p);
   const float over = overshootPx(p);
   const float dx = static_cast<float>(targetX) - spawnX;
   const float dir = dx > 0.0f ? 1.0f : (dx < 0.0f ? -1.0f : 0.0f);
@@ -168,7 +162,7 @@ void drawRise(Canvas& c, const GfxFont& font, int64_t t) {
       const uint8_t trail = static_cast<uint8_t>(kTrailScale * (1.0f - p));
       if (trail)
         plotSpark(c, sparkAt(std::max(0.0f, p - kTrailLead), spawnX, spawnY, x, y),
-                  scaled(rgb, trail));
+                  color::scale8(rgb, trail));
       plotSpark(c, sparkAt(p, spawnX, spawnY, x, y), rgb);
     }
   }
@@ -246,7 +240,7 @@ void igniteBloom(Canvas& c, float k) {
 void drawBoom(Canvas& c, float p) {
   const float cx = static_cast<float>(c.width() - 1) * 0.5f;
   const float cy = static_cast<float>(c.height() - 1) * 0.5f;
-  const float r = kBoomMaxR * easeOutCubic(p);
+  const float r = kBoomMaxR * motion::easeOutCubic(p);
   const float half = kBoomThickness * 0.5f;
   const float fade = 1.0f - p;
 
@@ -300,23 +294,43 @@ void drawBootLogo(Canvas& c, const GfxFont& font, int64_t startMs, int64_t nowMs
   drawStars(c, nowMs);
 }
 
-bool drawBootAddress(Canvas& c, const GfxFont& font, const std::string& address, int64_t startMs,
-                     int64_t nowMs) {
+int bootInfoLineX(int areaW, int textW, int64_t elapsedMs) {
+  if (textW <= areaW) return (areaW - textW) / 2;
+  const int64_t travel = static_cast<int64_t>(areaW) + textW;
+  const int64_t scrolled =
+      std::min(travel, std::max<int64_t>(elapsedMs, 0) * kScrollPxPerSec / 1000);
+  return areaW - static_cast<int>(scrolled);
+}
+
+bool bootInfoLineShowing(int areaW, int textW, int64_t elapsedMs) {
+  if (textW <= areaW) return elapsedMs < kBootInfoHoldMs;
+  return bootInfoLineX(areaW, textW, elapsedMs) + textW > 0;
+}
+
+bool drawBootInfo(Canvas& c, const GfxFont& font, const BootInfo& info, int64_t startMs,
+                  int64_t nowMs) {
+  const std::string* lines[2];
+  int count = 0;
+  const bool twoRows = c.height() >= 2 * kTextRowH;
+  if (!info.version.empty() && (twoRows || info.address.empty())) lines[count++] = &info.version;
+  if (!info.address.empty()) lines[count++] = &info.address;
+
+  const int64_t t = elapsed(startMs, nowMs);
   const ColorRamp& ramp = logoRamp();
-  const int origin = ramp.originAt(nowMs, kRampSpanPx);
-  const int tail = kNgWidth + kAddressGapPx;
-  const int x = ngRestX(c) - static_cast<int>(elapsed(startMs, nowMs) * kScrollPxPerSec / 1000);
-
-  c.clear(color::kBlack);
-  drawNgGradient(c, x, ngRestY(c), origin);
-
   text::TextPaint paint;
   paint.ramp = &ramp;
-  paint.rampOriginPx = origin + tail;
-  text::drawRun(c, font, static_cast<float>(x + tail), kBaselineY, address, paint);
+  paint.rampOriginPx = ramp.originAt(nowMs, kRampSpanPx);
 
-  drawStars(c, nowMs);
-  return x + tail + text::width(font, address) >= 0;
+  c.clear(color::kBlack);
+  const int top = (c.height() - count * kTextRowH) / 2;
+  bool showing = false;
+  for (int i = 0; i < count; ++i) {
+    const text::TextMetrics m = text::measure(font, *lines[i]);
+    showing |= bootInfoLineShowing(c.width(), m.inkWidth(), t);
+    const int x = bootInfoLineX(c.width(), m.inkWidth(), t) - m.inkLeft;
+    text::drawRun(c, font, x, top + i * kTextRowH + kBaselineY, *lines[i], paint);
+  }
+  return showing;
 }
 
 }

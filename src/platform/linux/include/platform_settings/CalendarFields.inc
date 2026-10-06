@@ -1,0 +1,6 @@
+{Time, "calendarAnimation", "calendar", ClockProfile::Faces},
+{Time, "dateOrder", "calendar", ClockProfile::Faces},
+{Time, "dateSeparator", "calendar", ClockProfile::Faces},
+{Time, "dateYearMode", "calendar", ClockProfile::Faces},
+{Time, "dateMonthNames", "calendar", ClockProfile::Faces},
+{Time, "dateColor", "calendar", ClockProfile::Faces},

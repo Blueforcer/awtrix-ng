@@ -8,7 +8,7 @@
 
 #include "core/script/HttpBodyFilter.h"
 #include "core/script/HttpHeaders.h"
-#include "core/script/ScriptHeapTesting.h"
+#include "platform/linux/host/HostScriptHeap.h"
 #include "core/script/ScriptServices.h"
 
 using namespace awtrix;

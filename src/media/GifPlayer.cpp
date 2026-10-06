@@ -2,11 +2,7 @@
 
 #include <cstring>
 
-#include "media/AssetFile.h"
-
-unsigned int decode_base64_length(const unsigned char input[], unsigned int input_length);
-unsigned int decode_base64(const unsigned char input[], unsigned int input_length,
-                           unsigned char output[]);
+#include "media/ImageInfo.h"
 
 namespace awtrix {
 
@@ -16,32 +12,36 @@ namespace {
 // which costs CPU per frame but keeps the compressed bytes only.
 constexpr int kPreDecodeBudgetBytes = 16 * 1024;
 
+// Plenty of GIFs declare a 0 ms delay; browsers substitute roughly 100 ms and so do we.
+int playbackDelayMs(int delayMs) { return delayMs > 0 ? delayMs : 100; }
+
 }
 
 GifPlayer::~GifPlayer() { close(); }
 
-GifPlayer::OpenResult GifPlayer::open(const std::string& iconId, int maxWidth, int maxHeight,
+GifPlayer::OpenResult GifPlayer::open(std::string_view icon, int maxWidth, int maxHeight,
                                       bool firstFrameOnly,
                                       int maxResidentFrames) {
   close();
   if (maxWidth <= 0 || maxHeight <= 0) return OpenResult::kMissing;
-  // No id that long can be a filename, so treat it as an inline base64 GIF from the API.
-  if (iconId.size() > 64) {
-    const auto* in = reinterpret_cast<const unsigned char*>(iconId.c_str());
-    const unsigned int maxLen = decode_base64_length(in, iconId.size());
-    if (!data_.resize(maxLen)) return OpenResult::kOom;
-    const unsigned int n = decode_base64(in, iconId.size(), data_.data());
-    if (n < 6) {
-      data_.clear();
-      return OpenResult::kMissing;
-    }
-    data_.resize(n);
-  } else {
-    bool outOfMemory = false;
-    if (!media::readAsset("/ICONS/" + iconId + ".gif", data_, &outOfMemory))
-      return outOfMemory ? OpenResult::kOom : OpenResult::kMissing;
+  switch (media::readIconBytes(icons::parse(icon), icons::ImageFormat::kGif, data_)) {
+    case media::IconRead::kGood: break;
+    case media::IconRead::kOom: return OpenResult::kOom;
+    case media::IconRead::kMissing: return OpenResult::kMissing;
   }
-  if (data_.size() < 6 || std::memcmp(data_.data(), "GIF8", 4) != 0) {
+  return decodeLoaded(maxWidth, maxHeight, firstFrameOnly, maxResidentFrames);
+}
+
+GifPlayer::OpenResult GifPlayer::openBytes(media::PodBuffer<uint8_t> bytes,
+    int maxWidth, int maxHeight, bool firstFrameOnly, int maxResidentFrames) {
+  close();
+  data_ = std::move(bytes);
+  return decodeLoaded(maxWidth, maxHeight, firstFrameOnly, maxResidentFrames);
+}
+
+GifPlayer::OpenResult GifPlayer::decodeLoaded(int maxWidth, int maxHeight,
+    bool firstFrameOnly, int maxResidentFrames) {
+  if (maxWidth <= 0 || maxHeight <= 0 || data_.size() < 6 || std::memcmp(data_.data(), "GIF8", 4) != 0) {
     data_.clear();
     return OpenResult::kMissing;
   }
@@ -88,38 +88,37 @@ GifPlayer::PreDecode GifPlayer::preDecode(bool firstFrameOnly, int maxResidentFr
   const int cachedFrames = maxResidentFrames > 0 && maxResidentFrames < budgetFrames
                                ? maxResidentFrames : budgetFrames;
   const int maxFrames = firstFrameOnly || cachedFrames < 1 ? 1 : cachedFrames;
-  if (!firstFrameOnly && gif_.exceedsFrameCount(maxFrames)) {
+  const int found = gif_.countFrames(maxFrames);
+  if (!firstFrameOnly && found > maxFrames) {
     if (!frames_.resize(framePixels)) return PreDecode::kOom;
     Canvas first(w_, h_, frames_.data());
     const auto step = gif_.nextFrame(first, initialDelayMs_, true);
     if (step == media::MicroGif::Step::kOom) return PreDecode::kOom;
     if (step != media::MicroGif::Step::kFrame) return PreDecode::kDone;
-    if (initialDelayMs_ <= 0) initialDelayMs_ = 100;
+    initialDelayMs_ = playbackDelayMs(initialDelayMs_);
     return PreDecode::kStream;
   }
-  media::PodBuffer<uint32_t> scratchPixels;
-  if (!scratchPixels.resize(framePixels)) return PreDecode::kOom;
-  Canvas scratch(w_, h_, scratchPixels.data());
-  scratch.clear(0x000000u);
-  for (;;) {
+  const int slots = found < maxFrames ? found : maxFrames;
+  const size_t cachePixels = static_cast<size_t>(slots) * framePixels;
+  if (!frames_.resize(cachePixels, cachePixels) || !delays_.resize(slots, slots))
+    return PreDecode::kOom;
+  // GIF frames are deltas, so each slot starts as a copy of the frame before it.
+  for (; frameCount_ < slots; ++frameCount_) {
+    uint32_t* slot = frames_.data() + static_cast<size_t>(frameCount_) * framePixels;
+    Canvas frame(w_, h_, slot);
+    if (frameCount_ == 0) frame.clear(0x000000u);
+    else std::memcpy(slot, slot - framePixels, framePixels * sizeof(uint32_t));
     int delayMs = 0;
-    const media::MicroGif::Step st = gif_.nextFrame(scratch, delayMs);
+    const media::MicroGif::Step st = gif_.nextFrame(frame, delayMs);
     if (st == media::MicroGif::Step::kOom) return PreDecode::kOom;
     if (st != media::MicroGif::Step::kFrame) break;
-    // The descriptor scan counted every decodable frame before choosing this cache path.
-    if (frameCount_ == maxFrames) break;
-    if (!frames_.resize(static_cast<size_t>(frameCount_ + 1) * framePixels,
-                        static_cast<size_t>(maxFrames) * framePixels) ||
-        !delays_.resize(static_cast<size_t>(frameCount_) + 1))
-      return PreDecode::kOom;
-    uint32_t* out = frames_.data() + static_cast<size_t>(frameCount_) * framePixels;
-    std::memcpy(out, scratch.data(), framePixels * sizeof(uint32_t));
-    // Plenty of GIFs declare a 0 ms delay; browsers substitute roughly 100 ms and so do we.
-    if (delayMs <= 0) delayMs = 100;
-    delays_[frameCount_] = static_cast<uint16_t>(delayMs / 10);
-    ++frameCount_;
-    if (firstFrameOnly) break;
+    delays_[frameCount_] = static_cast<uint16_t>(playbackDelayMs(delayMs) / 10);
   }
+  // A frame that failed to decode ends the cache early; the slots after it go back to the heap.
+  frames_.resize(static_cast<size_t>(frameCount_) * framePixels);
+  frames_.shrinkToFit();
+  delays_.resize(frameCount_);
+  delays_.shrinkToFit();
   return PreDecode::kDone;
 }
 
@@ -137,6 +136,14 @@ bool GifPlayer::takeInitialFrame(media::PodBuffer<uint32_t>& out) {
   if (!active_ || !streamInitialPending_ || frames_.empty()) return false;
   out = std::move(frames_);
   return true;
+}
+
+GifPlayer::Frame GifPlayer::takeFrame(media::PodBuffer<uint32_t>& out) {
+  if (takeStaticFrame(out)) return Frame::kStill;
+  if (takeInitialFrame(out)) return Frame::kPlaying;
+  if (!out.resize(static_cast<std::size_t>(w_) * h_)) return Frame::kOom;
+  Canvas(w_, h_, out.data()).clear();
+  return Frame::kPlaying;
 }
 
 void GifPlayer::close() {
@@ -201,8 +208,7 @@ void GifPlayer::render(Canvas& dst, int64_t nowMs) {
     nextFrameMs_ = nowMs + 1000;
     return;
   }
-  if (delayMs <= 0) delayMs = 100;
-  nextFrameMs_ = nowMs + delayMs;
+  nextFrameMs_ = nowMs + playbackDelayMs(delayMs);
 }
 
 }

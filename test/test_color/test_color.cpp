@@ -63,11 +63,11 @@ static void test_fromKelvin_warm_vs_cold() {
 }
 
 static void test_scale8_endpoints() {
-  TEST_ASSERT_EQUAL_UINT8(200, color::scale8(200, 255));
-  TEST_ASSERT_EQUAL_UINT8(0, color::scale8(200, 0));
-  TEST_ASSERT_EQUAL_UINT8(255, color::scale8(255, 255));
-  TEST_ASSERT_EQUAL_UINT8(128, color::scale8(255, 128));
-  TEST_ASSERT_EQUAL_UINT8(0, color::scale8(0, 255));
+  TEST_ASSERT_EQUAL_UINT8(200, color::scaleChannel8(200, 255));
+  TEST_ASSERT_EQUAL_UINT8(0, color::scaleChannel8(200, 0));
+  TEST_ASSERT_EQUAL_UINT8(255, color::scaleChannel8(255, 255));
+  TEST_ASSERT_EQUAL_UINT8(128, color::scaleChannel8(255, 128));
+  TEST_ASSERT_EQUAL_UINT8(0, color::scaleChannel8(0, 255));
 }
 
 static void test_desaturate_full_keeps_colour() {

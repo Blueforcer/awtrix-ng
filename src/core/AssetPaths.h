@@ -1,12 +1,16 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
+#include "core/render/PaletteFile.h"
 #include "core/sound/Rtttl.h"
 #include "core/sound/SoundMp3.h"
 
 namespace awtrix {
 namespace assets {
+
+const char* mimeType(std::string_view path);
 
 inline bool isAssetPath(const std::string& path) {
   if (path.find("..") != std::string::npos) return false;
@@ -24,11 +28,15 @@ inline bool isBackupReadable(const std::string& path) {
   return path.rfind("/SCRIPTS/", 0) == 0 || path == "/apploop.json" || path == "/radio.json";
 }
 
+// A script's folder holds its sounds and nothing else, so under /SCRIPTS nothing reaches deeper
+// than "/SCRIPTS/<script>/<name>.mp3".
 inline bool isBackupWritable(const std::string& path) {
   if (path.find("..") != std::string::npos) return false;
+  if (path.rfind("/SCRIPTS/", 0) == 0)
+    return path.find('/', sizeof("/SCRIPTS/") - 1) == std::string::npos ||
+           sound::isScriptMp3Path(path);
   return path.rfind("/ICONS/", 0) == 0 || path.rfind("/MELODIES/", 0) == 0 ||
-         path.rfind("/PALETTES/", 0) == 0 || path.rfind("/MP3/", 0) == 0 ||
-         path.rfind("/SCRIPTS/", 0) == 0;
+         path.rfind("/PALETTES/", 0) == 0 || path.rfind("/MP3/", 0) == 0;
 }
 
 enum class AssetKind { Unknown, Icon, Melody, Palette, Mp3 };
@@ -38,6 +46,8 @@ inline AssetKind kindFor(const std::string& path) {
   if (path.rfind("/MELODIES/", 0) == 0) return AssetKind::Melody;
   if (path.rfind("/PALETTES/", 0) == 0) return AssetKind::Palette;
   if (path.rfind("/MP3/", 0) == 0) return AssetKind::Mp3;
+  // A script's own sounds are MP3s, held to the same content rule as the shared ones.
+  if (sound::isScriptMp3Path(path)) return AssetKind::Mp3;
   return AssetKind::Unknown;
 }
 
@@ -59,8 +69,7 @@ inline bool looksLikeImage(const unsigned char* data, unsigned n) {
   return n >= 4 && data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G';
 }
 
-// ID3v2 tag or an MPEG frame sync. Cheap by design: whether the frames are
-// actually MPEG-1 Layer III only comes out when the decoder runs.
+// ID3v2 tag or an MPEG frame sync; the decoder validates the frames.
 inline bool looksLikeMp3(const unsigned char* data, unsigned n) {
   if (n >= 3 && data[0] == 'I' && data[1] == 'D' && data[2] == '3') return true;
   return n >= 2 && data[0] == 0xFF && (data[1] & 0xE0) == 0xE0;
@@ -75,14 +84,8 @@ inline bool contentLooksValid(AssetKind kind, const unsigned char* data, unsigne
     case AssetKind::Melody:
       return n != 0 && rtttl::parse(std::string(reinterpret_cast<const char*>(data), n)).ok;
     case AssetKind::Palette: {
-      if (n == 0) return false;
-      if (looksLikeImage(data, n)) return false;
-      for (unsigned i = 0; i < n; ++i) {
-        const unsigned char c = data[i];
-        if (c == '\t' || c == '\n' || c == '\r') continue;
-        if (c < 0x20 || c == 0x7F) return false;
-      }
-      return true;
+      render::Palette palette;
+      return render::parsePaletteFile(std::string(reinterpret_cast<const char*>(data), n), palette);
     }
     case AssetKind::Mp3:
       return looksLikeMp3(data, n);
@@ -96,8 +99,8 @@ inline const char* acceptedFormats(AssetKind kind) {
   switch (kind) {
     case AssetKind::Icon: return "GIF or JPEG";
     case AssetKind::Melody: return "RTTTL text";
-    case AssetKind::Palette: return "text, one RRGGBB per line";
-    case AssetKind::Mp3: return "MP3 (MPEG-1 Layer III)";
+    case AssetKind::Palette: return "RRGGBB lines";
+    case AssetKind::Mp3: return "MP3";
     default: return "";
   }
 }

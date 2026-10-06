@@ -1,3 +1,4 @@
+#include "core/Sha256Hex.h"
 #include "core/icons/IconOrigins.h"
 
 #include <algorithm>
@@ -69,9 +70,7 @@ bool parseRecord(api::JsonReader r, Record& out) {
     if (!r.skipValue()) return false;
   }
   if (seen != 15 || !validName(out.name) || !validHub(out.hub) ||
-      !identifier(out.slug, false) || out.sha256.size() != 64) return false;
-  for (const char c : out.sha256)
-    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+      !identifier(out.slug, false) || !isSha256Hex(out.sha256)) return false;
   return r.ok();
 }
 
@@ -138,18 +137,18 @@ std::string serialize(const std::vector<Record>& records) {
 Result handle(Backend& storage, const std::string& method, const std::string& body,
               const std::string& name) {
   if (method != "GET" && method != "PUT" && method != "DELETE")
-    return error(405, "methodNotAllowed", "allowed method(s): GET, PUT, DELETE");
+    return error(405, "methodNotAllowed", "allowed: GET, PUT, DELETE");
   Record incoming;
   if (method == "PUT") {
-    if (body.size() > kMaxPutBytes) return error(413, "payloadTooLarge", "origin exceeds 1024 bytes");
+    if (body.size() > kMaxPutBytes) return error(413, "payloadTooLarge", "over 1024 bytes");
     if (!api::isWellFormed(body) || !parseRecord(api::JsonReader(body), incoming))
-      return error(400, "invalidOrigin", "expected valid name, HTTPS hub, slug and lowercase SHA256");
+      return error(400, "invalidOrigin", "invalid origin");
     if (!storage.iconExists(incoming.name)) return error(404, "notFound", "icon file not found");
   }
   if (method == "DELETE" && !validName(name))
-    return error(400, "invalidName", "name must be an icon filename ending in .gif or .jpg");
+    return error(400, "invalidName", "invalid icon name");
   std::vector<Record> records;
-  if (!load(storage, records)) return error(500, "storageError", "could not read icon origins");
+  if (!load(storage, records)) return error(500, "storageError", "read failed");
   if (method != "DELETE") {
     records.erase(std::remove_if(records.begin(), records.end(), [&](const Record& r) {
       return !storage.iconExists(r.name);
@@ -169,14 +168,26 @@ Result handle(Backend& storage, const std::string& method, const std::string& bo
     if (found != records.end()) *found = std::move(incoming);
     else {
       if (records.size() >= kMaxRecords)
-        return error(507, "insufficientStorage", "at most 64 icon origins can be stored");
+        return error(507, "insufficientStorage", "at most 64 origins");
       records.push_back(std::move(incoming));
     }
   }
   const std::string json = serialize(records);
   if (json.size() > kMaxBytes)
-    return error(507, "insufficientStorage", "icon origins exceed the 16 KiB storage limit");
-  if (!storage.writeAtomic(json)) return error(500, "storageError", "could not save icon origins");
+    return error(507, "insufficientStorage", "over 16 KiB");
+  if (!storage.writeAtomic(json)) return error(500, "storageError", "save failed");
+  return {200, "{\"ok\":true}"};
+}
+
+Result rename(Backend& storage, const std::string& from, const std::string& to) {
+  std::vector<Record> records;
+  if (!load(storage, records)) return error(500, "storageError", "read failed");
+  const auto found = std::find_if(records.begin(), records.end(), [&](const Record& r) {
+    return r.name == from;
+  });
+  if (found == records.end()) return {200, "{\"ok\":true}"};
+  found->name = to;
+  if (!storage.writeAtomic(serialize(records))) return error(500, "storageError", "save failed");
   return {200, "{\"ok\":true}"};
 }
 
@@ -186,7 +197,7 @@ bool restore(Backend& storage, const std::string& json, std::string& err) {
   records.erase(std::remove_if(records.begin(), records.end(), [&](const Record& r) {
     return !storage.iconExists(r.name);
   }), records.end());
-  if (!storage.writeAtomic(serialize(records))) { err = "could not save icon origins"; return false; }
+  if (!storage.writeAtomic(serialize(records))) { err = "save failed"; return false; }
   return true;
 }
 }

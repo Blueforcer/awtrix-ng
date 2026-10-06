@@ -1,5 +1,9 @@
 #include <unity.h>
+#include "../ScriptApplication.h"
 
+#include "berry.h"
+
+#include <cstring>
 #include <map>
 #include <set>
 #include <string>
@@ -13,8 +17,10 @@
 #include "core/script/ScriptApp.h"
 #include "core/script/ScriptBindings.h"
 #include "core/script/ScriptConfig.h"
+#include "core/script/ScriptExtension.h"
+#include "platform/linux/script/ExtensionHost.h"
 #include "core/script/ScriptHeap.h"
-#include "core/script/ScriptHeapTesting.h"
+#include "platform/linux/host/HostScriptHeap.h"
 #include "core/script/ScriptHost.h"
 #include "core/script/ScriptService.h"
 #include "core/script/ScriptServices.h"
@@ -23,10 +29,13 @@ using namespace awtrix;
 
 static long g_now = 0;
 static script::ScriptServices g_svc;
+static awtrix::test::ScriptApplication application;
 
 void setUp() {
   g_now = 0;
   g_svc = {};
+  application = {};
+  g_svc.application = &application;
   g_svc.monotonicMs = [] { return g_now; };
 }
 
@@ -168,7 +177,24 @@ static void test_replace_points_registry_at_the_new_app() {
   TEST_ASSERT_EQUAL_HEX32(0x22u, c.getPixel(0, 0));
 }
 
-// A script is refused only by the heap and fragmentation guards exercised below.
+static void test_a_script_cannot_take_a_built_in_apps_name() {
+  struct Builtin : IApp {
+    std::string name = "Time";
+    const std::string& id() const override { return name; }
+    void render(Canvas&, const RenderCtx&) override {}
+  } clock;
+  AppRegistry reg;
+  reg.add(&clock);
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  TEST_ASSERT_FALSE(host.set("Time", app("def draw() end")));
+  TEST_ASSERT_TRUE(host.refusalIsInvalid());
+  TEST_ASSERT_EQUAL_PTR(&clock, reg.find("Time"));
+  host.remove("Time");
+  TEST_ASSERT_EQUAL_PTR(&clock, reg.find("Time"));
+}
+
+// Beyond a built-in app's name, a script is refused only by the heap and fragmentation guards
+// exercised below.
 static void test_installing_many_scripts_succeeds() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
@@ -185,7 +211,7 @@ static void test_install_refused_over_the_script_heap_budget() {
   TEST_ASSERT_FALSE(host.set("A", app("def draw() end")));
   TEST_ASSERT_NULL(reg.find("A"));
   TEST_ASSERT_TRUE(host.lastRefusal().find("budget") != std::string::npos);
-  TEST_ASSERT_TRUE(host.lastRefusal().find("internal") != std::string::npos);
+  TEST_ASSERT_TRUE(host.lastRefusal().find("over budget") != std::string::npos);
 }
 
 static std::string fatApp() {
@@ -234,7 +260,7 @@ static void test_budget_does_not_relax_the_compile_guards() {
   const std::string src = app("def draw() end");
   freeHeap = script::installNeedsBytes(src.size()) - 1;
   TEST_ASSERT_FALSE(host.set("A", src));
-  TEST_ASSERT_TRUE(host.lastRefusal().find("free memory") != std::string::npos);
+  TEST_ASSERT_TRUE(host.lastRefusal().find("memory to compile") != std::string::npos);
 
   freeHeap = script::installNeedsBytes(src.size());
   TEST_ASSERT_TRUE(host.set("A", src));
@@ -252,7 +278,7 @@ static void test_install_refused_when_system_heap_is_low() {
   freeHeap = need - 1;
   TEST_ASSERT_FALSE(host.set("A", src));
   TEST_ASSERT_NULL(reg.find("A"));
-  TEST_ASSERT_TRUE(host.lastRefusal().find("free memory") != std::string::npos);
+  TEST_ASSERT_TRUE(host.lastRefusal().find("memory to compile") != std::string::npos);
 
   freeHeap = need;
   TEST_ASSERT_TRUE(host.set("A", src));
@@ -281,7 +307,7 @@ static void test_install_refused_when_the_heap_is_too_fragmented() {
   largest = src.size() - 1;
   TEST_ASSERT_FALSE(host.set("A", src));
   TEST_ASSERT_NULL(reg.find("A"));
-  TEST_ASSERT_TRUE(host.lastRefusal().find("contiguous") != std::string::npos);
+  TEST_ASSERT_TRUE(host.lastRefusal().find("too fragmented") != std::string::npos);
 
   largest = src.size();
   TEST_ASSERT_TRUE(host.set("A", src));
@@ -372,6 +398,30 @@ static void test_tick_runs_loop_at_1hz_and_visibility() {
   TEST_ASSERT_EQUAL_STRING("2+-", check(reg, "L").c_str());
 
   TEST_ASSERT_TRUE(host.errorOf("L").empty());
+}
+
+static void test_an_app_restarted_on_screen_is_shown_at_once() {
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  const std::string src = app("var vis\n"
+                              "def init() self.vis = '' end\n"
+                              "def setup() self.vis += 's' end\n"
+                              "def draw() end\n"
+                              "def on_show() self.vis += '+' end\n"
+                              "def on_hide() self.vis += '-' end\n"
+                              "def check() return self.vis end");
+  host.set("V", src);
+  host.set("H", src);
+  RenderCtx ctx;
+  host.tick(ctx, "V");
+  TEST_ASSERT_EQUAL_STRING("s+", check(reg, "V").c_str());
+
+  host.set("V", src);
+  host.set("H", src);
+  TEST_ASSERT_EQUAL_STRING("s+", check(reg, "V").c_str());
+  TEST_ASSERT_EQUAL_STRING("s", check(reg, "H").c_str());
+  host.tick(ctx, "V");
+  TEST_ASSERT_EQUAL_STRING("s+", check(reg, "V").c_str());
 }
 
 static const char* kCounter =
@@ -547,6 +597,245 @@ static void test_http_answers_do_not_reach_an_inactive_script() {
   RenderCtx ctx;
   host.tick(ctx, "Time");
   TEST_ASSERT_EQUAL_STRING("-1", check(reg, "W").c_str());
+}
+
+static void test_an_answer_missed_while_inactive_fails_once_the_script_runs_again() {
+  FakeHttp fake;
+  g_svc.http = &fake;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("W", app("var t\ndef init() self.t = '' end\n"
+                    "def setup() http.get('http://x/', def(b, s) self.t += b == nil ? 'f' + str(s) : b end) end\n"
+                    "def draw() end\n"
+                    "def check() return self.t + '/' + str(size(_http_cbs)) end"));
+  host.setRunningScripts({"Time"});
+  RenderCtx ctx;
+  g_now = 10;
+  host.pushHttpResult({fake.last(), true, 200, "33"});
+  host.tick(ctx, "Time");
+  TEST_ASSERT_EQUAL_STRING("/1", check(reg, "W").c_str());
+
+  host.setRunningScripts({"Time", "W"});
+  g_now = 20;
+  host.tick(ctx, "Time");
+  TEST_ASSERT_EQUAL_STRING("f0/0", check(reg, "W").c_str());
+
+  g_now = script::kHttpTimeoutMs * 4;
+  host.tick(ctx, "Time");
+  TEST_ASSERT_EQUAL_STRING("f0/0", check(reg, "W").c_str());
+}
+
+static void test_a_request_timing_out_while_inactive_fails_once_the_script_runs_again() {
+  FakeHttp fake;
+  g_svc.http = &fake;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  g_now = 10;
+  host.set("W", app("var t\ndef init() self.t = '' end\n"
+                    "def setup() http.get('http://x/', def(b, s) self.t += b == nil ? 'f' : b end) end\n"
+                    "def draw() end\n"
+                    "def check() return self.t end"));
+  host.setRunningScripts({"Time"});
+  RenderCtx ctx;
+  g_now = script::kHttpTimeoutMs * 2;
+  host.tick(ctx, "Time");
+  TEST_ASSERT_EQUAL_STRING("", check(reg, "W").c_str());
+
+  host.setRunningScripts({"Time", "W"});
+  host.tick(ctx, "Time");
+  TEST_ASSERT_EQUAL_STRING("f", check(reg, "W").c_str());
+}
+
+// A platform's addition to the engine: a native, and a module built on it that scripts import.
+struct EchoExtension : script::ScriptExtension {
+  std::vector<std::string> forgotten;
+  std::vector<std::string> hiddenApps;
+  std::set<std::string> held;
+  int ticks = 0;
+  bool callbacks = true;
+  std::vector<std::string> modules() const override { return {"echo"}; }
+  std::vector<std::string> hooks() const override { return {"on_extra"}; }
+  void install(script::ScriptExtensionHost& host) override {
+    host.defineNative("_echo_twice", &EchoExtension::twice, this);
+    host.defineNative("_echo_context", &EchoExtension::context, this);
+    host.defineNative("_echo_hold", &EchoExtension::hold, this);
+    host.defineModule("echo", "var m = module('echo')\nm.twice = _echo_twice\nm.context = _echo_context\n"
+                              "m.hold = _echo_hold\nreturn m\n");
+  }
+  void tick(script::ScriptExtensionHost& host, const RenderCtx* ctx) override {
+    ++ticks;
+    if (callbacks) host.deliver("S", "echo callback", "_echo_seen", "hello", "", "", ctx);
+  }
+  void forget(script::ScriptExtensionHost&, const std::string& app) override {
+    forgotten.push_back(app);
+    held.erase(app);
+  }
+  void hidden(script::ScriptExtensionHost&, const std::string& app) override {
+    hiddenApps.push_back(app);
+    held.erase(app);
+  }
+  bool holds(const std::string& app) const override { return held.count(app) != 0; }
+  void beginFrame(script::ScriptExtensionHost&, const std::string& app) override { held.erase(app); }
+  static int twice(bvm* vm) {
+    auto* self = static_cast<EchoExtension*>(script::BerryVM::nativeSelf(vm));
+    be_pushstring(vm, (script::ScriptExtensionHost::caller() + (self ? ":" : "?") + be_tostring(vm, 1) +
+                       be_tostring(vm, 1)).c_str());
+    be_return(vm);
+  }
+  static int context(bvm* vm) {
+    const Canvas* canvas = script::ScriptExtensionHost::canvas();
+    const RenderCtx* ctx = script::ScriptExtensionHost::context();
+    const std::string value = (canvas ? std::to_string(canvas->width()) + "x" + std::to_string(canvas->height())
+                                      : "none") + ":" + (ctx ? std::to_string(ctx->nowMs) : "none");
+    be_pushstring(vm, value.c_str());
+    be_return(vm);
+  }
+  static int hold(bvm* vm) {
+    auto* self = static_cast<EchoExtension*>(script::BerryVM::nativeSelf(vm));
+    self->held.insert(script::ScriptExtensionHost::caller());
+    be_pushnil(vm);
+    be_return(vm);
+  }
+};
+
+static void test_an_extension_adds_a_module_and_hears_about_its_apps() {
+  EchoExtension echo;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  script::ExtensionHost extensions(host, {&echo});
+  TEST_ASSERT_TRUE(host.set("S", "import echo\nimport global\n"
+                                 "global._echo_seen = def (a, b, c) global._echo_last = a end\n"
+                                 "class App\ndef draw() end\ndef check() return echo.twice('ab') + ',' + "
+                                 "str(global._echo_last) end\nend\nreturn App()"));
+  RenderCtx ctx;
+  host.tick(ctx, "S");
+  TEST_ASSERT_EQUAL_INT(1, echo.ticks);
+  TEST_ASSERT_EQUAL_STRING("S:abab,hello", check(reg, "S").c_str());
+  TEST_ASSERT_FALSE(host.set("M", "# @module echo\nreturn 1\n"));
+  TEST_ASSERT_TRUE(host.lastRefusal().find("reserved") != std::string::npos);
+  host.remove("S");
+  TEST_ASSERT_EQUAL_UINT(1u, (unsigned)echo.forgotten.size());
+  TEST_ASSERT_EQUAL_STRING("S", echo.forgotten[0].c_str());
+}
+
+static void test_extensions_follow_hidden_hold_and_removal_lifecycles() {
+  EchoExtension echo;
+  echo.callbacks = false;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  script::ExtensionHost extensions(host, {&echo});
+  TEST_ASSERT_TRUE(host.set("S", app("def draw() end")));
+  RenderCtx ctx;
+  host.tick(ctx, "S");
+  echo.held.insert("S");
+  TEST_ASSERT_TRUE(host.scrollHolds("S"));
+  host.tick(ctx, "Time");
+  TEST_ASSERT_FALSE(host.scrollHolds("S"));
+  TEST_ASSERT_EQUAL_UINT(1, echo.hiddenApps.size());
+  TEST_ASSERT_EQUAL_STRING("S", echo.hiddenApps[0].c_str());
+  host.tick(ctx, "Time");
+  TEST_ASSERT_EQUAL_UINT(1, echo.hiddenApps.size());
+  echo.held.insert("S");
+  host.remove("S");
+  TEST_ASSERT_FALSE(host.scrollHolds("S"));
+  TEST_ASSERT_TRUE(echo.held.empty());
+  TEST_ASSERT_EQUAL_UINT(1, echo.forgotten.size());
+  TEST_ASSERT_EQUAL_STRING("S", echo.forgotten[0].c_str());
+}
+
+static void test_extensions_deliver_only_registered_hooks_to_visible_running_apps() {
+  EchoExtension echo;
+  echo.callbacks = false;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  script::ExtensionHost extensions(host, {&echo});
+  TEST_ASSERT_TRUE(host.set("S", app("var last\ndef init() self.last = '' end\ndef draw() end\n"
+      "def on_extra(e) self.last = e return e == 'take' end\n"
+      "def on_button(e) self.last = 'wrong' return true end\n"
+      "def check() return self.last end")));
+  RenderCtx ctx;
+  TEST_ASSERT_FALSE(extensions.deliver("S", "on_extra", "hidden", &ctx));
+  host.tick(ctx, "S");
+  TEST_ASSERT_TRUE(extensions.deliver("S", "on_extra", "take", &ctx));
+  TEST_ASSERT_EQUAL_STRING("take", check(reg, "S").c_str());
+  TEST_ASSERT_FALSE(extensions.deliver("S", "on_extra", "pass", &ctx));
+  TEST_ASSERT_EQUAL_STRING("pass", check(reg, "S").c_str());
+  TEST_ASSERT_FALSE(extensions.deliver("S", "on_button", "take", &ctx));
+  TEST_ASSERT_EQUAL_STRING("pass", check(reg, "S").c_str());
+  host.setRunningScripts({"Time"});
+  TEST_ASSERT_FALSE(extensions.deliver("S", "on_extra", "inactive", &ctx));
+  TEST_ASSERT_EQUAL_STRING("pass", check(reg, "S").c_str());
+  host.setRunningScripts({"S", "Q"});
+  TEST_ASSERT_TRUE(host.set("Q", app("def draw() end")));
+  host.tick(ctx, "Q");
+  TEST_ASSERT_FALSE(extensions.deliver("Q", "on_extra", "absent", &ctx));
+  TEST_ASSERT_TRUE(host.errorOf("Q").empty());
+  TEST_ASSERT_FALSE(extensions.deliver("missing", "on_extra", "absent", &ctx));
+}
+
+static void test_extension_hooks_share_the_script_instruction_budget() {
+  EchoExtension echo;
+  echo.callbacks = false;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  script::ExtensionHost extensions(host, {&echo});
+  TEST_ASSERT_TRUE(host.set("S", app("def draw() end\ndef on_extra(e) while true end end")));
+  RenderCtx ctx;
+  host.tick(ctx, "S");
+  echo.held.insert("S");
+  TEST_ASSERT_FALSE(extensions.deliver("S", "on_extra", "run", &ctx));
+  TEST_ASSERT_FALSE(host.errorOf("S").empty());
+  TEST_ASSERT_FALSE(host.scrollHolds("S"));
+  TEST_ASSERT_EQUAL_UINT(1, echo.forgotten.size());
+  TEST_ASSERT_FALSE(extensions.deliver("S", "on_extra", "again", &ctx));
+}
+
+static void test_extension_frame_holds_expire_when_the_next_draw_does_not_use_them() {
+  EchoExtension echo;
+  echo.callbacks = false;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  script::ExtensionHost extensions(host, {&echo});
+  TEST_ASSERT_TRUE(host.set("S", "import echo\n" + app("var first\ndef init() self.first = true end\n"
+      "def draw() if self.first echo.hold() self.first = false end end")));
+  Canvas canvas(52, 16);
+  RenderCtx ctx;
+  host.tick(ctx, "S");
+  reg.find("S")->render(canvas, ctx);
+  TEST_ASSERT_TRUE(host.scrollHolds("S"));
+  host.tick(ctx, "S");
+  TEST_ASSERT_TRUE(host.scrollHolds("S"));
+  reg.find("S")->render(canvas, ctx);
+  TEST_ASSERT_FALSE(host.scrollHolds("S"));
+}
+
+static void test_extensions_can_access_only_the_current_drawing_context() {
+  EchoExtension echo;
+  echo.callbacks = false;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  script::ExtensionHost extensions(host, {&echo});
+  TEST_ASSERT_NULL(script::ScriptExtensionHost::canvas());
+  TEST_ASSERT_NULL(script::ScriptExtensionHost::context());
+  TEST_ASSERT_TRUE(host.set("S", "import echo\n" + app("var frame\ndef draw() self.frame = echo.context() end\n"
+      "def check() return self.frame end")));
+  Canvas canvas(52, 16);
+  RenderCtx ctx;
+  ctx.nowMs = 77;
+  reg.find("S")->render(canvas, ctx);
+  TEST_ASSERT_EQUAL_STRING("52x16:77", check(reg, "S").c_str());
+  TEST_ASSERT_NULL(script::ScriptExtensionHost::canvas());
+  TEST_ASSERT_NULL(script::ScriptExtensionHost::context());
+}
+
+static void test_without_the_platform_there_is_no_ble_or_gamepad() {
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("B", "import ble\nclass App\ndef draw() end\nend\nreturn App()");
+  host.set("G", "import gamepad\nclass App\ndef draw() end\nend\nreturn App()");
+  TEST_ASSERT_FALSE(host.errorOf("B").empty());
+  TEST_ASSERT_FALSE(host.errorOf("G").empty());
+  TEST_ASSERT_TRUE(host.set("ble", "# @module\nreturn 1\n"));
 }
 
 static void test_mqtt_messages_do_not_reach_an_inactive_script() {
@@ -1239,7 +1528,7 @@ static void test_saving_settings_restarts_the_script_with_the_new_values() {
   host.set("W", src);
   TEST_ASSERT_EQUAL_STRING("Berlin", check(reg, "W").c_str());
 
-  const script::ConfigPatch p =
+  const script::StorePatch p =
       script::applyConfigPatch(script::parseConfig(src), "{}", "{\"city\":\"Hamburg\"}");
   TEST_ASSERT_TRUE(p.ok);
   host.set("W", src, p.storeJson);
@@ -1312,6 +1601,29 @@ static void test_setup_sees_the_last_known_clock() {
   host.tick(ctx, "Time");
   host.set("S", src);
   TEST_ASSERT_EQUAL_STRING("21", check(reg, "S").c_str());
+}
+
+static void test_platform_instruction_budget_reaches_hooks_and_timers() {
+  AppRegistry reg;
+  g_svc.instructionLimit = 2000000;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  const std::string src = app(
+      "var n\ndef init() self.n = 0 end\n"
+      "def work() var i = 0 while i < 100000 i += 1 end self.n += i end\n"
+      "def setup() self.work() timer.after(25, / -> self.work()) end\n"
+      "def draw() self.work() end\ndef check() return str(self.n) end");
+  TEST_ASSERT_TRUE(host.set("Long", src));
+  TEST_ASSERT_TRUE(host.errorOf("Long").empty());
+  TEST_ASSERT_EQUAL_STRING("100000", check(reg, "Long").c_str());
+  Canvas canvas(32, 8);
+  RenderCtx ctx;
+  reg.find("Long")->render(canvas, ctx);
+  TEST_ASSERT_TRUE(host.errorOf("Long").empty());
+  TEST_ASSERT_EQUAL_STRING("200000", check(reg, "Long").c_str());
+  g_now = 25;
+  host.tick(ctx, "Long");
+  TEST_ASSERT_TRUE(host.errorOf("Long").empty());
+  TEST_ASSERT_EQUAL_STRING("300000", check(reg, "Long").c_str());
 }
 
 
@@ -1808,7 +2120,7 @@ static void test_module_with_an_unusable_import_name_is_refused() {
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
   TEST_ASSERT_FALSE(host.set("weather-lib", "# @module\nreturn module('x')"));
-  TEST_ASSERT_TRUE(host.lastRefusal().find("not a valid identifier") != std::string::npos);
+  TEST_ASSERT_TRUE(host.lastRefusal().find("is invalid") != std::string::npos);
   TEST_ASSERT_EQUAL_UINT(0, host.count());
 }
 
@@ -1869,8 +2181,9 @@ static void test_a_script_can_read_the_firmware_version() {
 }
 
 static void test_a_module_measures_text_while_it_loads() {
-  g_svc.fonts[0] = &kMeasureFont;
-  g_svc.fonts[1] = &kMeasureFont;
+  static const FontEntry entries[] = {{"small", &kMeasureFont, 6, 1, 8}};
+  static const FontCatalog fonts{entries, 1};
+  g_svc.fonts = &fonts;
   AppRegistry reg;
   TEST_ASSERT_EQUAL_STRING("16", measuredByModule(g_svc, reg).c_str());
 }
@@ -1896,7 +2209,7 @@ static void test_sensors_are_readable_while_a_module_loads() {
   static RuntimeState rt;
   rt.hasTemperature = true;
   rt.temperatureC = 21.5f;
-  g_svc.runtime = [] { return &rt; };
+  application.runtimeFn = [] { return &rt; };
 
   AppRegistry reg;
   script::ScriptHost host(reg, g_svc, nullptr, nullptr);
@@ -2072,6 +2385,101 @@ static void test_saving_module_settings_restarts_every_importer() {
   TEST_ASSERT_EQUAL_STRING("Graz", check(reg, "Sun").c_str());
   TEST_ASSERT_TRUE(std::find(installed.begin(), installed.end(), "Sun") != installed.end());
   TEST_ASSERT_TRUE(std::find(installed.begin(), installed.end(), "Idle") == installed.end());
+}
+
+static std::string dataApp() {
+  return "# @config city text default=\"Rom\"\n" +
+         app("def draw() end\n"
+             "def check() return str(store.get('city'))+'/'+str(store.get('hits'))+'/'+"
+             "str(store.get('best')) end");
+}
+
+struct DataRig {
+  FakeSink sink;
+  AppRegistry reg;
+  std::vector<std::string> installed;
+  std::map<std::string, std::string> sources;
+  std::map<std::string, std::string> stores{{"S", "{\"city\":\"Wien\",\"hits\":7,\"best\":[1]}"}};
+  script::ScriptHost host{reg, g_svc, [this](const std::string& id) { installed.push_back(id); },
+                          nullptr};
+  script::ScriptService svc{
+      host, [this](const std::string& n, const std::string& s) { sources[n] = s; }, nullptr};
+
+  DataRig() {
+    g_svc.storeSink = &sink;
+    g_svc.readSource = [this](const std::string& n, std::string& out) {
+      auto it = sources.find(n);
+      if (it == sources.end()) return false;
+      out = it->second;
+      return true;
+    };
+    g_svc.readStore = [this](const std::string& n, std::string& out) {
+      auto it = stores.find(n);
+      if (it == stores.end()) return false;
+      out = it->second;
+      return true;
+    };
+    DispatchDetail d;
+    TEST_ASSERT_EQUAL(DispatchResult::Ok, svc.setScript("S", dataApp(), d));
+    installed.clear();
+    sink.writes.clear();
+  }
+};
+
+static void test_saving_data_restarts_the_app_and_keeps_its_settings() {
+  DataRig rig;
+  TEST_ASSERT_EQUAL_STRING("Wien/7/[1]", check(rig.reg, "S").c_str());
+  DispatchDetail d;
+  TEST_ASSERT_EQUAL(DispatchResult::Ok,
+                    rig.svc.setScriptData("S", "{\"hits\":9,\"best\":null}", d));
+  TEST_ASSERT_EQUAL_STRING("Wien/9/nil", check(rig.reg, "S").c_str());
+  TEST_ASSERT_EQUAL_UINT(1u, (unsigned)rig.installed.size());
+  TEST_ASSERT_EQUAL_STRING("S:{\"city\":\"Wien\",\"hits\":9}", rig.sink.writes.back().c_str());
+}
+
+static void test_what_the_app_stores_while_restarting_is_kept() {
+  DataRig rig;
+  DispatchDetail d;
+  TEST_ASSERT_EQUAL(DispatchResult::Ok,
+                    rig.svc.setScript("S",
+                                      "# @config city text default=\"Rom\"\n" +
+                                          app("def setup() store.set('seen', store.get('hits')) end\n"
+                                              "def draw() end"),
+                                      d));
+  rig.sink.writes.clear();
+  TEST_ASSERT_EQUAL(DispatchResult::Ok, rig.svc.setScriptData("S", "{\"hits\":9}", d));
+  TEST_ASSERT_NOT_NULL(std::strstr(rig.sink.writes.back().c_str(), "\"seen\":9"));
+  TEST_ASSERT_NOT_NULL(std::strstr(rig.sink.writes.back().c_str(), "\"hits\":9"));
+  TEST_ASSERT_EQUAL(DispatchResult::Ok, rig.svc.setScriptConfig("S", "{\"city\":\"Graz\"}", d));
+  TEST_ASSERT_NOT_NULL(std::strstr(rig.sink.writes.back().c_str(), "\"seen\":7"));
+  TEST_ASSERT_NOT_NULL(std::strstr(rig.sink.writes.back().c_str(), "\"city\":\"Graz\""));
+}
+
+static void test_data_refuses_a_setting_and_leaves_the_app_alone() {
+  DataRig rig;
+  DispatchDetail d;
+  TEST_ASSERT_EQUAL(DispatchResult::ValidationError,
+                    rig.svc.setScriptData("S", "{\"city\":\"Graz\"}", d));
+  TEST_ASSERT_EQUAL_STRING("city", d.field.c_str());
+  TEST_ASSERT_TRUE(rig.installed.empty());
+  TEST_ASSERT_TRUE(rig.sink.writes.empty());
+
+  d.clear();
+  TEST_ASSERT_EQUAL(DispatchResult::ParseError, rig.svc.setScriptData("S", "{\"hits\":", d));
+  TEST_ASSERT_EQUAL(DispatchResult::ParseError, rig.svc.setScriptConfig("S", "{oops}", d));
+  TEST_ASSERT_TRUE(d.message.empty());
+  TEST_ASSERT_TRUE(rig.installed.empty());
+  TEST_ASSERT_TRUE(rig.sink.writes.empty());
+
+  d.clear();
+  TEST_ASSERT_EQUAL(DispatchResult::NotFound, rig.svc.setScriptData("Nope", "{}", d));
+
+  script::heap::testing::setGrowthBudget(8);
+  d.clear();
+  const DispatchResult tight = rig.svc.setScriptData("S", "{\"hits\":123456}", d);
+  script::heap::testing::resetGrowthBudget();
+  TEST_ASSERT_EQUAL(DispatchResult::Capacity, tight);
+  TEST_ASSERT_TRUE(rig.installed.empty());
 }
 
 static void test_module_settings_reach_the_store_sink() {
@@ -2307,13 +2715,216 @@ static void test_reinstalling_a_visible_app_releases_its_icons_first() {
   TEST_ASSERT_EQUAL_INT(1, g_icons.held);
 }
 
+static const std::string kGame =
+    "# @ondemand\n" +
+    app("var n\n"
+        "def setup() self.n = 1 end\n"
+        "def draw() end\n"
+        "def on_show() self.n += 1 end\n"
+        "def on_hide() store.set('left', self.n) end\n"
+        "def check() return str(self.n) end");
+
+static void test_an_ondemand_script_installs_without_an_instance() {
+  AppRegistry reg;
+  std::vector<std::string> installed, removed;
+  script::ScriptHost host(reg, g_svc, [&](const std::string& n) { installed.push_back(n); },
+                          [&](const std::string& n) { removed.push_back(n); });
+  TEST_ASSERT_TRUE(host.set("G", kGame));
+  TEST_ASSERT_NULL(reg.find("G"));
+  TEST_ASSERT_TRUE(host.has("G"));
+  TEST_ASSERT_TRUE(host.isOnDemand("G"));
+  TEST_ASSERT_FALSE(host.isLoaded("G"));
+  TEST_ASSERT_EQUAL_UINT(1u, (unsigned)installed.size());
+  const auto list = host.list();
+  TEST_ASSERT_TRUE(list.at("G").onDemand);
+  TEST_ASSERT_FALSE(list.at("G").loaded);
+
+  host.remove("G");
+  TEST_ASSERT_FALSE(host.has("G"));
+  TEST_ASSERT_EQUAL_UINT(1u, (unsigned)removed.size());
+}
+
+static void test_a_dormant_script_still_reports_a_syntax_error() {
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  TEST_ASSERT_TRUE(host.set("G", "# @ondemand\nclass App def draw( end\nreturn App()"));
+  TEST_ASSERT_FALSE(host.errorOf("G").empty());
+  TEST_ASSERT_NULL(reg.find("G"));
+}
+
+static void test_launch_starts_fresh_and_unload_lets_the_game_save() {
+  FakeSink sink;
+  g_svc.storeSink = &sink;
+  g_svc.readSource = [](const std::string& n, std::string& out) {
+    if (n != "G") return false;
+    out = kGame;
+    return true;
+  };
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("G", kGame);
+  RenderCtx ctx;
+
+  TEST_ASSERT_TRUE(host.launch("G"));
+  TEST_ASSERT_NOT_NULL(reg.find("G"));
+  TEST_ASSERT_EQUAL_STRING("", host.errorOf("G").message.c_str());
+  host.setRunningScripts({"G"});
+  host.tick(ctx, "G");
+  TEST_ASSERT_EQUAL_STRING("2", check(reg, "G").c_str());
+
+  host.unload("G");
+  TEST_ASSERT_NULL(reg.find("G"));
+  TEST_ASSERT_TRUE(host.isOnDemand("G"));
+  TEST_ASSERT_FALSE(sink.writes.empty());
+  TEST_ASSERT_EQUAL_STRING("G:{\"left\":2}", sink.writes.back().c_str());
+
+  TEST_ASSERT_TRUE(host.launch("G"));
+  TEST_ASSERT_EQUAL_STRING("1", check(reg, "G").c_str());
+  TEST_ASSERT_FALSE(host.launch("Other"));
+}
+
+static void test_saving_a_running_ondemand_script_rebuilds_it() {
+  g_svc.readSource = [](const std::string&, std::string& out) {
+    out = kGame;
+    return true;
+  };
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("G", kGame);
+  host.launch("G");
+  TEST_ASSERT_TRUE(host.set("G", kGame));
+  TEST_ASSERT_NOT_NULL(reg.find("G"));
+  TEST_ASSERT_EQUAL_STRING("1", check(reg, "G").c_str());
+}
+
+static void test_a_rotation_script_saved_as_ondemand_leaves_the_rotation() {
+  AppRegistry reg;
+  std::vector<std::string> removed;
+  script::ScriptHost host(reg, g_svc, nullptr,
+                          [&](const std::string& n) { removed.push_back(n); });
+  host.set("G", app("def draw() end"));
+  TEST_ASSERT_NOT_NULL(reg.find("G"));
+  host.set("G", kGame);
+  TEST_ASSERT_NULL(reg.find("G"));
+  TEST_ASSERT_TRUE(host.isOnDemand("G"));
+  TEST_ASSERT_TRUE(removed.empty());
+  host.set("G", app("def draw() end"));
+  TEST_ASSERT_NOT_NULL(reg.find("G"));
+  TEST_ASSERT_FALSE(host.isOnDemand("G"));
+}
+
+static void test_correcting_a_dormant_script_clears_its_compile_error() {
+  AppRegistry reg;
+  FakeSources files;
+  files.wire(g_svc);
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  TEST_ASSERT_TRUE(files.set(host, "G", "# @ondemand\nclass App def draw( end\nreturn App()"));
+  TEST_ASSERT_FALSE(host.errorOf("G").empty());
+  TEST_ASSERT_FALSE(host.list().at("G").error.empty());
+
+  TEST_ASSERT_TRUE(files.set(host, "G", "# @name Tiny Game\n" + kGame));
+  TEST_ASSERT_TRUE(host.errorOf("G").empty());
+  TEST_ASSERT_TRUE(host.list().at("G").error.empty());
+  TEST_ASSERT_TRUE(host.launch("G"));
+  TEST_ASSERT_EQUAL_STRING("Tiny Game", host.metaOf("G")->name.c_str());
+  TEST_ASSERT_EQUAL_STRING("Tiny Game", host.list().at("G").metaName.c_str());
+  TEST_ASSERT_EQUAL_UINT(1, host.count());
+  host.unload("G");
+  TEST_ASSERT_TRUE(host.isOnDemand("G"));
+  TEST_ASSERT_TRUE(host.errorOf("G").empty());
+  TEST_ASSERT_EQUAL_UINT(1, host.list().size());
+}
+
+static void test_unloading_a_failed_launch_discards_the_runtime_error() {
+  AppRegistry reg;
+  FakeSources files;
+  files.wire(g_svc);
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  TEST_ASSERT_TRUE(files.set(host, "G", "# @ondemand\n" + app("def setup() raise 'broken' end\ndef draw() end")));
+  TEST_ASSERT_TRUE(host.errorOf("G").empty());
+  TEST_ASSERT_TRUE(host.launch("G"));
+  TEST_ASSERT_FALSE(host.errorOf("G").empty());
+  TEST_ASSERT_FALSE(host.list().at("G").error.empty());
+  host.unload("G");
+  TEST_ASSERT_TRUE(host.errorOf("G").empty());
+  TEST_ASSERT_TRUE(host.list().at("G").error.empty());
+  TEST_ASSERT_FALSE(host.isLoaded("G"));
+  TEST_ASSERT_TRUE(host.launch("G"));
+  TEST_ASSERT_FALSE(host.errorOf("G").empty());
+}
+
+static void test_dormant_module_and_rotation_replacements_keep_one_inventory_entry() {
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  TEST_ASSERT_TRUE(host.set("G", "# @ondemand\nclass App def draw( end\nreturn App()"));
+  TEST_ASSERT_FALSE(host.errorOf("G").empty());
+  TEST_ASSERT_TRUE(host.set("G", "# @module game\nreturn module('game')"));
+  TEST_ASSERT_TRUE(host.isModule("G"));
+  TEST_ASSERT_FALSE(host.isOnDemand("G"));
+  TEST_ASSERT_TRUE(host.errorOf("G").empty());
+  TEST_ASSERT_FALSE(host.list().at("G").onDemand);
+  TEST_ASSERT_EQUAL_UINT(1, host.count());
+
+  TEST_ASSERT_TRUE(host.set("G", kGame));
+  TEST_ASSERT_FALSE(host.isModule("G"));
+  TEST_ASSERT_TRUE(host.isOnDemand("G"));
+  TEST_ASSERT_NULL(reg.find("G"));
+  TEST_ASSERT_TRUE(host.errorOf("G").empty());
+  TEST_ASSERT_EQUAL_UINT(1, host.list().size());
+
+  TEST_ASSERT_TRUE(host.set("G", app("def draw() end")));
+  TEST_ASSERT_FALSE(host.isOnDemand("G"));
+  TEST_ASSERT_NOT_NULL(reg.find("G"));
+  TEST_ASSERT_EQUAL_UINT(1, host.count());
+  host.remove("G");
+  TEST_ASSERT_FALSE(host.has("G"));
+  TEST_ASSERT_NULL(host.metaOf("G"));
+  TEST_ASSERT_TRUE(host.errorOf("G").empty());
+  TEST_ASSERT_TRUE(host.list().empty());
+  TEST_ASSERT_EQUAL_UINT(0, host.count());
+}
+
+static void test_a_refused_replacement_keeps_the_dormant_error_and_metadata() {
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  TEST_ASSERT_TRUE(host.set("G", "# @name Broken Game\n# @ondemand\nclass App def draw( end\nreturn App()"));
+  const script::ScriptError before = host.errorOf("G");
+  TEST_ASSERT_FALSE(before.empty());
+  TEST_ASSERT_FALSE(host.set("G", "# @module invalid-name\nreturn module('game')"));
+  TEST_ASSERT_TRUE(host.refusalIsInvalid());
+  g_svc.freeHeap = [] { return std::size_t(0); };
+  TEST_ASSERT_FALSE(host.set("G", app("def draw() end")));
+  TEST_ASSERT_TRUE(host.isOnDemand("G"));
+  TEST_ASSERT_FALSE(host.isLoaded("G"));
+  TEST_ASSERT_EQUAL_STRING("Broken Game", host.metaOf("G")->name.c_str());
+  TEST_ASSERT_EQUAL_STRING(before.message.c_str(), host.errorOf("G").message.c_str());
+  TEST_ASSERT_EQUAL_INT(before.line, host.errorOf("G").line);
+  TEST_ASSERT_EQUAL_UINT(1, host.count());
+  host.remove("G");
+  TEST_ASSERT_FALSE(host.has("G"));
+  TEST_ASSERT_FALSE(host.isOnDemand("G"));
+  TEST_ASSERT_NULL(host.metaOf("G"));
+  TEST_ASSERT_TRUE(host.errorOf("G").empty());
+  TEST_ASSERT_TRUE(host.list().empty());
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_an_ondemand_script_installs_without_an_instance);
+  RUN_TEST(test_a_dormant_script_still_reports_a_syntax_error);
+  RUN_TEST(test_launch_starts_fresh_and_unload_lets_the_game_save);
+  RUN_TEST(test_saving_a_running_ondemand_script_rebuilds_it);
+  RUN_TEST(test_a_rotation_script_saved_as_ondemand_leaves_the_rotation);
+  RUN_TEST(test_correcting_a_dormant_script_clears_its_compile_error);
+  RUN_TEST(test_unloading_a_failed_launch_discards_the_runtime_error);
+  RUN_TEST(test_dormant_module_and_rotation_replacements_keep_one_inventory_entry);
+  RUN_TEST(test_a_refused_replacement_keeps_the_dormant_error_and_metadata);
   RUN_TEST(test_guarded_copy_never_replaces_a_script);
   RUN_TEST(test_guarded_update_keeps_settings_and_rejects_stale_source);
   RUN_TEST(test_guarded_update_restores_broken_or_unsaved_replacement);
   RUN_TEST(test_set_replace_remove_registry_and_hooks);
   RUN_TEST(test_replace_points_registry_at_the_new_app);
+  RUN_TEST(test_a_script_cannot_take_a_built_in_apps_name);
   RUN_TEST(test_installing_many_scripts_succeeds);
   RUN_TEST(test_install_refused_over_the_script_heap_budget);
   RUN_TEST(test_a_larger_budget_admits_more_scripts);
@@ -2325,6 +2936,7 @@ int main(int, char**) {
   RUN_TEST(test_install_not_blocked_without_a_heap_reading);
   RUN_TEST(test_broken_script_still_installs);
   RUN_TEST(test_tick_runs_loop_at_1hz_and_visibility);
+  RUN_TEST(test_an_app_restarted_on_screen_is_shown_at_once);
   RUN_TEST(test_loop_runs_for_offscreen_scripts);
   RUN_TEST(test_stagger_spreads_first_loops_across_seconds);
   RUN_TEST(test_reinstall_clears_the_stagger_hold);
@@ -2337,6 +2949,15 @@ int main(int, char**) {
   RUN_TEST(test_the_headless_flag_follows_a_re_saved_header);
   RUN_TEST(test_rejoining_the_running_list_starts_a_script_again);
   RUN_TEST(test_http_answers_do_not_reach_an_inactive_script);
+  RUN_TEST(test_an_answer_missed_while_inactive_fails_once_the_script_runs_again);
+  RUN_TEST(test_a_request_timing_out_while_inactive_fails_once_the_script_runs_again);
+  RUN_TEST(test_an_extension_adds_a_module_and_hears_about_its_apps);
+  RUN_TEST(test_extensions_follow_hidden_hold_and_removal_lifecycles);
+  RUN_TEST(test_extensions_deliver_only_registered_hooks_to_visible_running_apps);
+  RUN_TEST(test_extension_hooks_share_the_script_instruction_budget);
+  RUN_TEST(test_extension_frame_holds_expire_when_the_next_draw_does_not_use_them);
+  RUN_TEST(test_extensions_can_access_only_the_current_drawing_context);
+  RUN_TEST(test_without_the_platform_there_is_no_ble_or_gamepad);
   RUN_TEST(test_mqtt_messages_do_not_reach_an_inactive_script);
   RUN_TEST(test_button_goes_only_to_the_visible_script);
   RUN_TEST(test_http_result_routed_to_owning_script);
@@ -2376,6 +2997,7 @@ int main(int, char**) {
   RUN_TEST(test_the_apps_list_reports_whether_a_script_has_settings);
   RUN_TEST(test_wall_clock_reaches_every_callback);
   RUN_TEST(test_setup_sees_the_last_known_clock);
+  RUN_TEST(test_platform_instruction_budget_reaches_hooks_and_timers);
   RUN_TEST(test_runaway_draw_latches_and_spares_the_rest);
   RUN_TEST(test_runaway_loop_latches_and_spares_the_rest);
   RUN_TEST(test_runaway_setup_latches_at_install);
@@ -2430,6 +3052,9 @@ int main(int, char**) {
   RUN_TEST(test_every_app_importing_a_module_sees_one_value);
   RUN_TEST(test_the_module_store_does_not_leak_into_the_app);
   RUN_TEST(test_saving_module_settings_restarts_every_importer);
+  RUN_TEST(test_saving_data_restarts_the_app_and_keeps_its_settings);
+  RUN_TEST(test_what_the_app_stores_while_restarting_is_kept);
+  RUN_TEST(test_data_refuses_a_setting_and_leaves_the_app_alone);
   RUN_TEST(test_module_settings_reach_the_store_sink);
   RUN_TEST(test_the_apps_list_reports_a_module_with_settings);
   RUN_TEST(test_editing_a_modules_code_keeps_its_settings);

@@ -73,8 +73,22 @@ def slugify(heading):
     return re.sub(r"[-\s]+", "-", text.strip())
 
 
+ATTR_BLOCK = re.compile(r" +\{:?([^}\n]*)\}$")
+
+
+def anchor(heading):
+    """The id mkdocs gives a heading: an attr_list `{#id}` replaces the slug."""
+    m = ATTR_BLOCK.search(heading)
+    if m:
+        explicit = re.search(r"(?:^|\s)#([^\s}]+)", m.group(1))
+        if explicit:
+            return explicit.group(1)
+        heading = heading[:m.start()]
+    return slugify(heading)
+
+
 def headings(md):
-    return {slugify(m.group(1)) for m in re.finditer(r"^#{1,6} +(.+?)\s*$", md, re.M)}
+    return {anchor(m.group(1)) for m in re.finditer(r"^#{1,6} +(.+?)\s*$", md, re.M)}
 
 
 def table_rows(md, start_heading, stop_re):
@@ -173,7 +187,7 @@ def check_settings(problems, maps, settings_md):
     known = {m.group(1) for m in re.finditer(r"`(\w+)`", settings_md)}
     for a3, spec in maps["SETTINGS_MAP"].items():
         targets = []
-        if spec["kind"] in ("rename", "seconds", "teff", "colorOrNull"):
+        if spec["kind"] in ("rename", "seconds", "teff", "colorOrNull", "volume"):
             targets = [spec["to"]]
         elif spec["kind"] == "nested":
             targets = spec["to"].split(".")

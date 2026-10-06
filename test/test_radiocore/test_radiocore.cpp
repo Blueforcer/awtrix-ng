@@ -4,15 +4,26 @@
 #include <vector>
 
 #include "core/radio/IcyMetadata.h"
-#include "core/radio/RadioDisplay.h"
 #include "core/radio/IcyStream.h"
 #include "core/radio/PlaylistParser.h"
+#include "core/radio/StationUrl.h"
 #include "core/radio/StationList.h"
+#include "core/radio/StreamPolicy.h"
 #include "core/render/TextEncoding.h"
 
 using namespace awtrix;
 
 namespace {
+
+void test_recognises_playlist_media_types() {
+  for (const auto* type : {"audio/x-mpegurl", "audio/mpegurl", "audio/x-scpls",
+                           "audio/mpegurl; charset=utf-8"}) {
+    TEST_ASSERT_TRUE_MESSAGE(radio::isPlaylistType(type), type);
+  }
+  for (const auto* type : {"", "audio/mpeg", "audio/aac", "text/html", "application/octet-stream"}) {
+    TEST_ASSERT_FALSE_MESSAGE(radio::isPlaylistType(type), type);
+  }
+}
 
 std::string titleOf(const std::string& block) {
   std::string title;
@@ -261,6 +272,37 @@ void test_m3u_bare() {
                            resolved("https://a.example/x\nhttps://b.example/y\n").c_str());
 }
 
+void test_m3u_entry_with_a_query() {
+  const std::string stream =
+      "https://regiocast.example/regc-90s-mp3-128?sABC=abc%3D&aw_0_1st.playerid=web&amsparams=playerid:web;skey:1";
+  TEST_ASSERT_EQUAL_STRING(stream.c_str(), resolved(stream + "\n").c_str());
+  TEST_ASSERT_EQUAL_STRING(stream.c_str(), resolved("#EXTM3U\r\n" + stream + "\r\n").c_str());
+}
+
+void test_pls_entry_with_a_query() {
+  TEST_ASSERT_EQUAL_STRING("http://stream.example/live?a=1&b=2",
+                           resolved("[playlist]\nFile1=http://stream.example/live?a=1&b=2\n").c_str());
+}
+
+void test_station_url_follows_and_restarts() {
+  radio::StationUrl url("http://radio.example/play.m3u");
+  TEST_ASSERT_TRUE(url.follow("http://stream.example/live?skey=1\n"));
+  TEST_ASSERT_EQUAL_STRING("http://stream.example/live?skey=1", url.current().c_str());
+  url.restart();
+  TEST_ASSERT_EQUAL_STRING("http://radio.example/play.m3u", url.current().c_str());
+}
+
+void test_station_url_never_locks_out() {
+  radio::StationUrl url("http://radio.example/a.m3u");
+  for (int i = 0; i < radio::kMaxPlaylistHops; ++i) TEST_ASSERT_TRUE(url.follow("http://next.example/x\n"));
+  TEST_ASSERT_FALSE(url.follow("http://next.example/x\n"));
+  TEST_ASSERT_EQUAL_STRING("http://radio.example/a.m3u", url.current().c_str());
+  TEST_ASSERT_FALSE(url.follow("#EXTM3U\n"));
+  TEST_ASSERT_EQUAL_STRING("http://radio.example/a.m3u", url.current().c_str());
+  TEST_ASSERT_TRUE(url.follow("http://stream.example/live\n"));
+  TEST_ASSERT_EQUAL_STRING("http://stream.example/live", url.current().c_str());
+}
+
 void test_pls_file_entries() {
   TEST_ASSERT_EQUAL_STRING(
       "http://stream.example/128",
@@ -415,16 +457,6 @@ void test_empty_stream_text_stays_empty() {
   TEST_ASSERT_EQUAL_STRING("", text::fromStreamBytes("").c_str());
 }
 
-void test_title_announcement_completes_one_scroll_pass() {
-  AppSpec announcement;
-  TEST_ASSERT_TRUE(radio::buildAnnouncement("Artist - A title longer than the display",
-                                             radio::Announcement::Title, announcement));
-  TEST_ASSERT_EQUAL_STRING("radio", announcement.name.c_str());
-  TEST_ASSERT_TRUE(announcement.stack);
-  TEST_ASSERT_EQUAL_INT(1, announcement.repeat);
-  TEST_ASSERT_EQUAL_INT(0, announcement.durationMs);
-}
-
 }
 
 void setUp() {}
@@ -432,6 +464,7 @@ void tearDown() {}
 
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_recognises_playlist_media_types);
   RUN_TEST(test_parses_a_plain_stream_title);
   RUN_TEST(test_title_may_contain_an_apostrophe);
   RUN_TEST(test_title_may_contain_a_semicolon);
@@ -456,6 +489,10 @@ int main(int, char**) {
   RUN_TEST(test_splitter_survives_chunk_boundaries_anywhere);
   RUN_TEST(test_m3u_with_comments);
   RUN_TEST(test_m3u_bare);
+  RUN_TEST(test_m3u_entry_with_a_query);
+  RUN_TEST(test_station_url_follows_and_restarts);
+  RUN_TEST(test_station_url_never_locks_out);
+  RUN_TEST(test_pls_entry_with_a_query);
   RUN_TEST(test_pls_file_entries);
   RUN_TEST(test_pls_ignores_non_file_keys);
   RUN_TEST(test_rejects_empty_and_html);
@@ -479,6 +516,5 @@ int main(int, char**) {
   RUN_TEST(test_every_stream_result_is_valid_utf8);
   RUN_TEST(test_control_bytes_are_dropped);
   RUN_TEST(test_empty_stream_text_stays_empty);
-  RUN_TEST(test_title_announcement_completes_one_scroll_pass);
   return UNITY_END();
 }

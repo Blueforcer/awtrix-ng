@@ -1,51 +1,63 @@
-# Finding AWTRIX
+# Find your clock
 
-AWTRIX joined your Wi-Fi and you need its address. You have three ways to get it, in
-increasing order of effort:
+Your clock is on your Wi-Fi and you need its address to open the web UI. There are three
+ways to find it, from easiest to most technical:
 
-1. [Read it off the panel](#read-it-off-the-panel) - it scrolled past at boot.
-2. [Use the hostname](#use-the-hostname) - `awtrixng-<last 6 hex of MAC>.local`, no tools required.
-3. [Ask the whole LAN](#broadcast-udp-discovery) - broadcast a discovery packet and collect the
-   replies.
+1. [Read it from the display](#read-it-off-the-panel).
+2. [Use its name](#use-the-hostname), like `http://awtrixng-a1b2c3.local`.
+3. [Search the network](#broadcast-udp-discovery) with a small script.
 
-## Read it off the panel
+You can also look in your router's list of connected devices.
 
-On a successful Wi-Fi connection - and only then - the panel scrolls `AWTRIX   <ip>` in rainbow
-text. mDNS, the HTTP API, MQTT and UDP discovery are already active while it scrolls, so you can
-reach AWTRIX before it finishes. If you changed the web port away from 80, the scroll reads
-`AWTRIX   <ip>:<port>`.
+## Read it from the display {#read-it-off-the-panel}
 
-This happens once per boot and takes a few seconds. If you missed it, power-cycle AWTRIX and
-watch again, or use one of the methods below.
+Each time the clock starts, it shows its address for a few seconds after the start animation.
 
-If the panel shows a rainbow **`AP MODE`** instead, AWTRIX could not join your network and
-fell back to its own open access point. Nothing on this page will find it - join that access point
-and follow [First boot](first-boot.md) instead.
+<!-- only tc002 -->
+* The firmware version stands above it.
+<!-- /only -->
+* An address too long for the display scrolls past once.
+<!-- only esp32 esp32-s3 -->
+* If you changed the web port from 80, the address reads `<ip>:<port>`.
+<!-- /only -->
 
-## Use the hostname
+The address only appears when the clock is connected to your Wi-Fi. Without Wi-Fi it shows only
+the version. You can already reach the clock while the address is shown.
 
-AWTRIX registers itself with mDNS (Bonjour / Avahi / Zeroconf), so it is reachable by name
-without knowing its IP at all:
+Missed it? Unplug the clock and plug it back in, or use one of the ways below.
 
-```bash
-curl http://awtrixng-a1b2c3.local/api/v1/device   # use your own hostname
+<!-- only tc002 -->
+The [Status app](../guides/device-controls.md#the-status-app) shows the address at any time. The
+web UI always uses port 80.
+<!-- /only -->
+
+If the display shows **`AP MODE`** instead, the clock could not join your Wi-Fi and opened its setup
+hotspot. Nothing on this page finds it then. Follow [Connect to Wi-Fi](first-boot.md).
+
+## Use the hostname {#use-the-hostname}
+
+The clock announces its name on your network with **mDNS** (also called Bonjour, Avahi or
+Zeroconf). This lets you open it by name instead of by IP address:
+
+```text
+http://awtrixng-a1b2c3.local
 ```
 
-The default hostname is `awtrixng-` followed by the last 6 hex characters of the Wi-Fi
-MAC address - `awtrixng-a1b2c3` for a MAC ending in `a1:b2:c3`. Set `hostname` to
-`kitchen-clock` and AWTRIX answers to `kitchen-clock.local` instead. The same name is used for
-the mDNS record, the discovery reply and the provisioning access point's SSID. See
+The default name is `awtrixng-` plus the last 6 characters of the clock's Wi-Fi MAC address, for
+example `awtrixng-a1b2c3` for a MAC ending in `a1:b2:c3`. If you set the `hostname` to `kitchen-clock`,
+the clock answers to `kitchen-clock.local`. The same name is used for the setup hotspot and for
+the discovery reply below. See
 [Identity, web server and authentication](../reference/system.md#identity-web-server-and-authentication).
 
-To check name resolution on its own:
+To test whether the name works on your computer:
 
-=== "Linux"
+=== "Windows"
 
-    ```bash
-    ping -c 3 awtrixng-a1b2c3.local
+    ```powershell
+    ping awtrixng-a1b2c3.local
     ```
 
-    Requires `avahi-daemon` and `nss-mdns`. Without them, `.local` names do not resolve.
+    Works on Windows 10 and later.
 
 === "macOS"
 
@@ -55,30 +67,31 @@ To check name resolution on its own:
 
     Works out of the box.
 
-=== "Windows"
-
-    ```powershell
-    ping awtrixng-a1b2c3.local
-    ```
-
-    Works out of the box on Windows 10 and later.
-
-For a script that runs unattended, prefer the IP - a name lookup is one more thing that can stall
-or be blocked by your router. Resolve the name once and keep the address, ideally backed by a DHCP
-reservation or a [static IP](../reference/system.md#wi-fi) configured on AWTRIX.
-
-## Browse for AWTRIX devices
-
-AWTRIX announces itself as `_awtrixng._tcp`, so you can list every unit on the LAN -
-name, address and port in one shot:
-
 === "Linux"
 
     ```bash
-    avahi-browse -rt _awtrixng._tcp
+    ping -c 3 awtrixng-a1b2c3.local
     ```
 
-    `-r` resolves each hit to an address; `-t` exits when the initial scan is done.
+    Needs `avahi-daemon` and `nss-mdns`. Without them, `.local` names do not work.
+
+For scripts that run on their own, use the IP address instead of the name. It is one less thing
+that can fail. Give the clock a fixed address, either as a DHCP reservation in your router or as a
+[static IP](../reference/system.md#wi-fi) on the clock.
+
+## List all clocks with mDNS
+
+Each clock announces itself as the service `_awtrixng._tcp`. With an mDNS browser you can list
+every clock on your network, with name, address and port:
+
+=== "Windows"
+
+    ```powershell
+    dns-sd -B _awtrixng._tcp
+    ```
+
+    `dns-sd` comes with Bonjour (installed by iTunes, or as Bonjour Print Services). Without
+    Bonjour, use the [UDP search](#broadcast-udp-discovery) below. It needs no extra software.
 
 === "macOS"
 
@@ -86,7 +99,7 @@ name, address and port in one shot:
     dns-sd -B _awtrixng._tcp
     ```
 
-    That lists instance names. To get the address and port for one of them:
+    This lists the names. To get the address and port of one clock:
 
     ```bash
     dns-sd -L "awtrixng-a1b2c3" _awtrixng._tcp
@@ -94,27 +107,29 @@ name, address and port in one shot:
 
     `dns-sd` runs until you press ++ctrl+c++.
 
-=== "Windows"
+=== "Linux"
 
-    ```powershell
-    dns-sd -B _awtrixng._tcp
+    ```bash
+    avahi-browse -rt _awtrixng._tcp
     ```
 
-    `dns-sd` ships with Bonjour (installed by iTunes, or standalone as part of the Bonjour Print
-    Services package). Without Bonjour, use the UDP broadcast below - it needs no extra software.
+    `-r` shows the address of each clock. `-t` stops when the first scan is done.
 
-Each one also appears as a plain web server, which is why it shows up in network browsers and
-Bonjour device lists.
+Each clock also appears as a normal web server, so it shows up in network browsers and Bonjour
+device lists.
 
-## Broadcast UDP discovery
+## Search with a UDP broadcast {#broadcast-udp-discovery}
 
-This is the method with no dependencies: no mDNS responder on your machine, no Bonjour, no router
-cooperation beyond passing a broadcast.
+This way needs no mDNS and no extra software, only a network that passes broadcasts.
 
-You send `FIND_AWTRIXNG` to UDP port **4210** as a broadcast. Every device that hears it answers
-with its hostname - or `HOSTNAME:PORT` when the web port is not 80 - and the IP address you want
-is the address the reply came from. The reply always goes to UDP port **4211**, so your socket has
-to be bound to 4211 to hear it. Both snippets below do that for you.
+How it works:
+
+1. Your computer sends the text `FIND_AWTRIXNG` as a broadcast to UDP port **4210**.
+2. Every clock that receives it answers with its hostname<!-- only esp32 esp32-s3 -->, or `HOSTNAME:PORT` when the web port is not 80<!-- /only -->.
+3. The answer always goes to UDP port **4211**. Your computer must listen on 4211 to receive it.
+4. The IP address of the clock is the address the answer came from.
+
+Both scripts below do all of this for you:
 
 === "Python (any OS)"
 
@@ -160,16 +175,15 @@ to be bound to 4211 to hear it. Both snippets below do that for you.
     $udp.Close()
     ```
 
-If `255.255.255.255` is filtered on your network, send to your subnet's directed broadcast
-instead - e.g. `192.168.1.255` for a `192.168.1.0/24` network.
+If your network blocks `255.255.255.255`, send to your subnet's broadcast address instead, for
+example `192.168.1.255` for a `192.168.1.0/24` network.
 
-Send one request and wait. A single broadcast to many devices gets many answers, but a rapid burst
-of requests aimed at one device can lose some of them - if nothing comes back, retry rather than
-flood.
+Send one request and wait for the answers. If nothing comes back, try again. Do not send many
+requests quickly, because the clock may miss some of them.
 
-## Confirm you found the right one
+## Check that you found the right clock
 
-Once you have an address, ask it who it is:
+Once you have an address, ask the clock who it is:
 
 ```bash
 curl http://192.168.1.42/api/v1/device
@@ -185,39 +199,43 @@ curl http://192.168.1.42/api/v1/device
 }
 ```
 
-The `uid` is the device's MAC address without the colons, and it is stable across reboots and
-reflashes - that is how you tell two devices apart when both answer a broadcast. The full response
-is documented in [Device state](../reference/device.md#endpoint).
+`uid` is the clock's MAC address without colons. It never changes, not even after a reinstall, so
+you can use it to tell two clocks apart. All fields are in
+[Device state](../reference/device.md#endpoint).
 
-If authentication is enabled, this call needs credentials:
+If you turned on login, add your username and password:
 
 ```bash
 curl -u admin:secret http://192.168.1.42/api/v1/device
 ```
 
-## When nothing answers
+## When nothing answers {#when-nothing-answers}
 
-UDP discovery, the mDNS record and the boot IP scroll all need a successful Wi-Fi station
-connection. Fall back to the provisioning access point and none of them start - but AWTRIX keeps
-retrying your configured network every 30 seconds while no one is connected to that access
-point, and restarts itself the moment a retry succeeds. A transient Wi-Fi outage can resolve on
-its own; no reboot needed.
+The address on the display, the `.local` name and the UDP search all need a working Wi-Fi
+connection. If the clock falls back to its setup hotspot, none of them work. While nobody is
+connected to the hotspot, the clock tries your saved network again every <!-- only esp32 esp32-s3 -->30<!-- /only --><!-- only tc002 -->60<!-- /only --> seconds.
+It connects as soon as it succeeds. A short Wi-Fi outage fixes itself. You do not need to restart
+the clock.
 
-Otherwise, work through these in order:
+Otherwise, check these in order:
 
 | Symptom | Likely cause |
 |---|---|
-| Panel shows a rainbow `AP MODE` | AWTRIX never joined your Wi-Fi. Join its open access point (SSID = the hostname, `awtrixng-<last 6 hex of the MAC>` by default) and configure Wi-Fi - see [First boot](first-boot.md). |
-| No broadcast replies, AWTRIX is definitely online | Your client is not bound to UDP 4211, or a firewall is dropping the inbound reply. Broadcast is also commonly blocked between Wi-Fi and wired segments, and on "guest" or client-isolated SSIDs. |
-| Broadcast works, `.local` does not | mDNS. Either your OS has no responder, or registration failed on AWTRIX. Use the IP. |
-| `.local` works, the API does not respond | You are probably on a non-default web port. Check the discovery reply - `HOSTNAME:PORT` tells you the port AWTRIX thinks it is on. |
-| Found it, but every request returns `401` | Authentication is configured. See [Authentication](../reference/http.md#authentication). |
+| The display shows `AP MODE` | The clock is not on your Wi-Fi. Join its setup hotspot (named after the hostname, `awtrixng-<last 6 characters of the MAC>` by default) and follow [Connect to Wi-Fi](first-boot.md). |
+| No answer to the UDP search, but the clock is online | Your computer does not listen on UDP 4211, or a firewall blocks the answer. Many routers also block broadcasts between Wi-Fi and cable, and on guest networks. |
+| The UDP search works, `.local` does not | Your computer has no mDNS support, or mDNS failed on the clock. Use the IP address. |
+<!-- only esp32 esp32-s3 -->
+| `.local` works, but the web UI does not open | The web port is probably not 80. The UDP answer `HOSTNAME:PORT` shows the port. |
+<!-- /only -->
+| Every request returns `401` | Login is turned on. See [Authentication](../reference/http.md#authentication). |
+
+More help: [Troubleshooting](../troubleshooting/troubleshooting.md#finding-awtrix-on-the-network).
 
 ## Related
 
-* [First boot](first-boot.md) - joining AWTRIX to your Wi-Fi in the first place
-* [Web UI tour](web-ui.md) - what to do once you have the address
-* [Wi-Fi configuration](../reference/system.md#wi-fi) - static IP, hostname, credentials
-* [Wi-Fi scan](../reference/system.md#wi-fi-scan) - asking AWTRIX what networks it can see
-* [Device state](../reference/device.md#endpoint) - the full identity and status snapshot
-* [HTTP API base URL](../reference/http.md#base-url) - how addresses and ports work across the API
+* [Connect to Wi-Fi](first-boot.md) - put the clock on your Wi-Fi
+* [The web UI](web-ui.md) - what to do once you have the address
+* [Wi-Fi configuration](../reference/system.md#wi-fi) - static IP, hostname, Wi-Fi details
+* [Wi-Fi scan](../reference/system.md#wi-fi-scan) - list the networks the clock can see
+* [Device state](../reference/device.md#endpoint) - the full status of the clock
+* [HTTP API base URL](../reference/http.md#base-url) - addresses and ports in the API

@@ -1,8 +1,7 @@
 # Contributing to AWTRIX NG
 
-Thanks for being here. Issues and pull requests are both welcome, and you do not
-need hardware to contribute — a host simulator runs the real firmware on your
-computer.
+Thanks for being here. Issues and pull requests are both welcome, and most changes
+need no hardware: the portable core and its tests run on your computer.
 
 By contributing you agree that your contribution is licensed under the project's
 [PolyForm Noncommercial License 1.0.0](LICENSE.md), and you additionally grant
@@ -40,20 +39,20 @@ pip install -U platformio
 Node 22+ is needed for a firmware build (the web UI is minified through `npx`
 before it is embedded) and for the web UI tests.
 
-## The four build targets
+## ESP32 firmware and host tests
 
 ```bash
 pio run  -e awtrix        # ESP32 firmware (stock pin defaults)
 pio run  -e awtrix_s3_octal     # ESP32-S3 firmware, octal PSRAM
 pio run  -e awtrix_s3_quad      # ESP32-S3 firmware, quad PSRAM
 python scripts/test_native.py  # host unit tests for the portable core
-pio run  -e native_sim    # host simulator: full firmware + web UI, no hardware
 ```
 
-The simulator is the fastest loop. Build it, run
-`.pio/build/native_sim/program`, and open <http://localhost:8080> — the web UI's
-live preview stands in for the panel, and the script engine, its editor, MQTT
-and the HTTP API all behave as they do on the device.
+The host tests are the fastest loop: `python scripts/test_native.py` builds and runs
+them in seconds. Linux and TC002 use the shared CMake build; generic headless
+Linux is a developer target. See [building from source](docs/developers/building.md)
+for Linux dependencies and tests, and the [TC002 developer guide](docs/developers/tc002/index.md)
+for its runtime, supervisor and release tools.
 
 ## What CI gates on
 
@@ -61,17 +60,40 @@ Every push runs, and your PR needs all of it green:
 
 ```bash
 python scripts/test_native.py          # host unit tests
-pio run -e awtrix                      # both firmware images build
+pio run -e awtrix                      # ESP32 firmware images
 pio run -e awtrix_s3_octal
+pio run -e awtrix_s3_quad
 python tools/check_docs_sync.py        # docs match the firmware's real fields
 python tools/check_berry_api.py        # editor's Berry API table is current
 python tools/gen_agent_skill.py --check
 python tools/check_prelude_solidified.py
 python tools/check_font_sync.py
 python tools/check_partitions.py
-mkdocs build --strict                  # docs build, no broken links or anchors
-cd webui/test && npm install && npm test
+python tools/docs/build_site.py       # documentation, one build per clock
+node --test "tools/flowconv/*.test.mjs"
+cd webui/test && npm ci && npm test
 ```
+
+CI also configures and builds the Linux targets, runs their CTest suite and
+checks service isolation. Use the commands in the
+[developer build guide](docs/developers/building.md) on a Linux host.
+
+### Documentation per clock
+
+The site is built once per clock (`esp32`, `esp32-s3`, `tc002`) from one source
+tree, and each build shows only what that firmware can do. Mark what belongs to
+which clock:
+
+* a whole page: front matter `only: [tc002]`. Pages without it are in all three.
+* a passage, table rows or a few words: `<!-- only esp32 esp32-s3 -->` …
+  `<!-- /only -->`, on lines of their own or inline; blocks may nest.
+* the OpenAPI file: `x-only: [tc002]` on an operation, parameter, property or
+  enum entry.
+
+Write each passage as if the page were only about that clock: no "TC002 only"
+or "(ESP32-S3)" asides. `tools/docs/build_site.py` fails on text that names
+another clock; real exceptions go into `tools/docs/lint-allow.txt`. Preview one
+clock with `AWTRIX_DOCS_VARIANT=tc002 mkdocs serve`.
 
 ### Generated files you may have to regenerate
 
@@ -82,8 +104,10 @@ silently on the device instead of loudly at build time.
 | If you changed… | Regenerate with |
 |---|---|
 | `src/core/script/Prelude.h`, or a binding name in `ScriptBindings.cpp` | `python scripts/gen_prelude_solidified.py` |
-| a BDF under `assets/fonts/` | `python scripts/gen_font.py` |
+| a legacy BDF directly under `assets/fonts/` | `python scripts/gen_font.py` |
+| pinned original catalog under `assets/fonts/matrix-fonts/` | update verified provenance, then `python scripts/gen_matrix_fonts.py`; keep originals unchanged |
 | `webui/index.html`, or added a Berry binding | any `pio run -e awtrix*` (the pre-script regenerates the embedded asset and the editor's API table in place) |
+| `docs/examples/berry-app-system-prompt.md` | `python tools/gen_agent_skill.py` |
 | `scripts/gen_partitions.py` | nothing — `check_partitions.py` regenerates and validates every table |
 
 Commit the regenerated file together with the change that caused it.
@@ -107,8 +131,8 @@ The load-bearing rules:
   two is the limit. No Doxygen, no banners, no commented-out code. The reasoning
   behind a *change* still belongs in its commit message and pull request, where
   it stays readable and dated.
-- **New behaviour comes with a host test** in `test/`, unless it genuinely
-  cannot run off-device.
+- **New behaviour comes with an appropriate host test** in `test/` (portable
+  core) or `tests/` (Linux and TC002 contracts), unless it cannot run off-device.
 - **The docs are part of the change.** A new field, endpoint or setting lands in
   `docs/` in the same PR — `check_docs_sync.py` will tell you if you forgot.
 
@@ -128,8 +152,8 @@ Common scopes: `http`, `mqtt`, `render`, `script`, `webui`, `audio`, `device`,
 `docs`, `ci`, `build`.
 
 For the PR itself: describe what changed and how you verified it. If you tested
-on hardware, say which board. If you only tested in the simulator, say that too
-— it is useful information, not an admission.
+on hardware, say which board. If you only ran the host tests, say that too — it
+is useful information, not an admission.
 
 ## Reporting security issues
 

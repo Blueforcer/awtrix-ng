@@ -1,0 +1,26 @@
+# Text a clock's documentation may contain although it names another clock or uses a
+# replaced word.
+# One entry per line: <variant>/<page path>: <exact phrase>, or */<page path>: <phrase>
+# for every clock. The phrase is removed before the check, so keep it as short as
+# the reason allows.
+# Words with one name only: the exceptions. A DIY build chains LED panels, the web UI and the
+# product name use these words, and `loop` is also a code loop and a GIF setting.
+*/: LED matrix clock
+*/troubleshooting/faq/: LED matrix clock
+*/getting-started/buy/: WS2812 LED matrix
+*/getting-started/web-ui/: Describe your LED panels
+*/getting-started/web-ui/: how wide one panel is and how many panels the cable runs through
+*/guides/migrating-from-awtrix3/: one 32×8 panel
+*/guides/migrating-from-awtrix3/: panel on its own looks right but the panels sit in the wrong order
+*/guides/migrating-from-awtrix3/: Alternating panels
+*/guides/migrating-from-awtrix3/: every second panel is upside down
+*/guides/scripting/drawing/: when panels are chained
+*/guides/scripting/sharing/: A single panel is
+*/guides/scripting/sharing/: Chained panels are wider
+*/reference/http/: How many panels the LED strip runs through
+*/reference/http/: the row of panels
+*/reference/http/: every second panel
+*/guides/icons/: the loop count
+*/tutorials/first-draw/: The loop.
+*/tutorials/real-data/: write the loop
+*/guides/display/: several panels chained

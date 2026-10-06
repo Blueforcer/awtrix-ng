@@ -9,7 +9,7 @@
 #include "core/script/BerryVM.h"
 #include "core/script/ScriptApp.h"
 #include "core/script/ScriptBindings.h"
-#include "core/script/ScriptHeapTesting.h"
+#include "platform/linux/host/HostScriptHeap.h"
 #include "core/script/ScriptServices.h"
 #include "core/script/SharedState.h"
 

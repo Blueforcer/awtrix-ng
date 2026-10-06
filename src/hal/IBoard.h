@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "core/input/Buttons.h"
 #include "core/render/Canvas.h"
 #include "core/render/ColorGrade.h"
 #include "core/render/MatrixLayout.h"
@@ -10,12 +11,6 @@
 
 namespace awtrix {
 
-struct ButtonState {
-  bool left = false;
-  bool select = false;
-  bool right = false;
-};
-
 class IBoard {
  public:
   virtual ~IBoard() = default;
@@ -23,6 +18,7 @@ class IBoard {
   virtual const char* name() const = 0;
   virtual int matrixWidth() const = 0;
   virtual int matrixHeight() const = 0;
+  virtual bool displayReady() const { return true; }
 
   virtual void begin() = 0;
   virtual void show(const Canvas& canvas) = 0;

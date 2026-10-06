@@ -207,19 +207,21 @@ void test_rejects_reserved_and_invalid_encodings() {
   TEST_ASSERT_TRUE(rejects({0xFF, 0xFB, 0x9C, 0x64}));
 }
 
-void test_mpeg2_5_parses_but_is_not_supported() {
+void test_mpeg2_5_is_supported() {
   const auto h = parsed({0xFF, 0xE3, 0x50, 0xC0});
   TEST_ASSERT_EQUAL(mp3::Version::Mpeg2_5, h.version);
   TEST_ASSERT_EQUAL_INT(11025, h.sampleRateHz);
-  TEST_ASSERT_FALSE(mp3::isSupported(h));
+  TEST_ASSERT_TRUE(mp3::isSupported(h));
+  TEST_ASSERT_TRUE(h.lsf());
 }
 
-void test_supported_covers_mpeg1_mono_and_stereo() {
+void test_supported_covers_mono_stereo_and_low_rates() {
   TEST_ASSERT_TRUE(mp3::isSupported(parsed({0xFF, 0xFB, 0x90, 0x64})));
   TEST_ASSERT_TRUE(mp3::isSupported(parsed({0xFF, 0xFB, 0x50, 0xC0})));
   TEST_ASSERT_TRUE(mp3::isSupported(parsed({0xFF, 0xFB, 0x90, 0x04})));
   TEST_ASSERT_TRUE(mp3::isSupported(parsed({0xFF, 0xFB, 0x90, 0x84})));
-  TEST_ASSERT_FALSE(mp3::isSupported(parsed({0xFF, 0xF3, 0x50, 0xC0})));
+  TEST_ASSERT_TRUE(mp3::isSupported(parsed({0xFF, 0xF3, 0x50, 0xC0})));
+  TEST_ASSERT_FALSE(parsed({0xFF, 0xFB, 0x90, 0x64}).lsf());
 }
 
 void test_rejects_missing_sync_and_short_buffers() {
@@ -484,6 +486,76 @@ void test_stereo_side_info_is_thirty_two_bytes() {
   TEST_ASSERT_EQUAL_INT(511, si.granules[1][1].part2_3Length);
 }
 
+void writeLsfGranule(BitWriter& w, int part23, int compress) {
+  w.put(part23, 12);
+  w.put(20, 9);
+  w.put(140, 8);
+  w.put(compress, 9);
+  w.put(0, 1);
+  w.put(7, 5);
+  w.put(11, 5);
+  w.put(13, 5);
+  w.put(9, 4);
+  w.put(3, 3);
+  w.put(1, 1);
+  w.put(0, 1);
+}
+
+mp3::FrameHeader lsfHeaderFor(mp3::ChannelMode mode, int modeExtension) {
+  mp3::FrameHeader h{};
+  h.version = mp3::Version::Mpeg2;
+  h.layer = mp3::Layer::LayerIII;
+  h.sampleRateHz = 24000;
+  h.channelMode = mode;
+  h.modeExtension = modeExtension;
+  return h;
+}
+
+void test_lsf_mono_side_info_is_nine_bytes_with_one_granule() {
+  BitWriter w;
+  w.put(200, 8);
+  w.put(0, 1);
+  writeLsfGranule(w, 1500, 510);
+
+  const auto header = lsfHeaderFor(mp3::ChannelMode::Mono, 0);
+  TEST_ASSERT_EQUAL_INT(9, mp3::sideInfoBytes(header));
+  TEST_ASSERT_EQUAL_INT(1, mp3::granules(header));
+  TEST_ASSERT_EQUAL_size_t(9, w.bytes().size());
+
+  mp3::BitReader r(w.bytes().data(), w.bytes().size());
+  mp3::SideInfo si{};
+  TEST_ASSERT_TRUE(mp3::parseSideInfo(r, header, si));
+  TEST_ASSERT_EQUAL_size_t(9 * 8, r.bitPos());
+  TEST_ASSERT_EQUAL_INT(200, si.mainDataBegin);
+  const mp3::GranuleInfo& g = si.granules[0][0];
+  TEST_ASSERT_EQUAL_INT(1500, g.part2_3Length);
+  TEST_ASSERT_EQUAL_INT(510, g.scalefacCompress);
+  TEST_ASSERT_EQUAL_INT(9, g.region0Count);
+  TEST_ASSERT_TRUE(g.preflag);
+  TEST_ASSERT_TRUE(g.scalefacScale);
+  TEST_ASSERT_FALSE(g.count1TableSelect);
+}
+
+void test_lsf_preflag_skips_intensity_positions() {
+  BitWriter w;
+  w.put(255, 8);
+  w.put(0, 2);
+  writeLsfGranule(w, 700, 510);
+  writeLsfGranule(w, 701, 510);
+
+  const auto header = lsfHeaderFor(mp3::ChannelMode::JointStereo, 0x01);
+  TEST_ASSERT_EQUAL_INT(17, mp3::sideInfoBytes(header));
+  TEST_ASSERT_EQUAL_size_t(17, w.bytes().size());
+
+  mp3::BitReader r(w.bytes().data(), w.bytes().size());
+  mp3::SideInfo si{};
+  TEST_ASSERT_TRUE(mp3::parseSideInfo(r, header, si));
+  TEST_ASSERT_EQUAL_INT(255, si.mainDataBegin);
+  TEST_ASSERT_EQUAL_INT(701, si.granules[0][1].part2_3Length);
+  TEST_ASSERT_TRUE(si.granules[0][0].preflag);
+  TEST_ASSERT_FALSE(si.granules[0][1].preflag);
+}
+
 void test_short_side_info_is_rejected() {
   const auto data = bytes({0x00, 0x00, 0x00});
   mp3::BitReader r(data.data(), data.size());
@@ -521,8 +593,8 @@ int main(int, char**) {
   RUN_TEST(test_parses_mpeg2_at_half_rate);
   RUN_TEST(test_free_format_reports_unknown_length);
   RUN_TEST(test_rejects_reserved_and_invalid_encodings);
-  RUN_TEST(test_mpeg2_5_parses_but_is_not_supported);
-  RUN_TEST(test_supported_covers_mpeg1_mono_and_stereo);
+  RUN_TEST(test_mpeg2_5_is_supported);
+  RUN_TEST(test_supported_covers_mono_stereo_and_low_rates);
   RUN_TEST(test_rejects_missing_sync_and_short_buffers);
   RUN_TEST(test_find_sync_skips_leading_garbage);
   RUN_TEST(test_find_sync_reports_failure_on_a_buffer_without_one);
@@ -540,6 +612,8 @@ int main(int, char**) {
   RUN_TEST(test_mono_side_info_is_seventeen_bytes_and_round_trips);
   RUN_TEST(test_switched_granule_infers_region_counts);
   RUN_TEST(test_stereo_side_info_is_thirty_two_bytes);
+  RUN_TEST(test_lsf_mono_side_info_is_nine_bytes_with_one_granule);
+  RUN_TEST(test_lsf_preflag_skips_intensity_positions);
   RUN_TEST(test_short_side_info_is_rejected);
   return UNITY_END();
 }

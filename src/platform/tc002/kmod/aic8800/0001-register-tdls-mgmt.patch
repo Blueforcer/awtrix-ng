@@ -1,0 +1,19 @@
+aic8800_fdrv: register the tdls_mgmt operation again
+
+The k230 import comments it out for its newer kernel. The AICSemi release
+and the stock TC002 module register it.
+
+---
+diff --git a/aic8800_fdrv/rwnx_main.c b/aic8800_fdrv/rwnx_main.c
+index bd23483..18be5dc 100755
+--- a/aic8800_fdrv/rwnx_main.c
++++ b/aic8800_fdrv/rwnx_main.c
+@@ -5189,7 +5189,7 @@ static struct cfg80211_ops rwnx_cfg80211_ops = {
+ 	.tdls_channel_switch = rwnx_cfg80211_tdls_channel_switch,
+ 	.tdls_cancel_channel_switch = rwnx_cfg80211_tdls_cancel_channel_switch,
+ #endif
+-	//.tdls_mgmt = rwnx_cfg80211_tdls_mgmt,
++	.tdls_mgmt = rwnx_cfg80211_tdls_mgmt,
+ 	.tdls_oper = rwnx_cfg80211_tdls_oper,
+ 	.change_bss = rwnx_cfg80211_change_bss,
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0) || defined(CONFIG_WPA3_FOR_OLD_KERNEL)

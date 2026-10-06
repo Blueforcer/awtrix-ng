@@ -1,10 +1,13 @@
 #include "transport/mqtt/MqttService.h"
 
+#include <utility>
+
 #include "core/CoreEngine.h"
 #include "core/api/ApiRouter.h"
+#include "core/api/StateJson.h"
+#include "hal/IBoard.h"
 #include "system/Log.h"
 #include "system/MonotonicClock.h"
-#include "transport/DeviceStateJson.h"
 #include "transport/ScriptMqttBridge.h"
 
 namespace awtrix {
@@ -13,6 +16,8 @@ namespace awtrix {
 // be reachable through a file-scope pointer.
 namespace {
 MqttService* s_self = nullptr;
+constexpr const char* kButtonTopics[] = {"state/buttons/left", "state/buttons/select",
+                                       "state/buttons/right"};
 }
 
 void MqttService::onMessageStatic(char* topic, uint8_t* payload, unsigned int len) {
@@ -21,7 +26,7 @@ void MqttService::onMessageStatic(char* topic, uint8_t* payload, unsigned int le
 
 void MqttService::begin(CoreEngine& engine, IBoard& board, const DeviceConfig& cfg,
                         const std::string& uid, const std::string& clientId,
-                        const std::string& hostname, net::IHostResolver& resolver) {
+                        const std::string& hostname, net::IHostResolver& resolver, MqttSocket::Options transport) {
   engine_ = &engine;
   board_ = &board;
   uid_ = uid;
@@ -30,11 +35,14 @@ void MqttService::begin(CoreEngine& engine, IBoard& board, const DeviceConfig& c
   cadence_.configure(cfg.statsInterval);
   s_self = this;
 
-  link_.begin(cfg, clientId, prefix_, &resolver, &engine.state().runtime().mqtt);
+  link_.begin(cfg, clientId, prefix_, &resolver, &engine.state().runtime().mqtt, transport);
   if (!link_.enabled()) return;
 
-  ha_.configure(cfg, board, uid, prefix_, hostname_);
-  engine_->state().subscribe([this](StateEvent e) { cadence_.onEvent(e); });
+  ha_.configure(cfg, board, engine_->audio().caps(), uid, prefix_, hostname_);
+  engine_->state().subscribe([this](StateEvent e) {
+    cadence_.onEvent(e);
+    if (e == StateEvent::ButtonsChanged) buttonEdges_.observe(buttonState());
+  });
   link_.setOnOnline([this] { onOnline(); });
   link_.client()->setCallback(onMessageStatic);
 }
@@ -47,28 +55,27 @@ void MqttService::onOnline() {
   client->publish((prefix_ + "/availability").c_str(), "online", true);
   send(prefix_ + "/state/capabilities", *capabilitiesJson_, true);
   send(prefix_ + "/state/prefix", prefix_, true);
-  ha_.announce(*client);
+  announceHa();
   cadence_.onConnect();
+  // Clears retained button messages left on the broker.
+  for (const char* topic : kButtonTopics) send(prefix_ + "/" + topic, "", true);
+  buttonEdges_.resync(buttonState());
   if (scriptBridge_) scriptBridge_->onReconnect();
 }
 
 void MqttService::tick() {
   const int64_t now = monotonicMs();
-  if (!link_.tick(static_cast<uint32_t>(now))) return;
+  if (!link_.tick(static_cast<uint32_t>(now),
+                  engine_->state().runtime().wifi.phase == net::LinkPhase::Connected)) return;
 
   const std::string& app = engine_->currentAppId();
   if (cadence_.appDue(app)) publish("state/apps/active", app, true);
-  if (cadence_.buttonsDue()) {
-    static const char* kNames[3] = {"left", "select", "right"};
-    const auto& buttons = engine_->state().runtime().buttons;
-    for (int i = 0; i < 3; ++i)
-      publish(std::string("state/buttons/") + kNames[i], buttons[i] ? "1" : "0", true);
-  }
+  ha::ButtonEdges::Edge edge;
+  while (buttonEdges_.pop(edge)) publish(kButtonTopics[edge.control], edge.down ? "1" : "0");
   if (cadence_.settingsDue()) publish("state/settings", buildSettingsJson(*engine_), true);
-  if (cadence_.radioDue()) publish("state/audio", buildAudioJson(*engine_), true);
-  if (cadence_.stateDue(now))
-    publish("state/device", buildDeviceStateJson(*engine_, *board_, uid_, scriptingRunning_),
-            true);
+  if (cadence_.audioDue()) publish("state/audio", buildAudioJson(*engine_), true);
+  if (deviceState_ && cadence_.stateDue(now))
+    publish("state/device", deviceState_(scriptingRunning_), true);
 }
 
 // Publishes in streaming form so the payload is never copied into the packet buffer; that keeps
@@ -82,9 +89,18 @@ bool MqttService::send(const std::string& topic, const std::string& payload, boo
   return client->endPublish() != 0;
 }
 
+ha::ButtonEdges::State MqttService::buttonState() const {
+  const RuntimeState& rt = engine_->state().runtime();
+  return rt.buttons;
+}
+
 void MqttService::publish(const std::string& suffix, const std::string& payload, bool retained) {
   if (!link_.online()) return;
   send(prefix_ + "/" + suffix, payload, retained);
+}
+
+void MqttService::publishError(const std::string& event) {
+  if (!event.empty()) publish("event/error", event);
 }
 
 void MqttService::publishRaw(const std::string& topic, const std::string& payload) {
@@ -102,10 +118,15 @@ void MqttService::unsubscribeRaw(const std::string& topic) {
   link_.client()->unsubscribe(topic.c_str());
 }
 
+void MqttService::announceHa() {
+  if (webUrl_) ha_.setUrl(webUrl_());
+  ha_.announce(*link_.client());
+}
+
 void MqttService::applyHaConfig(const DeviceConfig& cfg) {
   if (!link_.enabled() || !board_) return;
-  ha_.configure(cfg, *board_, uid_, prefix_, hostname_);
-  if (link_.online()) ha_.announce(*link_.client());
+  ha_.configure(cfg, *board_, engine_->audio().caps(), uid_, prefix_, hostname_);
+  if (link_.online()) announceHa();
 }
 
 // Reached from inside link_.tick() via PubSubClient::loop(), so this is still the main loop and
@@ -120,7 +141,7 @@ void MqttService::handleMessage(char* topic, uint8_t* payload, unsigned int len)
   // We publish our own replies under the same prefix and are subscribed to it, so skip them or
   // every command answers itself forever.
   if (api::isResultEcho(suffix)) return;
-  const std::string body(reinterpret_cast<char*>(payload), len);
+  std::string body(reinterpret_cast<char*>(payload), len);
   engine_->state().runtime().receivedMessages++;
   Command cmd;
   std::string result;
@@ -128,16 +149,18 @@ void MqttService::handleMessage(char* topic, uint8_t* payload, unsigned int len)
     case api::RouteOutcome::Routed: {
       const DispatchResult r = engine_->execute(cmd);
       logdbg("mqtt cmd %s -> %d", suffix.c_str(), static_cast<int>(r));
-      publish(suffix + "/result", api::mqttResult(r, engine_->lastDetail()));
+      result = api::mqttResult(r, engine_->lastDetail());
       break;
     }
     case api::RouteOutcome::Respond:
-      publish(suffix + "/result", result);
       break;
     case api::RouteOutcome::NoMatch:
     default:
+      if (!platformMqttCommand(suffix, body, result)) return;
       break;
   }
+  publish(suffix + "/result", result);
+  publishError(api::errorEvent("mqtt", t, result));
 }
 
 }

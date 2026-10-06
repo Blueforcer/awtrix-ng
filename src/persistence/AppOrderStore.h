@@ -8,6 +8,7 @@ class CoreEngine;
 namespace apporder {
 
 void save(const std::string& json);
+bool pending();
 void load(CoreEngine& engine);
 
 }

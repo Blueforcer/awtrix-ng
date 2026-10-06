@@ -1,0 +1,2 @@
+curl -X POST http://192.168.1.128/api/v1/notifications \
+  -H "Content-Type: application/json" -d '{"text":"Bell","icon":"data:image/gif;base64,R0lGODlhCAAIAPAAAAAAAP///yH5BAkIAAAALAAAAAAIAAgAAAIHDI6py+3fCgA7AAAA"}'

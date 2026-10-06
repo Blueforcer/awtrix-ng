@@ -8,7 +8,7 @@ namespace audio {
 
 constexpr int kBandCount = 32;
 
-// One analysed frame of the music being played: bass first, 0..255 under automatic gain.
+// One analysed audio frame: bass first, 0..255 under the source's scaling policy.
 struct FrameStats {
   uint8_t bands[kBandCount] = {};
   uint8_t level = 0;

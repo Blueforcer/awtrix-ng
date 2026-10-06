@@ -1,0 +1,63 @@
+[package]
+name = "awtrix-tc002-installer"
+version = "0.1.0"
+description = "AWTRIX NG USB installer for the Ulanzi TC002"
+authors = ["Stephan Mühl (Blueforcer)"]
+edition = "2021"
+rust-version = "1.94"
+license = "PolyForm-Noncommercial-1.0.0"
+default-run = "awtrix-tc002-installer"
+
+[lib]
+name = "awtrix_installer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "awtrix-tc002-installer"
+path = "src/main.rs"
+required-features = ["gui"]
+
+[[bin]]
+name = "awtrix-tc002-installer-cli"
+path = "src/cli.rs"
+required-features = ["cli"]
+
+[features]
+default = ["gui"]
+cli = []
+gui = ["dep:tauri", "dep:tauri-plugin-single-instance", "dep:tauri-plugin-dialog", "dep:open"]
+qualification = ["gui"]
+
+[build-dependencies]
+tauri-build = { version = "=2.7.0", features = [] }
+
+[dependencies]
+nusb = { version = "=0.2.7", features = ["tokio"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "process", "io-util", "io-std", "signal"] }
+futures-util = "0.3"
+reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls-native-roots", "stream"] }
+sha2 = "0.10"
+base64 = "0.22"
+tempfile = "3"
+include_dir = "0.7"
+dirs = "6"
+rpassword = "7"
+flate2 = "1"
+tar = "0.4"
+zip = { version = "4", default-features = false, features = ["deflate"] }
+tauri = { version = "=2.12.0", optional = true, features = [] }
+tauri-plugin-single-instance = { version = "=2.5.0", optional = true }
+tauri-plugin-dialog = { version = "2", optional = true }
+open = { version = "5", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

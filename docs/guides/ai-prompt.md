@@ -1,19 +1,18 @@
 # Build an app with AI
 
-[AWTRIX scripting](scripting.md) assumes you want to write the code. This page
-assumes you do not.
+This page shows how to let an AI chatbot write an AWTRIX app for you. You do not need to write
+or understand the code.
 
-Below is a **system prompt**: a single block of text that teaches a chatbot -
-ChatGPT, Claude, Gemini, a local model, whichever you have - everything about
-the AWTRIX scripting API. Paste it in once, then describe the app you want in
-plain words. What comes back is a complete script you paste into the web UI.
+Below is a **system prompt**: one block of text that teaches a chatbot the AWTRIX scripting API.
+It works with ChatGPT, Claude, Gemini, a local model, whichever you use. Paste it in once, then
+describe the app you want in plain words. The chatbot answers with a complete script that you
+paste into the web UI.
 
-You do not need to understand the code. You do need to be able to copy, paste,
-and say what you want.
+If you use a *coding agent* instead of a chatbot, for example Claude Code, Codex or Gemini CLI,
+use the [agent skill](#as-an-agent-skill) further down. It contains the same knowledge, you
+install it once, and the agent puts the app on your display by itself.
 
-If instead of a chatbot you use a *coding agent* - Claude Code, Codex, Gemini CLI
-- take the [agent skill](#as-an-agent-skill) further down. Same knowledge,
-installed once, and the agent puts the app on your panel itself.
+To write scripts yourself, read the [Scripting guide](scripting/index.md).
 
 [Jump to the prompt](#the-prompt){ .md-button }
 [Download as `.md`](https://raw.githubusercontent.com/Blueforcer/awtrix-ng/main/docs/examples/berry-app-system-prompt.md){ .md-button }
@@ -23,60 +22,57 @@ installed once, and the agent puts the app on your panel itself.
 
 ## How to use it
 
-**1. Start a fresh chat.** A new conversation, with nothing else in it. If your
-tool has a place for permanent instructions - a Custom GPT, a Claude Project, a
-system prompt field - put the prompt there instead and it applies to every
-message.
+**1. Start a new chat** with nothing else in it. If your tool has a place for permanent
+instructions, such as a Custom GPT, a Claude Project or a system prompt field, put the prompt
+there instead. Then it applies to every message.
 
-**2. Paste the prompt as your first message.** The assistant will not answer with
-anything interesting yet. That is correct.
+**2. Paste the prompt as your first message.** The assistant does not answer with anything
+useful yet. That is correct.
 
-**3. Say what you want, in your own words.** Be concrete about what should be on
-the panel; you do not need any technical vocabulary.
+**3. Say what you want, in your own words.** Say exactly what should be on the display. You do not
+need any technical words.
 
 > Show the current temperature in my city, Hamburg. Green when it's mild, red
 > when it's over 28 degrees.
 
-> A countdown to 24 December. Just the number of days, in a warm colour.
+> A countdown to 24 December. Just the number of days, in a warm color.
 
 > Show the price of Bitcoin, updated every few minutes.
 
-> When I press the middle button, play a sound and flash "COFFEE" on the screen.
+> When I press the middle button, play a sound and flash "COFFEE" on the display.
 
-It may ask you a question or two - which city, which currency, which icon. Answer
-and it will produce the script.
+It first asks which clock you have, unless you said it already: a TC001 or another ESP32 clock,
+an ESP32-S3, or a TC002. What runs on a TC002 does not run on the others. Then it may ask a question
+or two more: which city, which currency, which icon. Answer, and it writes the script.
 
-**4. Install it.** Copy the code block it gives you, open the AWTRIX web
-interface, go to the **Scripts** tab, create a script, paste, save. The app joins
-the rotation a moment later. The assistant repeats these steps for you at the end
-of its answer.
+**4. Install it.** Copy the code block from the answer. Open the AWTRIX web UI, go to the
+**Scripts** tab, create a script, paste the code and save. The app appears in the rotation a
+moment later. The assistant repeats these steps at the end of its answer.
 
-The prompt tells the assistant that AWTRIX has very little memory, so
-the scripts come back terse: few, long methods, and only the part of a web
-response the app actually needs. You do not have to ask for that, and it does not
-change what the app does.
+The prompt tells the assistant that AWTRIX has little memory. So the scripts it writes are
+compact: few, long methods, and only the part of a web answer the app needs. You do not have
+to ask for this, and it does not change what the app does.
 
-If you want several views of one device or service, say so together, for example:
+If you want several views of one device or service, ask for them together, for example:
 
 > Read my energy meter once every ten seconds. Show power and voltage as two
 > separate apps, sharing the same readings.
 
-The assistant can then provide one background reader and small display apps,
-instead of having every app contact the device again. Common helper functions
-can live in a module. The [guide](scripting.md#choose-how-your-apps-work-together)
-explains when each approach is useful.
+The assistant can then write one background script that reads the data, and small apps that
+show it. Then not every app has to contact the device. Shared helper functions can go into a
+module. [Choose how your apps work together](scripting/several-apps.md#choose-how-your-apps-work-together)
+explains when each way is useful.
 
 ---
 
 ## As an agent skill
 
-If you work with a coding agent - Claude Code, Codex, Gemini CLI - you do not
-have to paste anything. Install the same knowledge once as a **skill**, and the
-agent picks it up by itself whenever you ask for an AWTRIX app.
+With a coding agent, such as Claude Code, Codex or Gemini CLI, you do not have to paste
+anything. Install the same knowledge once as a **skill**. The agent uses it by itself whenever
+you ask for an AWTRIX app.
 
-The agent writes the app, puts it on your device, and looks at the
-panel before it tells you it is done - so the copying, the pasting and the
-error message below are steps you no longer do by hand.
+The agent writes the app, installs it on your device, and checks the display before it tells
+you it is done. You do not copy, paste or report errors by hand.
 
 [Download the skill](../examples/awtrix-berry-app-skill.zip){ .md-button }
 
@@ -89,75 +85,69 @@ folder from the archive sits directly inside it:
 | OpenAI Codex | `~/.agents/skills/` |
 | Gemini CLI | `~/.gemini/skills/` |
 
-On Windows that is `%USERPROFILE%` instead of `~`, and the folder may not exist
-yet - create it.
+On Windows, use `%USERPROFILE%` instead of `~`. If the folder does not exist yet, create it.
 
-**2. Say what you want**, and give it the address of your AWTRIX once - the IP,
-or `awtrixng-xxxxxx.local`:
+**2. Say what you want**, and give the agent the address of your AWTRIX once: the IP address,
+or `awtrixng-xxxxxx.local`.
 
 > Show the ICE departures from Hamburg Hbf on my AWTRIX at 192.168.1.42.
 
-Leave the address out and it simply hands you the script instead, with the
-same steps as above. For anything secret it leaves a marked line for you to
-fill in; it will not ask you for a key.
+Without the address, it gives you the script and the same install steps as above. For
+anything secret, such as an API key, it leaves a marked line for you to fill in. It does not
+ask you for the key.
 
 ---
 
 ## When it goes wrong
 
-It will sometimes. The fix is nearly always another turn in the same chat.
+Usually the fix is one more message in the same chat.
 
-If the panel shows **`ERR:`** in red, the script hit an error. Open the
-**Scripts** tab in the web UI - the message is shown right next to your script,
-and the editor marks the line when it can. **Copy that message back into the
-chat.** The assistant has the whole API in front of it and usually fixes the
-fault in one turn.
+**The display shows `ERR:` in red.** The script has an error. Open the **Scripts** tab in the
+web UI. The message is shown next to your script, and the editor marks the line when it can.
+**Copy the message into the chat.** The assistant usually fixes the error in one answer.
 
-If the app installs and runs but looks wrong, say what you see: *"the text is cut
-off on the right"*, *"it only shows a dash"*, *"the colour never changes"*. Ask
-for a corrected full file rather than a patch - you are pasting whole scripts,
-not editing them.
+**The app runs but looks wrong.** Say what you see: *"the text is cut off on the right"*,
+*"it only shows a dash"*, *"the color never changes"*. Ask for the complete corrected
+script, not only the changed lines. You paste whole scripts.
 
-If the web UI refuses to save with a **`507`** - *"not enough free memory to
-compile"* or *"heap too fragmented to compile"* - the script never ran; AWTRIX
-turned it away for lack of room. Say so in the chat and the assistant will
-come back with a shorter script. Rebooting, and deleting a script you no longer
-use, help as well - see ["Not enough free memory to
-compile"](scripting.md#not-enough-free-memory-to-compile).
+**The web UI refuses to save and says there is not enough memory.** The script was not
+installed because AWTRIX has too little free memory right now. Tell the assistant, and it
+writes a shorter script. Restarting AWTRIX and deleting scripts you do not use also help. See
+["Not enough memory to compile"](scripting/troubleshooting.md#not-enough-memory-to-compile).
 
-A script that crashes or loops forever breaks only itself: AWTRIX marks that
-one app broken, and the clock and the other apps carry on until you fix or delete
-it (see [one interpreter, many
-scripts](scripting.md#one-interpreter-many-scripts)).
+A script that crashes or never ends breaks only itself. AWTRIX marks that one app as broken,
+and the clock and the other apps keep running until you fix or delete it (see
+[Scripts don't disturb each other](scripting/troubleshooting.md#one-interpreter-many-scripts)).
 
 ---
 
 ## What it cannot do for you
 
-**It does not know your AWTRIX.** It cannot see which icons you have installed,
-what your MQTT topics are called, or what your Wi-Fi can reach. Tell it, or it
-will guess - the prompt instructs it to draw shapes rather than invent icon IDs,
-but it cannot know that your broker publishes on `home/kitchen/temp`.
+**It does not know your AWTRIX.** It cannot see which icons you have installed, what your
+MQTT topics are called, or what your network can reach. Tell it, or it guesses. The prompt
+tells it to draw shapes instead of inventing icon IDs, but it cannot know that your broker
+publishes on `home/kitchen/temp`.
 
-**It cannot test.** Nothing in the chat runs the script. The first real test is
-your panel. If you would rather iterate without AWTRIX on the other side of the
-room, the [simulator](../advanced/simulator.md) runs scripts too.
+**It cannot test.** Nothing in the chat runs the script. The first real test is your display.
 
-**It does not know your API keys, and should not.** For services that need one,
-it will leave a clearly marked line for you to fill in. Note that a script's
-HTTPS traffic is [encrypted but unverified](scripting.md#a-complete-fetch) - do not put a
-credential you care about into a script.
+**It does not know your API keys, and should not.** For services that need a key, it leaves a
+clearly marked line for you to fill in. A key in a script is
+[only as private as AWTRIX](scripting/network.md#keep-tokens-private).
+<!-- only esp32 esp32-s3 -->
+A script's HTTPS connection is encrypted, but the clock does not check the server. Do not put a
+password or key you care about into a script.
+<!-- /only -->
 
-**It knows a fixed set of calls.** The prompt lists the scripting API; anything
-that is not in it, the assistant will not use.
+**It knows only the calls in the prompt.** The prompt lists the scripting API. The assistant
+does not use anything that is not in it.
 
 ---
 
 ## The prompt
 
-Everything the assistant needs is in here: the full API, the app structure,
-AWTRIX's limits, and the mistakes language models reliably make when writing for
-a small LED panel. Paste the whole block; do not summarize or shorten it.
+The prompt contains everything the assistant needs: the full API, how an app is built,
+AWTRIX's limits, and the mistakes AI models often make when they write for a small LED display.
+Paste the whole block. Do not shorten it.
 
 Use the copy button in the top-right corner of the block.
 
@@ -169,7 +159,6 @@ Use the copy button in the top-right corner of the block.
 
 ## Related
 
-- [AWTRIX scripting](scripting.md) - the same API, written for a person rather than a model
-- [Icons & assets](icons.md) - installing the icons you want to name
-- [Simulator](../advanced/simulator.md) - iterate without hardware
-- [Pushed apps](pushed-apps.md) - when something outside AWTRIX can just keep it fed, no script needed
+- [Scripting guide](scripting/index.md): the same API, written for people
+- [Icons](icons.md): install the icons you want to use
+- [Pushed apps](pushed-apps.md): show data sent from outside AWTRIX, without a script

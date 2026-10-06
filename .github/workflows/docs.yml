@@ -25,7 +25,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  image-tools:
+    uses: ./.github/workflows/tc002-image-tools.yml
+
   build:
+    needs: image-tools
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -35,6 +39,41 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-docs.txt
       - run: pip install -r requirements-docs.txt
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: tc002-image-tools
+          path: docs/assets/tc002/image/
+      - name: Prepare the TC002 browser installation package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          if [ -z "$tag" ]; then exit 0; fi
+          mkdir -p docs/firmware/tc002
+          gh release download "$tag" --pattern 'usb-awtrix-ng-tc002.zip' --dir docs/firmware/tc002 || true
+          python - "$tag" <<'PY'
+          import hashlib, json, pathlib, sys, zipfile
+          sys.path.insert(0, "tools/tc002/install")
+          from constants import MAX_ARCHIVE_BYTES, PRODUCTION_TARGET
+          root = pathlib.Path("docs/firmware/tc002")
+          package = root / "usb-awtrix-ng-tc002.zip"
+          if package.exists():
+              data = package.read_bytes()
+              if not 0 < len(data) <= MAX_ARCHIVE_BYTES:
+                  raise SystemExit("TC002 browser package exceeds its size limit")
+              with zipfile.ZipFile(package) as archive:
+                  entry = archive.getinfo("browser-manifest.json")
+                  if entry.file_size > 16384 or entry.compress_type != zipfile.ZIP_STORED:
+                      raise SystemExit("Invalid TC002 browser manifest")
+                  manifest = json.loads(archive.read(entry))
+              if manifest.get("target") != PRODUCTION_TARGET or manifest.get("dirty") is not False:
+                  raise SystemExit("Not a clean TC002 browser package")
+              record = {"version": manifest["version"], "asset": package.name, "size": len(data),
+                        "sha256": hashlib.sha256(data).hexdigest()}
+              (root / "index.json").write_text(json.dumps(record), encoding="utf-8")
+          else:
+              print("No TC002 browser package is published for this release.")
+          PY
       # The browser flasher on getting-started/flashing.md fetches the firmware
       # from this site, not from the releases page: release assets carry no
       # Access-Control-Allow-Origin header, so a page on github.io cannot read
@@ -83,7 +122,7 @@ jobs:
           tag=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
           if [ -z "$tag" ]; then exit 0; fi
           mkdir -p "docs/firmware/ota/$tag"
-          gh release download "$tag" --pattern 'firmware-awtrix-ng*.bin' --dir "docs/firmware/ota/$tag"
+          gh release download "$tag" --pattern 'firmware-awtrix-ng*.bin' --pattern 'awtrix-ng-tc002.awup' --dir "docs/firmware/ota/$tag"
           python - "$tag" <<'PY'
           import hashlib, json, pathlib, sys
           tag = sys.argv[1]
@@ -92,19 +131,18 @@ jobs:
           for name in ("firmware-awtrix-ng.bin", "firmware-awtrix-ng-s3-octal.bin", "firmware-awtrix-ng-s3-quad.bin"):
               data = (root / tag / name).read_bytes()
               assets[name] = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+          tc002 = root / tag / "awtrix-ng-tc002.awup"
+          if tc002.exists():
+              data = tc002.read_bytes()
+              assets[tc002.name] = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
           (root / "index.json").write_text(json.dumps({"version": tag, "assets": assets}), encoding="utf-8")
           PY
-      # A link to a heading that has been renamed is reported by mkdocs at INFO
-      # level, so --strict walks straight past it and the broken anchor ships.
-      # Fail on it explicitly.
-      - name: Build, and fail on broken anchors
-        run: |
-          mkdocs build --strict 2>&1 | tee build.log
-          if grep -q "does not contain an anchor" build.log; then
-            echo "::error::Broken in-page anchors (a linked heading was renamed):"
-            grep "does not contain an anchor" build.log
-            exit 1
-          fi
+      # One documentation per clock plus the landing page, assembled into site/.
+      # Each build runs with --strict; the script also fails on broken in-page
+      # anchors (mkdocs reports those at INFO level only), on text that names
+      # another clock, and on redirects or cross-links into missing pages.
+      - name: Build the site for every clock
+        run: python tools/docs/build_site.py
       - name: Upload the Pages artifact
         if: github.event.repository.has_pages
         uses: actions/upload-pages-artifact@v3

@@ -7,7 +7,7 @@
 
 namespace awtrix {
 
-// Decides when each MQTT state topic is worth republishing: settings, buttons and radio go out on
+// Decides when each MQTT state topic is worth republishing: settings and audio go out on
 // change, the stats blob on a timer that a change can cut short.
 class StatePublishCadence {
  public:
@@ -22,16 +22,14 @@ class StatePublishCadence {
   void onEvent(StateEvent e) {
     if (e == StateEvent::SettingsChanged) settingsDirty_ = true;
     if (e == StateEvent::PowerChanged || e == StateEvent::IndicatorChanged) statesDirty_ = true;
-    if (e == StateEvent::ButtonsChanged) buttonsDirty_ = true;
-    if (e == StateEvent::RadioChanged) radioDirty_ = true;
+    if (e == StateEvent::AudioChanged) audioDirty_ = true;
   }
 
   // A fresh broker session republishes everything. Clearing lastApp_ matters: appDue would
   // otherwise hold the app topic back as unchanged.
   void onConnect() {
     settingsDirty_ = true;
-    radioDirty_ = true;
-    buttonsDirty_ = true;
+    audioDirty_ = true;
     lastApp_.clear();
   }
 
@@ -41,21 +39,15 @@ class StatePublishCadence {
     return true;
   }
 
-  bool radioDue() {
-    const bool due = radioDirty_;
-    radioDirty_ = false;
+  bool audioDue() {
+    const bool due = audioDirty_;
+    audioDirty_ = false;
     return due;
   }
 
   bool settingsDue() {
     const bool due = settingsDirty_;
     settingsDirty_ = false;
-    return due;
-  }
-
-  bool buttonsDue() {
-    const bool due = buttonsDirty_;
-    buttonsDirty_ = false;
     return due;
   }
 
@@ -73,8 +65,7 @@ class StatePublishCadence {
   int64_t lastStateMs_ = 0;
   bool settingsDirty_ = true;
   bool statesDirty_ = false;
-  bool buttonsDirty_ = true;
-  bool radioDirty_ = true;
+  bool audioDirty_ = true;
 };
 
 }

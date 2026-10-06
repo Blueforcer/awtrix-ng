@@ -1,5 +1,7 @@
 #include "core/mqtt/HaDiscovery.h"
 
+#include <cstring>
+
 #include "core/Transitions.h"
 
 namespace awtrix {
@@ -61,9 +63,13 @@ enum Gate : unsigned char {
   Humidity = 1 << 2,
   Pressure = 1 << 3,
   LightSensor = 1 << 4,
+  Sound = 1 << 6,
+  Radio = 1 << 7,
 };
 
-enum Dynamic : unsigned char { NoExtra = 0, TransitionOptions = 1 };
+// Volume: body is the entity's name, icon and settings key, each ended by a NUL; the payload
+// around them is the same for every volume.
+enum Dynamic : unsigned char { NoExtra = 0, TransitionOptions = 1, Volume = 2 };
 
 struct Component {
   const char* key;
@@ -91,13 +97,21 @@ constexpr Component kComponents[] = {
 
     {"brimode",
      R"J("p":"select","name":"Brightness mode","ic":"mdi:brightness-auto","ops":["Manual","Auto"],"cmd_t":"~/cmd/settings","cmd_tpl":"{\"autoBrightness\":{{ 'true' if value == 'Auto' else 'false' }}}","stat_t":"~/state/settings","val_tpl":"{{ 'Auto' if value_json.autoBrightness else 'Manual' }}")J",
-     Always, NoExtra},
+     LightSensor, NoExtra},
     {"transeff",
      R"J("p":"select","name":"Transition effect","ic":"mdi:auto-fix","cmd_t":"~/cmd/settings","cmd_tpl":"{\"transitionEffect\":\"{{ value }}\"}","stat_t":"~/state/settings","val_tpl":"{{ value_json.transitionEffect }}")J",
      Always, TransitionOptions},
     {"trans",
      R"J("p":"switch","name":"Transition","ic":"mdi:swap-horizontal","cmd_t":"~/cmd/settings","pl_on":"{\"autoTransition\":true}","pl_off":"{\"autoTransition\":false}","stat_t":"~/state/settings","val_tpl":"{{ 'ON' if value_json.autoTransition else 'OFF' }}","stat_on":"ON","stat_off":"OFF")J",
      Always, NoExtra},
+
+    {"vol", "Volume\0volume-high\0volume", Sound, Volume},
+    {"radvol", "Radio volume\0radio\0radioVolume", Sound | Radio, Volume},
+    {"appvol", "App volume\0gamepad-variant\0appVolume", Sound, Volume},
+    {"alrtvol", "Alert volume\0bell-ring\0alertVolume", Sound, Volume},
+    {"stopsnd",
+     R"J("p":"button","name":"Stop sound","ic":"mdi:stop","cmd_t":"~/cmd/audio/stop","pl_prs":"{}")J",
+     Sound, NoExtra},
 
     {"next",
      R"J("p":"button","name":"Next app","ic":"mdi:arrow-right-bold","cmd_t":"~/cmd/apps/next","pl_prs":"{}")J",
@@ -162,6 +176,7 @@ constexpr Component kComponents[] = {
     {"btnr",
      R"J("p":"binary_sensor","name":"Button right","ic":"mdi:gesture-tap-button","stat_t":"~/state/buttons/right","pl_on":"1","pl_off":"0")J",
      Always, NoExtra},
+
 };
 
 bool gated(unsigned char gate, const DiscoveryContext& ctx) {
@@ -170,40 +185,63 @@ bool gated(unsigned char gate, const DiscoveryContext& ctx) {
   if ((gate & Humidity) && !ctx.hasHumidity) return false;
   if ((gate & Pressure) && !ctx.hasPressure) return false;
   if ((gate & LightSensor) && !ctx.hasLightSensor) return false;
+  if ((gate & Sound) && !ctx.hasSound) return false;
+  if ((gate & Radio) && !ctx.hasRadio) return false;
   return true;
+}
+
+void emitComponent(const DiscoveryContext& ctx, IByteSink& sink, const char* key, const char* body,
+                   unsigned char dyn, bool& first) {
+  if (!first) sink.put(',');
+  first = false;
+  sink.put('"');
+  sink.put(key);
+  sink.put("\":{");
+  // "~" is Home Assistant's base-topic shorthand: every "~/..." topic in the bodies expands
+  // against this device's MQTT prefix.
+  field(sink, "~", ctx.prefix);
+  sink.put(',');
+  if (dyn == Volume) {
+    const char* icon = body + std::strlen(body) + 1;
+    const char* setting = icon + std::strlen(icon) + 1;
+    sink.put("\"p\":\"number\",\"name\":\"");
+    sink.put(body);
+    sink.put("\",\"ic\":\"mdi:");
+    sink.put(icon);
+    sink.put("\",\"min\":0,\"max\":100,\"step\":5,\"unit_of_meas\":\"%\",\"cmd_t\":\"~/cmd/settings\","
+             "\"cmd_tpl\":\"{\\\"");
+    sink.put(setting);
+    sink.put("\\\":{{ value | int }}}\",\"stat_t\":\"~/state/settings\",\"val_tpl\":\"{{ value_json.");
+    sink.put(setting);
+    sink.put(" }}\"");
+  } else {
+    sink.put(body);
+  }
+  if (dyn == TransitionOptions) {
+    sink.put(",\"ops\":[");
+    for (std::size_t i = 0; i < kTransitionCount; ++i) {
+      if (i) sink.put(',');
+      sink.put('"');
+      sink.put(kTransitionNames[i]);
+      sink.put('"');
+    }
+    sink.put(']');
+  }
+  sink.put(",\"uniq_id\":\"");
+  putEscaped(sink, ctx.uid);
+  sink.put('_');
+  sink.put(key);
+  sink.put("\"}");
 }
 
 void emitComponents(const DiscoveryContext& ctx, IByteSink& sink) {
   sink.put(",\"cmps\":{");
   bool first = true;
-  for (const Component& c : kComponents) {
-    if (!gated(c.gate, ctx)) continue;
-    if (!first) sink.put(',');
-    first = false;
-    sink.put('"');
-    sink.put(c.key);
-    sink.put("\":{");
-    // "~" is Home Assistant's base-topic shorthand: every "~/..." topic in the bodies expands
-    // against this device's MQTT prefix.
-    field(sink, "~", ctx.prefix);
-    sink.put(',');
-    sink.put(c.body);
-    if (c.dyn == TransitionOptions) {
-      sink.put(",\"ops\":[");
-      for (std::size_t i = 0; i < kTransitionCount; ++i) {
-        if (i) sink.put(',');
-        sink.put('"');
-        sink.put(kTransitionNames[i]);
-        sink.put('"');
-      }
-      sink.put(']');
-    }
-    sink.put(",\"uniq_id\":\"");
-    putEscaped(sink, ctx.uid);
-    sink.put('_');
-    sink.put(c.key);
-    sink.put("\"}");
-  }
+  for (const Component& c : kComponents)
+    if (gated(c.gate, ctx)) emitComponent(ctx, sink, c.key, c.body, c.dyn, first);
+  ctx.eachPlatformEntity([&](const Entity& entity) {
+    emitComponent(ctx, sink, entity.key, entity.body, NoExtra, first);
+  });
   sink.put('}');
 }
 
@@ -221,6 +259,10 @@ void emit(const DiscoveryContext& ctx, IByteSink& sink) {
   field(sink, "name", ctx.hostname);
   sink.put(',');
   field(sink, "sw", ctx.version);
+  if (!ctx.url.empty()) {
+    sink.put(',');
+    field(sink, "cu", ctx.url);
+  }
   sink.put(",\"mf\":\"Blueforcer\",\"mdl\":\"AWTRIX NG\"},\"o\":{\"name\":\"awtrix-ng\",");
   field(sink, "sw", ctx.version);
   sink.put('}');

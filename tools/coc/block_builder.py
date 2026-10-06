@@ -160,7 +160,7 @@ class block_builder:
 
     def writefile(self, filename, text):
         otext = "#include \"be_constobj.h\"\n\n" + text
-        with open(filename, "w", encoding='utf-8') as f:
+        with open(filename, "w", encoding='utf-8', newline="\n") as f:
             f.write(otext)
 
     def dumpfile(self, path):

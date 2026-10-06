@@ -35,9 +35,13 @@ class JsonReader {
 
   bool asBool(bool& out) const;
   bool asLong(long long& out) const;
+  // Unsigned JSON integer without a fraction or exponent; preserves out on failure.
+  bool asUnsigned(std::uint64_t& out) const;
   bool asDouble(double& out) const;
 
   bool appendString(std::string& out) const;
+  // Allocation-free decode. A null destination measures the decoded size up to capacity.
+  bool copyString(char* out, std::size_t capacity, std::size_t& written) const;
 
   // Zero-copy view of the string, empty if it contains any escape; use appendString for those.
   std::string_view rawString() const;
@@ -77,10 +81,28 @@ class JsonReader {
 
 JsonReader memberValue(JsonReader obj, const char* name);
 
+inline JsonReader memberValue(std::string_view obj, const char* name) {
+  return memberValue(JsonReader(obj), name);
+}
+
+// Invalid/missing/non-string members and values beyond the decoded byte limit read as empty.
+inline std::string memberText(JsonReader obj, const char* name, std::size_t limit = std::string::npos) {
+  const auto value = memberValue(obj, name);
+  std::string out;
+  if (!value.appendString(out) || out.size() > limit) return {};
+  return out;
+}
+inline std::string memberText(std::string_view obj, const char* name, std::size_t limit = std::string::npos) {
+  return memberText(JsonReader(obj), name, limit);
+}
+
 // A missing member reads back as Type::Invalid, so this answers "was the key in the object".
 inline bool present(const JsonReader& r) { return r.type() != JsonReader::Type::Invalid; }
 
 bool isWellFormed(std::string_view text);
+
+// Whitespace only, or an object without members.
+bool isEmptyObject(std::string_view text);
 
 struct Member {
   const char* key;

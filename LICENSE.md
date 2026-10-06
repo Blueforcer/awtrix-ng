@@ -1,5 +1,22 @@
 Required Notice: Copyright © Stephan Mühl (Blueforcer) https://github.com/Blueforcer/awtrix-ng
 
+## Font data exception
+
+Copyright © Stephan Mühl (Blueforcer), AWTRIX NG font contributions.
+
+The project-owned font data in `assets/fonts/awtrix.bdf`, the glyph supplements in
+`assets/fonts/awtrix-ng/*.bdf`, and the project-owned portions of the bitmap, glyph,
+metric, index and range tables generated into `src/media/AwtrixFont.h`,
+`src/media/MatrixFonts.h` and `src/media/MatrixFontsCompact.h` are additionally
+licensed under the **SIL Open Font License, Version 1.1**. The full license and inherited font notices are in
+[LICENSES/MIT-Matrix-Fonts.txt](LICENSES/MIT-Matrix-Fonts.txt). No additional
+Reserved Font Names are declared for these AWTRIX NG contributions.
+
+The combined panel fonts are distributed under OFL-1.1 with their inherited
+notices. This exception does not change the licenses of the original third-party
+contributions. The application, rendering code, independent font generator
+programs and unrelated assets retain their existing licenses.
+
 # PolyForm Noncommercial License 1.0.0
 
 <https://polyformproject.org/licenses/noncommercial/1.0.0>

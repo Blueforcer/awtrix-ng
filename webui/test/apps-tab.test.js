@@ -1,13 +1,14 @@
-/* Apps tab: three cards, and what Save sends.
+/* Apps tab: the groups, and what every change sends.
 
    An app has three independent properties - `enabled` (it runs), `inLoop` (it
    is drawn) and `present` (it exists on the device right now). A headless
    script is enabled but never drawn; a pushed app whose sender is quiet is
    enabled and not drawn either, and it must keep its slot rather than look
-   switched off. So Save states both halves outright: `order` is what runs, in
-   order, and `disabled` is exactly what is switched off. Deriving `disabled` from
-   what the page happens to see would switch off every app pushed since it
-   loaded.
+   switched off. So every save states both halves outright: `order` is what
+   runs, in order, and `disabled` is exactly what is switched off. Deriving
+   `disabled` from what the page happens to see would switch off every app
+   pushed since it loaded. There is no Save button: each change is sent at once,
+   and its toast offers Undo.
 
    Run:  node apps-tab.test.js */
 const { boot, goto, flush, stubXhr } = require('./harness');
@@ -22,13 +23,17 @@ const INVENTORY = [
   { name: 'Time', enabled: true, inLoop: true, slot: 0, present: true, origin: 'builtin' },
   { name: 'co2', enabled: true, inLoop: false, slot: 1, present: false, origin: null },
   { name: 'Weather', enabled: true, inLoop: true, slot: 2, present: true, origin: 'script',
-    headless: false, skipped: false, config: true, error: null,
-    meta: { icons: ['2105', '2106'] } },
+    headless: false, skipped: true, config: true, error: null,
+    meta: { name: 'Weather', desc: 'Forecast', icons: ['2105', '2106'] } },
   { name: 'Doorbell', enabled: true, inLoop: false, slot: 3, present: true, origin: 'script',
     headless: true, skipped: false, error: null, meta: {} },
   { name: 'Bridge', enabled: false, inLoop: false, slot: null, present: true, origin: 'script',
-    headless: true, skipped: false, error: null, meta: {} },
+    headless: true, skipped: false, error: { message: 'boom', line: 3 }, meta: {} },
   { name: 'Date', enabled: false, inLoop: false, slot: null, present: true, origin: 'builtin' },
+  { name: 'Racer', enabled: true, inLoop: false, slot: null, present: true, origin: 'script',
+    headless: false, ondemand: true, skipped: false, config: true, error: null, meta: { name: 'Racer' } },
+  { name: 'Maze', enabled: true, inLoop: true, slot: null, present: true, origin: 'script',
+    headless: false, ondemand: true, skipped: false, error: null, meta: {} },
   { name: 'location', origin: 'module', import: 'location', config: true, error: null, meta: {} },
   { name: 'fmt', origin: 'module', import: 'fmt', config: false, error: null, meta: {} },
 ];
@@ -55,135 +60,162 @@ const CONFIG = {
   },
 };
 
-const rowFor2 = (window, name) => [...window.document.querySelectorAll('.approw')]
-  .find(r => r.querySelector('.nm') && r.querySelector('.nm').firstChild.textContent === name);
-const cards = window => [...window.document.querySelectorAll('.card.wide')];
-const cardRows = (window, i) =>
-  [...cards(window)[i].querySelectorAll('.approw .nm')].map(n => n.firstChild.textContent);
-const visible = card => card.style.display !== 'none';
-
 async function run() {
   const { window, store } = await boot();
+  const doc = window.document;
   store.apps = INVENTORY;
   store.configs = CONFIG;
   await goto(window, '#/apps');
 
-  const [rotation, background, disabled] = cards(window);
-
-  assert(cardRows(window, 0).join(',') === 'Time,co2,Weather',
-    'rotation holds the drawn apps in order, then the enabled ones nothing is sending');
-  assert(cardRows(window, 1).join(',') === 'Doorbell', 'background holds the running headless script');
-  assert(cardRows(window, 2).sort().join(',') === 'Bridge,Date',
-    'disabled holds everything switched off, headless or not');
-  assert(visible(background), 'background card shows while a script runs in it');
-
-  const co2Row = [...cards(window)[0].querySelectorAll('.approw')]
-    .find(r => r.querySelector('.nm').firstChild.textContent === 'co2');
-  assert([...co2Row.querySelectorAll('.chip')].some(c => c.textContent === 'no data'),
-    'an enabled app nobody is sending is marked, not silently dropped');
-
-  // A menu starts closed. The `hidden` property alone does not do that: any
-  // author `display` rule on the list beats what `hidden` asks the browser for,
-  // so this asserts the computed style, not the flag.
-  assert(window.getComputedStyle(
-    rowFor2(window, 'Time').querySelector('.rowmenu .mlist')).display === 'none',
-    'a row menu starts closed');
-
-  const rowsOf = card => [...card.querySelectorAll('.approw')];
-  // Other row actions live behind the row's menu, labelled with words.
+  const group = id => doc.getElementById('apps-' + id);
+  const shown = id => !group(id).hidden;
+  const names = id => [...group(id).querySelectorAll('.approw .nmt')].map(n => n.textContent);
+  const rowFor = name => [...doc.querySelectorAll('.approw')]
+    .find(r => r.querySelector('.nmt') && r.querySelector('.nmt').textContent === name);
+  // Rarer actions live behind the row's ⋯ menu, labelled with words.
   const btn = (row, label) => {
     const m = row.querySelector('.rowmenu .mbtn');
     if (m) m.click();
     return [...row.querySelectorAll('.rowmenu .mlist > button')]
       .find(b => b.textContent.trim() === label);
   };
-
-  assert(!!btn(rowsOf(background)[0], 'Deactivate'),
-    'a background row deactivates with the same menu entry as a loop row');
-  assert(!btn(rowsOf(background)[0], 'Duplicate'),
-    'a background row offers no rotation-only action');
-
-  const moduleCard = cards(window)[3];
-  assert(cardRows(window, 3).join(',') === 'location',
-    'the module card holds the modules with settings, and leaves out plain library code');
-  assert(visible(moduleCard), 'module card shows while such a module is installed');
-  const modRow = rowsOf(moduleCard)[0];
-  assert(!btn(modRow, 'Activate') && !btn(modRow, 'Deactivate') &&
-         !btn(modRow, 'Show now'),
-    'a module row offers no rotation actions');
-  assert(modRow.textContent.includes('import location'),
-    'a module row names what import finds it');
-
-  // + on a disabled row lands the app in the card its own headless flag picks.
-  const bridgeRow = rowsOf(disabled).find(r => r.querySelector('.nm').firstChild.textContent === 'Bridge');
-  btn(bridgeRow, 'Activate').click();
-  await flush(30);
-  assert(cardRows(window, 1).join(',') === 'Bridge,Doorbell', 'activating a headless script goes to background');
-
-  const dateRow = rowsOf(cards(window)[2]).find(r => r.querySelector('.nm').firstChild.textContent === 'Date');
-  btn(dateRow, 'Activate').click();
-  await flush(30);
-  assert(cardRows(window, 0).join(',') === 'Time,co2,Weather,Date', 'activating a normal app goes to the rotation');
-
-  const save = async () => {
-    store.order = null;
-    window.document.querySelector('#savebar button.pri').click();
-    await flush(60);
+  // Frequent ones sit in the row itself.
+  const act = (row, label) => [...row.querySelectorAll('.racts > button')]
+    .find(b => b.textContent.trim().endsWith(label));
+  const switchOf = row => row.querySelector('.racts .switch input');
+  const flip = async row => {
+    const s = switchOf(row);
+    s.checked = !s.checked;
+    s.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await flush(40);
   };
+  const lastToast = () => [...doc.querySelectorAll('#toasts .toast')].pop();
+  const undo = () => [...lastToast().querySelectorAll('button')].find(b => b.textContent === 'Undo');
 
-  await save();
-  assert(!!store.order, 'Save reaches PUT /api/v1/apps/order');
+  // ---- where each app lands ----------------------------------------------
+  assert(names('loop').join(',') === 'Time,co2,Weather',
+    'the display group holds the drawn apps in order, then the enabled ones nothing is sending');
+  assert(names('od').join(',') === 'Maze,Racer', 'the device menu group holds the on-demand scripts');
+  assert(names('bg').join(',') === 'Doorbell', 'the background group holds the running headless script');
+  assert(names('off').sort().join(',') === 'Bridge,Date', 'switched off holds everything that does not run');
+  assert(group('loop').tagName === 'SECTION' && !group('loop').querySelector('summary'),
+    'the display group stays visible without a collapse control');
+  for (const id of ['od', 'bg', 'off', 'mod']) {
+    const card = group(id), summary = card.querySelector('summary');
+    assert(card.tagName === 'DETAILS' && !card.open,
+      id + ' starts as a closed native details group');
+    assert(summary && summary.classList.contains('appgrphead') &&
+           doc.getElementById(summary.getAttribute('aria-labelledby')) === card.querySelector('h2') &&
+           doc.getElementById(summary.getAttribute('aria-describedby')) === card.querySelector('.ghelp'),
+      id + ' has the common named header with count and help');
+  }
+  assert(names('mod').join(',') === 'location',
+    'shared settings hold the modules with settings, and leave out plain library code');
+  assert(!doc.querySelector('#savebar'), 'there is no save bar to forget');
+
+  const count = id => group(id).querySelector('h2 .cnt').textContent;
+  assert(count('loop') === '3' && count('od') === '2' && count('bg') === '1' && count('off') === '2',
+    'each group heading counts its apps');
+  for (const id of ['od', 'bg', 'off']) group(id).querySelector('summary').click();
+  assert(group('od').open && group('bg').open && group('off').open && !group('mod').open,
+    'each summary opens its own group independently');
+  const groupCards = Object.fromEntries(['od', 'bg', 'off', 'mod'].map(id => [id, group(id)]));
+
+  // ---- state chips explain themselves ------------------------------------
+  const chip = (row, text) => [...row.querySelectorAll('.chip')].find(c => c.textContent === text);
+  assert(!!chip(rowFor('co2'), 'no data'), 'an enabled app nobody is sending is marked, not dropped');
+  assert(!!chip(rowFor('Weather'), 'skipped'), 'a script that sat this round out says so');
+  assert(!!chip(rowFor('Maze'), 'running'), 'an on-demand script that runs says so');
+  chip(rowFor('co2'), 'no data').click();
+  await flush(20);
+  assert(rowFor('co2').querySelector('.rowinfo').textContent.includes('No data yet'),
+    'tapping a chip shows what it means');
+  chip(rowFor('Bridge'), 'error').click();
+  await flush(20);
+  assert(rowFor('Bridge').querySelector('.rowinfo.bad').textContent.includes('ERR:Bridge'),
+    'an error chip opens the message');
+  assert(rowFor('Weather').querySelector('.sub').textContent.startsWith('Script'),
+    'each row says what kind of app it is');
+
+  // ---- every change is saved at once, and can be undone ------------------
+  await flip(rowFor('Weather'));
+  assert(JSON.stringify(store.order) ===
+         JSON.stringify({ order: ['Time', 'co2', 'Doorbell'], disabled: ['Bridge', 'Date', 'Weather'] }),
+    'switching an app off saves at once, naming everything that is off');
+  assert(names('off').includes('Weather'), 'and moves it to switched off');
+  assert(Object.entries(groupCards).every(([id, card]) => group(id) === card) &&
+         group('od').open && group('bg').open && group('off').open && !group('mod').open,
+    'an order change preserves every group container and its independent open state');
+  assert(lastToast().textContent.includes('Weather switched off') && !!undo(),
+    'the toast names what happened and offers Undo');
+  undo().click();
+  await flush(40);
+  assert(JSON.stringify(store.order.order) === JSON.stringify(['Time', 'co2', 'Weather', 'Doorbell']),
+    'Undo puts it back in its old place and saves that');
+  assert(names('loop').join(',') === 'Time,co2,Weather', 'on the page too');
+
+  await flip(rowFor('Date'));
+  assert(names('loop').join(',') === 'Time,co2,Weather,Date', 'switching an app on adds it to the end of the display');
+  await flip(rowFor('Bridge'));
+  assert(names('bg').join(',') === 'Bridge,Doorbell', 'a headless script goes back to the background');
   assert(JSON.stringify(store.order.order) ===
-         JSON.stringify(['Time', 'co2', 'Weather', 'Date', 'Bridge', 'Doorbell']),
-    'the body carries the rotation in order, then the running background scripts');
-  assert(JSON.stringify(store.order.disabled) === JSON.stringify([]),
-    'nothing is switched off, and the body says so instead of leaving it to be guessed');
+         JSON.stringify(['Time', 'co2', 'Weather', 'Date', 'Bridge', 'Doorbell']) &&
+         store.order.disabled.length === 0,
+    'the body carries the display in order, then the background scripts');
+  assert(!shown('off'), 'the switched-off group hides once it is empty');
 
-  // Saving reloads from the device, so the cards are back to INVENTORY here.
-  for (const row of rowsOf(cards(window)[1])) { btn(row, 'Deactivate').click(); await flush(20); }
-  assert(!visible(cards(window)[1]), 'background card hides once nothing runs in it');
+  await flip(rowFor('Doorbell'));
+  assert(store.order.disabled.join(',') === 'Doorbell', 'a background script switches off the same way');
+  assert(shown('off') && group('off').open,
+    'a group keeps its open state when it disappears empty and later has an app again');
+  await flip(rowFor('Doorbell'));
 
-  await save();
-  assert(JSON.stringify(store.order.order) === JSON.stringify(['Time', 'co2', 'Weather']),
-    'an app nobody is sending keeps its slot in the body');
-  assert(store.order.disabled.slice().sort().join(',') === 'Bridge,Date,Doorbell',
-    'disabled names every switched-off app, which is what stops a background script');
-  assert(!store.order.disabled.includes('co2'),
-    'and never an app that is merely absent');
+  // ---- order ----------------------------------------------------------------
+  assert(!btn(rowFor('Time'), 'Move up'), 'the first app cannot move up');
+  btn(rowFor('Time'), 'Move down').click();
+  await flush(40);
+  assert(store.order.order.slice(0, 2).join(',') === 'co2,Time', 'Move down swaps it with the next and saves');
+  btn(rowFor('Time'), 'Move up').click();
+  await flush(40);
+  btn(rowFor('Time'), 'Duplicate').click();
+  await flush(40);
+  assert(store.order.order.slice(0, 2).join(',') === 'Time,Time', 'Duplicate shows an app twice per round');
+  assert(!!rowFor('Time').querySelector('.grip'), 'display rows can be dragged');
+  assert(!rowFor('Doorbell').querySelector('.grip'), 'other rows cannot');
 
-  // Two actions and no third: switch an app off, or delete it. Delete means gone
-  // from RAM AND gone from the arrangement - including a name you only mistyped,
-  // where there is nothing in RAM to remove in the first place.
-  await goto(window, '#/apps');
-  const del = row => btn(row, 'Delete');
-  assert(!!del(rowFor2(window, 'co2')), 'a name nothing is sending can be deleted');
-  assert(!del(rowFor2(window, 'Time')), 'a built-in cannot - it can only be switched off');
-  assert(!del(rowFor2(window, 'Weather')), 'nor a script - that belongs in its editor');
-  assert(!!btn(rowFor2(window, 'Weather'), 'Edit'), 'a script row offers its editor by name');
-  const rmco2 = del(rowFor2(window, 'co2'));
+  // ---- show and start --------------------------------------------------------
+  assert(!!rowFor('Racer').querySelector('.cfgbtn') && !rowFor('Maze').querySelector('.cfgbtn'),
+    'optional settings never add a placeholder beside the primary action');
+  act(rowFor('Weather'), 'Show').click();
+  await flush(30);
+  assert(store.active && store.active.name === 'Weather', 'Show puts the app on the display');
+  const racer = rowFor('Racer');
+  assert(!switchOf(racer) && !btn(racer, 'Duplicate'), 'an on-demand script has no switch and no rotation actions');
+  act(racer, 'Start').click();
+  await flush(30);
+  assert(store.active.name === 'Racer', 'Start runs it on the device');
+  assert(!store.order.order.includes('Racer') && !store.order.disabled.includes('Racer'),
+    'and it never lands in the saved order');
+
+  // ---- delete ------------------------------------------------------------------
+  assert(!btn(rowFor('Time'), 'Delete'), 'a built-in cannot be deleted - only switched off');
+  assert(!btn(rowFor('Weather'), 'Delete'), 'nor a script - that belongs in its editor');
+  assert(!!btn(rowFor('Weather'), 'Edit'), 'a script row offers its editor by name');
+  const rmco2 = btn(rowFor('co2'), 'Delete');
   rmco2.click();
   await flush(20);
-  assert(cardRows(window, 0).includes('co2'),
-    'one click only arms it - deleting takes two, like every destructive button here');
+  assert(names('loop').includes('co2'), 'one click only arms it - deleting takes two');
   rmco2.click();
-  await flush(40);
-  assert(!cardRows(window, 0).includes('co2'), 'deleting takes the row out of the list');
-  await save();
+  await flush(60);
+  assert(!names('loop').includes('co2'), 'deleting takes the row out of the list');
   assert(!store.order.order.includes('co2') && !store.order.disabled.includes('co2'),
-    'and Save leaves the name out of both lists, so the device drops it');
+    'and the saved order drops the name');
 
   // ---- settings a script declares --------------------------------------
-  // Settings is the only entry point, and its absence is information: an app
-  // with nothing to set must not offer it.
-  await goto(window, '#/apps');
-  const rowFor = name => [...window.document.querySelectorAll('.approw')]
-    .find(r => r.querySelector('.nm') &&
-               r.querySelector('.nm').firstChild.textContent === name);
-  const gearOf = row => row.querySelector(':scope > .cfgbtn');
-
+  const gearOf = row => row.querySelector('.racts > .cfgbtn');
   assert(!!gearOf(rowFor('Weather')), 'a script with settings offers Settings');
   assert(!gearOf(rowFor('Doorbell')), 'a script without settings does not');
-  assert(!gearOf(rowFor('Time')), 'a built-in never does');
+  assert(!gearOf(rowFor('Time')), 'an app without configurable fields has no Settings button');
 
   assert(!!btn(rowFor('Weather'), 'Install icons'), 'a script that names icons offers to fetch them');
   assert(!btn(rowFor('Doorbell'), 'Install icons'), 'a script that names none does not');
@@ -203,7 +235,7 @@ async function run() {
 
   gearOf(rowFor('Weather')).click();
   await flush(60);
-  assert(!panel.hidden, 'the Settings entry opens the panel');
+  assert(!panel.hidden, 'the Settings button opens the panel');
 
   const ctl = key => {
     const row = [...panel.querySelectorAll('.frow')]
@@ -241,7 +273,7 @@ async function run() {
     'PATCH carries only the field that changed');
   assert(cfgBtn('Save').disabled, 'Save goes quiet again once the values are saved');
 
-  cfgBtn('Use defaults').click();
+  cfgBtn('Reset to defaults').click();
   await flush(20);
   assert(ctl('city').querySelector('input[type=text]').value === 'Berlin' &&
          ctl('tint').querySelector('input[type=color]').value === '#ff8800',
@@ -279,25 +311,19 @@ async function run() {
   assert(ctl('city').querySelector('input[type=text]').value === 'Graz',
     'with the unsaved edit still in it');
 
-  // The direct settings button also closes the panel; actions stay accessible.
   const closeBtn = gearOf(rowFor('Weather'));
   assert(closeBtn.title === 'Close settings', 'the settings button closes an open panel');
-  assert(closeBtn.nextElementSibling.classList.contains('rowmenu'),
-    'settings is directly left of the actions dropdown');
   assert(!btn(rowFor('Weather'), 'Settings'), 'settings is absent from the dropdown');
   closeBtn.click();
   await flush(20);
   assert(panel.hidden, 'and closes it again');
-  assert(rowFor('Weather').querySelector('.rowmenu .mbtn').title === 'Actions',
-    'and the menu is back afterwards');
 
   // ---- settings a module owns --------------------------------------------
-  // Several apps share one value by importing the module that holds it, so the
-  // module gets the same Settings entry an app does - and one without settings does
-  // not appear on this tab at all.
   assert(!!gearOf(rowFor('location')), 'a module with settings offers Settings too');
   assert(!rowFor('fmt'), 'a module without settings is not on the Apps tab');
+  assert(!switchOf(rowFor('location')), 'a module has no switch');
 
+  group('mod').querySelector('summary').click();
   gearOf(rowFor('location')).click();
   await flush(60);
   const modPanel = rowFor('location').querySelector('.appcfg');
@@ -310,6 +336,16 @@ async function run() {
   await flush(20);
   const modSave = [...modPanel.querySelectorAll('.cfgbar button')]
     .find(b => b.textContent.trim() === 'Save');
+  group('mod').querySelector('summary').click();
+  btn(rowFor('Time'), 'Duplicate').click();
+  await flush(40);
+  assert(!group('mod').open && rowFor('location').querySelector('.appcfg') === modPanel &&
+         !modPanel.hidden && modCtl.value === 'Graz' && !modSave.disabled,
+    'collapsing a group and re-rendering rows preserves its open dirty config panel');
+  group('mod').querySelector('summary').click();
+  assert(group('mod').open && rowFor('location').querySelector('.appcfg') === modPanel &&
+         modCtl.value === 'Graz' && !modSave.disabled,
+    'expanding the group reveals the same unsaved settings');
   modSave.click();
   await flush(60);
   assert(JSON.stringify(store.configPatch) === '{"city":"Graz"}',

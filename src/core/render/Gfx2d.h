@@ -25,6 +25,11 @@ struct ColorSource {
 // negative pct draws nothing at all.
 void drawProgress(Canvas& c, int pct, const ColorSource& fill, uint32_t track, int x0);
 
+// Fills pct (0..100) percent of the box from the left and the rest with track. A ramp runs
+// across the whole box.
+void fillProgress(Canvas& c, int x, int y, int w, int h, int pct, const ColorSource& fill,
+                  uint32_t track);
+
 void drawBars(Canvas& c, const std::vector<int>& values, const ColorSource& color, bool autoscale,
               int x0);
 

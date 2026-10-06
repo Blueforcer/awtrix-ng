@@ -1,0 +1,94 @@
+# @name Spectrum
+# @desc Spectrum analyser for the audio source selected under System > Audio
+# @author Blueforcer
+# @version 1.4
+# @config palette select "Colours" default=classic options=classic,rainbow,ice,fire,mono
+# @config decay number "Bar fall time" default=350 min=100 max=2000 unit=ms
+# @config peaks bool "Peak markers" default=false
+# @config beat_flash bool "Flash markers on the beat" default=true
+
+class Spectrum
+  var n, level, peak, peak_at, last, rows, decay, peaks, flash
+
+  def init()
+    self.n = (width() + 1) / 2
+    if self.n > 32 self.n = 32 end
+    self.level = []
+    self.peak = []
+    self.peak_at = []
+    for i: 0..self.n - 1
+      self.level.push(0.0)
+      self.peak.push(0.0)
+      self.peak_at.push(0)
+    end
+    self.last = -1
+    self.decay = store.get("decay", 350)
+    self.peaks = store.get("peaks", false)
+    self.flash = store.get("beat_flash", true)
+    self.rows = self.build_rows(store.get("palette", "classic"))
+  end
+
+  def build_rows(p)
+    var classic = [0x00A83C, 0x18C830, 0x50DC1C, 0x9CE010, 0xE8D000, 0xF09800, 0xF05000, 0xF01800]
+    var r = []
+    var top = height() > 1 ? height() - 1 : 1
+    for y: 0..height() - 1
+      if p == "classic"
+        r.push(classic[y * 7 / top])
+      elif p == "rainbow"
+        r.push(hsv(y * 300 / top, 100, 70))
+      elif p == "ice"
+        r.push(hsv(220 - y * 60 / top, 100 - y * 70 / top, 45 + y * 55 / top))
+      elif p == "fire"
+        r.push(hsv(y * 50 / top, 100, 40 + y * 60 / top))
+      else
+        r.push(hsv(0, 0, 25 + y * 75 / top))
+      end
+    end
+    return r
+  end
+
+  # No music.playing() guard: the selected source can be the microphone.
+  def draw()
+    var now = now_ms()
+    var dt = self.last >= 0 ? now - self.last : 0
+    if dt < 0 dt = 0 end
+    self.last = now
+    # Fractional levels keep decay consistent even at high frame rates.
+    var fall = dt * 255.0 / self.decay
+    var bands = music.bands(self.n, 255)
+    var beat = music.beat() && self.flash
+    var h = height()
+    var left = (width() - (self.n * 2 - 1)) / 2
+    for i: 0..self.n - 1
+      var lv = self.level[i] - fall
+      if bands[i] > lv lv = bands[i] end
+      if lv < 0 lv = 0.0 end
+      self.level[i] = lv
+      if lv >= self.peak[i]
+        self.peak[i] = lv
+        self.peak_at[i] = now
+      elif now - self.peak_at[i] > 450
+        # Apply only the part of this frame after the marker's hold expires.
+        var released = now - self.peak_at[i] - 450
+        if released > dt released = dt end
+        var p = self.peak[i] - released * 255.0 / 1200
+        self.peak[i] = p < 0 ? 0.0 : p
+      end
+      # Squared, so quiet bands sit low and loud ones reach the upper rows.
+      var x = left + i * 2
+      var bar = int(lv * lv * h / 65025.0 + 0.5)
+      for y: 0..bar - 1
+        pixel(x, h - 1 - y, self.rows[y])
+      end
+      if self.peaks
+        var pk = int(self.peak[i] * self.peak[i] * h / 65025.0 + 0.5)
+        if pk > 0
+          pixel(x, h - pk, beat ? 0xFFFFFF : 0x9098A0)
+        end
+      end
+    end
+  end
+end
+
+return Spectrum()

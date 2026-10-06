@@ -2,7 +2,7 @@
 #include <unity.h>
 
 #include "core/api/StateJson.h"
-#include "core/script/ScriptHeapTesting.h"
+#include "platform/linux/host/HostScriptHeap.h"
 #include "core/script/SharedState.h"
 
 using namespace awtrix::script;

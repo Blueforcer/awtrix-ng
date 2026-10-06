@@ -1,0 +1,6 @@
+menu "AWTRIX NG"
+
+source "$BR2_EXTERNAL_AWTRIX_PATH/package/awtrix-base64/Config.in"
+source "$BR2_EXTERNAL_AWTRIX_PATH/package/awtrix-ng/Config.in"
+
+endmenu

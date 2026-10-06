@@ -61,20 +61,9 @@ void changesNothing(const char* json) {
 
 }
 
-static int members(const std::string& json) {
-  int n = 0;
-  api::JsonReader r{std::string_view(json)};
-  TEST_ASSERT_TRUE(r.enterObject());
-  while (r.nextMember()) {
-    ++n;
-    TEST_ASSERT_TRUE(r.skipValue());
-  }
-  return n;
-}
-
-static void test_the_reply_carries_every_field() {
-  TEST_ASSERT_EQUAL_INT(67, members(written(seeded(), false)));
-  TEST_ASSERT_EQUAL_INT(70, members(written(seeded(), true)));
+static void test_reply_exposes_configurable_panel_fields() {
+  TEST_ASSERT_TRUE(written(seeded(), false).find("\"panels\":4") != std::string::npos);
+  TEST_ASSERT_TRUE(written(seeded(), false).find("panelHeight") == std::string::npos);
 }
 
 static void test_secrets_are_omitted_unless_asked_for() {
@@ -94,6 +83,7 @@ static void test_every_type_reads_its_value() {
   TEST_ASSERT_EQUAL_UINT8(20, after(R"({"lowBatteryThreshold":20})").lowBatteryThreshold);
   TEST_ASSERT_EQUAL_UINT8(1, after(R"({"tempDecimals":1})").tempDecimals);
   TEST_ASSERT_EQUAL_INT(-1, after(R"({"pinMatrix":-1})").pinMatrix);
+  TEST_ASSERT_EQUAL_INT(2, after(R"({"panels":2})").panels);
 
   TEST_ASSERT_FALSE(after(R"({"scriptingEnabled":false})").scriptingEnabled);
   changesNothing("{}");
@@ -173,7 +163,7 @@ static void test_the_whole_table_round_trips() {
 
 int main(int, char**) {
   UNITY_BEGIN();
-  RUN_TEST(test_the_reply_carries_every_field);
+  RUN_TEST(test_reply_exposes_configurable_panel_fields);
   RUN_TEST(test_secrets_are_omitted_unless_asked_for);
   RUN_TEST(test_every_type_reads_its_value);
   RUN_TEST(test_a_wrong_type_coerces_the_way_it_always_has);

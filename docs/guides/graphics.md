@@ -1,176 +1,183 @@
 # Charts & drawing
 
-Anything you can put on the matrix that is not text or an icon comes from four keys in the
-app/notification payload: `progress`, `barChart`, `lineChart` and `draw`. They live in the same JSON
-body as everything else. (`backgroundColor`, `effect` and `overlay` also paint the canvas,
-independently of these four - see [Layering](#layering).)
+This page shows you how to add a progress bar, a bar chart, a line chart or your own drawing to a
+pushed app or a notification.
 
-Start here - a download progress bar with a label:
+!!! tip "New here?"
+    [How the display works](display.md) shows where things sit on the display and which text
+    moves by itself.
 
+## What you get {#start-here}
+
+A download progress bar with a label. Replace `<awtrix-ip>` with the IP address of your clock:
+
+<!-- panel -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/download \
   -H 'Content-Type: application/json' \
-  -d '{"text":"64%","progress":64,"progressColor":"#00AAFF","progressTrackColor":"#202020"}'
+  -d '{"text":"64%","progress":64,"progressColor":"#00AAFF","progressTrackColor":"#404040"}'
 ```
 
-**What you see:** `64%` on the middle rows, and along the very bottom row of the panel a bar that is
-bright blue for the left ~20 pixels and dark grey for the remaining ~12.
+The label stands in the middle. The bottom row is the bar: blue for 64 % of its length, dark gray
+for the rest.
 
-Every example on this page sends `Content-Type: application/json`, which is
-[mandatory on every write](../reference/conventions.md#content-type-is-mandatory). For the
-per-key tables - types, ranges, defaults - see [App & notification payload](../reference/payload.md).
+Every example on this page sends `Content-Type: application/json`. Without it, `curl -d` marks
+the body as a form, and AWTRIX refuses a `PUT` with that
+([Content-Type](../reference/conventions.md#content-type-is-mandatory)).
 
----
+## How it behaves {#the-canvas}
 
-## The canvas
+Four keys draw: `progress`, `barChart`, `lineChart` and `draw`. They go into the same JSON as the
+text of the app.
 
-Every coordinate on this page refers to the same grid:
+- **AWTRIX places the charts and the progress bar.** The charts grow up from the bottom row, to
+  the right of the icon. The progress bar is the bottom row.
+- **You place each drawing command.** `x` counts the columns from the left and `y` the rows from
+  the top, both from `0`. The icon does not move them.
+<!-- only esp32 esp32-s3 -->
+- **The examples are made for a display of 32 × 8.** Its last column is `31`, its last row `7`.
+  A wider display has more columns: [Panel and orientation](../reference/system.md#panel-and-orientation).
+<!-- /only -->
+<!-- only tc002 -->
+- **A pushed app or a notification is drawn at double size, on a grid of 26 × 8.** Its last
+  column is `25` and its last row `7`: `["pixel",25,7]` lights the bottom-right corner. A larger
+  position lies outside the grid and shows nothing. With the setting
+  [`enlargeApps`](../reference/settings.md#global-text) off, it uses all 52 × 16 pixels.
+<!-- /only -->
+- **Drawn text stands still.** In a `text` command, `y` is the top row of the letters in the
+  default font. What does not fit is cut off.
+- **Charts and drawings lie over the text**, unless `textInFront` is on.
 
-- **x** runs `0` … *panel width* − 1 left to right (`31` on the default 32-wide panel; wider on
-  multi-panel setups, see [Panel and orientation](../reference/system.md#panel-and-orientation)),
-  **y** runs `0` … `7` top to bottom. `(0,0)` is top-left.
-- Off-canvas pixels are dropped, never wrapped to the other side. You can safely draw a circle that
-  hangs off the edge.
-- Colors accept `"#RRGGBB"`, `"RRGGBB"`, `"RGB"` shorthand, `[r,g,b]`, `["HSV",h,s,v]`, or a packed
-  integer - everywhere, with no exceptions. See [Colors](../reference/payload.md#colors).
-
-An `icon` takes the leftmost 9 pixels and pushes the charts across - see
-[Combining with an icon](#combining-with-an-icon).
-
----
+[How the display works](display.md) explains the grid, the icon area and the layers with pictures.
 
 ## Draw a progress bar
 
-`progress` is a percentage. It paints the **bottom row only**.
+`progress` is a percentage. The bar fills the bottom row from the left.
 
+<!-- panel -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/build \
   -H 'Content-Type: application/json' \
   -d '{"text":"BUILD","progress":30,"progressColor":"#00FF00","progressTrackColor":"#FFFFFF"}'
 ```
 
-**What you see:** `BUILD` across the panel, and on row 7 a green segment covering the leftmost ~9
-pixels with white filling the rest of the row all the way to x=31.
-
-- `progressColor` paints the filled part of the row, `progressTrackColor` the remainder. The track
-  is drawn, not left transparent - if you want the bar to disappear into the background, set
-  `progressTrackColor` to your background color.
-- `progress: 0` is **not** "no bar" - it draws a full row of `progressTrackColor`. Use `-1` (or omit
-  the key) to turn the bar off. Anything above 100 clamps to 100.
-
-Defaults and ranges: [Progress bar](../reference/payload.md#progress-bar).
-
----
+- `progressColor` is the filled part, `progressTrackColor` the rest of the row. The rest is always
+  drawn. To hide it, give it the color of your background.
+- To show no bar, send `-1` or leave the key out. `0` draws the whole row in `progressTrackColor`.
 
 ## Draw a bar chart
 
-`barChart` takes an array of integers, one per bar, up to 16 of them.
+`barChart` takes a list of whole numbers, one bar each, up to 16. The bars share the width, with
+a gap of 1 pixel between them.
 
+<!-- panel -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/traffic \
   -H 'Content-Type: application/json' \
   -d '{"barChart":[2,5,3,8,6,4,7,1],"chartColor":"#00FF00"}'
 ```
 
-**What you see:** eight green columns filling the whole panel width, evenly spaced with a gap
-between them, all growing up from the bottom row. The tallest (`8`) reaches the top of the panel;
-the shortest (`1`) is a single pixel on the bottom row. The rest are proportional in between.
+`chartColor` colors the bars. Without it, they take the text color. Between the bars, the
+background shows through.
 
-**Sizing.** The bars split the available width evenly between them, separated by a 1px gap, so more
-bars means narrower bars. Add an icon and they share the narrower space left beside it.
+**The scale.** `chartAutoscale` decides which value reaches the top row:
 
-**Scaling.** `chartAutoscale` (default `true`) decides what "full height" means:
+=== "Autoscale (default)"
 
-- **`true`** - the largest value in your data becomes full height. `[2,5,3,8]` and `[20,50,30,80]`
-  render **identically**. Good for showing shape; bad for comparing two updates against each other.
-- **`false`** - the max is fixed at **8**. A value of 8 fills the panel, and anything larger is
-  clamped flat to the top. Use this when the absolute number matters.
+    <!-- panel -->
+    ```bash
+    curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/traffic \
+      -H 'Content-Type: application/json' \
+      -d '{"barChart":[1,3,2,4],"chartColor":"#00FF00"}'
+    ```
 
-```bash
-# Same data, absolute scale - values are read against a fixed max of 8
-curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/traffic \
-  -H 'Content-Type: application/json' \
-  -d '{"barChart":[2,5,3,8,6,4,7,1],"chartAutoscale":false,"chartColor":"#00FF00"}'
-```
+    The largest value reaches the top, so `[1,3,2,4]` and `[10,30,20,40]` look the same. Good for
+    a trend.
 
-**Color.** `chartColor` sets the bars - and the line, if the page also has one. Omit it and both use
-the resolved text color (your `textColor` key, or the global `textColor` setting). Cells that are
-not part of a bar are not painted at all; they keep whatever the background or effect put there.
+=== "Fixed scale"
 
-Negative values are allowed. Under the default autoscale they still draw a visible bar below the
-zero line; with `chartAutoscale: false` anything at or below zero draws nothing at all. A 17th
-entry and beyond are dropped.
+    <!-- panel -->
+    ```bash
+    curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/traffic \
+      -H 'Content-Type: application/json' \
+      -d '{"barChart":[1,3,2,4],"chartAutoscale":false,"chartColor":"#00FF00"}'
+    ```
 
-Full table: [Charts](../reference/payload.md#charts).
-
----
+    With `"chartAutoscale":false`, `8` always reaches the top, so `4` fills half the height.
+    Larger values are cut off at the top. Use it when the number itself matters.
 
 ## Draw a line chart
 
-`lineChart` takes an array of integers and plots a polyline across the panel. It needs at least
-**2 points** - a 1-element array draws nothing.
+`lineChart` takes a list of whole numbers and draws a line through them, from the left edge to the
+right edge. It needs at least 2 values.
 
+<!-- panel -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/temp \
   -H 'Content-Type: application/json' \
   -d '{"lineChart":[3,4,6,5,7,8,6,4],"chartColor":"#FF8800"}'
 ```
 
-**What you see:** an orange zig-zag stretching the full width - the first point sits at x=0, the
-last at x=31, with the six others spaced evenly between, and the segments drawn as 1px lines
-connecting them.
+It takes the same `chartAutoscale` and `chartColor` as the bar chart, and up to 16 values too.
+Send both charts, and the line lies over the bars, in the same color:
 
-It shares the 16-entry cap, `chartAutoscale` and `chartColor` with `barChart`. Send both in one
-payload and both are drawn, in that one shared color:
-
+<!-- panel -->
 ```bash
-# Bars behind, line on top, in one page
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/combo \
   -H 'Content-Type: application/json' \
   -d '{"barChart":[2,5,3,8,6,4,7,1],"lineChart":[2,5,3,8,6,4,7,1],"chartColor":"#00FF00"}'
 ```
 
-**What you see:** eight green columns with a line of the same green tracing across their tops.
-
-Full table: [Charts](../reference/payload.md#charts).
-
----
-
 ## Draw commands
 
-`draw` is an array of commands. Each command is itself an array, with the **command name first**:
+`draw` is a list of commands. Each command is itself a list, with the **command name first** and
+its values after it. All nine commands and their values, in one table:
+[Draw commands](../reference/payload.md#draw-commands).
 
+<!-- only esp32 esp32-s3 -->
+<!-- panel style=diagram -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/art \
   -H 'Content-Type: application/json' \
   -d '{"draw":[
-        ["rect",0,0,32,8,"#202020"],
+        ["rect",0,0,32,8,"#444"],
         ["circleFill",4,4,2,"#F00"],
         ["text",9,1,"HI"]
       ]}'
 ```
+<!-- /only -->
+<!-- only tc002 -->
+<!-- panel -->
+```bash
+curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/art \
+  -H 'Content-Type: application/json' \
+  -d '{"draw":[
+        ["rect",0,0,26,8,"#444"],
+        ["circleFill",4,4,2,"#F00"],
+        ["text",9,1,"HI"]
+      ]}'
+```
+<!-- /only -->
 
-**What you see:** a dark grey frame around the whole panel, a small red disc near the left edge, and
-`HI` in your app's text color beside it - the label takes that color because the command leaves its
-color out.
+The frame is dark gray and the dot red. `HI` takes the text color of the app, because its command
+has no color of its own. It stands still, with the top of its letters on row 1.
 
-Two rules cover the whole list:
+- **Commands are drawn in list order.** Where two overlap, the later one is on top.
+- **The color at the end is optional.** Without it, a command uses the text color of the app.
+  `pixels` takes its color first, and `bitmap` has no color of its own.
+- **A wrong command stops the whole request.** The answer is `422 validationFailed`, and
+  `"field":"draw[2]"` points at the third command. Nothing is changed.
 
-- **Array order is draw order.** The last command wins wherever two overlap.
-- **A malformed command is rejected.** A misspelled name, a wrong argument count, a coordinate that
-  is not a number - each gives `422 validationFailed` with `"field":"draw[<index>]"`, and nothing at
-  all is stored.
-
-The trailing `color` is optional everywhere: leave it off and the command uses your app's text
-color. `pixels` takes its color **first** instead, where `null` means the same thing.
-
-There are nine commands, each with an example below: [`pixel`](#draw-a-pixel),
-[`pixels`](#draw-many-pixels), [`line`](#draw-a-line), [`rect` and `rectFill`](#draw-a-rectangle),
-[`circle` and `circleFill`](#draw-a-circle), [`text`](#draw-text) and [`bitmap`](#draw-a-bitmap).
-Argument order for each: [Draw commands](../reference/payload.md#draw-commands).
+The commands: [`pixel`](#draw-a-pixel), [`pixels`](#draw-many-pixels), [`line`](#draw-a-line),
+[`rect` and `rectFill`](#draw-a-rectangle), [`circle` and `circleFill`](#draw-a-circle),
+[`text`](#draw-text) and [`bitmap`](#draw-a-bitmap).
 
 ### Draw a pixel
 
+`pixel` lights one pixel at `x, y`. Four of them mark the corners, a quick check of your positions:
+
+<!-- only esp32 esp32-s3 -->
+<!-- panel style=diagram -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/corners \
   -H 'Content-Type: application/json' \
@@ -181,31 +188,44 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/corners \
         ["pixel",31,7,"#FF0"]
       ]}'
 ```
-
-**What you see:** four single lit LEDs, one in each corner of an otherwise black panel - red
-top-left, green top-right, blue bottom-left, yellow bottom-right. This is the fastest way to
-confirm your coordinate system and your panel wiring are right.
+<!-- /only -->
+<!-- only tc002 -->
+<!-- panel -->
+```bash
+curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/corners \
+  -H 'Content-Type: application/json' \
+  -d '{"draw":[
+        ["pixel",0,0,"#F00"],
+        ["pixel",25,0,"#0F0"],
+        ["pixel",0,7,"#00F"],
+        ["pixel",25,7,"#FF0"]
+      ]}'
+```
+<!-- /only -->
 
 ### Draw many pixels
 
-`pixels` names one color and then lists coordinates in `x, y` pairs. Use it whenever a drawing is a
-scattering of points in the same color - it is far shorter than one `pixel` command each.
+`pixels` takes one color and then a list of `x, y` pairs. For many points in one color, it is much
+shorter than one `pixel` command per point.
 
+<!-- only esp32 esp32-s3 -->
+<!-- panel style=diagram -->
+<!-- /only -->
+<!-- only tc002 -->
+<!-- panel -->
+<!-- /only -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/stars \
   -H 'Content-Type: application/json' \
-  -d '{"draw":[["pixels","#FFF",2,1,7,0,13,3,19,1,25,2,29,5]]}'
+  -d '{"draw":[["pixels","#FFF",2,1,6,0,11,3,15,1,20,2,24,5]]}'
 ```
-
-**What you see:** six white points scattered across the upper half of the panel, like a small
-starfield.
-
-A trailing coordinate with no partner is an error - `["pixels","#FFF",0,0,1]` is rejected.
 
 ### Draw a line
 
-Both endpoints are included.
+`line` takes the two end points, and both are drawn.
 
+<!-- only esp32 esp32-s3 -->
+<!-- panel style=diagram -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/cross \
   -H 'Content-Type: application/json' \
@@ -214,82 +234,115 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/cross \
         ["line",0,7,31,0,"#0FF"]
       ]}'
 ```
-
-**What you see:** a magenta diagonal from the top-left corner down to the bottom-right, crossed by
-a cyan diagonal running the other way - a large X filling the panel, the two lines overlapping near
-the middle where the cyan (drawn second) wins.
+<!-- /only -->
+<!-- only tc002 -->
+<!-- panel -->
+```bash
+curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/cross \
+  -H 'Content-Type: application/json' \
+  -d '{"draw":[
+        ["line",0,0,25,7,"#F0F"],
+        ["line",0,7,25,0,"#0FF"]
+      ]}'
+```
+<!-- /only -->
 
 ### Draw a rectangle
 
-`rect` is a 1px outline, `rectFill` is solid. `w` and `h` are a **size, not a second coordinate**:
-a rect at `x=0` with `w=32` spans x=0 … x=31.
+`rect` draws a 1-pixel outline, `rectFill` a filled rectangle. The values are `x, y, width, height`.
+Width and height are a **size, not a second corner**.
 
+<!-- only esp32 esp32-s3 -->
+<!-- panel style=diagram -->
+<!-- /only -->
+<!-- only tc002 -->
+<!-- panel -->
+<!-- /only -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/box \
   -H 'Content-Type: application/json' \
   -d '{"draw":[
-        ["rectFill",0,0,32,8,"#000040"],
         ["rect",2,1,12,6,"#FFF"],
-        ["rectFill",18,2,10,4,"#F00"]
+        ["rectFill",16,2,8,4,"#F00"]
       ]}'
 ```
 
-**What you see:** the whole panel washed dark blue; a hollow white rectangle on the left (12 wide,
-6 tall, with the dark blue showing through its middle); and a solid red block on the right.
-
-A `w` or `h` of zero or less draws nothing, and is not an error.
+The white outline covers the columns 2 to 13 and the rows 1 to 6.
 
 ### Draw a circle
 
-`cx`/`cy` are the **center**, not a bounding-box corner, and `r` is the radius.
+The values are `x, y, radius`. `x` and `y` are the **center**.
 
+<!-- only esp32 esp32-s3 -->
+<!-- panel style=diagram -->
+<!-- /only -->
+<!-- only tc002 -->
+<!-- panel -->
+<!-- /only -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/rings \
   -H 'Content-Type: application/json' \
   -d '{"draw":[
         ["circle",8,4,3,"#0F0"],
-        ["circleFill",24,4,3,"#F00"]
+        ["circleFill",18,4,3,"#F00"]
       ]}'
 ```
 
-**What you see:** a hollow green ring roughly 7px across on the left half, and a solid red disc the
-same size on the right half, both vertically centred.
-
-- `r = 0` draws the single center pixel.
-- A negative radius draws nothing.
-- At these sizes a filled circle looks chunky - a radius-2 disc is a 5px-wide plus-shape with
-  corners.
+A radius of `3` makes a circle 7 pixels wide.
 
 ### Draw text
 
+`text` writes one line at `x, y`. It stands still: what does not fit is cut off at the edge.
+
+<!-- only esp32 esp32-s3 -->
+<!-- panel style=diagram mark=row:1 -->
+<!-- /only -->
+<!-- only tc002 -->
+<!-- panel -->
+<!-- /only -->
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/label \
   -H 'Content-Type: application/json' \
-  -d '{"draw":[
-        ["rectFill",0,0,32,8,"#101010"],
-        ["text",1,1,"12:30","#FA0"]
-      ]}'
+  -d '{"draw":[["text",1,1,"12:30","#FA0"]]}'
 ```
 
-**What you see:** a dim grey panel with amber `12:30` sitting near the top-left.
+In the default font `small`, `y` is the top row of the letters: `y = 1` puts the capitals on rows 1
+to 5, the rows the app's own text uses.
 
-A drawn label's `y` is the glyph **top**, not the baseline: the baseline lands at `y + 5`, so `y: 1`
-puts the glyph roughly at rows 1–6. The main `text` key uses the other convention, with its baseline
-fixed at row 6.
+A `text` command has no font of its own. It uses the font of the app: set `font` next to `draw`,
+and every `text` command in the list uses it.
 
-A drawn label is also **raw**. Unlike the main `text` key it is not affected by `textCase`,
-`palette`, `textBlinkMs`, `textFadeMs`, `textCenter`, or the global `uppercase`
-setting. It is UTF-8 like every other text field. For styled, scrolling, centred
-text use `text` instead - see [Text & colors](text.md).
+<!-- panel -->
+```bash
+curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/label \
+  -H 'Content-Type: application/json' \
+  -d '{"font":"matrix-light6","draw":[["text",1,1,"12:30","#FA0"]]}'
+```
+
+In every font, `y = 1` puts the letters on the rows of the app's own text. A taller font such as
+`large` then fills rows 0 to 6. All fonts: [The fonts](text.md#the-fonts).
+<!-- only tc002 -->
+To show **two fonts at once**, for example a large clock next to a small label, use a
+[layout](layouts.md): each box there has its own `font`.
+<!-- /only -->
+
+For text that moves, is styled or is centered for you, use the `text` key: see
+[Text & colors](text.md).
 
 ### Draw a bitmap
 
-A row-major blit of `w × h` pixels starting at `(x, y)`. The data is either an array of colors - in
-any of the usual [color forms](../reference/payload.md#colors) - or a base64 string of raw RGB888
-bytes.
+A bitmap is a small image, given pixel by pixel. The values are `x, y, width, height` and then the
+pixels, row by row from the top-left. Give the pixels as a list of colors, or as a base64 text of
+raw RGB bytes, 3 bytes per pixel.
 
+<!-- only esp32 esp32-s3 -->
+<!-- panel style=diagram -->
+<!-- /only -->
+<!-- only tc002 -->
+<!-- panel -->
+<!-- /only -->
 ```bash
-# A 4x2 checkerboard of red and green at the top-left
+# A 4x2 red-and-green checkerboard in the top-left corner
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/bmp \
   -H 'Content-Type: application/json' \
   -d '{"draw":[["bitmap",0,0,4,2,[
@@ -298,118 +351,106 @@ curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/bmp \
       ]]]}'
 ```
 
-**What you see:** a small 4×2 patch in the top-left corner alternating red and green, with the
-second row offset from the first.
+For a large image, base64 is much shorter. See [Keep the request small](#keeping-payloads-small).
 
-A **short** array is not an error - the blit just stops, leaving the remaining cells untouched.
-Extra entries beyond `w × h` are ignored. For anything approaching a full panel, send base64
-instead; see [Keeping payloads small](#keeping-payloads-small).
+## Show a chart next to an icon {#combining-with-an-icon}
 
----
+With an `icon`, the charts and the progress bar move to the right of it. The icon takes its own
+width and a gap of 1 pixel: 9 columns for an 8-pixel icon.
 
-## Keeping payloads small
-
-A request body is capped at 8 KB - see [Limits](../reference/limits.md#requests). Four habits keep a
-busy drawing well inside it.
-
-**Short hex.** `#F00` is the same red as `#FF0000` and four characters shorter. Every digit is
-doubled, so `#1A2` means `#11AA22`.
-
-**Leave the color out.** A command without a trailing color uses your app's text color. If most of a
-drawing is one color, set `textColor` once and drop it everywhere else.
-
-**Group your points.** Drawing many single pixels one command at a time is the most expensive thing
-you can do. `["pixels","#0F0",0,0,1,1,2,2]` names the color once and then lists coordinates in
-pairs - a hundred points fit in about a quarter of the space.
-
-**Send bitmaps as base64.** For a full-panel image, the base64 form of `["bitmap", …]` is
-dramatically smaller than listing every pixel as its own color.
-
----
-
-## Layering
-
-Within one page, decorations are always painted in this order: **`draw` commands → `progress` →
-`barChart` → `lineChart`**. So a line chart paints over a bar chart, and both paint over your draw
-commands. The icon goes on next, and an `overlay` (`rain`, `snow`, …) on top of everything.
-
-`textInFront` flips one thing - whether the **text** goes under or over that decoration group:
-
-| `textInFront` | Order |
-|---|---|
-| `false` (default) | text first, decorations painted **over** it |
-| `true` | decorations first, text painted **on top** |
-
-It changes z-order only; the text baseline is row 6 either way.
-
+<!-- only esp32 esp32-s3 -->
+<!-- panel style=diagram cols=9-W -->
+<!-- /only -->
+<!-- only tc002 -->
+<!-- panel -->
+<!-- /only -->
 ```bash
-# Text on top of a bar chart instead of behind it
+curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/weather \
+  -H 'Content-Type: application/json' \
+  -d '{"icon":"sun","lineChart":[3,4,6,5,7,8,6,4],"chartColor":"#FF8800"}'
+```
+
+- `barChart` and `lineChart` start after the gap, at `x = 9`.
+- `progress` starts right at the edge of the icon, at `x = 8`.
+- `draw` commands ignore the icon. Their positions count from the left edge of the display, and
+  the icon is drawn over them.
+
+`sun` is an icon from the [AWTRIX Hub](icons.md#install-from-the-awtrix-hub).
+
+## Put the text in front of a chart {#layering}
+
+The text lies under charts and drawings. `textInFront: true` puts it on top:
+
+<!-- panel -->
+```bash
 curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/cpu \
   -H 'Content-Type: application/json' \
   -d '{"text":"CPU","textInFront":true,"barChart":[2,5,3,8,6,4,7,1],"chartColor":"#040"}'
 ```
 
-**What you see:** dark green bars filling the panel with white `CPU` legible on top of them. Drop
-`textInFront` and the bars paint over the letters instead.
+Without `textInFront`, the bars cover the letters. It changes only what is on top: the text stays
+where it is.
 
-Underneath all of that sits the background: the `effect` animation if one resolves, otherwise
-`backgroundColor` or black. An effect owns the whole canvas, so `backgroundColor` is ignored while
-one is active - see [Effects & overlays](effects.md).
+The other layers keep their order: the `draw` commands first, then `progress`, `barChart` and
+`lineChart`, then the icon. An `overlay` such as `rain` is drawn over everything. Below everything
+is the background: the `effect` if there is one, else `backgroundColor`, else black. See
+[Effects & overlays](effects.md).
 
-Full order: [Render order](../reference/payload.md#render-order).
+## Keep the request small {#keeping-payloads-small}
 
----
+<!-- only esp32 esp32-s3 -->
+A request can be at most 8192 bytes. Over MQTT, the topic counts too. See
+[Limits](../reference/limits.md#requests).
+<!-- /only -->
+<!-- only tc002 -->
+A request can be at most 2 MiB over HTTP, and 8192 bytes over MQTT with the topic included. See
+[Limits](../reference/limits.md#requests).
+<!-- /only -->
+Four tips keep a detailed drawing below that:
 
-## Combining with an icon
+1. **Use short colors.** `#F00` is the same as `#FF0000`. Each digit is doubled, so `#1A2` means
+   `#11AA22`.
+2. **Leave the color out.** A command without a color uses the text color. If most of your drawing
+   has one color, set `textColor` once and leave the color out everywhere else.
+3. **Group your points.** One `pixel` command per point takes the most space.
+   `["pixels","#0F0",0,0,1,1,2,2]` names the color once, so a hundred points need about a quarter
+   of the space.
+4. **Send bitmaps as base64.** For a full-display image, base64 is much shorter than a list of
+   colors.
 
-An `icon` reserves its own width plus `iconGap` on the left - 9px for an 8px icon with the default 1px gap. `barChart` and `lineChart` respect
-it and start at `x = 9`; `progress` starts at `x = 8`; draw commands ignore it completely and use
-raw coordinates, so they will paint over the icon.
+## Good to know {#when-nothing-appears}
 
-```bash
-curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/weather \
-  -H 'Content-Type: application/json' \
-  -d '{"icon":"11201","lineChart":[3,4,6,5,7,8,6,4],"chartColor":"#FF8800"}'
-```
+- **The answer is `200 {"ok":true}`, but nothing shows.** Every key was accepted, so check the
+  position and the size: the shape lies outside the
+  <!-- only esp32 esp32-s3 -->display<!-- /only --><!-- only tc002 -->grid of 26 × 8<!-- /only -->,
+  or a width, height or radius is 0 or less.
+- **A rectangle takes a size, not a second corner.** For the columns 2 to 13, the width is `12`.
+- **A line chart needs 2 values.** A single value draws nothing.
+- **The chart starts at the left edge, although you sent an `icon`.** The icon is missing on the
+  clock or cannot be read, so the app is laid out without it. Check its ID, see [Icons](icons.md).
+- **Drawn text has no style.** `textCase`, `palette`, `textBlinkMs`, `textFadeMs`, `textAlign` and
+  the setting `uppercase` do not change it. Use the `text` key for styled text.
 
-**What you see:** the icon occupying the leftmost 8 pixels, then a 1px gap, then the orange line
-chart plotted across the remaining 23 pixels.
+## Details
 
-If the icon file is missing or fails to decode, charts, text and the scroll model all fall back to
-the icon-less layout at `x = 0` rather than leaving a blank column behind. You still get no icon, so
-verify the ID.
-
-Only JPEG and GIF are supported for icons. See [Icons & assets](icons.md).
-
----
-
-## When nothing appears
-
-A request either applies whole or is rejected whole. If you got `200 {"ok":true}`, every key in the
-body was accepted, and a missing drawing is down to its geometry rather than a typo.
-
-| Symptom | Likely cause |
-|---|---|
-| `415 unsupportedMediaType` | Missing `Content-Type: application/json` - `curl -d` sends a form body |
-| `413 payloadTooLarge` | Body over the size limit - see [Keeping payloads small](#keeping-payloads-small) |
-| `422` with `"field":"draw[2]"` | The third draw command: unknown name, wrong argument count, or a coordinate that is not a number |
-| `422` with `"field"` naming a key | A misspelled key name, or a color AWTRIX could not read |
-| Line chart missing | Fewer than 2 points in `lineChart` |
-| Rectangle missing | `w` or `h` is 0 or negative, or you passed a second coordinate instead of a size |
-| Bars all look the same height across updates | `chartAutoscale` is `true` - set it to `false` for an absolute scale |
-| Chart shifted 9px right | An `icon` is present and reserving its column |
-| Drawing invisible over a busy background | An `overlay` (`rain`, `snow`, …) is painting over it - check [Layering](#layering) |
-| Only the 17th and later bars missing | The 16-entry cap on `barChart`/`lineChart` |
-
-Full list of codes: [Errors](../reference/errors.md).
-
----
+- [Charts](../reference/payload.md#charts): every chart key, the scale and negative values
+- [Progress bar](../reference/payload.md#progress-bar): its keys and defaults
+- [Draw commands](../reference/payload.md#draw-commands): all nine commands with their values
+- [Render order](../reference/payload.md#render-order): every layer of an app, from the background
+  to the overlay
+- [Colors](../reference/payload.md#colors): the five color forms, for example `"#F00"` or
+  `[255,0,0]`
+- [Limits](../reference/limits.md#requests): the size of a request
+- [Errors](../reference/errors.md): every error code
 
 ## Related
 
-- [App & notification payload](../reference/payload.md) - every key, type, range and default
-- [Visual reference](../reference/visuals.md) - colors, palettes, the matrix layout
-- [Text & colors](text.md) - the `text` key, styling and scrolling
-- [Effects & overlays](effects.md) - animated backgrounds and weather overlays
-- [Pushed apps](pushed-apps.md) - lifecycle, expiry, rotation
-- [Scripting](scripting.md) - the same marks drawn from your own logic, on AWTRIX itself
+- [App & notification payload](../reference/payload.md): every key, type, range and default
+- [Visual reference](../reference/visuals.md): colors, palettes and the display layout
+- [Text & colors](text.md): the `text` key, styling and scrolling
+- [Effects & overlays](effects.md): animated backgrounds and weather effects
+<!-- only tc002 -->
+- [Layouts](layouts.md): split the display into boxes with their own text, icon or chart
+<!-- /only -->
+- [Pushed apps](pushed-apps.md): sending, expiry and the rotation
+- [Scripting guide](scripting/index.md): draw the same things from your own program on the clock

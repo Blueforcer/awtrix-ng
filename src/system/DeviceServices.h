@@ -17,22 +17,6 @@
 
 namespace awtrix {
 
-using Publisher = std::function<void(const std::string& suffix, const std::string& payload)>;
-
-
-class DeviceDisplay : public IDisplayService {
- public:
-  void setPublisher(Publisher pub) { pub_ = std::move(pub); }
-  void setScreen(Canvas* screen) { screen_ = screen; }
-  void sendScreen() override {
-    if (pub_ && screen_) pub_("state/screen", buildScreenJson(*screen_));
-  }
-
- private:
-  Publisher pub_;
-  Canvas* screen_ = nullptr;
-};
-
 class DeviceSystem : public ISystemService {
  public:
   enum class Pending { None, Reboot, Sleep, FactoryReset, ResetSettings };

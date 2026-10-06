@@ -8,39 +8,28 @@
 
 namespace awtrix {
 
-inline Command scriptSoundCommand(script::SoundAction action, const std::string& payload) {
+// script is the one asking: its own sounds are found first, and it only ever stops what it started.
+inline Command scriptSoundCommand(script::SoundAction action, const std::string& json,
+                                  const std::string& script) {
   Command c;
   c.source = Source::Internal;
+  c.name = script;
   switch (action) {
     case script::SoundAction::Play:
+    case script::SoundAction::Effect:
       c.type = CommandType::PlayAudio;
-      c.arg = static_cast<int>(sound::Source::Auto);
-      c.payload = payload;
+      c.arg = static_cast<int>(action == script::SoundAction::Effect ? sound::PlayAs::Effect
+                                                                     : sound::PlayAs::Once);
+      c.payload = json;
       break;
-    case script::SoundAction::Mp3:
-      c.type = CommandType::PlayAudio;
-      c.arg = static_cast<int>(sound::Source::Mp3);
-      c.payload = payload;
-      break;
-    case script::SoundAction::Melody:
-      c.type = CommandType::PlayAudio;
-      c.arg = static_cast<int>(sound::Source::Melody);
-      c.payload = payload;
-      break;
-    case script::SoundAction::Track:
-      c.type = CommandType::PlayAudio;
-      c.arg = static_cast<int>(sound::Source::Track);
-      c.payload = payload;
-      break;
-    case script::SoundAction::Rtttl:
-      c.type = CommandType::PlayAudio;
-      c.arg = static_cast<int>(sound::Source::Rtttl);
-      c.payload = payload;
-      break;
-    // sound.stop() must not kill the user's radio.
     case script::SoundAction::Stop:
+    case script::SoundAction::Release:
       c.type = CommandType::StopAudio;
-      c.arg = static_cast<int>(sound::StopScope::Sounds);
+      c.arg = static_cast<int>(sound::Stop::ScriptSounds);
+      break;
+    case script::SoundAction::StopMusic:
+      c.type = CommandType::StopAudio;
+      c.arg = static_cast<int>(sound::Stop::ScriptMusic);
       break;
   }
   return c;

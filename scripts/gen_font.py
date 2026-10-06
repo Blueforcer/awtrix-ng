@@ -29,8 +29,8 @@ FONT_DIR = os.path.join(ROOT, "assets", "fonts")
 OUT_HEADER = os.path.join(ROOT, "src", "media", "AwtrixFont.h")
 
 FONTS = [
-    ("Small", "awtrix.bdf", "MatrixChunky6.bdf", 5),
-    ("Large", "MatrixChunky8.bdf", None, 6),
+    ("Small", "awtrix.bdf", "MatrixChunky6.bdf", 5, "awtrix-ng/small.bdf"),
+    ("Large", "MatrixChunky8.bdf", None, 6, "awtrix-ng/large.bdf"),
 ]
 
 DENSE_FIRST, DENSE_LAST = 0x20, 0x7E
@@ -39,6 +39,12 @@ BASE_EXCLUDE = {
     "awtrix.bdf": {
         0x00A0,
         0x00B6,
+    },
+}
+
+BASE_KEEP = {
+    "awtrix.bdf": {
+        0x00B0,
     },
 }
 
@@ -51,9 +57,19 @@ MARK_ABOVE = 230
 COVERAGE = [
     ("Latin1", 0x00A0, 0x00FF),
     ("LatinExtA", 0x0100, 0x017F),
+    ("LatinExtB", 0x01A0, 0x01B0),
+    ("Ipa", 0x0250, 0x02AF),
+    ("Greek", 0x0370, 0x03FF),
     ("Cyrillic", 0x0400, 0x04FF),
-    ("Punctuation", 0x2010, 0x2027),
-    ("Currency", 0x20AC, 0x20AC),
+    ("Vietnamese", 0x1E9E, 0x1EF9),
+    ("Punctuation", 0x2002, 0x2027),
+    ("Currency", 0x20A1, 0x20C0),
+    ("Letterlike", 0x2100, 0x214F),
+    ("Enclosed", 0x2460, 0x24FF),
+    ("Geometric", 0x25A0, 0x25FF),
+    ("Cjk", 0x3000, 0x9FFF),
+    ("Hangul", 0xAC00, 0xD7A3),
+    ("Fullwidth", 0xFF00, 0xFFFF),
 ]
 
 
@@ -116,16 +132,18 @@ def parse_bdf(path):
                 bits = []
             elif line == "ENDCHAR":
                 if None not in (encoding, bbx, bits) and encoding >= 0:
-                    w, h, _xoff, yoff = bbx
+                    w, h, xoff, yoff = bbx
+                    if xoff < 0:
+                        raise SystemExit(f"{path}: U+{encoding:04X} has a negative x offset")
                     rows = []
                     for hexrow in bits:
                         value = int(hexrow, 16)
                         span = len(hexrow) * 4
-                        rows.append("".join(
+                        rows.append("." * xoff + "".join(
                             "#" if (value >> (span - 1 - x)) & 1 else "."
                             for x in range(w)))
                     glyphs[encoding] = Glyph(
-                        rows, dwidth if dwidth else w, yoff + h).trimmed()
+                        rows, w if dwidth is None else dwidth, yoff + h).trimmed()
                 encoding = bbx = dwidth = bits = None
             elif bits is not None and re.fullmatch(r"[0-9A-Fa-f]+", line):
                 bits.append(line)
@@ -177,9 +195,9 @@ def write_bdf(path, glyphs, name):
 class Packer:
     """Collects glyph bitmaps into one blob shared by every font.
 
-    Rows are at most 8 px wide, so a row is one byte and glyphs stay
-    byte-aligned, which lets identical bitmaps share storage even when the
-    glyphs around them differ.
+    A row is one byte, or two for the few glyphs wider than 8 px, so glyphs
+    stay byte-aligned, which lets identical bitmaps share storage even when
+    the glyphs around them differ.
     """
 
     def __init__(self):
@@ -188,24 +206,43 @@ class Packer:
 
     def add(self, glyph):
         rows = tuple(glyph.rows)
-        offset = self._seen.get(rows)
+        if glyph.width > 16:
+            raise SystemExit(f"a glyph is {glyph.width} px wide; rows hold at most 16")
+        if not (0 <= glyph.height <= 15 and 0 <= glyph.advance <= 15):
+            raise SystemExit("glyph height and advance must fit four bits")
+        width = 8 if glyph.width <= 8 else 16
+        offset = self._seen.get((rows, width))
         if offset is None:
             offset = len(self.blob)
-            self._seen[rows] = offset
+            self._seen[(rows, width)] = offset
             for row in rows:
                 value = 0
                 for i, ch in enumerate(row):
                     if ch == "#":
-                        value |= 0x80 >> i
-                self.blob.append(value)
-        return (offset, 8, glyph.height, glyph.advance, 0, -glyph.top)
+                        value |= (1 << (width - 1)) >> i
+                self.blob.extend(value.to_bytes(width // 8, "big"))
+        return (offset, width, glyph.height, glyph.advance, 0, -glyph.top)
+
+
+SPARSE_GAP = 8
 
 
 def narrow(glyphs, lo, hi):
-    """Shrinks a declared range to the code points the font actually carries."""
+    """Splits a declared range into the runs of code points the font carries.
+
+    A run ends where more than SPARSE_GAP code points in a row are missing, so
+    a block with a handful of scattered characters costs an index entry per
+    character it has, not one per code point of the block.
+    """
     have = [cp for cp in range(lo, hi + 1)
             if cp in glyphs or (cp in ALIASES and ALIASES[cp] in glyphs)]
-    return (have[0], have[-1]) if have else None
+    runs = []
+    for cp in have:
+        if runs and cp - runs[-1][1] <= SPARSE_GAP:
+            runs[-1][1] = cp
+        else:
+            runs.append([cp, cp])
+    return [tuple(r) for r in runs]
 
 
 def build_font(glyphs, packer):
@@ -223,29 +260,27 @@ def build_font(glyphs, packer):
         slot_of.setdefault(g.key(), i)
 
     indices, shared = [], 0
-    for name, lo, hi in COVERAGE:
-        span = narrow(glyphs, lo, hi)
-        if span is None:
-            continue
-        first, last = span
-        entries = []
-        for cp in range(first, last + 1):
-            g = glyphs.get(cp)
-            if g is None and cp in ALIASES:
-                g = glyphs.get(ALIASES[cp])
-            if g is None:
-                entries.append(0)
-                continue
-            key = g.key()
-            slot = slot_of.get(key)
-            if slot is None:
-                slot = len(order)
-                slot_of[key] = slot
-                order.append(g)
-            else:
-                shared += 1
-            entries.append(slot + 1)
-        indices.append((name, first, last, entries))
+    for block, lo, hi in COVERAGE:
+        for run, (first, last) in enumerate(narrow(glyphs, lo, hi)):
+            entries = []
+            for cp in range(first, last + 1):
+                g = glyphs.get(cp)
+                if g is None and cp in ALIASES:
+                    g = glyphs.get(ALIASES[cp])
+                if g is None:
+                    entries.append(0)
+                    continue
+                key = g.key()
+                slot = slot_of.get(key)
+                if slot is None:
+                    slot = len(order)
+                    slot_of[key] = slot
+                    order.append(g)
+                else:
+                    shared += 1
+                entries.append(slot + 1)
+            name = block if run == 0 else f"{block}{run + 1}"
+            indices.append((name, first, last, entries))
 
     table = [packer.add(g) for g in order]
     return table, indices, shared
@@ -270,9 +305,11 @@ def emit(blob, fonts):
         lines.append(f"//   assets/fonts/{filename}  --  {copyright_of(filename)}")
     lines += [
         "//",
-        "// The Matrix-Fonts are Copyright (c) 2026 Trip5 and MIT licensed. The full",
-        "// notice is in assets/fonts/MatrixFonts.LICENSE and has to ship with any copy",
-        "// of this data, this header included.",
+        "// SPDX-License-Identifier: OFL-1.1",
+        "// Combined font data: SIL Open Font License 1.1; application and generator licenses unchanged.",
+        "// Copyright (c) 2026 Trip5; AWTRIX NG font contributions: Stephan Muehl (Blueforcer).",
+        "// Includes BoutiqueBitmap7x7 / MisakiGothic-derived glyphs and retained upstream notices.",
+        "// Full font license, MIT/Apache notices and reserved names: LICENSES/MIT-Matrix-Fonts.txt.",
         "",
         "#include <cstdint>",
         "",
@@ -318,7 +355,7 @@ def copyright_of(filename):
     """The COPYRIGHT line a BDF carries, so the notice travels with the glyphs.
 
     The generated header is a substantial portion of these fonts and reaches the
-    firmware image, which is what the MIT notice has to accompany. Reading it
+    firmware image, which is what the font notices have to accompany. Reading it
     from the source keeps it honest if a font is ever swapped.
     """
     with open(os.path.join(FONT_DIR, filename), encoding="latin-1") as fh:
@@ -332,7 +369,7 @@ def sources():
     """Every BDF that contributes glyphs, in the order the fonts use them."""
     out = []
     for entry in FONTS:
-        for filename in entry[1:3]:
+        for filename in entry[1:3] + entry[4:5]:
             if filename and filename not in out:
                 out.append(filename)
     return out
@@ -361,9 +398,11 @@ def base_letter(cp):
     return ord(parts[0])
 
 
-def seat_on_baseline(glyphs):
+def seat_on_baseline(glyphs, placed=()):
     moved = 0
     for cp in sorted(glyphs):
+        if cp in placed:
+            continue
         letter = base_letter(cp)
         if letter is None:
             continue
@@ -381,7 +420,7 @@ def seat_on_baseline(glyphs):
 def generate():
     packer = Packer()
     fonts, stats = [], []
-    for name, base_file, fill_file, cap_top in FONTS:
+    for name, base_file, fill_file, cap_top, extra_file in FONTS:
         glyphs = aligned(base_file, cap_top)
         for cp in BASE_EXCLUDE.get(base_file, ()):
             glyphs.pop(cp, None)
@@ -393,11 +432,15 @@ def generate():
                     glyphs[cp] = g
                     filled += 1
                 elif (cp > DENSE_LAST and g.height > have.height
+                        and cp not in BASE_KEEP.get(base_file, ())
                         and (base_letter(cp) is None
                              or g.top - g.height == have.top - have.height)):
                     glyphs[cp] = g
                     filled += 1
-        seated = seat_on_baseline(glyphs)
+        placed = parse_bdf(os.path.join(FONT_DIR, extra_file)) if extra_file else {}
+        glyphs.update(placed)
+        filled += len(placed)
+        seated = seat_on_baseline(glyphs, placed)
         missing = [cp for cp in range(DENSE_FIRST, DENSE_LAST + 1) if cp not in glyphs]
         if missing:
             raise SystemExit(

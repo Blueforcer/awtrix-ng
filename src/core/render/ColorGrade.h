@@ -3,6 +3,8 @@
 #include <cstdint>
 
 #include "core/render/Canvas.h"
+#include "core/render/OutputTable.h"
+#include "platform_render/OutputGrade.h"
 
 namespace awtrix {
 
@@ -26,12 +28,25 @@ struct GradeParams {
   bool operator!=(const GradeParams& o) const { return !(*this == o); }
 };
 
-class ColorGrade {
+class ColorGrade : private OutputGrade {
  public:
   ColorGrade() { rebuild(); }
 
   void setParams(const GradeParams& p);
+  // Calibration changes keep the driver's current brightness.
+  void setGrade(const GradeParams& p) {
+    GradeParams next = p;
+    next.brightness = params_.brightness;
+    setParams(next);
+  }
+  void setBrightness(uint8_t brightness) {
+    if (params_.brightness == brightness) return;
+    params_.brightness = brightness;
+    rebuild();
+  }
   const GradeParams& params() const { return params_; }
+  // Platform output calibration; the table must outlive the grade.
+  void setOutput(const OutputTable* table);
   bool isIdentity() const { return identity_; }
 
   uint32_t applyPixel(uint32_t c) const;
@@ -43,8 +58,7 @@ class ColorGrade {
 
   GradeParams params_;
   uint8_t lut_[3][256];
-  // The curve stays at 16 bits until brightness has been applied; quantising it to a byte first is
-  // what loses a dim colour.
+  // 16-bit curve, quantised only when it becomes an output code.
   uint16_t gamma16_[256];
   float gammaBuilt_ = -1.0f;
   bool identity_ = true;

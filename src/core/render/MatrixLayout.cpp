@@ -23,7 +23,9 @@ int clampInt(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 bool sameLayout(const MatrixLayout& a, const MatrixLayout& b) {
   return a.panelWidth == b.panelWidth && a.panels == b.panels && a.panelStart == b.panelStart &&
          a.panelWiring == b.panelWiring && a.panelColorOrder == b.panelColorOrder &&
-         a.panelSerpentine == b.panelSerpentine;
+         a.panelSerpentine == b.panelSerpentine && a.panelChainReverse == b.panelChainReverse &&
+         a.panelChainSerpentine == b.panelChainSerpentine && a.mirror == b.mirror &&
+         a.rotate180 == b.rotate180;
 }
 
 }
@@ -60,7 +62,7 @@ MatrixLayout sanitizeMatrixLayout(MatrixLayout in, bool* changed) {
 
   // A width/panel-count pair that lands outside the supported range is unusable, so fall back to
   // the stock layout and keep only the orientation flags the user set.
-  if (out.width() < kMatrixWidthMin || out.width() > kMatrixWidthMax) {
+  if (!kEspDisplayLimits.accepts(out.width(), out.height())) {
     MatrixLayout fallback;
     fallback.mirror = out.mirror;
     fallback.rotate180 = out.rotate180;

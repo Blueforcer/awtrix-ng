@@ -3,6 +3,7 @@
 #include <LittleFS.h>
 
 #include "persistence/VfsFile.h"
+#include "persistence/DocumentFile.h"
 
 namespace awtrix::iconorigins {
 namespace {
@@ -18,15 +19,8 @@ class LittleFsOrigins : public Backend {
     return count == out.size();
   }
   bool writeAtomic(const std::string& json) override {
-    constexpr const char* temp = "/config/icon-origins.tmp";
     if (!LittleFS.exists("/config") && !LittleFS.mkdir("/config")) return false;
-    File f = LittleFS.open(temp, "w");
-    if (!f) return false;
-    const bool complete = f.write(reinterpret_cast<const uint8_t*>(json.data()), json.size()) == json.size();
-    f.flush(); f.close();
-    if (complete && LittleFS.rename(temp, kPath)) return true;
-    LittleFS.remove(temp);
-    return false;
+    return document::write(kPath, json);
   }
   bool iconExists(const std::string& name) override {
     return validName(name) && fs::isFile("/ICONS/" + name);

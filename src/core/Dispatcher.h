@@ -7,7 +7,7 @@ namespace awtrix {
 
 class Dispatcher {
  public:
-  DispatchResult dispatch(const Command& cmd, CommandContext& ctx);
+  DispatchResult dispatch(Command& cmd, CommandContext& ctx);
 };
 
 }

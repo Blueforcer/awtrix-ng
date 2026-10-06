@@ -1,23 +1,27 @@
+---
+only: [esp32, esp32-s3]
+---
+
 # Art-Net
 
-Art-Net drives every LED on the panel directly from software, in real time. Instead of sending an
-app or a notification and letting AWTRIX render it, **you** render the frame on your computer and
-ship the raw pixels over the network. AWTRIX becomes a plain 32×8 display.
+Art-Net lets software on your computer set every LED of the display directly, in real time. Instead
+of sending an app or a notification, **you** draw each frame on your computer and send the pixels
+over the network. The examples below use a 32×8 display.
 
-Use it for live visualisers, VJ software, screen mirroring, a custom animation loop in Python -
-anything where you want frame-by-frame control and the app rotation is in your way.
+Use it for music visualizers, VJ software, screen mirroring or your own animation in Python:
+anything where you want to control every frame yourself.
 
-Art-Net ships **disabled**. Turn it on with the [`artnet` flag](../reference/system.md#art-net) in
-the device config (`PUT /api/v1/system`, or the **Art-Net** toggle under *Misc* in the web UI);
-AWTRIX then listens on UDP port **6454** whenever it is on your Wi-Fi. There is no
-authentication - see [Security](#security).
+Art-Net is **off** by default. Switch it on with the **Art-Net** toggle under *Misc* in the web
+UI, or with the [`artnet` setting](../reference/system.md#art-net) on `PUT /api/v1/system`.
+AWTRIX then listens on UDP port **6454** while it is on your Wi-Fi. There is no password. See
+[Security](#security).
 
 ---
 
-## Light up the panel in 30 seconds
+## Light up the display in 30 seconds {#light-up-the-panel-in-30-seconds}
 
-Art-Net is a UDP protocol, so `curl` cannot send frames to it - `curl` speaks TCP only. First
-switch Art-Net on, then confirm you have the right address:
+`curl` cannot send Art-Net frames, so you use a small Python script for that. First switch
+Art-Net on and check that you have the right address:
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/system \
@@ -26,7 +30,7 @@ curl http://<awtrix-ip>/api/v1/device
 ```
 
 If the last call returns JSON, AWTRIX is reachable. Now paste this into `artnet.py` and run it with
-`python artnet.py` - it fills the whole panel solid red for ten seconds:
+`python artnet.py`. It fills the whole display solid red for ten seconds:
 
 ```python
 import socket, struct, time
@@ -59,44 +63,34 @@ for _ in range(300):          # ~10 s at 30 fps
     time.sleep(1 / 30)
 ```
 
-The panel turns red instantly and stays red while the script runs. Stop the script and about five
-seconds later the normal app rotation comes back on its own - you do not have to release anything.
+The display turns red instantly and stays red while the script runs. Stop the script, and about five
+seconds later the rotation comes back by itself. You do not have to release anything.
 
 ---
 
-## Keep sending
+## How it behaves {#keep-sending}
 
-Art-Net is not a mode you enter and leave. It is a five-second hold window: while your last frame
-is less than 5 seconds old the panel shows your pixels and nothing else - no apps, no
-notifications, no transitions. Five seconds after your last frame, the app rotation resumes.
-
-Two things follow from that.
-
-**Keep sending.** Even for a static image, resend at least once every 5 seconds or AWTRIX drifts
-back to its apps. Most senders just run a steady frame loop, which handles this for free.
-
-**You cannot release early.** There is no stop packet and no release command. Stop sending and wait
-out the 5 seconds, or send one last frame of the content you want and let it expire. If you need
-the panel back *now*, power the display off and on with
-[`PATCH /api/v1/display`](../reference/http.md#display).
-
-Two things beat Art-Net while it is holding: a display that is powered off, which keeps the panel
-black, and mood light. And in provisioning (AP) mode - the open `awtrixng-xxxxxx` hotspot shown
-before Wi-Fi is configured - port 6454 is not open at all. So if your frames appear to do nothing,
-check the display is on and that AWTRIX has joined your network. See
-[Finding AWTRIX](../getting-started/discovery.md).
+There is no Art-Net mode to switch on and off. While your last frame is less than 5 seconds old,
+the display shows your pixels and nothing else: no apps, no notifications, no transitions. Five
+seconds after your last frame, the apps come back, so send even a still image again at least every
+5 seconds. There is no stop command: to get the display back at once, turn the display off and on
+with [`PATCH /api/v1/display`](../reference/http.md#display). A display that is turned off stays
+black, and the mood light wins over Art-Net too. In setup mode, while the clock offers its own
+`awtrixng-xxxxxx` hotspot, AWTRIX does not listen for Art-Net at all.
 
 ---
 
 ## Universes and pixel mapping
 
 Art-Net carries 512 DMX channels per universe, and each pixel takes three of them, so one universe
-covers 170 pixels. The standard **32 × 8 = 256 pixel** panel therefore spans two universes:
+covers 170 pixels. Start at universe 0 and use `ceil(width × height / 170)`
+universes for the active geometry. Each full universe carries 510 RGB bytes.
+The standard **32 × 8 = 256 pixel** display therefore spans two universes:
 
 | Universe | Pixels | Channels used | Notes |
 |---|---|---|---|
 | `0` | 0 – 169 | 510 of 512 | Full universe |
-| `1` | 170 – 255 | 258 of 512 | Only 86 pixels - the rest is ignored |
+| `1` | 170 – 255 | 258 of 512 | Only 86 pixels. The rest is ignored |
 
 Channel order is plain **RGB**, three channels per pixel, no white channel. The first pixel is DMX
 channels 1–3, the second 4–6, and so on.
@@ -110,11 +104,11 @@ x = p % width
 y = p / width
 ```
 
-You address the logical 32×8 grid, not the raw LED strip. AWTRIX applies its wiring map and its
-colour pipeline afterwards, exactly as it does for apps, so changing your panel's wiring config
-leaves your Art-Net code working unchanged. Widening the panel (`panelWidth × panels`, see
+You address the 32×8 grid as you see it, not the LED strip inside. AWTRIX takes care of the
+wiring and applies its color settings, just as it does for apps, so a change to your display's
+wiring settings does not affect your Art-Net code. Widening the display (`panelWidth × panels`, see
 [Panel and orientation](../reference/system.md#panel-and-orientation)) adds pixels, and the mapping
-and universe count scale with it: a wider panel spans universe `2` and beyond.
+and universe count scale with it: a wider display spans universe `2` and beyond.
 
 If your controller offers separate Net / Sub-Net / Universe boxes, leave Net and Sub-Net at **0**
 and set Universe to 0 and 1.
@@ -124,13 +118,14 @@ and set Universe to 0 and 1.
 ## Using a lighting controller
 
 Any Art-Net-capable software (Resolume, QLC+, Jinx!, xLights, TouchDesigner, Madrix…) can drive the
-panel. AWTRIX answers Art-Net discovery and announces itself as **AWTRIX NG**, so it usually turns
-up in the controller's node list on its own; entering the IP by hand works just as well.
+display. AWTRIX answers Art-Net discovery as **AWTRIX NG**, so it usually appears in the
+controller's node list by itself. While Art-Net is off, AWTRIX does not answer discovery. If your
+controller still misses it, enter its IP address by hand.
 
 | Setting | Value |
 |---|---|
 | Protocol | Art-Net |
-| Node address | the IP address of your AWTRIX - or let discovery find it |
+| Node address | the IP address of your AWTRIX, or let discovery find it |
 | Port | `6454` |
 | Net / Sub-Net | `0` |
 | Universes | `0` and `1` |
@@ -138,9 +133,8 @@ up in the controller's node list on its own; entering the IP by hand works just 
 | Matrix size | 32 × 8 |
 | Pixel layout | Horizontal, left-to-right, top-to-bottom (no serpentine) |
 
-The "no serpentine" row matters and often surprises people: even though the physical strip inside a
-Ulanzi TC001 *is* wired as a zigzag, you must configure your controller for a plain progressive
-layout. AWTRIX already handles the snake.
+Mind the "no serpentine" row. The LED strip inside your display may be wired as a zigzag, but
+AWTRIX already handles that. Set your controller to a plain left-to-right layout.
 
 ---
 
@@ -149,7 +143,7 @@ layout. AWTRIX already handles the snake.
 ### An animation loop
 
 Keep the `artdmx` and `send_frame` helpers from the quickstart and swap the red loop for this
-scrolling rainbow, which keeps the override alive for as long as it runs:
+scrolling rainbow. It keeps the display for as long as it runs:
 
 ```python
 import colorsys
@@ -167,86 +161,72 @@ while True:
     time.sleep(1 / 40)
 ```
 
-### Send all 256 pixels every frame
+### Send a complete frame
 
-At the start of a session - the first frame after the hold window has lapsed - the panel is cleared
-to black, so a partial first frame never reveals a frozen fragment of whatever app was on screen.
+When your first frame arrives (after at least 5 seconds without frames), the display is cleared to
+black first, so no leftover of the previous app stays visible.
 
-Within a session, though, Art-Net only writes the pixels it receives. A pixel you set in one frame
-keeps its colour until you overwrite it, so a later partial frame leaves earlier Art-Net pixels in
-place. Send both universes and a full 256 pixels every frame unless you specifically want that
-persistence effect.
+After that, Art-Net changes only the pixels it receives. A pixel you set keeps its color until you
+set it again, so a partial frame leaves the earlier pixels in place. For the 32×8 example, send both universes and all 256 pixels every frame
+unless you want that persistence effect. For other ESP32 geometries, send the
+active `capabilities.display.width × height` pixels across the required universes.
 
 ### Frame rate
 
-Frames are drawn as they arrive, so your sender sets the pace. 30–50 fps is a sensible target.
-There is no queue and no buffering: if you send faster than the panel can draw, the extra frames
-are overwritten or dropped in transit. Faster is not smoother.
+Frames are shown as they arrive, so your program sets the pace. 30–50 fps is a good target. If you
+send faster than the display can show, the extra frames are skipped. Faster is not smoother.
 
 ---
 
 ## What Art-Net does not control
 
-Art-Net sets **pixel colour only**. Everything else stays under AWTRIX's control while your frames
-are playing:
+Art-Net sets **pixel colors only**. Everything else stays under AWTRIX's control while your frames
+play:
 
 - **Brightness** still comes from the brightness setting and, if enabled, the ambient light sensor,
   so auto-brightness can dim your frames as the room darkens. For predictable output, turn
   auto-brightness off and pin a fixed brightness. See
   [Brightness settings](../reference/settings.md#brightness).
-- **Saturation, gamma, colour correction and tint** are applied to your pixels on the way to the
-  LEDs, so what you send is not bit-for-bit what lights up. A panel left at `saturation: 0` shows
-  your frames in greys. See
+- **Saturation, gamma, color correction and tint** still apply to your pixels, so the LEDs do not
+  show exactly the values you send. A display left at `saturation: 0` shows
+  your frames in grays. See
   [Display color pipeline](../reference/visuals.md#display-color-pipeline).
-- **Wiring layout** is applied afterwards, as described above.
-- **Sound, buttons, MQTT and the HTTP API** all keep working normally during an override.
+- **Wiring layout** is handled by AWTRIX, as described above.
+- **Sound, buttons, MQTT and the HTTP API** keep working normally while you send frames.
 
 ---
 
 ## Security
 
-Art-Net ships **disabled**, so out of the box nothing is listening on UDP 6454. Once you turn the
-`artnet` flag on there is no authentication - the protocol has none - so anything on your network
-that can reach the port can take over the panel for 5 seconds at a time, and the HTTP API's Basic
-auth does not cover it.
+Art-Net is **off** by default, so nothing listens on UDP port 6454. Art-Net itself has no
+password. Once you switch it on, any device on your network can take over the display, 5 seconds at
+a time. The web UI login does not protect it.
 
-Leave the flag off unless you need it, and be deliberate about enabling it on a network you do not
-trust. To lock it back down, send `{"artnet":false}` to `PUT /api/v1/system` (or clear the
-**Art-Net** toggle in the web UI) - the listener closes at once and the panel returns to the app
-rotation.
+Leave Art-Net off unless you need it, especially on a network you do not trust. To switch it off,
+clear the **Art-Net** toggle in the web UI, or send `{"artnet":false}` to `PUT /api/v1/system`.
+AWTRIX stops listening at once and the apps come back.
 
 ---
 
-## Troubleshooting
+## Good to know {#when-it-goes-wrong}
 
-**Nothing happens at all.** First check Art-Net is enabled (`{"artnet":true}` on `PUT
-/api/v1/system`) - it ships off. Then check the
-display is powered on - that beats Art-Net. Confirm the IP with `curl
-http://<awtrix-ip>/api/v1/device`, and confirm AWTRIX is on your Wi-Fi and not sitting in its
-provisioning hotspot.
-
-**The panel flickers back to apps.** Your frame rate has gaps longer than 5 seconds, or packets are
-being lost. Send continuously.
-
-**Only the left three-quarters of the panel responds.** You are sending universe 0 only. Pixels
-170–255 live in universe 1.
-
-**Colours are wrong.** Check pixel order is RGB, not GRB or RGBW. If colours are right but dull or
-shifted, that is the colour pipeline, not Art-Net.
-
-**The image is scrambled or snaked.** Your controller is applying its own serpentine mapping on top
-of the one AWTRIX already applies. Set it to a plain progressive left-to-right layout.
-
-**My controller cannot find AWTRIX.** Make sure Art-Net is enabled (`{"artnet":true}` on `PUT
-/api/v1/system`) - with the flag off, AWTRIX neither listens nor answers discovery. With it on the
-node should appear on its own; if your controller still misses it, add the IP manually.
+- **Nothing happens at all.** Check that Art-Net is on, that the display is switched on, and that
+  AWTRIX answers `curl http://<awtrix-ip>/api/v1/device` on your Wi-Fi, not in its setup hotspot.
+- **The display flickers back to apps.** There are gaps of more than 5 seconds between your
+  frames, or frames get lost: send without pauses.
+- **Only the top five rows of the display respond.** You send universe 0 only, which ends ten
+  pixels into the sixth row: send pixels 170–255 in universe 1.
+- **Colors are wrong.** Set the pixel order to RGB, not GRB or RGBW. If colors are right but dull
+  or shifted, check the color settings (saturation, gamma, tint).
+- **The image is scrambled or zigzagged.** Your controller adds its own serpentine layout on top
+  of AWTRIX's: set it to a plain left-to-right layout.
 
 ---
 
 ## Related
 
-- [Finding AWTRIX](../getting-started/discovery.md) - get the IP or hostname
-- [Panel and orientation](../reference/system.md#panel-and-orientation) - wiring layouts
-- [Display color pipeline](../reference/visuals.md#display-color-pipeline) - gamma and correction
-- [Brightness settings](../reference/settings.md#brightness) - pin a fixed brightness
-- [HTTP API: Display](../reference/http.md#display) - power the panel on and off
+- [Find your clock](../getting-started/discovery.md): get the IP or hostname
+- [Panel and orientation](../reference/system.md#panel-and-orientation): wiring layouts
+- [Display color pipeline](../reference/visuals.md#display-color-pipeline): gamma and correction
+- [Brightness settings](../reference/settings.md#brightness): pin a fixed brightness
+- [HTTP API: Display](../reference/http.md#display): power the display on and off

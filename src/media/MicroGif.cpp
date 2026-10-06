@@ -204,7 +204,7 @@ void MicroGif::rewind() {
   restore_.resize(0);
 }
 
-bool MicroGif::exceedsFrameCount(int limit) const {
+int MicroGif::countFrames(int limit) const {
   std::size_t at = firstFramePos_;
   int count = 0;
   const auto skipBlocks = [&]() -> bool {
@@ -216,34 +216,33 @@ bool MicroGif::exceedsFrameCount(int limit) const {
     }
     return false;
   };
-  if (!data_) return false;
+  if (!data_) return 0;
   while (at < len_) {
     const int tag = data_[at++];
     if (tag == 0x21) {
-      if (at == len_) return false;
+      if (at == len_) break;
       ++at;  // Extension label; all extensions then use length-prefixed blocks.
-      if (!skipBlocks()) return false;
+      if (!skipBlocks()) break;
     } else if (tag == 0x2C) {
-      if (len_ - at < 9) return false;
+      if (len_ - at < 9) break;
       const int fw = data_[at + 4] | (data_[at + 5] << 8);
       const int fh = data_[at + 6] | (data_[at + 7] << 8);
       const int packed = data_[at + 8];
-      if (fw > maxW_ || fh > maxH_ || !pixelCountFits(fw, fh)) return false;
+      if (fw > maxW_ || fh > maxH_ || !pixelCountFits(fw, fh)) break;
       at += 9;
       if (packed & 0x80) {
         const std::size_t bytes = (1u << ((packed & 7) + 1)) * 3;
-        if (bytes > len_ - at) return false;
+        if (bytes > len_ - at) break;
         at += bytes;
       }
-      if (at == len_ || data_[at] < 1 || data_[at] > 8) return false;
+      if (at == len_ || data_[at] < 1 || data_[at] > 8) break;
       ++at;
-      if (++count > limit) return true;
-      if (!skipBlocks()) return false;
+      if (++count > limit || !skipBlocks()) break;
     } else {
-      return false;
+      break;
     }
   }
-  return false;
+  return count;
 }
 
 // Graphic Control Extension: transparency index, disposal method and the frame delay, which the

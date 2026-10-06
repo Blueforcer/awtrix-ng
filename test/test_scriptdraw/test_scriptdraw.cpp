@@ -76,15 +76,25 @@ static void drawWith(const GfxFont& font, const char* user, Canvas& c) {
   TEST_ASSERT_TRUE(load(vm, user));
   RenderCtx ctx;
   ctx.nowMs = g_ms;
+  const FontEntry entries[] = {{"small", &font, 6, 1, 8}, {"large", &kWideFont, 6, 2, 8}};
+  const FontCatalog fonts{entries, 2};
   ctx.font = &font;
-  ctx.fonts[0] = &font;
-  ctx.fonts[1] = &kWideFont;
+  ctx.fonts = &fonts;
   script::BindingScope s(&c, &ctx, "T", nullptr, &g_icon);
   TEST_ASSERT_TRUE(vm.call("draw"));
 }
 
 static void draw(const char* user, Canvas& c) { drawWith(kFont, user, c); }
 
+static void test_native_display_coordinates_are_unscaled() {
+  Canvas c(52, 16);
+  draw("def draw() pixel(width()-1,height()-1,0xAABBCC) pixel(2,3,0x112233) end", c);
+  TEST_ASSERT_EQUAL_HEX32(0xAABBCCu, c.getPixel(51, 15));
+  TEST_ASSERT_EQUAL_HEX32(0x112233u, c.getPixel(2, 3));
+  int lit = 0;
+  for (std::size_t i = 0; i < c.size(); ++i) lit += c.data()[i] != 0;
+  TEST_ASSERT_EQUAL_INT(2, lit);
+}
 
 static void test_fill_functions_use_the_shape_first_names() {
   Canvas c(32, 8);
@@ -383,6 +393,7 @@ static void test_a_long_fragment_list_is_not_truncated() {
 
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_native_display_coordinates_are_unscaled);
   RUN_TEST(test_text_takes_a_fragment_list);
   RUN_TEST(test_a_fragment_without_a_colour_takes_the_run_colour);
   RUN_TEST(test_text_without_a_colour_uses_the_device_colour);

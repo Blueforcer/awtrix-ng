@@ -1,0 +1,61 @@
+name: TC002 image tools
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  image-tools:
+    name: Verified image tools and shared installer tests
+    runs-on: ubuntu-24.04
+    # Callers for one revision share the verified cache after the first job finishes.
+    concurrency:
+      group: tc002-image-tools-${{ github.repository }}-${{ github.ref }}-${{ github.sha }}
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: webui/test/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Restore verified image tools
+        id: verified
+        uses: actions/cache@v5
+        with:
+          path: |
+            docs/assets/tc002/image/sqfs2tar.js
+            docs/assets/tc002/image/sqfs2tar.wasm
+            docs/assets/tc002/image/tar2sqfs.js
+            docs/assets/tc002/image/tar2sqfs.wasm
+            docs/assets/tc002/image/build.json
+            docs/assets/tc002/image/sources/
+            docs/assets/tc002/image/licenses/
+          key: tc002-image-verified-v1-${{ runner.os }}-${{ hashFiles('.github/workflows/tc002-image-tools.yml', 'tools/tc002/**', 'tools/update/**', 'docs/assets/tc002/**', 'webui/test/tc002-*.js', 'webui/test/package*.json', 'LICENSE.md', 'THIRD-PARTY-NOTICES.md') }}
+      - name: Prepare pinned SquashFS WASM and synthetic stock fixture
+        if: steps.verified.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config squashfs-tools
+          python tools/tc002/browser-image/build.py --work "$RUNNER_TEMP/tc002-image" --output docs/assets/tc002/image
+          python tools/tc002/browser-image/fixture.py tools/tc002/browser-image/fixtures/stock.sqfs
+      - name: Test the shared browser and native installer engines without hardware
+        if: steps.verified.outputs.cache-hit != 'true'
+        run: |
+          python tools/tc002/install/gen_constants.py --check
+          npm ci --prefix webui/test
+          node --test webui/test/tc002-*.test.js tools/tc002/desktop/test/*.test.*
+          python -c "import sys; sys.path.insert(0, 'tools/tc002/install'); import test_build_res_image as tests; assert tests.HAVE_OVERRIDE and tests.HAVE_IMAGE_TOOLS, 'image integration prerequisites are missing'"
+          python -m unittest discover -s tools/tc002/install -p test_build_res_image.py -v
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: tc002-image-tools
+          path: docs/assets/tc002/image/
+          if-no-files-found: error
+          retention-days: 7

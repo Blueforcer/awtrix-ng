@@ -9,38 +9,42 @@
 
 #include "core/script/ScriptServices.h"
 #include "media/PodBuffer.h"
+#include "platform_icons/Remote.h"
 
 namespace awtrix {
 
 class GifPlayer;
 class ScriptIcon;
 
-// One script app's icons. Entries are allocated only for used icons, up to 4 IDs. Icons drawn
-// at the same nowMs stay resident together; a fifth ID in that draw tick returns false
+// One script app's icons. Entries are allocated only for used icons, up to 4. Icons drawn
+// at the same nowMs stay resident together; a fifth icon in that draw tick returns false
 // instead of evicting one already drawn and restarting its animation. Older entries are evicted
-// least-recently used, and release() drops them all.
+// least-recently used, and release() drops them all. An entry is keyed by a hash of the icon
+// text, so a data URI is never copied.
 class ScriptIconSet : public script::IScriptIconSet {
  public:
   explicit ScriptIconSet(ScriptIcon& service);
   ~ScriptIconSet() override;
 
-  bool draw(Canvas& canvas, std::string_view name, int x, int y, int64_t nowMs) override;
+  bool draw(Canvas& canvas, std::string_view icon, int x, int y, int64_t nowMs) override;
   void release() override;
 
  private:
   static constexpr std::size_t kMaxEntries = 4;
-  static constexpr std::size_t kMaxNameLen = 64;
 
   enum class State : uint8_t {
     kGood,
     kMissing,
     kOom,
+    // A URL picture not shown yet: asked for again when the picture source moves on.
+    kPending,
   };
 
-  struct Entry {
+  struct Entry : RemoteIconEntry {
     ~Entry();
 
-    char name[kMaxNameLen + 1] = {};
+    uint64_t key = 0;
+    std::size_t length = 0;
     media::PodBuffer<uint32_t> pixels;
     int width = 0;
     int height = 0;
@@ -52,8 +56,11 @@ class ScriptIconSet : public script::IScriptIconSet {
     std::unique_ptr<Entry> next;
   };
 
-  Entry* acquire(std::string_view name, int64_t nowMs);
-  void load(Entry& e, int64_t nowMs);
+  Entry* acquire(std::string_view icon, int64_t nowMs);
+  void load(Entry& e, std::string_view icon, int64_t nowMs);
+  void loadRemote(Entry& e, std::string_view url, int64_t nowMs);
+  bool adopt(Entry& e, GifPlayer* gif, int64_t nowMs);
+  void outOfMemory(Entry& e, std::string_view icon, int64_t nowMs);
   static void reset(Entry& e);
 
   ScriptIcon& service_;
@@ -62,7 +69,7 @@ class ScriptIconSet : public script::IScriptIconSet {
   uint32_t generation_ = 0;
 };
 
-class ScriptIcon : public script::IScriptIcon {
+class ScriptIcon : public script::IScriptIcon, public RemoteIconSource {
  public:
   std::unique_ptr<script::IScriptIconSet> createSet() override;
 

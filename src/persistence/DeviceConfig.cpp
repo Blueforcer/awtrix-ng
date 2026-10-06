@@ -1,8 +1,9 @@
 #include "persistence/DeviceConfig.h"
 
 #include <Preferences.h>
+#include <nvs.h>
 
-#include "persistence/DeviceConfigFields.h"
+#include "persistence/DeviceConfigRows.h"
 
 namespace awtrix {
 
@@ -30,25 +31,33 @@ void cfgGet(Preferences& p, const char* k, PanelColorOrder& v) {
   v = static_cast<PanelColorOrder>(p.getInt(k, static_cast<int>(v)));
 }
 
-void cfgPut(Preferences& p, const char* k, bool v) { p.putBool(k, v); }
-void cfgPut(Preferences& p, const char* k, int v) { p.putInt(k, v); }
-void cfgPut(Preferences& p, const char* k, long v) { p.putLong(k, v); }
-void cfgPut(Preferences& p, const char* k, float v) { p.putFloat(k, v); }
-void cfgPut(Preferences& p, const char* k, uint8_t v) { p.putUChar(k, v); }
-void cfgPut(Preferences& p, const char* k, uint16_t v) { p.putUShort(k, v); }
-void cfgPut(Preferences& p, const char* k, uint32_t v) { p.putUInt(k, v); }
-void cfgPut(Preferences& p, const char* k, const std::string& v) { p.putString(k, v.c_str()); }
-void cfgPut(Preferences& p, const char* k, PanelStart v) { p.putInt(k, static_cast<int>(v)); }
-void cfgPut(Preferences& p, const char* k, Wiring v) { p.putInt(k, static_cast<int>(v)); }
-void cfgPut(Preferences& p, const char* k, PanelColorOrder v) {
-  p.putInt(k, static_cast<int>(v));
+template <typename T>
+__attribute__((noinline)) bool cfgSame(Preferences& p, const char* k, const T& expected) {
+  T stored = expected;
+  cfgGet(p, k, stored);
+  return p.isKey(k) && stored == expected;
+}
+
+// Preferences' on-flash types, written through NVS with its actual status.
+bool cfgPut(nvs_handle_t h, const char* k, bool v) { return nvs_set_u8(h, k, v ? 1 : 0) == ESP_OK; }
+bool cfgPut(nvs_handle_t h, const char* k, int v) { return nvs_set_i32(h, k, v) == ESP_OK; }
+bool cfgPut(nvs_handle_t h, const char* k, long v) { return nvs_set_i32(h, k, v) == ESP_OK; }
+bool cfgPut(nvs_handle_t h, const char* k, float v) { return nvs_set_blob(h, k, &v, sizeof(v)) == ESP_OK; }
+bool cfgPut(nvs_handle_t h, const char* k, uint8_t v) { return nvs_set_u8(h, k, v) == ESP_OK; }
+bool cfgPut(nvs_handle_t h, const char* k, uint16_t v) { return nvs_set_u16(h, k, v) == ESP_OK; }
+bool cfgPut(nvs_handle_t h, const char* k, uint32_t v) { return nvs_set_u32(h, k, v) == ESP_OK; }
+bool cfgPut(nvs_handle_t h, const char* k, const std::string& v) { return nvs_set_str(h, k, v.c_str()) == ESP_OK; }
+bool cfgPut(nvs_handle_t h, const char* k, PanelStart v) { return cfgPut(h, k, static_cast<int>(v)); }
+bool cfgPut(nvs_handle_t h, const char* k, Wiring v) { return cfgPut(h, k, static_cast<int>(v)); }
+bool cfgPut(nvs_handle_t h, const char* k, PanelColorOrder v) {
+  return cfgPut(h, k, static_cast<int>(v));
 }
 
 // Matrix geometry keys from older firmware. Nothing reads them any more; save() deletes them so
 // they stop occupying entries in the NVS partition.
 const char* const kLegacyMatrixKeys[] = {"mwidth", "matlay", "mtilew", "morient", "mserp",
                                          "mflipx", "mflipy", "ph",     "pnx",     "pny",
-                                         "cserp"};
+                                         "cserp",  "pheight"};
 }
 
 // Every key defaults to whatever the member already holds, so a config written by an older
@@ -56,21 +65,39 @@ const char* const kLegacyMatrixKeys[] = {"mwidth", "matlay", "mtilew", "morient"
 void DeviceConfig::load() {
   Preferences p;
   p.begin(kNs, true);
-#define X(member, key, secret) cfgGet(p, key, member);
+#define X(member, key, secret, need) cfgGet(p, key, member);
   AWTRIX_CFG_FIELDS(X)
 #undef X
   p.end();
 }
 
-void DeviceConfig::save() const {
+bool DeviceConfig::save() const {
+  nvs_handle_t handle;
+  if (nvs_open(kNs, NVS_READWRITE, &handle) != ESP_OK) {
+    persistencePending = true;
+    return false;
+  }
+  bool saved = true;
+  for (const auto& row : configfields::kRows)
+    if (!configfields::visit(*this, row, [handle](const char* key, const auto& value) {
+          return cfgPut(handle, key, value);
+        })) saved = false;
+  for (const char* legacy : kLegacyMatrixKeys) {
+    const esp_err_t status = nvs_erase_key(handle, legacy);
+    if (status != ESP_OK && status != ESP_ERR_NVS_NOT_FOUND) saved = false;
+  }
+  if (nvs_commit(handle) != ESP_OK) saved = false;
+  nvs_close(handle);
+  // Confirm the values through a fresh handle before acknowledging durable configuration.
   Preferences p;
-  p.begin(kNs, false);
-#define X(member, key, secret) cfgPut(p, key, member);
-  AWTRIX_CFG_FIELDS(X)
-#undef X
-  for (const char* legacy : kLegacyMatrixKeys)
-    if (p.isKey(legacy)) p.remove(legacy);
+  if (!p.begin(kNs, true)) { persistencePending = true; return false; }
+  for (const auto& row : configfields::kRows)
+    if (!configfields::visit(*this, row, [&p](const char* key, const auto& value) {
+          return cfgSame(p, key, value);
+        })) saved = false;
   p.end();
+  persistencePending = !saved;
+  return saved;
 }
 
 

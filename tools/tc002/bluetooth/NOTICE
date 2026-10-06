@@ -1,0 +1,13 @@
+AIC Bluetooth AON parameter format and defaults
+Copyright (C) 2019-2027 AIC Corporation
+Licensed under the Apache License, Version 2.0.
+
+The parameter layout and defaults are documented in aic_hardware.c at:
+https://github.com/radxa-pkg/aic8800/blob/516e3b087763d80c44f5e3b6d2dd63e0d925c91d/src/SDIO/patch/for_Amlogic/905x4/Android11/mod/vendor/amlogic/common/wifi_bt/bluetooth/aic/libbt/src/aic_hardware.c
+
+AWTRIX represents the 104-byte configuration in BtService.cpp and uses the
+recorded TC002 values -1 for aon_extra_sleep_duration_cpus and 0x113 for
+aon_debug_level instead of the Amlogic defaults -2 and 0. All other fields
+match those defaults. See docs/developers/tc002/bluetooth.md for field offsets
+and independently pinned provenance. This attribution concerns parameter
+data; no AIC controller firmware is included.

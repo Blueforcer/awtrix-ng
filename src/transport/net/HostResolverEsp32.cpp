@@ -30,9 +30,9 @@ constexpr uint32_t kResolveDeadlineMs = 20000;
 class HostResolverEsp32 : public IHostResolver {
  public:
   ResolveState resolve(const std::string& host) override {
-    uint8_t octets[4];
-    if (parseIpv4(host, octets)) {
-      address_ = IPAddress(octets[0], octets[1], octets[2], octets[3]);
+    uint32_t literal;
+    if (parseIpv4(host, literal)) {
+      address_ = literal;
       error_ = LinkError::None;
       have_ = true;
       return ResolveState::Ready;
@@ -72,16 +72,16 @@ class HostResolverEsp32 : public IHostResolver {
       return ResolveState::Failed;
     }
 
-    address_ = IPAddress(result_.load(std::memory_order_relaxed));
+    address_ = ntohl(result_.load(std::memory_order_relaxed));
     cachedHost_ = pendingHost_;
     error_ = LinkError::None;
     have_ = true;
-    logf("dns: %s is %s via %s", cachedHost_.c_str(), address_.toString().c_str(),
+    logf("dns: %s is %s via %s", cachedHost_.c_str(), IPAddress(htonl(address_)).toString().c_str(),
          viaName(via_.load(std::memory_order_relaxed)));
     return ResolveState::Ready;
   }
 
-  IPAddress address() const override { return address_; }
+  uint32_t address() const override { return address_; }
   LinkError error() const override { return error_; }
 
   // Bumping the generation is how an in-flight query is cancelled: the worker cannot be
@@ -205,7 +205,7 @@ class HostResolverEsp32 : public IHostResolver {
 
   std::string cachedHost_;
   std::string pendingHost_;
-  IPAddress address_;
+  uint32_t address_ = 0;
   LinkError error_ = LinkError::None;
   uint32_t startedMs_ = 0;
   bool have_ = false;

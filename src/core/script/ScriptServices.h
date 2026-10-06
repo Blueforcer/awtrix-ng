@@ -6,11 +6,15 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "core/audio/AudioStats.h"
 #include "core/render/Font.h"
+#include "core/render/FontCatalog.h"
+#include "core/script/BerryVM.h"
 #include "core/script/HttpHeaders.h"
 #include "core/script/ScriptHeap.h"
+#include "core/script/ScriptApplication.h"
 
 namespace awtrix {
 class Canvas;
@@ -22,6 +26,7 @@ struct Settings;
 namespace awtrix::script {
 
 class SharedState;
+class ScriptExtensionLifecycle;
 
 // How much of a response is kept when a script does not ask for a specific maxBytes itself.
 constexpr std::size_t kMaxHttpBody = 8 * 1024;
@@ -137,21 +142,21 @@ class IScriptStoreSink {
   virtual void storeChanged(const std::string& script, const std::string& json) = 0;
 };
 
-// Mirrored by the ordinals the prelude hands to _native_sound; keep the order.
-enum class SoundAction : uint8_t { Play, Mp3, Melody, Track, Rtttl, Stop };
-
 // Everything the script layer may reach outside itself. Any member may be null or empty, and
 // a binding whose service is missing answers "not available" rather than failing.
 struct ScriptServices {
+  // Berry instructions one call into a script may run; the platform may grant more.
+  long instructionLimit = BerryVM::kInstructionLimit;
   IScriptHttp* http = nullptr;
   IScriptMqtt* mqtt = nullptr;
   IScriptIcon* icon = nullptr;
+  ScriptExtensionLifecycle* extensionLifecycle = nullptr;
   IScriptStoreSink* storeSink = nullptr;
   SharedState* shared = nullptr;
   const EffectRegistry* effects = nullptr;
   const EffectRegistry* overlays = nullptr;
-  const GfxFont* fonts[kFontCount] = {nullptr, nullptr};
   const Canvas* panel = nullptr;
+  const FontCatalog* fonts = nullptr;
   std::function<int32_t(int32_t, bool)> startTimer;
   std::function<bool(int32_t)> cancelTimer;
   std::function<int64_t()> monotonicMs;
@@ -159,22 +164,9 @@ struct ScriptServices {
   std::function<std::size_t()> freeHeap;
   std::function<std::size_t()> maxAllocHeap;
   std::function<void(const std::string&)> logDebug;
-  std::function<bool(const std::string& json)> notify;
-  std::function<const Settings*()> settings;
-  std::function<const RuntimeState*()> runtime;
-  std::function<bool(const std::string& json)> setSettings;
-  std::function<bool(bool)> setDisplayPower;
-  std::function<bool(SoundAction, const std::string&)> sound;
-  std::function<bool()> soundPlaying;
-  // Which outputs this board actually has, as a bitmask: buzzer 1, track 2, mp3 4,
-  // radio 8. Lets a script pick a sound its hardware can make.
-  std::function<int()> soundSinks;
+  IScriptApplication* application = nullptr;
   // The analysed frame audible at nowMs; asking is what switches the analysis on.
   std::function<bool(int64_t nowMs, audio::FrameStats& out)> audioStats;
-  std::function<void()> rotateNext;
-  std::function<void()> rotatePrevious;
-  std::function<bool(const std::string&)> showApp;
-  std::function<void(bool)> holdRotation;
   std::function<bool(const std::string& name, std::string& out)> readSource;
   std::function<bool(const std::string& name, std::string& out)> readStore;
 };

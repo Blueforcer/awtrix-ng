@@ -3,6 +3,7 @@
 #include <cstring>
 #include <string>
 
+#include "core/StrCase.h"
 #include "core/render/Color.h"
 
 namespace awtrix {
@@ -54,6 +55,13 @@ bool readColor(api::JsonReader r, uint32_t& out) {
     return true;
   }
   return false;
+}
+
+bool isPaletteWord(api::JsonReader r) {
+  char value[8];
+  std::size_t size = 0;
+  return r.isString() && r.copyString(value, sizeof(value), size) &&
+         strcase::equalsIgnoreCase(std::string_view(value, size), "palette");
 }
 
 }

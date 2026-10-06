@@ -5,6 +5,7 @@
 #include "core/render/Canvas.h"
 #include "core/render/TextRenderer.h"
 #include "core/script/ScriptBindings.h"
+#include "core/script/ScriptExtension.h"
 #include "core/script/ScriptServices.h"
 
 namespace awtrix::script {
@@ -30,14 +31,14 @@ ScriptApp::ScriptApp(BerryVM& vm, std::string name, const std::string& source,
   {
     BindingScope scope(nullptr, ctx, name_);
     if (!vm_.loadApp(name_, source, kHookNames, kHookCount, hooks_)) {
-      broken_ = true;
       error_ = parseScriptError(vm_.lastError());
+      markBroken();
       return;
     }
   }
   if (!meta.headless && !has(kDraw)) {
-    broken_ = true;
     error_.message = "no draw() method";
+    markBroken();
     vm_.dropApp(name_);
     return;
   }
@@ -52,9 +53,19 @@ ScriptApp::ScriptApp(BerryVM& vm, std::string name, const std::string& source,
 // so a script cannot throw once a frame forever. `what` names the hook for the error report.
 void ScriptApp::enter(const char* what, bool okResult) {
   if (okResult) return;
-  broken_ = true;
   error_ = parseScriptError(vm_.lastError(), what);
+  markBroken();
   releaseIcons();
+}
+
+// A broken app keeps its place in the rotation, but releases its extension resources and sounds.
+void ScriptApp::markBroken() {
+  broken_ = true;
+  const ScriptServices* svc = services();
+  if (!svc) return;
+  if (svc->extensionLifecycle) svc->extensionLifecycle->forget(name_);
+  std::string ignored;
+  if (svc->application) svc->application->sound(SoundAction::Release, std::string(), name_, ignored);
 }
 
 void ScriptApp::releaseIcons() {
@@ -72,6 +83,7 @@ void ScriptApp::render(Canvas& canvas, const RenderCtx& ctx) {
   lastRenderMs_ = ctx.nowMs;
   if (!icons_ && svc && svc->icon) icons_ = svc->icon->createSet();
   BindingScope scope(&canvas, &ctx, name_, &scroll_, icons_.get());
+  if (svc && svc->extensionLifecycle) svc->extensionLifecycle->beginFrame(name_);
   // Same call twice: the timed branch only exists because reading the clock around every
   // frame is not worth paying for unless someone is listening to the numbers.
   if (!svc || !svc->logDebug) {
@@ -145,6 +157,7 @@ bool ScriptApp::handleButtonEvent(const std::string& btn, const std::string& eve
   return !broken_ && consumed;
 }
 
+
 void ScriptApp::dispatchTimer(int32_t id, const RenderCtx* ctx) {
   if (broken_) return;
   BindingScope scope(nullptr, ctx, name_);
@@ -170,6 +183,21 @@ void ScriptApp::dispatchMqtt(const std::string& filter, const std::string& topic
   if (broken_) return;
   BindingScope scope(nullptr, ctx, name_);
   enter("mqtt callback", vm_.call3("_dispatch_mqtt", filter, topic, payload));
+}
+
+void ScriptApp::dispatch(const char* what, const char* function, const std::string& a, const std::string& b,
+                         const std::string& c, const RenderCtx* ctx) {
+  if (broken_) return;
+  BindingScope scope(nullptr, ctx, name_);
+  enter(what, vm_.call3(function, a, b, c));
+}
+
+bool ScriptApp::dispatchHook(const char* hook, const std::string& event, const RenderCtx* ctx) {
+  if (broken_ || !visible_ || !vm_.hasMethod(name_, hook)) return false;
+  bool consumed = false;
+  BindingScope scope(nullptr, ctx, name_);
+  enter(hook, vm_.method1Bool(name_, hook, event, consumed));
+  return !broken_ && consumed;
 }
 
 bool ScriptApp::callCheckForTest(std::string& out) {

@@ -45,6 +45,22 @@ static void test_rain_draws_drops_over_content() {
   TEST_ASSERT_EQUAL_STRING("rain", r.id().c_str());
 }
 
+static void test_weather_never_darkens_the_app() {
+  RainOverlay rain; SnowOverlay snow; StormOverlay storm;
+  IEffect* all[] = {&rain, &snow, &storm};
+  for (IEffect* e : all)
+    for (long f = 0; f < 60; ++f) {
+      Canvas c(32, 8);
+      c.clear(0xC08000u);
+      e->render(c, f);
+      for (int y = 0; y < 8; ++y)
+        for (int x = 0; x < 32; ++x) {
+          const uint32_t p = c.getPixel(x, y);
+          TEST_ASSERT_TRUE(((p >> 16) & 0xFF) >= 0xC0 && ((p >> 8) & 0xFF) >= 0x80);
+        }
+    }
+}
+
 static void test_rain_is_scattered_not_a_diagonal() {
   RainOverlay r;
   Canvas c(32, 8);
@@ -94,7 +110,7 @@ static void test_thunder_flashes_at_irregular_intervals() {
     c.clear(0);
     t.render(c, f);
     bool full = true;
-    for (int x = 0; x < c.width() && full; ++x) full = c.getPixel(x, 4) != 0;
+    for (int x = 0; x < c.width() && full; ++x) full = c.getPixel(x, c.height() / 2) != 0;
     if (full) flashes.push_back(f);
   }
   TEST_ASSERT_TRUE(flashes.size() >= 2u);
@@ -103,24 +119,72 @@ static void test_thunder_flashes_at_irregular_intervals() {
   TEST_ASSERT_TRUE(gaps.size() > 1u);
 }
 
-static void test_frost_is_static_and_hugs_the_edges() {
+static void test_frost_hugs_the_edges_and_shimmers() {
   FrostOverlay fr;
   Canvas a(32, 8), b(32, 8);
   a.clear(0);
   b.clear(0);
   fr.render(a, 0);
-  fr.render(b, 5000);
+  fr.render(b, 60);
+  bool top = false, bottom = false, changed = false;
   for (int y = 0; y < 8; ++y)
-    for (int x = 0; x < 32; ++x) TEST_ASSERT_EQUAL_HEX32(a.getPixel(x, y), b.getPixel(x, y));
-  bool top = false, bottom = false;
+    for (int x = 0; x < 32; ++x) {
+      TEST_ASSERT_EQUAL(a.getPixel(x, y) != 0, b.getPixel(x, y) != 0);
+      changed = changed || a.getPixel(x, y) != b.getPixel(x, y);
+    }
   for (int x = 0; x < 32; ++x) {
     top = top || a.getPixel(x, 0) != 0;
-    bottom = bottom || a.getPixel(x, 7) != 0;
-    TEST_ASSERT_EQUAL_HEX32(0u, a.getPixel(x, 3));
-    TEST_ASSERT_EQUAL_HEX32(0u, a.getPixel(x, 4));
+    bottom = bottom || a.getPixel(x, a.height() - 1) != 0;
+    TEST_ASSERT_EQUAL_HEX32(0u, a.getPixel(x, a.height() / 2 - 1));
+    TEST_ASSERT_EQUAL_HEX32(0u, a.getPixel(x, a.height() / 2));
   }
   TEST_ASSERT_TRUE(top);
   TEST_ASSERT_TRUE(bottom);
+  TEST_ASSERT_TRUE(changed);
+}
+
+static void test_frost_rim_grows_with_the_panel() {
+  FrostOverlay fr;
+  Canvas c(32, 32);
+  c.clear(0);
+  fr.render(c, 0);
+  int rows = 0;
+  for (int y = 0; y < 32; ++y) {
+    bool lit = false;
+    for (int x = 0; x < 32; ++x) lit = lit || c.getPixel(x, y) != 0;
+    rows += lit;
+  }
+  Canvas small(32, 8);
+  fr.render(small, 0);
+  int smallRows = 0;
+  for (int y = 0; y < small.height(); ++y) {
+    bool lit = false;
+    for (int x = 0; x < small.width(); ++x) lit |= small.getPixel(x, y) != 0;
+    smallRows += lit;
+  }
+  TEST_ASSERT_TRUE(rows > smallRows);
+  for (int x = 0; x < 32; ++x) TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(x, c.height() / 2));
+}
+
+static void test_thunder_strike_draws_a_bolt_over_the_text() {
+  ThunderOverlay t;
+  for (long f = 0; f < 3000; ++f) {
+    Canvas c(32, 8);
+    c.clear(0x00FF00u);
+    t.render(c, f);
+    if (c.getPixel(0, c.height() / 2) == 0x00FF00u && c.getPixel(c.width() - 1, c.height() / 2) == 0x00FF00u) continue;
+    int bolt = 0, keptGreen = 0;
+    for (int y = 0; y < 8; ++y)
+      for (int x = 0; x < 32; ++x) {
+        const uint32_t p = c.getPixel(x, y);
+        bolt += (p & 0xFF) > 0xC0;
+        keptGreen += ((p >> 8) & 0xFF) == 0xFF;
+      }
+    TEST_ASSERT_TRUE(bolt > 0);
+    TEST_ASSERT_TRUE(keptGreen > 32 * 8 / 2);
+    return;
+  }
+  TEST_FAIL_MESSAGE("no strike in 3000 frames");
 }
 
 static int diagonalLinks(IEffect& e, int frames) {
@@ -167,11 +231,14 @@ static void test_storm_is_denser_than_drizzle() {
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_rain_draws_drops_over_content);
+  RUN_TEST(test_weather_never_darkens_the_app);
   RUN_TEST(test_rain_is_scattered_not_a_diagonal);
   RUN_TEST(test_snow_draws_flakes);
   RUN_TEST(test_snow_flakes_sway_sideways);
   RUN_TEST(test_thunder_flashes_at_irregular_intervals);
-  RUN_TEST(test_frost_is_static_and_hugs_the_edges);
+  RUN_TEST(test_frost_hugs_the_edges_and_shimmers);
+  RUN_TEST(test_frost_rim_grows_with_the_panel);
+  RUN_TEST(test_thunder_strike_draws_a_bolt_over_the_text);
   RUN_TEST(test_storm_slants_while_rain_falls_plumb);
   RUN_TEST(test_storm_is_denser_than_drizzle);
   return UNITY_END();

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/StrCase.h"
@@ -20,7 +21,7 @@ class EffectRegistry {
       }
     effects_.push_back(effect);
   }
-  IEffect* find(const std::string& id) const {
+  IEffect* find(std::string_view id) const {
     if (id.empty()) return nullptr;
     for (IEffect* e : effects_)
       if (strcase::equalsIgnoreCase(e->id(), id)) return e;

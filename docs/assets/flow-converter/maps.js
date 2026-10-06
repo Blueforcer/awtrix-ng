@@ -14,34 +14,39 @@
 //   keep             -- same name and value in both dialects
 //   palette / scroll / effectSettings / draw / text / special
 //                    -- structural conversions the engine implements
+//   sound            -- sound, rtttl and loopSound merge into one sound object
 //   dead             -- no NG equivalent; left in place, warned about
 // "notificationOnly" marks keys NG rejects on a pushed app.
+// "number" marks keys whose value NG reads only as a JSON number; AWTRIX 3 also
+// took "70", so a numeric string becomes a number.
+// "template" is where an enum key goes when its value is a template the engine
+// cannot turn into one of the words.
 export const KEY_MAP = {
   "text": {"kind": "text"},
   "textCase": {"kind": "enum", "to": "textCase", "values": ["inherit", "upper", "asTyped"]},
   "topText": {"kind": "dead", "note": "place text freely with a draw text command instead"},
-  "textOffset": {"kind": "rename", "to": "textOffsetX"},
-  "center": {"kind": "rename", "to": "textCenter"},
+  "textOffset": {"kind": "rename", "to": "textOffsetX", "number": true},
+  "center": {"kind": "enum", "to": "textAlign", "values": ["start", "center"], "template": "textCenter"},
   "color": {"kind": "rename", "to": "textColor"},
   "gradient": {"kind": "palette"},
-  "blinkText": {"kind": "rename", "to": "textBlinkMs"},
-  "fadeText": {"kind": "rename", "to": "textFadeMs"},
+  "blinkText": {"kind": "rename", "to": "textBlinkMs", "number": true},
+  "fadeText": {"kind": "rename", "to": "textFadeMs", "number": true},
   "rainbow": {"kind": "palette"},
   "background": {"kind": "rename", "to": "backgroundColor"},
   "noScroll": {"kind": "scroll"},
-  "scrollSpeed": {"kind": "scroll"},
-  "icon": {"kind": "keep"},
+  "scrollSpeed": {"kind": "scroll", "number": true},
+  "icon": {"kind": "special"},
   "pushIcon": {"kind": "enum", "to": "iconMode", "values": ["fixed", "pushOnce", "push"]},
   "duration": {"kind": "seconds", "to": "durationMs"},
   "lifetime": {"kind": "seconds", "to": "lifetimeMs"},
   "lifetimeMode": {"kind": "enum", "to": "lifetimeExpiry", "values": ["remove", "mark"]},
-  "repeat": {"kind": "special"},
+  "repeat": {"kind": "special", "number": true},
   "pos": {"kind": "dead", "note": "set the rotation once with PUT /api/v1/apps/order", "anchor": "pos-became-the-order-call"},
   "bar": {"kind": "rename", "to": "barChart"},
   "line": {"kind": "rename", "to": "lineChart"},
   "autoscale": {"kind": "rename", "to": "chartAutoscale"},
   "barBC": {"kind": "dead", "note": "unfilled chart cells show the app background"},
-  "progress": {"kind": "keep"},
+  "progress": {"kind": "keep", "number": true},
   "progressC": {"kind": "rename", "to": "progressColor"},
   "progressBC": {"kind": "rename", "to": "progressTrackColor"},
   "effect": {"kind": "keep"},
@@ -51,9 +56,9 @@ export const KEY_MAP = {
   "hold": {"kind": "keep", "notificationOnly": true},
   "stack": {"kind": "keep", "notificationOnly": true},
   "wakeup": {"kind": "keep", "notificationOnly": true},
-  "sound": {"kind": "keep", "notificationOnly": true},
-  "rtttl": {"kind": "rename", "to": "soundRtttl", "notificationOnly": true},
-  "loopSound": {"kind": "rename", "to": "soundLoop", "notificationOnly": true},
+  "sound": {"kind": "sound", "to": "sound", "notificationOnly": true},
+  "rtttl": {"kind": "sound", "to": "sound", "notificationOnly": true},
+  "loopSound": {"kind": "sound", "to": "sound", "notificationOnly": true},
   "clients": {"kind": "dead", "note": "send to each device yourself"},
   "save": {"kind": "dead", "note": "pushed apps are RAM-only; move the app to a script", "anchor": "save-is-gone-scripts-took-its-place"}
 };
@@ -61,7 +66,7 @@ export const KEY_MAP = {
 // NG payload keys that have no AWTRIX 3 spelling of their own. Together with
 // the KEY_MAP targets they form the set the engine recognises as "already
 // converted" -- anything outside both sets draws an unknown-key warning.
-export const NG_ONLY_KEYS = ["font", "iconOffsetX", "iconGap", "textInFront", "palette", "paletteBlend", "paletteSpan", "paletteSpeed", "chartColor", "scroll", "name", "durationMs", "lifetimeMs", "lifetimeExpiry", "textColor", "backgroundColor", "iconMode", "textOffsetX", "textCenter", "textBlinkMs", "textFadeMs", "barChart", "lineChart", "chartAutoscale", "progressColor", "progressTrackColor", "soundRtttl", "soundLoop", "effectSpeed"];
+export const NG_ONLY_KEYS = ["font", "iconOffsetX", "iconGap", "textInFront", "palette", "paletteBlend", "paletteSpan", "paletteSpeed", "chartColor", "scroll", "name", "durationMs", "lifetimeMs", "lifetimeExpiry", "textColor", "backgroundColor", "iconMode", "textOffsetX", "textAlign", "textCenter", "textBlinkMs", "textFadeMs", "barChart", "lineChart", "chartAutoscale", "progressColor", "progressTrackColor", "effectSpeed"];
 
 // AWTRIX 3 draw command codes and the NG command names, one to one.
 export const DRAW_MAP = {"dp": "pixel", "dl": "line", "dr": "rect", "df": "rectFill", "dc": "circle", "dfc": "circleFill", "dt": "text", "db": "bitmap"};
@@ -78,7 +83,8 @@ export const TEFF_NAMES = ["Random", "Slide", "Dim", "Zoom", "Rotate", "Pixelate
 //   rename / seconds  -- as in KEY_MAP
 //   teff              -- number replaced by TEFF_NAMES[n]
 //   colorOrNull       -- AWTRIX 3 used 0 for "use the global color"; NG uses null
-//   nested            -- value moves into an object field ("weekdayBar.show")
+//   volume            -- AWTRIX 3's 0-30 rescaled to NG's 0-100
+//   nested           -- value moves into an object field ("weekdayBar.show")
 //   tformat / dformat -- strftime-ish string split into NG's word settings
 //   warn              -- no settings equivalent; left in place, warned about
 export const SETTINGS_MAP = {
@@ -110,7 +116,7 @@ export const SETTINGS_MAP = {
   "HUM_COL": {"kind": "colorOrNull", "to": "humidityColor"},
   "BAT_COL": {"kind": "colorOrNull", "to": "batteryColor"},
   "SSPEED": {"kind": "nested", "to": "scroll.speed"},
-  "VOL": {"kind": "volume"},
+  "VOL": {"kind": "volume", "to": "volume"},
   "GAMMA": {"kind": "rename", "to": "gamma"},
   "TIM": {"kind": "warn", "warning": "crossEndpoint", "note": "switching built-in apps off is the disabled list of PUT /api/v1/apps/order", "anchor": "pos-became-the-order-call"},
   "DAT": {"kind": "warn", "warning": "crossEndpoint", "note": "switching built-in apps off is the disabled list of PUT /api/v1/apps/order", "anchor": "pos-became-the-order-call"},

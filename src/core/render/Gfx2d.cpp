@@ -42,12 +42,15 @@ void drawProgress(Canvas& c, int pct, const ColorSource& fill, uint32_t track, i
   x0 = std::max(x0, 0);
   const int w = c.width() - x0;
   if (w <= 0) return;
-  const int prog = pct > 100 ? 100 : pct;
-  const int y = c.height() - 1;
-  const int filled = (prog * w) / 100;
+  fillProgress(c, x0, c.height() - 1, w, 1, pct > 100 ? 100 : pct, fill, track);
+}
+
+void fillProgress(Canvas& c, int x, int y, int w, int h, int pct, const ColorSource& fill,
+                  uint32_t track) {
+  const int filled = (pct * w) / 100;
   const float span = static_cast<float>(w > 1 ? w - 1 : 1);
-  for (int x = 0; x < w; ++x)
-    c.setPixel(x0 + x, y, x < filled ? fill.at(static_cast<float>(x) / span) : track);
+  for (int i = 0; i < w; ++i)
+    c.fillRect(x + i, y, 1, h, i < filled ? fill.at(static_cast<float>(i) / span) : track);
 }
 
 void drawBars(Canvas& c, const std::vector<int>& values, const ColorSource& color, bool autoscale,

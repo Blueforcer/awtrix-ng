@@ -29,9 +29,9 @@ class MicroGif {
   // whatever the previous one left behind. delayMs is 0 unless kFrame is returned.
   Step nextFrame(Canvas& dst, int& delayMs, bool clearFirst = false);
 
-  // Counts structurally valid frame descriptors without decoding pixels. Used to choose
-  // streaming before allocating a frame cache that would immediately be discarded.
-  bool exceedsFrameCount(int limit) const;
+  // Counts structurally valid frame descriptors without decoding pixels and stops at limit + 1.
+  // A count within the limit bounds the frames nextFrame() can decode.
+  int countFrames(int limit) const;
 
   void rewind();
 

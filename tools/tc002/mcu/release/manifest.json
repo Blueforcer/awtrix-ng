@@ -1,0 +1,17 @@
+{
+  "schema": 2,
+  "target": "tc002",
+  "recipe": "tc002-pcm-v1",
+  "base_version": "V1.0.17",
+  "base_sha256": "ae9737b190501c8ac9500cae31d9fb496f33f55b8e87413dee8f4b90a9c28bbd",
+  "family": 123,
+  "abi": 1,
+  "features": 11,
+  "version": 13,
+  "build_tag": 3690530934,
+  "file": "extension.bin",
+  "bytes": 3490,
+  "sha256": "f49bea97f5686ed289b30504f6241683901b3fcadf6c925fcd7842c1a71288ac",
+  "image_bytes": 38400,
+  "image_sha256": "2ae39bee4e35a878b4ca56603dd9fd0ff81fb39c7b183c18e603b7fbe82dc97a"
+}

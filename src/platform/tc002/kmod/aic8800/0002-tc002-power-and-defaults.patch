@@ -1,0 +1,122 @@
+aic8800: power the TC002 Wi-Fi like the stock modules
+
+The stock TC002 kernel exports the Wi-Fi power switch as sunxi_wlan_*
+and the SDIO card detect as sigmastar_mmc_rescan_card(slot, insert).
+The stock aic8800_bsp powers the chip through them, logs errors only
+and frees its platform device on unload.
+
+---
+diff --git a/aic8800_bsp/Makefile b/aic8800_bsp/Makefile
+index db095a2..7699eb1 100755
+--- a/aic8800_bsp/Makefile
++++ b/aic8800_bsp/Makefile
+@@ -96,6 +96,8 @@ KDIR ?= /home/yaya/E/Rockchip/3566/firefly/Android11.0/Firefly-RK356X_Android11.
+ CROSS_COMPILE ?= /home/yaya/E/Rockchip/3566/firefly/Android11.0/Firefly-RK356X_Android11.0_git_20210824/RK356X_Android11.0/prebuilts/gcc/linux-x86/aarch64/gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-
+ endif
+ 
++ccflags-$(CONFIG_PLATFORM_TC002) += -DCONFIG_PLATFORM_TC002
++
+ ifeq ($(CONFIG_PLATFORM_ALLWINNER), y)
+ ccflags-$(CONFIG_PLATFORM_ALLWINNER) += -DCONFIG_PLATFORM_ALLWINNER
+ KDIR  ?= /home/yaya/E/Allwinner/r818/Android10/lichee/kernel/linux-4.9/
+diff --git a/aic8800_bsp/aic_bsp_main.c b/aic8800_bsp/aic_bsp_main.c
+index e2a020f..d63d457 100755
+--- a/aic8800_bsp/aic_bsp_main.c
++++ b/aic8800_bsp/aic_bsp_main.c
+@@ -15,7 +15,7 @@
+ #define DRV_AUTHOR            "AICSemi"
+ #define DRV_VERS_MOD          "1.0"
+ 
+-int aicwf_dbg_level_bsp = LOGERROR|LOGINFO|LOGDEBUG|LOGTRACE;
++int aicwf_dbg_level_bsp = LOGERROR;
+ 
+ struct semaphore aicbsp_probe_semaphore;
+ 
+@@ -409,7 +409,7 @@ static void __exit aicbsp_exit(void)
+     }
+ #endif
+ 	sysfs_remove_group(&(aicbsp_pdev->dev.kobj), &aicbsp_attribute_group);
+-	platform_device_del(aicbsp_pdev);
++	platform_device_unregister(aicbsp_pdev);
+ 	platform_driver_unregister(&aicbsp_driver);
+ 	mutex_destroy(&aicbsp_power_lock);
+ 	aicbsp_resv_mem_deinit();
+diff --git a/aic8800_bsp/aicsdio.c b/aic8800_bsp/aicsdio.c
+index 65088fa..2eaa7b3 100755
+--- a/aic8800_bsp/aicsdio.c
++++ b/aic8800_bsp/aicsdio.c
+@@ -35,6 +35,13 @@ extern int sunxi_wlan_get_bus_index(void);
+ static int aicbsp_bus_index = -1;
+ #endif
+ 
++#ifdef CONFIG_PLATFORM_TC002
++extern void sigmastar_mmc_rescan_card(unsigned int ids, int insert);
++extern void sunxi_wlan_set_power(int on);
++extern int sunxi_wlan_get_bus_index(void);
++static int aicbsp_bus_index;
++#endif
++
+ #ifdef CONFIG_PLATFORM_AMLOGIC//for AML
+ #include <linux/amlogic/aml_gpio_consumer.h>
+ extern void sdio_reinit(void);
+@@ -491,6 +498,10 @@ static int aicbsp_platform_power_on(void)
+ 		return aicbsp_bus_index;
+ #endif //CONFIG_PLATFORM_ALLWINNER
+ 
++#ifdef CONFIG_PLATFORM_TC002
++	aicbsp_bus_index = sunxi_wlan_get_bus_index();
++#endif
++
+ #ifdef CONFIG_PLATFORM_AMLOGIC
+ 		extern_wifi_set_enable(0);
+ 		mdelay(200);
+@@ -523,6 +534,12 @@ static int aicbsp_platform_power_on(void)
+ 	sunxi_mmc_rescan_card(aicbsp_bus_index);
+ #endif //CONFIG_PLATFORM_ALLWINNER
+ 
++#ifdef CONFIG_PLATFORM_TC002
++	sunxi_wlan_set_power(1);
++	msleep(100);
++	sigmastar_mmc_rescan_card(aicbsp_bus_index, 1);
++#endif
++
+ 	if (down_timeout(&aic_chipup_sem, msecs_to_jiffies(2000)) == 0) {
+ 		aicbsp_unreg_sdio_notify();
+ 		if(aicbsp_load_fw_in_fdrv){
+@@ -536,6 +553,9 @@ static int aicbsp_platform_power_on(void)
+ #ifdef CONFIG_PLATFORM_ALLWINNER
+ 	sunxi_wlan_set_power(0);
+ #endif //CONFIG_PLATFORM_ALLWINNER
++#ifdef CONFIG_PLATFORM_TC002
++	sunxi_wlan_set_power(0);
++#endif
+ 
+ #ifdef CONFIG_PLATFORM_AMLOGIC
+         extern_wifi_set_enable(0);
+@@ -564,6 +584,13 @@ static void aicbsp_platform_power_off(void)
+ 	sunxi_mmc_rescan_card(aicbsp_bus_index);
+ #endif //CONFIG_PLATFORM_ALLWINNER
+ 
++#ifdef CONFIG_PLATFORM_TC002
++	aicbsp_bus_index = sunxi_wlan_get_bus_index();
++	sunxi_wlan_set_power(0);
++	mdelay(100);
++	sigmastar_mmc_rescan_card(aicbsp_bus_index, 0);
++#endif
++
+ #ifdef CONFIG_PLATFORM_ROCKCHIP2
+ 	rockchip_wifi_set_carddetect(0);
+ 	mdelay(200);
+diff --git a/aic8800_fdrv/rwnx_main.c b/aic8800_fdrv/rwnx_main.c
+index 18be5dc..7a76351 100755
+--- a/aic8800_fdrv/rwnx_main.c
++++ b/aic8800_fdrv/rwnx_main.c
+@@ -510,7 +510,7 @@ static const int rwnx_hwq2uapsd[NL80211_NUM_ACS] = {
+ 
+ 
+ extern uint8_t scanning;
+-int aicwf_dbg_level = LOGERROR|LOGINFO|LOGDEBUG|LOGTRACE;
++int aicwf_dbg_level = LOGERROR;
+ module_param(aicwf_dbg_level, int, 0660);
+ int testmode = 0;
+ char aic_fw_path[200];

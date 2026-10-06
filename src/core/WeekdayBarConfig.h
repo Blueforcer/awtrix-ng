@@ -22,6 +22,9 @@ struct WeekdayBarConfig {
 
 namespace weekdaybar {
 
+// Lowercase day names in weekendMask bit order, Sunday first.
+extern const char* const kDayNames[7];
+
 struct Error {
   std::string field;
   std::string message;

@@ -2,27 +2,17 @@
 
 #include <cmath>
 
+#include "core/render/Color.h"
+#include "core/render/Motion.h"
+
 namespace awtrix {
 namespace render {
 
 namespace {
 
-uint32_t scale(uint32_t c, float f) {
-  if (f < 0) f = 0;
-  if (f > 1) f = 1;
-  const uint32_t r = static_cast<uint32_t>(((c >> 16) & 0xFF) * f);
-  const uint32_t g = static_cast<uint32_t>(((c >> 8) & 0xFF) * f);
-  const uint32_t b = static_cast<uint32_t>((c & 0xFF) * f);
-  return (r << 16) | (g << 8) | b;
-}
-
-uint32_t mix(uint32_t a, uint32_t b, float t) {
-  auto ch = [&](int sh) {
-    const int va = (a >> sh) & 0xFF, vb = (b >> sh) & 0xFF;
-    return static_cast<uint32_t>(va + (vb - va) * t);
-  };
-  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
-}
+using color::scale;
+using color::mix;
+using motion::clamp01;
 
 // Cheap integer hash, only used to give each pixel or block a stable place in the reveal order.
 uint32_t hash2(int x, int y) {
@@ -33,10 +23,6 @@ uint32_t hash2(int x, int y) {
 
 // Stable 0..1 value per column, used to stagger the falling lanes so they don't move in lockstep.
 float lane01(int x) { return static_cast<float>(hash2(x, 0x5A17) >> 8) * (1.0f / 16777216.0f); }
-
-float clamp01(float v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
-
-float smoothstep(float p) { return p * p * (3.0f - 2.0f * p); }
 
 constexpr float kLaneStagger = 0.5f;
 
@@ -60,7 +46,7 @@ void composeTransition(Canvas& out, const Canvas& from, const Canvas& to, Transi
   if (p <= 0.0f) { copyCanvas(out, from); return; }
   if (p >= 1.0f) { copyCanvas(out, to); return; }
 
-  if (transitionPacing(effect) == Pacing::Eased) p = smoothstep(p);
+  if (transitionPacing(effect) == Pacing::Eased) p = motion::smoothstep(p);
 
   const bool backward = dir < 0;
 

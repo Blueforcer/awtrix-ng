@@ -47,6 +47,15 @@ std::shared_ptr<const Palette> paletteByName(const std::string& name) {
   return made;
 }
 
+bool lookupPalette(const std::string& name, Palette& out) {
+  if (name.empty()) return false;
+  if (g_loader && g_loader(name, out)) return true;
+  const Palette* stock = findStockPalette(name);
+  if (!stock) return false;
+  out = *stock;
+  return true;
+}
+
 std::shared_ptr<const Palette> paletteFromStopList(const uint32_t* stops, std::size_t n) {
   if (!stops || n == 0) return nullptr;
   return std::make_shared<const Palette>(paletteFromStops(stops, n));

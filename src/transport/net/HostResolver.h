@@ -1,7 +1,5 @@
 #pragma once
 
-#include <IPAddress.h>
-
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -22,7 +20,8 @@ class IHostResolver {
   // literal IPv4 address is answered on the spot.
   virtual ResolveState resolve(const std::string& host) = 0;
 
-  virtual IPAddress address() const = 0;
+  // IPv4 in host byte order, matching net::Endpoint (127.0.0.1 is 0x7f000001).
+  virtual uint32_t address() const = 0;
 
   virtual LinkError error() const = 0;
 

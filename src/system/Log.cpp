@@ -1,6 +1,7 @@
 #include "system/Log.h"
 
-#include <Arduino.h>
+#include "system/MonotonicClock.h"
+#include "platform_log/Output.h"
 
 #include <cstdarg>
 #include <cstdio>
@@ -42,10 +43,10 @@ void writeLine(const char* msg) {
     localtime_r(&now, &tmv);
     snprintf(line, kLineMax, "%02d:%02d:%02d %s", tmv.tm_hour, tmv.tm_min, tmv.tm_sec, msg);
   } else {
-    snprintf(line, kLineMax, "[%6lus] %s", static_cast<unsigned long>(millis() / 1000), msg);
+    snprintf(line, kLineMax, "[%6lus] %s", static_cast<unsigned long>(monotonicMs() / 1000), msg);
   }
   slot.seq = ++g_seq;
-  Serial.println(line);
+  writeLogLine(line);
 }
 
 }

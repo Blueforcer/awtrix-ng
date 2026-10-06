@@ -31,7 +31,14 @@ class AppRegistry {
                                [&](IApp* a) { return a->id() == id; }),
                 apps_.end());
   }
+  std::vector<std::string> ids() const {
+    std::vector<std::string> names;
+    names.reserve(apps_.size());
+    for (const IApp* app : apps_) names.push_back(app->id());
+    return names;
+  }
   std::size_t size() const { return apps_.size(); }
+  const std::vector<IApp*>& all() const { return apps_; }
 
  private:
   std::vector<IApp*> apps_;

@@ -8,29 +8,43 @@ namespace sound {
 constexpr size_t kMaxMp3Name = 32;
 constexpr const char* kDir = "/MP3/";
 constexpr const char* kExt = ".mp3";
+// A script's own sounds live in a folder named after it, next to its source.
+constexpr const char* kScriptsDir = "/SCRIPTS/";
+constexpr const char* kMelodiesDir = "/MELODIES/";
 
-// The allowed alphabet has no '/' and no '.', so the returned path cannot
-// escape /MP3 by construction.
-inline std::string mp3PathFor(const std::string& name) {
-  if (name.empty() || name.size() > kMaxMp3Name) return "";
-  for (char c : name) {
-    const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                    (c >= '0' && c <= '9') || c == '_' || c == '-';
-    if (!ok) return "";
-  }
-  return std::string(kDir) + name + kExt;
+// An MP3 to fetch rather than a stored name; no name can contain ':' or '/'.
+inline bool isUrl(const std::string& value) {
+  return value.compare(0, 7, "http://") == 0 || value.compare(0, 8, "https://") == 0;
 }
 
-// The inverse, for state reporting: "/MP3/<name>.mp3" back to "<name>".
-// Anything shaped differently answers "".
-inline std::string mp3NameFor(const std::string& path) {
-  constexpr size_t kPrefix = sizeof("/MP3/") - 1;
-  constexpr size_t kSuffix = sizeof(".mp3") - 1;
-  if (path.size() <= kPrefix + kSuffix) return "";
-  if (path.rfind(kDir, 0) != 0) return "";
-  if (path.compare(path.size() - kSuffix, kSuffix, kExt) != 0) return "";
-  return path.substr(kPrefix, path.size() - kPrefix - kSuffix);
-}
+// The one rule for a name that becomes part of a sound's path: 1-32 of A-Z, a-z, 0-9, _ and -.
+// It is the app name rule too, so every script's install name passes it. The alphabet has no '/'
+// and no '.', so a path built from such names cannot leave the folder it is joined to.
+bool validName(const std::string& name);
+
+// "/MP3/<name>.mp3" and "/MELODIES/<name>.txt"; "" for a name that breaks the rule.
+std::string mp3PathFor(const std::string& name);
+std::string melodyPathFor(const std::string& name);
+
+// "/SCRIPTS/<script>", the folder a script's sounds live in; "" for a name no folder can have.
+std::string scriptSoundDir(const std::string& script);
+
+// "/SCRIPTS/<script>/<name>.mp3"; "" unless both names follow the rule.
+std::string scriptMp3PathFor(const std::string& script, const std::string& name);
+
+// "<name>.mp3" back to "<name>" for the file a sound is stored in; "" for any other file name.
+std::string mp3NameOfFile(const std::string& file);
+
+// A plain name means one sound, so an MP3 in /MP3 and a melody in /MELODIES never share a name.
+// The file the other kind would keep under path's name; "" for any other path, a script's own
+// folder included.
+std::string namesakePath(const std::string& path);
+
+// Whether path is exactly one a script's sound can have: "/SCRIPTS/<script>/<name>.mp3".
+bool isScriptMp3Path(const std::string& path);
+
+// Whether path is place itself or lies inside the folder place: what deleting place takes along.
+bool within(const std::string& path, const std::string& place);
 
 }
 }

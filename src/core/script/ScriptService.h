@@ -8,6 +8,7 @@
 #include "core/Services.h"
 #include "core/api/JsonReader.h"
 #include "core/script/ScriptConfig.h"
+#include "core/script/ScriptData.h"
 #include "core/script/ScriptHeap.h"
 #include "core/script/ScriptHost.h"
 
@@ -43,7 +44,7 @@ class ScriptService : public IScriptService {
     const bool createOnly = expectedValue.isNull();
     if ((!createOnly && (!expectedValue.isString() || !expectedValue.appendString(expected))) ||
         !sourceValue.isString() || !sourceValue.appendString(source) || source.empty()) {
-      detail.message = "expected_source must be a string or null; source must be a non-empty string";
+      detail.message = "invalid source or expected_source";
       return DispatchResult::ValidationError;
     }
     std::string previous;
@@ -57,7 +58,7 @@ class ScriptService : public IScriptService {
         save_(name, source);
         std::string saved;
         if (readSource(name, saved) && saved == source) return DispatchResult::Ok;
-        detail.message = "the new source could not be saved";
+        detail.message = "source not saved";
       }
       removeScript(name);
       return DispatchResult::ValidationError;
@@ -83,42 +84,27 @@ class ScriptService : public IScriptService {
           saveStore(name, cleaned);
         return DispatchResult::Ok;
       }
-      detail.message = "the new source could not be saved";
+      detail.message = "source not saved";
     }
     const std::string failure = detail.message;
     const bool restored = host_.set(name, previous, oldStore) && host_.errorOf(name).message.empty();
     saveStore(name, oldStore.empty() ? "{}" : oldStore);
-    detail.message = failure + (restored ? "; previous version restored" :
-                                           "; previous source retained, restart the device");
+    detail.message = failure + (restored ? "; old version restored" : "; old version kept, restart");
     return DispatchResult::ValidationError;
   }
 
   DispatchResult setScriptConfig(const std::string& name, const std::string& json,
                                  DispatchDetail& detail) override {
-    std::string source;
-    if (!readSource(name, source)) {
-      detail.field = "name";
-      detail.message = "no such script";
-      return DispatchResult::NotFound;
-    }
-    std::string storeJson;
-    readStore(name, storeJson);
+    return patchStore(name, json, applyConfigPatch, "settings not applied",
+                      "not enough memory",
+                      detail);
+  }
 
-    const ConfigPatch patch = applyConfigPatch(parseConfig(source), storeJson, json);
-    if (!patch.ok) {
-      detail.field = patch.field;
-      detail.message = patch.message;
-      return DispatchResult::ValidationError;
-    }
-    if (patch.storeJson.size() > heap::growthBudget()) {
-      detail.field = "name";
-      detail.message = "not enough free memory to store the change; shorten a text setting";
-      return DispatchResult::Capacity;
-    }
-
-    const DispatchResult r = install(name, source, patch.storeJson, "settings not applied", detail);
-    if (r == DispatchResult::Ok) saveStore(name, patch.storeJson);
-    return r;
+  // The script keeps its store in memory, so a change only reaches it by a restart.
+  DispatchResult setScriptData(const std::string& name, const std::string& json,
+                               DispatchDetail& detail) override {
+    return patchStore(name, json, applyDataPatch, "data not applied",
+                      "not enough memory", detail);
   }
 
   void removeScript(const std::string& name) override {
@@ -136,7 +122,62 @@ class ScriptService : public IScriptService {
     host_.setRunningScripts(running);
   }
 
+  bool scriptIsOnDemand(const std::string& name) override { return host_.isOnDemand(name); }
+
+  // Like an install, Ok means started, not working: a script that throws in setup() is running
+  // and shows its error.
+  DispatchResult launchScript(const std::string& name, DispatchDetail& detail) override {
+    if (!host_.launch(name)) {
+      const DispatchResult refusal = refused("script start refused", detail);
+      return host_.refusalIsInvalid() ? DispatchResult::NotFound : refusal;
+    }
+    reportError(name, detail);
+    return DispatchResult::Ok;
+  }
+
+  void unloadScript(const std::string& name) override { host_.unload(name); }
+
+  std::string scriptTitle(const std::string& name) override {
+    const ScriptMeta* meta = host_.metaOf(name);
+    return meta && !meta->name.empty() ? meta->name : name;
+  }
+
  private:
+  using StorePatchFn = StorePatch (*)(const ConfigSchema&, const std::string&,
+                                      const std::string&);
+
+  DispatchResult patchStore(const std::string& name, const std::string& json,
+                            StorePatchFn apply, const char* refusal, const char* tooBig,
+                            DispatchDetail& detail) {
+    std::string source;
+    if (!readSource(name, source)) {
+      detail.field = "name";
+      detail.message = "no such script";
+      return DispatchResult::NotFound;
+    }
+    std::string storeJson;
+    readStore(name, storeJson);
+
+    const StorePatch patch = apply(parseConfig(source), storeJson, json);
+    if (patch.malformed) return DispatchResult::ParseError;
+    if (!patch.ok) {
+      detail.field = patch.field;
+      detail.message = patch.message;
+      return DispatchResult::ValidationError;
+    }
+    if (patch.storeJson.size() > heap::growthBudget()) {
+      detail.field = "name";
+      detail.message = tooBig;
+      return DispatchResult::Capacity;
+    }
+
+    // Saved before the restart, so what the app itself stores while starting comes last.
+    saveStore(name, patch.storeJson);
+    const DispatchResult r = install(name, source, patch.storeJson, refusal, detail);
+    if (r != DispatchResult::Ok) saveStore(name, storeJson.empty() ? "{}" : storeJson);
+    return r;
+  }
+
   bool readSource(const std::string& name, std::string& out) const {
     const ScriptServices& svc = host_.services();
     return svc.readSource && svc.readSource(name, out);
@@ -173,18 +214,24 @@ class ScriptService : public IScriptService {
   DispatchResult install(const std::string& name, const std::string& source,
                          const std::string& storeJson, const char* refusal,
                          DispatchDetail& detail) {
-    if (!host_.set(name, source, storeJson)) {
-      detail.field = "name";
-      detail.message = host_.lastRefusal();
-      if (detail.message.empty()) detail.message = refusal;
-      if (host_.refusalIsInvalid()) return DispatchResult::ValidationError;
-      return host_.refusalIsTransient() ? DispatchResult::Busy : DispatchResult::Capacity;
-    }
+    if (!host_.set(name, source, storeJson)) return refused(refusal, detail);
+    reportError(name, detail);
+    return DispatchResult::Ok;
+  }
+
+  DispatchResult refused(const char* fallback, DispatchDetail& detail) const {
+    detail.field = "name";
+    detail.message = host_.lastRefusal();
+    if (detail.message.empty()) detail.message = fallback;
+    if (host_.refusalIsInvalid()) return DispatchResult::ValidationError;
+    return host_.refusalIsTransient() ? DispatchResult::Busy : DispatchResult::Capacity;
+  }
+
+  void reportError(const std::string& name, DispatchDetail& detail) const {
     const ScriptError err = host_.errorOf(name);
     detail.message = err.message;
     detail.line = err.line;
     detail.hook = err.hook;
-    return DispatchResult::Ok;
   }
 
   ScriptHost& host_;

@@ -13,6 +13,11 @@ namespace audio {
 // frame sequence always answers the same numbers, which is what the host tests lean on.
 class SpectrumAnalyzer {
  public:
+  enum class Scaling { Adaptive, Fixed };
+  explicit SpectrumAnalyzer(Scaling scaling = Scaling::Adaptive) : scaling_(scaling) {}
+  // Absolute RMS dBFS for live inputs: quiet rooms must not grow towards full scale.
+  static constexpr float kFixedUpperDb = -18.f;
+  static constexpr float kFixedRangeDb = 36.f;
   static constexpr float kMinBandHz = 50.f;
   static constexpr float kMaxBandHz = 16000.f;
   // Dynamic range on the panel, below a reference that follows the loudest band. The loudness
@@ -45,6 +50,7 @@ class SpectrumAnalyzer {
   int sampleRateHz() const { return rateHz_; }
 
  private:
+  Scaling scaling_;
   bool ensureScratch();
   void rebuildBands(int sampleRateHz);
 

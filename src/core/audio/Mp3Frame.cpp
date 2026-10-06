@@ -58,7 +58,7 @@ bool parseHeader(const uint8_t* data, std::size_t bytes, FrameHeader& out) {
 }
 
 bool isSupported(const FrameHeader& h) {
-  return h.version == Version::Mpeg1 && h.layer == Layer::LayerIII;
+  return h.layer == Layer::LayerIII && h.version != Version::Reserved;
 }
 
 // Scans for a frame start. 0xFF alone is far too common in audio data, so every candidate has to

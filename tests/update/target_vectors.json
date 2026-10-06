@@ -1,0 +1,66 @@
+[
+  {
+    "target": "awtrix-ng:tc002",
+    "allowed": true
+  },
+  {
+    "target": "experimental:x",
+    "allowed": true
+  },
+  {
+    "target": "experimental:AZaz09._:-",
+    "allowed": true
+  },
+  {
+    "target": "experimental:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "allowed": true
+  },
+  {
+    "target": "experimental:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "allowed": false
+  },
+  {
+    "target": "",
+    "allowed": false
+  },
+  {
+    "target": "awtrix-ng:esp32",
+    "allowed": false
+  },
+  {
+    "target": "AWTRIX-NG:tc002",
+    "allowed": false
+  },
+  {
+    "target": "experimental:",
+    "allowed": false
+  },
+  {
+    "target": "experimental:a/b",
+    "allowed": false
+  },
+  {
+    "target": "experimental:a b",
+    "allowed": false
+  },
+  {
+    "target": "experimental:a\u0000b",
+    "allowed": false
+  },
+  {
+    "target": "experimental:a\nb",
+    "allowed": false
+  },
+  {
+    "target": "experimental:\u00e4",
+    "allowed": false
+  },
+  {
+    "target": "experimental:\\",
+    "allowed": false
+  },
+  {
+    "target": " experimental:x",
+    "allowed": false
+  }
+]

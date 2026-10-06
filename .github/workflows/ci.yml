@@ -29,6 +29,36 @@ jobs:
       - name: Run native unit tests
         run: python scripts/test_native.py
 
+  linux-tests:
+    name: Linux application and shared host contracts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install Linux build and integration dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libssl-dev liblzma-dev libjpeg-turbo8-dev openssl mosquitto
+          pip install -U platformio
+      - name: Resolve shared host libraries
+        run: pio pkg install -e native
+      - name: Configure the Linux targets
+        run: cmake -S . -B .pio/linux -DCMAKE_BUILD_TYPE=Release -DAWTRIX_REQUIRE_INTEGRATION_SERVICES=ON
+      - name: Build the Linux targets
+        run: cmake --build .pio/linux --parallel 2
+      - name: Run Linux contracts
+        run: ctest --test-dir .pio/linux --output-on-failure
+      - name: Verify actual systemd service isolation and restart persistence
+        run: sudo python3 tests/linux/test_service.py --unit .pio/linux/awtrix-ng.service --binary .pio/linux/awtrix-linux --webui webui/index.html
+
   webui-tests:
     name: Web UI tests (jsdom)
     runs-on: ubuntu-latest
@@ -36,12 +66,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: webui/test/package-lock.json
-      # The harness loads webui/index.html from disk and drives it in jsdom, so
-      # these run against the shipped source rather than a build of it -- which
-      # is the point: the simulator serves that same file.
+      # The harness loads webui/index.html from disk and tests it in jsdom.
       - name: Install test dependencies
         run: npm ci
         working-directory: webui/test
@@ -52,6 +80,22 @@ jobs:
         # The converter on the migration page is dependency-free ES modules,
         # so its golden fixtures run on the node this job already has.
         run: node --test "tools/flowconv/*.test.mjs"
+
+  tc002-image-tools:
+    uses: ./.github/workflows/tc002-image-tools.yml
+
+  # On main as well, so a broken TC002 build shows before a tag, and a tag finds the toolchain
+  # cache main saved.
+  tc002-update:
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    uses: ./.github/workflows/tc002-update.yml
+
+  tc002-installer:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: tc002-image-tools
+    uses: ./.github/workflows/tc002-installer.yml
+    with:
+      image-tools-ready: true
 
   device-build:
     name: Firmware build (${{ matrix.env }})
@@ -115,6 +159,10 @@ jobs:
         # It lives here rather than in docs.yml because this workflow also runs
         # on tags, so a release cannot publish with the docs out of sync.
         run: python tools/check_docs_sync.py
+      - name: Check documented error messages and the drift detector
+        run: |
+          python tools/test_check_error_messages.py
+          python tools/check_error_messages.py
       - name: Check the flow converter's maps against the migration tables
         # The converter widget applies the same renames the key-map tables
         # teach by hand, links its warnings at anchors across the docs, and
@@ -148,16 +196,27 @@ jobs:
         # source glyphs get imported is decided by comparing them against their
         # Latin twins, one redrawn base glyph renumbers every index after it.
         run: python tools/check_font_sync.py
+      - name: Check shared TC002 package constants
+        run: python tools/tc002/install/gen_constants.py --check
       - name: Check every partition table the generator can produce
         # Partition arithmetic looks right in review and bricks a device: an
         # overlap or a misaligned app offset only shows up once someone flashes
         # it. Cheap to check here, expensive to discover in the field.
         run: python tools/check_partitions.py
+      - name: Check the tag against the version and its release notes
+        # The release body only links the release notes page of the docs, so a
+        # tag without that page would publish a dead link.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(tr -d '[:space:]' < version)
+          [ "$GITHUB_REF_NAME" = "v$version" ] || { echo "::error::tag $GITHUB_REF_NAME does not match version $version"; exit 1; }
+          [ -f "docs/releases/$version.md" ] || { echo "::error::docs/releases/$version.md is missing"; exit 1; }
+          grep -q "releases/$version.md" mkdocs.yml || { echo "::error::docs/releases/$version.md is not in the mkdocs.yml nav"; exit 1; }
 
   release:
     name: Publish firmware release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [native-tests, webui-tests, device-build, docs]
+    needs: [native-tests, webui-tests, tc002-image-tools, tc002-update, tc002-installer, device-build, docs]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -203,11 +262,35 @@ jobs:
         # images stay separate assets on purpose: the device names the exact
         # file to upload, and that name should be a direct click.
         run: zip usb-awtrix-ng.zip usb-awtrix-ng-*.bin
+      - name: Fetch the TC002 update package, USB installation package and sources
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: tc002-update
+      - name: Fetch the TC002 installers
+        uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: tc002-installer-*
+          path: tc002-installer-run
+      - name: Stage the TC002 installers
+        # Version-free names, so the TC002 guide links releases/latest/download/<name>.
+        run: node tools/tc002/desktop/publish.mjs --from tc002-installer-run --out tc002-installer
       - name: Stage license notices
         # LGPL-2.1 section 6 and the Apache, MIT and BSD terms all require their
         # text to accompany a binary distribution. A release of bare .bin files
         # carries none, so the notices ship as their own asset.
         run: zip -r licenses-awtrix-ng.zip LICENSE.md THIRD-PARTY-NOTICES.md LICENSES/
+      - name: Write the release body
+        # The release notes live in the docs, one page per version, built per
+        # clock. The body only links them.
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          docs=https://blueforcer.github.io/awtrix-ng
+          cat > release-body.md <<EOF
+          **[Release notes]($docs/releases/$version/)** for your clock:
+          [ESP32 (Ulanzi TC001, DIY)]($docs/esp32/releases/$version/) ·
+          [ESP32-S3]($docs/esp32-s3/releases/$version/) ·
+          [Ulanzi TC002]($docs/tc002/releases/$version/)
+          EOF
       - name: Stage the release as a draft
         # Created as a draft on purpose. Publishing fires `release: published`,
         # which is what notifies Discord -- do that before the assets are
@@ -217,15 +300,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          # The notes are written by hand into RELEASE_NOTES.md alongside the
-          # `version` bump. Without this the release ships an empty body and the
-          # Discord embed falls back to a bare link.
-          body_path: RELEASE_NOTES.md
+          body_path: release-body.md
           files: |
             firmware-awtrix-ng.bin
             firmware-awtrix-ng-s3-octal.bin
             firmware-awtrix-ng-s3-quad.bin
+            awtrix-ng-tc002.awup
             usb-awtrix-ng.zip
+            usb-awtrix-ng-tc002.zip
+            tc002-sources.tar.gz
+            tc002-installer/*
             licenses-awtrix-ng.zip
       - name: Flip the release live, now that every asset is attached
         env:

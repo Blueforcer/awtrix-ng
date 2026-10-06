@@ -1,0 +1,16 @@
+{
+  "maxArchiveBytes": 33554432,
+  "maxFileBytes": 16777216,
+  "maxFiles": 128,
+  "productionTarget": "awtrix-ng:tc002",
+  "resPartitionBytes": 8388608,
+  "resEraseBytes": 65536,
+  "resChunkBytes": 1048576,
+  "tmpReserveBytes": 2097152,
+  "maxConfigBytes": 262144,
+  "usbConnectWaitMs": 120000,
+  "usbConnectPollMs": 150,
+  "usbConnectSettleMs": 60000,
+  "usbConnectStableMs": 4000,
+  "usbScanEndMs": 10000
+}

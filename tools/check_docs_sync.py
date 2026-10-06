@@ -19,6 +19,7 @@ Run: python tools/check_docs_sync.py     (exit 1 on drift)
 """
 
 import os
+from pathlib import Path
 import re
 import sys
 
@@ -29,8 +30,8 @@ except ImportError:
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-REMOVED_KEYS = {"bootSound", "updateCheck", "colorTemperature", "clients", "save", "volume",
-                "matrixWidth",
+REMOVED_KEYS = {"updateCheck", "colorTemperature", "clients", "save",
+                "matrixWidth", "panelHeight",
                 "matrixLayout", "matrixTileWidth", "matrixOrientation", "matrixSerpentine",
                 "matrixFlipX", "matrixFlipY"}
 HISTORICAL_MENTIONS_OK = {
@@ -41,6 +42,8 @@ HISTORICAL_MENTIONS_OK = {
     "docs/reference/visuals.md",
 }
 UNPUBLISHED = ("docs/examples/",)
+# Internal protocol pages are exempt from public API key checks.
+DEVELOPER_PAGES = ("docs/developers/",)
 
 
 def read(rel):
@@ -55,7 +58,11 @@ def ground_truth():
         r'mk(?:Bool|Int|Long|Float|Enum|Color|NullColor|Transition)\("([a-zA-Z0-9]+)"',
         settings_src))
     settings |= set(re.findall(r'w\.key\("([a-zA-Z0-9]+)"\)', settings_src))
+    for fields in (Path(ROOT) / "src/platform").glob("*/include/platform_settings/Fields.inc"):
+        settings |= set(re.findall(r'SETTING_\w+\((\w+),', fields.read_text(encoding="utf-8")))
     system = set(re.findall(r"X\(([a-zA-Z0-9]+),", read("src/persistence/DeviceConfigFields.h")))
+    for fields in (Path(ROOT) / "src/platform").glob("*/include/platform_settings/ConfigFields.inc"):
+        system |= set(re.findall(r'PLATFORM_CONFIG\([^,]+,\s*(\w+),', fields.read_text(encoding="utf-8")))
     state_json = read("src/core/api/StateJson.cpp")
     start = state_json.index("std::string buildDeviceJson(")
     end = state_json.index("\n}", start)
@@ -66,10 +73,30 @@ def ground_truth():
         body = body[:arr_start] + body[arr_end:]
     device = set(re.findall(r'\bw\.(?:member|memberNull|key)\("([a-zA-Z0-9]+)"',
                             body)) | {"indicators"}
-    router = read("src/core/api/ApiRouter.cpp") + read("src/transport/http/HttpApiServer.cpp")
-    errors = set(re.findall(r'errorJson\("([a-zA-Z]+)"', router))
-    errors |= set(re.findall(r'sendError\([0-9]+, "([a-zA-Z]+)"', router))
+    # Top-level members only: Tc002Update nests its fields under one key.
+    for source, pattern in (("Tc002Update", r'\bjson\.key\("([a-zA-Z0-9]+)"'),
+                            ("SupervisedRuntime", r'\bjson\.member\("([a-zA-Z0-9]+)"')):
+        text = read(f"src/platform/tc002/runtime/{source}.cpp")
+        start = text.index(f"void {source}::writeMembers(")
+        end = text.index("\n}", start)
+        device |= set(re.findall(pattern, text[start:end]))
+    # HTTP error codes from shared services and transport handlers.
+    api_sources = sorted((Path(ROOT) / "src/core/api").glob("*.cpp"))
+    router = "\n".join(path.read_text(encoding="utf-8") for path in api_sources)
+    http_sources = [path for path in sorted((Path(ROOT) / "src/transport/http").iterdir())
+                    if path.suffix in (".cpp", ".inc")]
+    router += "\n".join(path.read_text(encoding="utf-8") for path in http_sources)
+    router += read("src/persistence/SystemConfigApi.cpp")
+    # API handlers and supervisor adapters can both construct platform responses.
+    host = "\n".join(path.read_text(encoding="utf-8")
+                     for path in sorted((Path(ROOT) / "src/platform").rglob("*.cpp"))
+                     if "vendor" not in path.parts)
+    errors = set(re.findall(r'errorJson\("([a-zA-Z]+)"', router + host))
+    errors |= set(re.findall(r'\b(?:sendError|reject|error|errorResult)\(\s*[0-9]+,\s*"([a-zA-Z]+)"', router))
     errors |= set(re.findall(r'return \{"([a-zA-Z]+)", [0-9]+,', router))
+    errors |= set(re.findall(r'sendError\(res,\s*[0-9]+,\s*"([a-zA-Z]+)"', host))
+    errors |= set(re.findall(r'fail\(body,\s*[0-9]+,\s*"([a-zA-Z]+)"', host))
+    errors |= set(re.findall(r'(?:Refusal\{|refusal = \{)[0-9]+,\s*"([a-zA-Z]+)"', host))
     errors |= set(re.findall(r'err = \{[0-9]+, "([a-zA-Z]+)"',
                              read("src/persistence/SystemConfigApply.cpp")))
     errors |= set(re.findall(r'\berror\([0-9]+,\s*"([a-zA-Z]+)"',
@@ -168,18 +195,12 @@ def check_caps(problems):
 
 
 def stock_palettes():
-    """The palette names the firmware advertises in GET /api/v1/capabilities.
-
-    The array is a hand-written literal in the capabilities builder rather than
-    generated from the palette table, so it is exactly the kind of list that
-    drifts: `Rainbow` was a working palette that five doc pages described as
-    missing from the API long after it had been added to the literal.
-    """
+    """The palette names written to GET /api/v1/capabilities by JsonWriter."""
     src = read("src/core/api/CapabilitiesJson.h")
-    m = re.search(r'\\"palettes\\":\[(.*?)\]', src, re.S)
+    m = re.search(r'\.key\("palettes"\)\.beginArray\(\);\s*for\s*\([^:]+:\s*\{([^}]+)\}', src)
     if not m:
         return None
-    return set(re.findall(r'\\"([A-Za-z0-9]+)\\"', m.group(1)))
+    return set(re.findall(r'"([A-Za-z0-9]+)"', m.group(1)))
 
 
 def check_palettes(problems):
@@ -483,7 +504,7 @@ def main():
             if not name.endswith((".md", ".yaml")):
                 continue
             rel = os.path.relpath(os.path.join(dirpath, name), ROOT).replace(os.sep, "/")
-            if rel.startswith(UNPUBLISHED) or rel in HISTORICAL_MENTIONS_OK:
+            if rel.startswith(UNPUBLISHED + DEVELOPER_PAGES) or rel in HISTORICAL_MENTIONS_OK:
                 continue
             body = read(rel)
             for key in sorted(REMOVED_KEYS):

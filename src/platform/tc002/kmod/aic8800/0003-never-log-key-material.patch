@@ -1,0 +1,20 @@
+aic8800_fdrv: never write key material to the kernel log
+
+rwnx_send_key_add dumped every pairwise and group key to the kernel
+log whatever aicwf_dbg_level said.
+
+---
+diff --git a/aic8800_fdrv/rwnx_msg_tx.c b/aic8800_fdrv/rwnx_msg_tx.c
+index 9b0e359..264d5e6 100755
+--- a/aic8800_fdrv/rwnx_msg_tx.c
++++ b/aic8800_fdrv/rwnx_msg_tx.c
+@@ -670,9 +670,6 @@ int rwnx_send_key_add(struct rwnx_hw *rwnx_hw, u8 vif_idx, u8 sta_idx, bool pair
+ 	RWNX_DBG("%s: sta_idx:%d key_idx:%d inst_nbr:%d cipher:%d key_len:%d\n", __func__,
+ 			 key_add_req->sta_idx, key_add_req->key_idx, key_add_req->inst_nbr,
+ 			 key_add_req->cipher_suite, key_add_req->key.length);
+-#if defined(CONFIG_RWNX_DBG) || defined(CONFIG_DYNAMIC_DEBUG)
+-	print_hex_dump_bytes("key: ", DUMP_PREFIX_OFFSET, key_add_req->key.array, key_add_req->key.length);
+-#endif
+ 
+ 	/* Send the MM_KEY_ADD_REQ message to LMAC FW */
+ 	return rwnx_send_msg(rwnx_hw, key_add_req, 1, MM_KEY_ADD_CFM, cfm);

@@ -70,16 +70,16 @@ inline bool validate(const PinSet& p, const SocProfile& soc, std::string& err) {
   };
 
   if (!isMatrixPin(p.matrix, soc)) {
-    err = "pinMatrix: unsupported pin (compiled drivers: " + detail::pinListText(soc.matrix) + ")";
+    err = "pinMatrix: unsupported pin (use " + detail::pinListText(soc.matrix) + ")";
     return false;
   }
   for (const Entry& e : entries) {
     if (!e.enabled) continue;
     if (!exists(e.pin, soc)) {
-      err = std::string(e.name) + ": not a valid " + soc.label + " GPIO (0-" +
+      err = std::string(e.name) + ": invalid " + soc.label + " GPIO (0-" +
             std::to_string(soc.gpioMax);
       if (!soc.missing.empty()) err += " except " + detail::rangeText(soc.missing);
-      err += ", or -1 = disabled)";
+      err += ", or -1)";
       return false;
     }
     if (const ReservedRange* r = soc.reserved.find(e.pin)) {
@@ -94,11 +94,11 @@ inline bool validate(const PinSet& p, const SocProfile& soc, std::string& err) {
   }
   const std::string adcText = detail::rangeText(soc.adc1);
   if (p.battery >= 0 && !soc.adc1.contains(p.battery)) {
-    err = "pinBattery: must be an ADC1 pin (GPIO " + adcText + ", usable while WiFi is on)";
+    err = "pinBattery: must be ADC1 (GPIO " + adcText + ")";
     return false;
   }
   if (p.ldr >= 0 && !soc.adc1.contains(p.ldr)) {
-    err = "pinLdr: must be an ADC1 pin (GPIO " + adcText + ", usable while WiFi is on)";
+    err = "pinLdr: must be ADC1 (GPIO " + adcText + ")";
     return false;
   }
   for (std::size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); ++i) {
@@ -109,11 +109,10 @@ inline bool validate(const PinSet& p, const SocProfile& soc, std::string& err) {
         err = std::string("duplicate pin ") + std::to_string(entries[i].pin) + " (" +
               entries[i].name + ", " + entries[j].name + ")";
         // Freeing the matrix pin needs both changes in one body, because either half on its own
-        // still collides and would be rejected. Hence the worked example in the message.
+        // still collides and would be rejected.
         if (std::string(entries[i].name) == "pinMatrix" ||
             std::string(entries[j].name) == "pinMatrix")
-          err += " - the matrix pin cannot be shared; move the other pin in the SAME request"
-                 " (AWTRIX 2: set pinI2cSda to 17 together with pinMatrix 21)";
+          err += " - move both pins in one request";
         return false;
       }
     }

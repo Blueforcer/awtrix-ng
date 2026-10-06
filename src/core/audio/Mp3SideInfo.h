@@ -35,6 +35,16 @@ struct SideInfo {
   GranuleInfo granules[kGranules][kMaxChannels];
 };
 
+// Two granules per MPEG-1 frame, one per MPEG-2 or 2.5 frame.
+inline int granules(const FrameHeader& header) { return header.lsf() ? 1 : kGranules; }
+
+// Whether this channel's scalefactors carry intensity-stereo positions, which MPEG-2 and 2.5 code
+// differently from the rest.
+inline bool intensityChannel(const FrameHeader& header, int channel) {
+  return channel == 1 && header.channelMode == ChannelMode::JointStereo &&
+         (header.modeExtension & 0x01) != 0;
+}
+
 int sideInfoBytes(const FrameHeader& header);
 
 bool parseSideInfo(BitReader& bits, const FrameHeader& header, SideInfo& out);

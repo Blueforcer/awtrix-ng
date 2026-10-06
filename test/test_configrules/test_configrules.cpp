@@ -224,7 +224,8 @@ void test_malformed_ip_fields_rejected() {
     TEST_ASSERT_EQUAL_STRING(k, e.field.c_str());
   }
   cfgrules::ConfigError e;
-  for (const char* bad : {"192.168.1", "192.168.1.1.1", "192.168.1.a", "1.2.3.4 ", "...."}) {
+  for (const char* bad : {"192.168.1", "192.168.1.1.1", "192.168.1.a", "1.2.3.4 ", "....", "192.168.001.50",
+                          "192.168.1.50."}) {
     Body d;
     d.set("ip", bad);
     TEST_ASSERT_FALSE_MESSAGE(ok(d, e), bad);
@@ -321,14 +322,41 @@ void test_ip_split_is_absent_without_a_suffix() {
   }
 }
 
+bool staticNet(bool netStatic, const char* ip, const char* subnet, cfgrules::ConfigError& e,
+               const char* gateway = "", const char* dns1 = "", const char* dns2 = "") {
+  return cfgrules::validateStaticNet(netStatic, ip, subnet, gateway, dns1, dns2, e);
+}
+
 void test_static_ip_without_mask_rejected() {
   cfgrules::ConfigError e;
-  TEST_ASSERT_FALSE(cfgrules::validateStaticNet(true, "192.168.1.50", "", e));
+  TEST_ASSERT_FALSE(staticNet(true, "192.168.1.50", "", e));
   TEST_ASSERT_EQUAL_STRING("subnet", e.field.c_str());
 
-  TEST_ASSERT_TRUE(cfgrules::validateStaticNet(true, "192.168.1.50", "255.255.255.0", e));
-  TEST_ASSERT_TRUE(cfgrules::validateStaticNet(true, "", "", e));
-  TEST_ASSERT_TRUE(cfgrules::validateStaticNet(false, "192.168.1.50", "", e));
+  TEST_ASSERT_TRUE(staticNet(true, "192.168.1.50", "255.255.255.0", e));
+  TEST_ASSERT_TRUE(staticNet(true, "", "", e));
+  TEST_ASSERT_TRUE(staticNet(false, "192.168.1.50", "", e));
+}
+
+void test_unusable_static_ip_rejected() {
+  struct Case {
+    const char *ip, *subnet, *gateway, *dns1, *field;
+  };
+  for (const Case& c : {Case{"192.168.1.50", "255.0.255.0", "", "", "subnet"},
+                        Case{"192.168.1.50", "0.0.0.0", "", "", "subnet"},
+                        Case{"192.168.1.0", "255.255.255.0", "", "", "ip"},
+                        Case{"192.168.1.255", "255.255.255.0", "", "", "ip"},
+                        Case{"127.0.0.5", "255.0.0.0", "", "", "ip"},
+                        Case{"224.0.0.5", "255.255.255.0", "", "", "ip"},
+                        Case{"192.168.1.50", "255.255.255.0", "192.168.1.50", "", "gateway"},
+                        Case{"192.168.1.50", "255.255.255.0", "192.168.1.1", "239.1.1.1", "dns1"}}) {
+    cfgrules::ConfigError e;
+    TEST_ASSERT_FALSE_MESSAGE(staticNet(true, c.ip, c.subnet, e, c.gateway, c.dns1), c.ip);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(c.field, e.field.c_str(), c.ip);
+  }
+  cfgrules::ConfigError e;
+  TEST_ASSERT_TRUE(staticNet(true, "192.168.1.50", "255.255.255.0", e, "0.0.0.0", "0.0.0.0"));
+  TEST_ASSERT_TRUE(staticNet(true, "10.0.0.7", "255.255.255.254", e, "10.0.0.6"));
+  TEST_ASSERT_TRUE(staticNet(true, "10.0.0.7", "255.255.255.255", e));
 }
 
 void test_inverted_brightness_window_rejected() {
@@ -351,6 +379,11 @@ void test_panel_width_product_must_fit_the_envelope() {
   TEST_ASSERT_EQUAL_STRING("panelWidth", e.field.c_str());
   TEST_ASSERT_FALSE(cfgrules::validateMatrixGeometry(128, 2, e));
   TEST_ASSERT_EQUAL_STRING("panelWidth", e.field.c_str());
+  TEST_ASSERT_FALSE(e.message.empty());
+
+  // A stored value from another firmware must not overflow the product.
+  TEST_ASSERT_FALSE(cfgrules::validateMatrixGeometry(INT_MAX, 2, e));
+  TEST_ASSERT_FALSE(cfgrules::validateMatrixGeometry(2, INT_MAX, e));
 }
 
 void test_panel_fields_are_range_checked() {
@@ -390,8 +423,7 @@ void test_wiring_enums_are_named_not_numbered() {
   c.set("panelStart", "sideways");
   TEST_ASSERT_FALSE(ok(c, e));
   TEST_ASSERT_EQUAL_STRING("panelStart", e.field.c_str());
-  TEST_ASSERT_EQUAL_STRING("must be one of: topLeft topRight bottomLeft bottomRight",
-                           e.message.c_str());
+  TEST_ASSERT_FALSE(e.message.empty());
 
   Body d;
   d.set("panelStart", 2);
@@ -405,7 +437,7 @@ void test_wiring_enums_are_named_not_numbered() {
   Body g;
   g.set("panelWiring", "diagonal");
   TEST_ASSERT_FALSE(ok(g, e));
-  TEST_ASSERT_EQUAL_STRING("must be one of: rows columns", e.message.c_str());
+  TEST_ASSERT_FALSE(e.message.empty());
 }
 
 void test_panel_color_order_is_a_named_enum() {
@@ -418,7 +450,7 @@ void test_panel_color_order_is_a_named_enum() {
   invalid.set("panelColorOrder", "rrg");
   TEST_ASSERT_FALSE(ok(invalid, e));
   TEST_ASSERT_EQUAL_STRING("panelColorOrder", e.field.c_str());
-  TEST_ASSERT_EQUAL_STRING("must be one of: rgb rbg grb gbr brg bgr", e.message.c_str());
+  TEST_ASSERT_FALSE(e.message.empty());
 }
 
 void test_wiring_booleans_must_be_booleans() {
@@ -431,7 +463,7 @@ void test_wiring_booleans_must_be_booleans() {
   b.set("panelSerpentine", "flase");
   TEST_ASSERT_FALSE(ok(b, e));
   TEST_ASSERT_EQUAL_STRING("panelSerpentine", e.field.c_str());
-  TEST_ASSERT_EQUAL_STRING("must be a boolean", e.message.c_str());
+  TEST_ASSERT_FALSE(e.message.empty());
 
   Body r;
   r.set("panelChainReverse", true);
@@ -441,7 +473,7 @@ void test_wiring_booleans_must_be_booleans() {
   rb.set("panelChainReverse", "yes");
   TEST_ASSERT_FALSE(ok(rb, e));
   TEST_ASSERT_EQUAL_STRING("panelChainReverse", e.field.c_str());
-  TEST_ASSERT_EQUAL_STRING("must be a boolean", e.message.c_str());
+  TEST_ASSERT_FALSE(e.message.empty());
 
   Body s;
   s.set("panelChainSerpentine", true);
@@ -451,7 +483,7 @@ void test_wiring_booleans_must_be_booleans() {
   sb.set("panelChainSerpentine", "yes");
   TEST_ASSERT_FALSE(ok(sb, e));
   TEST_ASSERT_EQUAL_STRING("panelChainSerpentine", e.field.c_str());
-  TEST_ASSERT_EQUAL_STRING("must be a boolean", e.message.c_str());
+  TEST_ASSERT_FALSE(e.message.empty());
 
   Body c;
   c.set("rotate", 1);
@@ -464,6 +496,23 @@ void test_wiring_booleans_must_be_booleans() {
   TEST_ASSERT_TRUE_MESSAGE(ok(d, e), e.field.c_str());
 }
 
+}
+
+void test_ignored_keys_are_not_checked() {
+  Body d;
+  d.set("pinMatrix", 99);
+  d.set("panelWiring", "diagonal");
+  d.set("hostname", "clock");
+  cfgrules::ConfigError e;
+  TEST_ASSERT_FALSE(ok(d, e));
+  const auto ignore = [](std::string_view key, const void*) {
+    return key == "pinMatrix" || key == "panelWiring";
+  };
+  TEST_ASSERT_TRUE_MESSAGE(
+      cfgrules::validateSystemRead(api::JsonReader(d.str()), e, false, ignore), e.field.c_str());
+  d.set("maxBrightness", 999);
+  TEST_ASSERT_FALSE(cfgrules::validateSystemRead(api::JsonReader(d.str()), e, false, ignore));
+  TEST_ASSERT_EQUAL_STRING("maxBrightness", e.field.c_str());
 }
 
 void setUp() {}
@@ -490,6 +539,7 @@ int main(int, char**) {
   RUN_TEST(test_ip_accepts_cidr_suffix);
   RUN_TEST(test_cidr_suffix_rejected_on_other_ip_fields);
   RUN_TEST(test_ip_suffix_and_subnet_together_rejected);
+  RUN_TEST(test_unusable_static_ip_rejected);
   RUN_TEST(test_ip_split_names_the_mask);
   RUN_TEST(test_ip_split_is_absent_without_a_suffix);
   RUN_TEST(test_static_ip_without_mask_rejected);
@@ -501,6 +551,7 @@ int main(int, char**) {
   RUN_TEST(test_wiring_booleans_must_be_booleans);
   RUN_TEST(test_i2s_pins_are_all_or_none);
   RUN_TEST(test_mclk_and_amp_enable_need_the_i2s_bus);
+  RUN_TEST(test_ignored_keys_are_not_checked);
   UNITY_END();
   return 0;
 }

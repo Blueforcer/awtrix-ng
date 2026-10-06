@@ -1,0 +1,12 @@
+// Public voice-state error codes. Included by C++; read as data by the WebUI tests.
+AWTRIX_VOICE_ERROR(connectionLost)
+AWTRIX_VOICE_ERROR(haError)
+AWTRIX_VOICE_ERROR(microphoneFailed)
+AWTRIX_VOICE_ERROR(audioTooSlow)
+AWTRIX_VOICE_ERROR(tokenRejected)
+AWTRIX_VOICE_ERROR(pipelineIncomplete)
+AWTRIX_VOICE_ERROR(nothingUnderstood)
+AWTRIX_VOICE_ERROR(playbackFailed)
+AWTRIX_VOICE_ERROR(timeout)
+AWTRIX_VOICE_ERROR(configUnavailable)
+AWTRIX_VOICE_ERROR(microphoneUpdate)

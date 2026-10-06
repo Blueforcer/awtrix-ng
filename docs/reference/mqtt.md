@@ -1,48 +1,46 @@
 # MQTT topics
 
-AWTRIX connects to one broker. The command, state and availability topics below
-are the entire interface - Home Assistant discovery is an optional retained
-document layered on top of them, not a second way in.
+This page lists every MQTT topic AWTRIX reads and publishes. AWTRIX connects to one broker. The
+command, state and availability topics below are everything there is. Home Assistant discovery
+uses these same topics; it is not a second interface.
 
-Command payloads are byte-identical to the HTTP request bodies, so anything you
-can `curl` you can also publish. Reads have no MQTT equivalent: `GET` routes are
-served over HTTP only, and AWTRIX instead *pushes* its state to retained topics.
+Command payloads are exactly the same as the HTTP request bodies, so anything you can send with
+`curl` you can also publish. There are no read commands over MQTT: instead, AWTRIX *publishes* its
+state to retained topics.
 
-The [Conventions](conventions.md) - camelCase keys, integer millisecond
-durations with an `...Ms` suffix, the color forms (`"#RRGGBB"` out;
-`"RRGGBB"`, `"RGB"`, `[r,g,b]`, `["HSV",h,s,v]` or a packed integer in;
-`null` = inherit/off) and the `{"error":{"code","message","field?"}}` error
-shape - hold on every topic below.
+The [Conventions](conventions.md) apply to every topic: camelCase keys, durations in whole
+milliseconds with an `...Ms` suffix, the color forms (`"#RRGGBB"` out; `"RRGGBB"`, `"RGB"`,
+`[r,g,b]`, `["HSV",h,s,v]` or a number in; `null` = use the default / off) and the error format
+`{"error":{"code","message","field?"}}`.
 
 ## Connection
 
 | Key | Type | Range | Default | Units | Meaning |
 |---|---|---|---|---|---|
-| `mqttEnabled` | bool | - | `false` | - | Master switch. **`true` runs the client** (requires a non-empty `mqttHost`); `false` keeps the settings but never connects. |
-| `mqttHost` | string | - | `""` | - | Broker host. |
+| `mqttEnabled` | bool | - | `false` | - | Main switch. **`true` connects to the broker** (needs a `mqttHost`); `false` keeps the settings but never connects. |
+| `mqttHost` | string | - | `""` | - | Broker host name or IP address. |
 | `mqttPort` | int | 1–65535 | `1883` | - | Broker port. |
-| `mqttUser` | string | - | `""` | - | Username. Empty **and** empty `mqttPass` = anonymous connect. |
+| `mqttUser` | string | - | `""` | - | User name. If both user and `mqttPass` are empty, AWTRIX connects without login. |
 | `mqttPass` | string | - | `""` | - | Password. |
 | `mqttPrefix` | string | - | `""` | - | Topic prefix `<P>`. Empty → the device uid. |
-| `haDiscovery` | bool | - | `false` | - | Publish the Home Assistant discovery document. |
-| `haPrefix` | string | - | `"homeassistant"` | - | HA discovery prefix. |
+| `haDiscovery` | bool | - | `false` | - | Announce AWTRIX to Home Assistant. |
+| `haPrefix` | string | - | `"homeassistant"` | - | Home Assistant discovery prefix. |
 
-These live in the device configuration, not in settings - see
-[System configuration](system.md). The MQTT client id is the device **uid**.
+These keys are part of the system configuration, not the settings – see
+[System configuration](system.md). The MQTT client ID is the device **uid**.
 
-### Topic prefix `<P>`
+### Topic prefix `<P>` {#the-prefix}
 
-`<P>` is whatever you put in `mqttPrefix`. Leave it empty and AWTRIX falls back
-to its uid - the 12-character MAC, e.g. `a4cf12ab34cd/cmd/notify` - which is
-unique but unreadable, so setting a name is worth the two seconds.
+`<P>` is the value of `mqttPrefix`. If you leave it empty, AWTRIX uses its uid – the
+12-character MAC address, for example `a4cf12ab34cd/cmd/notify`. That works, but is hard to read,
+so set a name.
 
-**Every example on this page uses `awtrixNG` as the prefix.** Topics outside
-`<P>/` are ignored.
+**Every example on this page uses `awtrixNG` as the prefix.** Topics outside `<P>/` are ignored.
 
 ## Command topics
 
-Only topics under **`<P>/cmd/`** are read; everything under `<P>/state/` is
-outbound-only. `<P>/cmd` and `<P>/cmd/` on their own match nothing.
+AWTRIX reads only topics under **`<P>/cmd/`**. Topics under `<P>/state/` are only published by
+AWTRIX. `<P>/cmd` and `<P>/cmd/` alone do nothing.
 
 | Topic | Payload | HTTP equivalent |
 |---|---|---|
@@ -54,27 +52,40 @@ outbound-only. `<P>/cmd` and `<P>/cmd/` on their own match nothing.
 | `<P>/cmd/apps/next` | ignored | `POST /api/v1/apps/next` |
 | `<P>/cmd/apps/previous` | ignored | `POST /api/v1/apps/previous` |
 | `<P>/cmd/apps/order` | `{"order":["Time","weather"],"disabled":["Battery"]}`; `disabled` is required, `order` is optional | `PUT /api/v1/apps/order` |
+| `<P>/cmd/apps/<name>/enabled` | `true` or `false` | `PUT /api/v1/apps/{name}/enabled` |
 | `<P>/cmd/settings` | partial settings JSON | `PATCH /api/v1/settings` |
 | `<P>/cmd/settings/reset` | ignored | `POST /api/v1/settings/reset` |
 | `<P>/cmd/display` | `{"power":bool?,"overlay":"rain"\|null?}` | `PATCH /api/v1/display` |
-| `<P>/cmd/display/moodlight` | moodlight JSON; empty = off | `PUT` / `DELETE /api/v1/display/moodlight` |
+| `<P>/cmd/display/moodlight` | mood light JSON; empty = off | `PUT` / `DELETE /api/v1/display/moodlight` |
 | `<P>/cmd/indicators/1` \| `/2` \| `/3` | `{"color","blinkMs","fadeMs"}`; empty or `{}` = off | `PUT` / `DELETE /api/v1/indicators/{id}` |
-| `<P>/cmd/audio/play` | `{"sound"}` \| `{"mp3"}` \| `{"melody"}` \| `{"track"}` \| `{"rtttl"}` \| `{"station"}` \| `{"index"}` \| `{"url"}` | `POST /api/v1/audio/play` |
-| `<P>/cmd/audio/stop` | ignored | `POST /api/v1/audio/stop` |
+<!-- only esp32 -->
+| `<P>/cmd/audio/play` | a [sound object](http.md#the-sound-object): `"ding"`, `{"file"}` \| `{"rtttl"}` \| `{"track"}`, or a list | `POST /api/v1/audio/play` |
+| `<P>/cmd/audio/stop` | `{"group":"alert"\|"app"}`; empty or `{}` = everything | `POST /api/v1/audio/stop` |
+<!-- /only -->
+<!-- only esp32-s3 -->
+| `<P>/cmd/audio/play` | a [sound object](http.md#the-sound-object): `"ding"`, `{"file"}` \| `{"rtttl"}` \| `{"track"}` \| `{"station"}`, or a list | `POST /api/v1/audio/play` |
+<!-- /only -->
+<!-- only tc002 -->
+| `<P>/cmd/audio/play` | a [sound object](http.md#the-sound-object): `"ding"`, `{"file"}` \| `{"rtttl"}` \| `{"song"}` \| `{"speech"}` \| `{"station"}`, or a list | `POST /api/v1/audio/play` |
+<!-- /only -->
+<!-- only esp32-s3 tc002 -->
+| `<P>/cmd/audio/stop` | `{"group":"alert"\|"app"\|"radio"}`; empty or `{}` = everything | `POST /api/v1/audio/stop` |
 | `<P>/cmd/audio/stations` | `{"stations":[…]}` | `PUT /api/v1/audio/stations` |
+<!-- /only -->
 | `<P>/cmd/device/reboot` | ignored | `POST /api/v1/device/reboot` |
 | `<P>/cmd/device/sleep` | `{"durationMs":ms}` | `POST /api/v1/device/sleep` |
 | `<P>/cmd/screen/get` | ignored | publishes `<P>/state/screen` |
+<!-- only tc002 -->
+| `<P>/cmd/voice/start` | ignored | - |
+<!-- /only -->
 
-A topic that matches no route produces **no `/result`** at all - no error, no
-acknowledgement, so typos are invisible. This includes
-`<P>/cmd/indicators/<bad-id>`, where the HTTP route would return a 404
-`indicator id must be 1..3`. If a command seems to vanish, check the topic
-spelling first.
+A topic that is not in this table gets **no `/result`** at all – no error, no answer. So a typo in
+a topic is silent. This includes `<P>/cmd/indicators/<bad-id>`, where HTTP would answer 404
+`id must be 1..3`. If a command seems to do nothing, check the topic spelling first.
 
-**Not available over MQTT:** factory reset is HTTP-only
-(`POST /api/v1/device/factory-reset`). Publishing to
-`<P>/cmd/device/factory-reset` does nothing and answers nothing.
+**Not available over MQTT:** factory reset works only over HTTP
+(`POST /api/v1/device/factory-reset`). Publishing to `<P>/cmd/device/factory-reset` does nothing
+and gets no answer.
 
 ### notify
 
@@ -96,13 +107,11 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/notify/dismiss' -m ''
 
 ### notify/dismiss/&lt;name&gt;
 
-Dismisses the notification pushed with that `name`, wherever it sits in the
-queue. Payload is ignored. If nothing in the queue carries the name, the result
-is `notFound`.
+Dismisses the notification sent with that `name`, wherever it is in the queue. Payload is ignored.
+If no notification has that name, the result is `notFound`.
 
-The name lets several senders sharing one AWTRIX dismiss only their own
-messages. It is not access control - any client that knows the name can dismiss
-that notification.
+With names, several senders sharing one AWTRIX can each dismiss only their own messages. It is not
+a protection – any client that knows the name can dismiss that notification.
 
 ```bash
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/notify'   -m '{"name":"backup-job","text":"Backup running","hold":true}'
@@ -111,9 +120,9 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/notify/dismiss/backup-job' -m ''
 
 ### apps/pushed/&lt;name&gt;
 
-`<name>` is the remainder of the topic after `apps/pushed/`, and it must match
-`[A-Za-z0-9_-]{1,32}` - the same rule the HTTP route applies. An **empty payload
-or the literal `{}`** deletes the app; anything else creates or replaces it.
+`<name>` is the rest of the topic after `apps/pushed/`. It must be 1 to 32 characters from
+`A-Z a-z 0-9 _ -` (`[A-Za-z0-9_-]{1,32}`) – the same rule as over HTTP. An **empty payload or
+`{}`** deletes the app; anything else creates or replaces it.
 
 ```bash
 # create / replace
@@ -125,21 +134,20 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/pushed/weather' -m ''
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/pushed/weather' -m '{}'
 ```
 
-`<P>/cmd/apps/pushed/` with an empty name matches nothing. A malformed name is
-answered on `<topic>/result` and nothing is stored:
+`<P>/cmd/apps/pushed/` with an empty name does nothing. An invalid name is answered on
+`<topic>/result` and nothing is stored:
 
 ```json
-{"ok":false,"error":{"code":"invalidName","message":"name must match [A-Za-z0-9_-]{1,32}","field":"name"}}
+{"ok":false,"error":{"code":"invalidName","message":"invalid name","field":"name"}}
 ```
 
-This topic removes a **pushed** app only. Scripts have no MQTT topic - their
-payload is Berry source, not JSON - so removing one is
-`DELETE /api/v1/apps/{name}` over HTTP.
+This topic removes **pushed** apps only. Scripts cannot be installed or removed over MQTT; to
+remove one, use `DELETE /api/v1/apps/{name}` over HTTP.
 
 ### apps/switch
 
-Accepts either a **bare app name** or a JSON object. JSON is only parsed when
-the payload starts with `{`.
+Send either **just the app name** or a JSON object. The payload is read as JSON only when it
+starts with `{`.
 
 | Key | Type | Range | Default | Units | Meaning |
 |---|---|---|---|---|---|
@@ -152,8 +160,8 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/switch' \
   -m '{"name":"Time","fast":true}'
 ```
 
-An unknown app answers `notFound`. A JSON body that parses but has no `name` is
-treated as a literal app name, and therefore also answers `notFound`.
+An unknown app answers `notFound`. A JSON object without `name` is taken as an app name as it
+is, and so also answers `notFound`.
 
 ### apps/next, apps/previous
 
@@ -166,28 +174,43 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/previous' -m ''
 
 ### apps/order
 
-`order` is what runs, in the order it draws; `disabled` is what is switched off. Duplicates in `order`
-are allowed. An app named in neither list keeps what it had. `disabled` is always required, `order` is
-optional.
+`order` lists the apps that rotate, in that order. `disabled` is the complete list of switched-off
+apps: every app it does not name is switched on. An app may appear more than once in `order`.
+`disabled` is always required, `order` is optional.
 
 ```bash
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/order' \
   -m '{"order":["Time","weather","Date"],"disabled":["Battery"]}'
 ```
 
-`disabled` can be sent on its own, so one app can be switched off without resending the arrangement:
+Send `disabled` alone to keep the order. Battery is then off and every other app on:
 
 ```bash
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/order' \
   -m '{"disabled":["Battery"]}'
 ```
 
+### apps/&lt;name&gt;/enabled
+
+Switches one app on (`true`) or off (`false`). Every other app stays as it is. The rules are those
+of [PUT /api/v1/apps/{name}/enabled](http.md#put-apiv1appsnameenabled).
+
+<!-- only esp32 esp32-s3 -->
+```bash
+mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/Battery/enabled' -m 'false'
+```
+<!-- /only -->
+<!-- only tc002 -->
+```bash
+mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/Status/enabled' -m 'false'
+```
+<!-- /only -->
+
 ### settings
 
-Any subset of the settings JSON, checked as a whole - if one key fails, nothing at
-all is applied and the result carries `field`. The accepted keys, ranges and defaults
-are the full table in [Settings](settings.md); the payload is identical to
-`PATCH /api/v1/settings`.
+Any subset of the settings JSON, the same as `PATCH /api/v1/settings`. If one key is wrong,
+nothing is applied and the result names it in `field`. All keys, ranges and defaults are in
+[Settings](settings.md).
 
 ```bash
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/settings' \
@@ -202,8 +225,8 @@ A rejected value answers, for example:
 
 ### settings/reset
 
-Payload ignored. **Clears the stored settings** and reboots - the `/result`
-publish may not survive the restart.
+Payload ignored. **Deletes the stored settings** and restarts. The `/result` may not arrive
+because of the restart.
 
 ```bash
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/settings/reset' -m ''
@@ -217,8 +240,7 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/display' -m '{"power":false}'
 
 ### display/moodlight
 
-An **empty payload turns the moodlight off** - the MQTT clear idiom, equivalent
-to `DELETE /api/v1/display/moodlight`.
+An **empty payload turns the mood light off**, like `DELETE /api/v1/display/moodlight`.
 
 ```bash
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/display/moodlight' \
@@ -228,16 +250,15 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/display/moodlight' -m ''
 
 ### indicators/1 … indicators/3
 
-The id must be a **single character `1`, `2` or `3`**. Anything else matches no
-route and is silently dropped. The three indicators are the pixels on the
-panel's right edge - `1` top, `2` middle, `3` bottom - and their state is
-reported in `<P>/state/device`.
+The ID must be **`1`, `2` or `3`**. Anything else is ignored without an answer. The three
+indicators are the dots on the display's right edge – `1` top, `2` middle, `3` bottom. Their state
+is published in `<P>/state/device`.
 
 | Key | Type | Range | Default | Units | Meaning |
 |---|---|---|---|---|---|
-| `color` | color | - | - | - | Sets the color and turns the indicator **on**. `0` / `null` turns it **off** while keeping the stored color. An unparseable value is rejected. |
-| `blinkMs` | int | 0–65535 | `0` | ms | Blink period. `0` = solid. Left unchanged when absent from a partial update; only an empty payload or `{}` resets it to `0`. |
-| `fadeMs` | int | 0–65535 | `0` | ms | Fade period. `0` = no fade. Left unchanged when absent from a partial update; only an empty payload or `{}` resets it to `0`. |
+| `color` | color | - | - | - | Sets the color and turns the indicator **on**. `0` / `null` turns it **off** and keeps the stored color. An unreadable color is rejected. |
+| `blinkMs` | int | 0–65535 | `0` | ms | Blink interval. `0` = no blinking. Stays as it is if you leave it out; only an empty payload or `{}` sets it to `0`. |
+| `fadeMs` | int | 0–65535 | `0` | ms | Fade interval. `0` = no fading. Stays as it is if you leave it out; only an empty payload or `{}` sets it to `0`. |
 
 ```bash
 # on, red, blinking
@@ -249,52 +270,74 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/indicators/1' -m ''
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/indicators/1' -m '{}'
 ```
 
-Note the asymmetry: an empty payload or `{}` resets the indicator completely
-(off, color black, no blink/fade), while `{"color":0}` only clears `on` and
-preserves the stored color. A payload that omits `color`, `blinkMs` or `fadeMs`
-leaves that field exactly as it was; only the empty payload or `{}` zeroes
-everything at once.
+An empty payload or `{}` resets the indicator completely (off, black, no blinking or fading).
+`{"color":0}` only switches it off and keeps the stored color. Any key you leave out stays as it
+was.
 
 ### audio/play
 
-Send **exactly one** key, and the key chooses which output answers. Sending more than one is
-refused whole - `field` names the first of them in the order above - and nothing plays. Only `sound` looks at
-more than one output; the rest never fall back. Full rules:
-[HTTP API - POST /api/v1/audio/play](http.md#post-apiv1audioplay).
+The payload is a [sound object](http.md#the-sound-object), as for
+[`POST /api/v1/audio/play`](http.md#post-apiv1audioplay): a stored name, an object with exactly one
+source key, or a list of 1 to 4 of them. The sound plays as an alert.<!-- only esp32-s3 tc002 --> `station` starts the radio.<!-- /only -->
 
-| Key | Type | Range | Default | Units | Meaning |
-|---|---|---|---|---|---|
-| `sound` | string | a name | - | - | A stored MP3, else a melody, else a DFPlayer track if the name is a plain number. |
-| `mp3` | string | a stored MP3 | - | - | Play `/MP3/<name>.mp3`. |
-| `melody` | string | a stored melody | - | - | Play `/MELODIES/<name>.txt`. |
-| `track` | integer | 1-2999 | - | - | Play that track from the DFPlayer's SD card. |
-| `rtttl` | string | RTTTL | - | - | Play an inline RTTTL melody on the buzzer. |
-| `station` | string | a stored station | - | - | Start the radio on that station. |
-| `index` | integer | 0-31 | - | - | Start the radio on that position in the list. |
-| `url` | string | http/https | - | - | Start the radio on a stream that is not stored. |
+| Key | Type | Value | Plays |
+|---|---|---|---|
+<!-- only esp32 -->
+| `file` | string | a stored name | a stored melody |
+<!-- /only -->
+<!-- only esp32-s3 -->
+| `file` | string | a stored name or `Script/name` | a stored MP3 or melody |
+<!-- /only -->
+<!-- only tc002 -->
+| `file` | string | a stored name, `Script/name`, or an `http(s)://` address | a stored MP3 or melody, or an MP3 from the address |
+<!-- /only -->
+| `rtttl` | string | RTTTL, up to 512 characters | the melody in the payload |
+<!-- only esp32-s3 tc002 -->
+| `song` | string | [song text](songs.md) | a song on the synthesizer |
+<!-- /only -->
+<!-- only tc002 -->
+| `speech` | string | 1 to 512 bytes | the text, read aloud (needs a voice) |
+<!-- /only -->
+<!-- only esp32 esp32-s3 -->
+| `track` | integer | 1–2999 | a DFPlayer track |
+<!-- /only -->
+<!-- only esp32-s3 tc002 -->
+| `station` | string or integer | a station name, a position from 0, or a stream address | internet radio |
+<!-- /only -->
+| `loop` | bool | `true` / `false` | not a sound of its own: repeats the sound until it is stopped or a new alert replaces it.<!-- only esp32-s3 tc002 --> Not with `station`<!-- /only --> |
 
 ```bash
-mosquitto_pub -h broker.local -t 'awtrixNG/cmd/audio/play' -m '{"mp3":"beep"}'
+mosquitto_pub -h broker.local -t 'awtrixNG/cmd/audio/play' -m '"ding"'
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/audio/play' \
   -m '{"rtttl":"two:d=4,o=5,b=200:c,e"}'
 ```
 
-No recognised key answers:
+<!-- only esp32-s3 tc002 -->
+```bash
+mosquitto_pub -h broker.local -t 'awtrixNG/cmd/audio/play' -m '{"station":"SWR3"}'
+```
+<!-- /only -->
+
+A payload without a source key answers:
 
 ```json
-{"ok":false,"error":{"code":"validationFailed","message":"exactly one of \"sound\", \"mp3\", \"melody\", \"track\", \"rtttl\", \"station\", \"index\" or \"url\" is required"}}
+{"ok":false,"error":{"code":"validationFailed","message":"needs a sound key"}}
 ```
 
-When `soundEnabled` is `false`, the one-shot keys answer `{"ok":true}` and nothing
-is played. A successful result is not a guarantee that anything was heard. A radio stream is not
-muted by that switch.
+The errors are those of [`POST /api/v1/audio/play`](http.md#post-apiv1audioplay).<!-- only tc002 --> Song text with an
+error answers with `field` `song`; `message` gives the reason, line and column.<!-- /only --> The whole message,
+topic<!-- only tc002 --> and song<!-- /only --> included, may be at most 8192 bytes. A longer one is dropped without an answer.
 
-`cmd/audio/stop` takes an optional `{"scope":"sounds"|"stream"|"all"}`; with no payload it stops
-everything.
+`{"ok":true}` means the sound was accepted. If the master volume or the alert volume is `0`, it
+plays silently.
+
+`cmd/audio/stop` stops everything with an empty payload or `{}`. `{"group":"alert"}` stops the
+alert that plays<!-- only esp32 --> and `{"group":"app"}` every sound of the scripts<!-- /only --><!-- only esp32-s3 tc002 -->, `{"group":"app"}` every sound of the scripts, and `{"group":"radio"}` the radio<!-- /only -->.
+Another value answers `must be alert, app or radio`.
 
 ### device/reboot
 
-Payload ignored. Reboots; the `/result` publish may not survive.
+Payload ignored. Restarts AWTRIX; the `/result` may not arrive because of the restart.
 
 ```bash
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/device/reboot' -m ''
@@ -304,10 +347,10 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/device/reboot' -m ''
 
 | Key | Type | Range | Default | Units | Meaning |
 |---|---|---|---|---|---|
-| `durationMs` | int | `> 0` | - | ms | Deep-sleep duration. Missing, non-integer or `<= 0` is rejected - `{"ok":false,"error":{"code":"validationFailed","field":"durationMs",...}}` on `.../result`. |
+| `durationMs` | int | `> 0` | - | ms | How long to sleep. Missing, not a whole number, or `<= 0` is rejected with `{"ok":false,"error":{"code":"validationFailed","field":"durationMs",...}}` on `.../result`. |
 
-A valid value answers `{"ok":true}` on `.../result`, then AWTRIX enters deep
-sleep on the next loop pass; nothing is published after that.
+A valid value answers `{"ok":true}` on `.../result`. Right after that AWTRIX goes into deep sleep
+and publishes nothing more.
 
 ```bash
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/device/sleep' \
@@ -324,10 +367,24 @@ mosquitto_sub -h broker.local -t 'awtrixNG/state/screen' &
 mosquitto_pub -h broker.local -t 'awtrixNG/cmd/screen/get' -m ''
 ```
 
+<!-- only tc002 -->
+### voice/start
+
+Payload ignored. Starts [Home Assistant Voice](../guides/voice.md), as if you held the
+knob, and answers `{"ok":true}`.
+
+It answers `unavailable`, `voice not ready` while Voice is off, not connected yet, already busy, or
+the clock is still starting. [`blockNavigation`](settings.md) does not stop it.
+
+```bash
+mosquitto_pub -h broker.local -t 'awtrixNG/cmd/voice/start' -m ''
+```
+<!-- /only -->
+
 ## The `/result` reply
 
-Every command that **matches a route** is answered on `<cmd topic>/result`,
-non-retained, QoS 0:
+Every command on a topic from the table above is answered on `<cmd topic>/result`, not retained,
+QoS 0:
 
 ```
 awtrixNG/cmd/settings        ->  awtrixNG/cmd/settings/result
@@ -340,24 +397,23 @@ Success is exactly:
 {"ok":true}
 ```
 
-Failure carries the same error body as HTTP, wrapped in `ok:false`
-(`field` is omitted when empty):
+A failure has the same error body as HTTP, inside `ok:false` (`field` is left out when there is
+none):
 
 ```json
 {"ok":false,"error":{"code":"validationFailed","message":"invalid value","field":"brightness"}}
 ```
 
-Eight codes can appear here, with the messages they carry:
-[Errors - Errors over MQTT](errors.md#errors-over-mqtt). The framing codes HTTP uses
-(`methodNotAllowed`, `unauthorized`, `unsupportedMediaType`, …) have no MQTT equivalent.
+Eight codes can appear here; they and their messages are listed in
+[Errors – Errors over MQTT](errors.md#errors-over-mqtt). HTTP-only codes such as
+`methodNotAllowed`, `unauthorized` and `unsupportedMediaType` never appear over MQTT.
 
-The `code` values match HTTP exactly; two messages are less specific. `notFound`
-collapses to a bare `not found` where HTTP distinguishes `app not found` from
-`no MP3 of that name`, and `invalidJson` says `payload` where HTTP says
-`request body`.
+The `code` values and messages are the same as over HTTP, with one exception: an unknown app in
+`cmd/apps/switch` answers `not found`, where HTTP says `app not found`.
 
-A `/result` topic is never itself read as a command, so replies published back
-to the broker do not loop.
+AWTRIX never reads a `/result` topic as a command, so its answers cannot trigger new commands.
+
+To see every failure in one place, subscribe to [`<P>/event/error`](#eventerror) instead.
 
 ## State topics
 
@@ -366,65 +422,112 @@ to the broker do not loop.
 | `<P>/state/device` | device JSON (`GET /api/v1/device` shape) | **yes** | every `statsInterval` (default **10 s**), and at once when power or an indicator changes |
 | `<P>/state/settings` | settings JSON (`GET /api/v1/settings` shape) | **yes** | on every settings change, and on connect |
 | `<P>/state/apps/active` | app name, plain string (not JSON) | **yes** | immediately on change, and on connect |
-| `<P>/state/audio` | audio JSON (`GET /api/v1/audio` shape) | **yes** | on play, stop, track change and error, and on connect |
-| `<P>/state/capabilities` | `{"effects":[…],"paletteEffects":[…],"transitions":[…],"overlays":[…],"palettes":[…],"radio":bool,"gpio":{…}}` | **yes** | once per connect |
+| `<P>/state/audio` | audio JSON (`GET /api/v1/audio` shape): `radio`, `app`, `alert` and `stations` | **yes** | on every change of the radio, the app or the alert group (play, stop, title change, error), and on connect |
+| `<P>/state/capabilities` | `{"effects":[…],"paletteEffects":[…],"transitions":[…],"overlays":[…],"palettes":[…],"audio":{…},"gpio":{…},"sensors":{"light":bool},…}` | **yes** | once per connect |
 | `<P>/state/prefix` | `<P>` itself, plain string (not JSON) | **yes** | once per connect |
-| `<P>/state/buttons/left` \| `/select` \| `/right` | `"1"` / `"0"` | **yes** | on button edge, and on connect |
+| `<P>/state/buttons/left` \| `/select` \| `/right` | `"1"` / `"0"` | no | on every press and release, and on connect |
+<!-- only tc002 -->
+| `<P>/state/buttons/knob` | `"1"` / `"0"` | no | on every push and release of the knob, and on connect |
+| `<P>/event/knob` | `{"turn":N}` | no | when the knob turns |
+<!-- /only -->
+| `<P>/event/error` | `{"source":…,"request":…,"error":{…}}` | no | when a command over MQTT or HTTP is rejected |
 | `<P>/state/screen` | `{"width":W,"height":H,"pixels":[…]}` | no | only as the reply to `cmd/screen/get` |
 
-`statsInterval` (default 10 000 ms, floored at 1 000) is the slowest that
-`state/device` publishes, not the only trigger. It is also published
-**immediately** when the matrix power or an indicator changes, so a panel
-switched off over HTTP does not read as still on for another ten seconds.
-Consecutive change-driven publishes are spaced at least **250 ms** apart, so an
-automation blinking an indicator sends one message every 250 ms instead of one
-per rendered frame.
+`state/device` is published at least every `statsInterval` (default 10 000 ms, minimum 1 000). It
+is also published **at once** when the display power or an indicator changes, so a display switched
+off over HTTP does not show as on for another ten seconds. These extra messages come at most every
+**250 ms**, so an automation that blinks an indicator sends one message every 250 ms, not one per
+frame.
 
-Brightness is not a trigger; with auto-brightness on it moves continuously and
-still rides the timer. `state/settings` and `state/apps/active` are event-driven
-and ignore `statsInterval` entirely.
+A brightness change does not publish at once; with auto-brightness the value changes all the time
+and is sent with the regular interval. `state/settings` and `state/apps/active` are sent whenever
+they change and do not use `statsInterval`.
 
 ### state/device
 
-Same shape as `GET /api/v1/device`; see [Device state](device.md) for the full
-list of fields that are always present (which fields depend on a battery pin or a
-sensor follows the same rules there).
+Same content as `GET /api/v1/device`; see [Device state](device.md) for every field, including
+which fields appear only with a battery pin or a sensor.
 
 ### state/buttons/&lt;button&gt;
 
-Published on every button **edge**, whether or not an app acts on the press, and
-**retained** - the value is also re-sent on each connect, so a fresh subscriber
-(or a restarted Home Assistant) immediately sees the current level instead of
-`unknown`. The buttons are named `left`, `select` and `right`; the separate HTTP
-button webhook (`buttonCallback`) calls the middle one `middle`.
+Published on every press and release, whether or not an app reacts to it, and only on the topic
+of the button that changed. It is **not retained**, so a press reaches only the subscribers listening at that moment and is never replayed
+later. On each connect AWTRIX sends the current state once and deletes any retained message left
+on these topics. The buttons are named `left`, `select` and `right`<!-- only tc002 -->, and the knob's push is `knob`<!-- /only -->. The HTTP button webhook (`buttonCallback`) calls the middle
+one `middle`.
 
 ```bash
 mosquitto_sub -h broker.local -t 'awtrixNG/state/buttons/+' -v
 ```
 
+<!-- only tc002 -->
+### event/knob
+
+Sent when the knob turns. `turn` is the number of clicks, positive clockwise and
+negative counterclockwise. A fast turn can arrive as one message with several clicks:
+
+```json
+{"turn":3}
+```
+
+It is not retained: a new subscriber only sees turns made after it subscribed.
+
+```bash
+mosquitto_sub -h broker.local -t 'awtrixNG/event/knob' -v
+```
+<!-- /only -->
+
+### event/error
+
+Sent whenever AWTRIX rejects a command, whether it came over MQTT or HTTP. Use it to find out why
+a payload from an automation does nothing, without watching every `/result` topic or reading HTTP
+responses:
+
+```json
+{"source":"http","request":"PUT /api/v1/apps/pushed/weather","error":{"code":"validationFailed","message":"not allowed with layout","field":"text"}}
+```
+
+```json
+{"source":"mqtt","request":"awtrixNG/cmd/notify","error":{"code":"invalidJson","message":"invalid JSON"}}
+```
+
+| Field | Content |
+|---|---|
+| `source` | `mqtt` or `http` |
+| `request` | the full MQTT topic, or the HTTP method and path |
+| `error` | the same error object the sender got back; see [Errors](errors.md#the-error-body) |
+
+Only commands are reported: pushed apps, notifications, settings, apps, audio, display, indicators,
+scripts and the device commands. Failed logins, uploads, firmware updates and unknown paths are
+not.
+
+It is not retained: a new subscriber only sees errors that happen after it subscribed.
+
+```bash
+mosquitto_sub -h broker.local -t 'awtrixNG/event/error' -v
+```
+
 ### state/capabilities
 
-The `transitions` list is the same 22 names the `transitionEffect` setting
-accepts, in index order:
+The `transitions` list holds the 22 names the `transitionEffect` setting accepts, in this order:
 
 ```json
 ["Random","Slide","Dim","Zoom","Rotate","Pixelate","Curtain","Ripple","Blink","Reload","Fade",
  "Cover","Uncover","Split","Blinds","Blocks","Flash","Diamond","Wave","Rain","Melt","Interlace"]
 ```
 
-`palettes` is the fixed list of built-ins,
-`["Cloud","Lava","Ocean","Forest","Stripe","Party","Heat","Rainbow"]`; palette files are not in it.
-`effects` and `overlays` are the names this board actually offers - see
+`palettes` is the fixed list of built-in palettes,
+`["Cloud","Lava","Ocean","Forest","Stripe","Party","Heat","Rainbow"]`; your own palette files are
+not in it. `effects` and `overlays` are the names this clock offers – see
 [Visual reference](visuals.md).
 
 ### state/prefix
 
-The prefix itself, published under it - `awtrixNG/state/prefix` carries `awtrixNG`.
-Retained, so a fresh subscriber sees it without waiting for a reconnect.
+The prefix itself – `awtrixNG/state/prefix` contains `awtrixNG`. Retained, so a new subscriber sees
+it at once.
 
-It exists for Home Assistant: the **MQTT prefix** sensor reads it, which is what lets a
-blueprint start from the device you picked and end up with the topic to publish to. Over
-plain MQTT you already know the prefix - you had to, to subscribe.
+It is meant for Home Assistant: the **MQTT prefix** sensor reads it. A blueprint can then start
+from the device you pick and find the topic to publish to.
 
 ```bash
 mosquitto_sub -h broker.local -t 'awtrixNG/state/prefix' -v
@@ -432,13 +535,13 @@ mosquitto_sub -h broker.local -t 'awtrixNG/state/prefix' -v
 
 ### state/screen
 
-`pixels` is a flat array of packed RGB integers (`0xRRGGBB` as unsigned
-decimal), `width × height` entries.
+`pixels` is a list of `width × height` colors, row by row from the top left. Each color is one
+number (`0xRRGGBB` written as a decimal number).
 
 ## Retain and QoS
 
-**QoS 0 everywhere** - publishes, subscriptions and the last will - so a message
-lost in transit is lost silently.
+**QoS 0 everywhere** – for publishing, subscribing and the last will. A message lost on the way is
+not sent again.
 
 | Topic | Retained |
 |---|---|
@@ -449,23 +552,26 @@ lost in transit is lost silently.
 | `<P>/state/audio` | **yes** |
 | `<P>/state/capabilities` | **yes** |
 | `<P>/state/prefix` | **yes** |
-| `<P>/state/buttons/*` | **yes** |
+| `<P>/state/buttons/*` | no |
+<!-- only tc002 -->
+| `<P>/event/knob` | no |
+<!-- /only -->
+| `<P>/event/error` | no |
 | `<P>/state/screen` | no |
 | `<cmd topic>/result` | no |
 | every HA discovery config, entity state and availability publish | **yes** |
 
-A command you publish must fit in **8192 bytes**. Anything larger is dropped
-before it is parsed, with no error and no `/result` - a big notification is the
-realistic way to hit it. What AWTRIX publishes *to you* has no such limit:
-`state/device` and `state/screen` go out at whatever size they are. Every other
-cap a command can run into is in [Limits](limits.md).
+A command you publish may be at most **8192 bytes**, topic included. A larger one is dropped without an error and
+without `/result` – a very long notification is the usual way to hit this. Messages AWTRIX
+publishes *to you* have no such limit: `state/device` and `state/screen` are sent at full size. All
+other limits are in [Limits](limits.md).
 
 ## Availability and LWT
 
-There is one availability topic, `<P>/availability` (`online` / `offline`,
-retained, QoS 0). It is registered as the broker-side last will at CONNECT
-(`offline`, retained) and published as `online` immediately on a successful
-connect, so the broker publishes `offline` on an ungraceful disconnect.
+There is one availability topic, `<P>/availability` (`online` / `offline`, retained, QoS 0).
+AWTRIX publishes `online` as soon as it connects. It also registers `offline` as its "last will"
+(LWT) with the broker, so the broker publishes `offline` when AWTRIX disappears without saying
+goodbye – for example on a power cut.
 
 | Topic | Payload | Retained |
 |---|---|---|
@@ -475,24 +581,22 @@ connect, so the broker publishes `offline` on an ungraceful disconnect.
 mosquitto_sub -h broker.local -t 'awtrixNG/availability' -v
 ```
 
-The discovery document declares `avty_t` once at the device level and points it
-at this same topic, so it doubles as the availability source for every entity.
-An automation keyed on `<P>/availability` keeps working after you enable
-`haDiscovery` - the topic does not move.
+Home Assistant discovery uses this same topic (`avty_t`) for every entity. An automation that
+watches `<P>/availability` keeps working after you turn on `haDiscovery` – the topic stays the
+same.
 
-A failed connection is retried after **5 s**, then 10, 20, 40, and at most every
-**60 s**, each delay shortened by up to 20% of jitter. A successful connection
-resets the schedule.
+After a failed connection AWTRIX tries again after **5 s**, then 10, 20, 40, and then every
+**60 s**. Each wait is up to 20 % shorter at random. After a successful connection the waits start
+again at 5 s.
 
 Whether AWTRIX is connected, and why not, is reported at `GET /api/v1/device` under
-[`mqtt`](device.md#connection-status) and on the web UI's MQTT tab.
+[`mqtt`](device.md#connection-status) and in the web UI under **System → MQTT**.
 
 ## Home Assistant discovery
 
-Published when `haDiscovery` is on. **There is no separate entity topic tree** -
-every entity points at the `<P>/cmd/...` and `<P>/state/...` topics documented
-above, with the same validation and the same `/result` publish, so an automation
-you built against plain MQTT keeps working unchanged once you turn discovery on.
+Published when `haDiscovery` is on. **There are no extra topics for Home Assistant** – every
+entity uses the `<P>/cmd/...` and `<P>/state/...` topics above, with the same checks and the same
+`/result` answers. Automations you built with plain MQTT keep working when you turn discovery on.
 
 ### One document, one topic
 
@@ -501,27 +605,24 @@ you built against plain MQTT keeps working unchanged once you turn discovery on.
 | Discovery config | `<haPrefix>/device/<uid>/config` | `homeassistant/device/a4cf12ab34cd/config` |
 | Shared availability | `<P>/availability` | `awtrixNG/availability` |
 
-This is Home Assistant's **device discovery** format: a single retained payload
-carrying `dev` (the device), `o` (the origin) and `cmps` (every component).
-It requires **Home Assistant 2024.11 or newer**.
+This is Home Assistant's **device discovery** format: one retained message with `dev` (the
+device), `o` (the origin) and `cmps` (all entities). It needs **Home Assistant 2024.11 or newer**.
 
-- **`<uid>`** - the 12-character lowercase MAC, also the HA device identifier.
-- Each component's `uniq_id` is `<uid>_<key>`, where `<key>` is the `cmps` key
-  (`mat`, `ind1`, `rssi`, …).
-- `~` is declared independently inside every component in `cmps` - each one
-  carries its own `"~":"<P>"` - so topics inside a component are still written
-  `~/cmd/display`, `~/state/device` and so on.
-- Keys use the standard HA abbreviations: `p`, `stat_t`, `cmd_t`, `val_tpl`,
-  `cmd_tpl`, `bri_cmd_t`, `rgb_stat_t`, `avty_t`, `uniq_id`.
-- Components in use: `light`, `select`, `button`, `switch`, `sensor`,
-  `binary_sensor`.
+- **`<uid>`** – the 12-character lowercase MAC address, also the Home Assistant device ID.
+- Each entity's `uniq_id` is `<uid>_<key>`, where `<key>` is its `cmps` key (`mat`, `ind1`,
+  `rssi`, …).
+- Every entity in `cmps` has its own `"~":"<P>"`, so its topics are written `~/cmd/display`,
+  `~/state/device` and so on.
+- Keys use the standard Home Assistant short forms: `p`, `stat_t`, `cmd_t`, `val_tpl`, `cmd_tpl`,
+  `bri_cmd_t`, `rgb_stat_t`, `avty_t`, `uniq_id`.
+- Entity types used: `light`, `select`, `button`, `switch`, `sensor`, `binary_sensor`.
 
-Turning `haDiscovery` off publishes an **empty retained payload** to the same
-topic, which is how Home Assistant is told to drop the device.
+When you turn `haDiscovery` off, AWTRIX publishes an **empty retained message** to the same topic.
+This tells Home Assistant to remove the device.
 
 ### Device block
 
-Sent once per message, under the `dev` key.
+Under the `dev` key.
 
 | Key | Value |
 |---|---|
@@ -533,9 +634,9 @@ Sent once per message, under the `dev` key.
 
 ### Entity set
 
-**20 entities are always created**, plus one per capability the board actually
-has. The `cmps` key doubles as the `uniq_id` suffix; the **Reads / writes**
-column is the topic the entity is bound to, all of them documented above.
+**19 entities are always created**, plus more for the hardware your clock has. The `cmps` key is
+also the end of the `uniq_id`. The **Reads / writes** column shows the topic each entity uses; all
+of them are described above.
 
 | Entity | Component | `cmps` key | Reads / writes |
 |---|---|---|---|
@@ -543,7 +644,6 @@ column is the topic the entity is bound to, all of them documented above.
 | Indicator 1 | `light` | `ind1` | `cmd/indicators/1` |
 | Indicator 2 | `light` | `ind2` | `cmd/indicators/2` |
 | Indicator 3 | `light` | `ind3` | `cmd/indicators/3` |
-| Brightness mode | `select` | `brimode` | `cmd/settings` → `autoBrightness`; options `Manual` / `Auto` |
 | Transition effect | `select` | `transeff` | `cmd/settings` → `transitionEffect`; options are the transition **names** |
 | Transition | `switch` | `trans` | `cmd/settings` → `autoTransition` |
 | Next app | `button` | `next` | `cmd/apps/next` |
@@ -560,12 +660,13 @@ column is the topic the entity is bound to, all of them documented above.
 | Button select | `binary_sensor` | `btnm` | `state/buttons/select` |
 | Button right | `binary_sensor` | `btnr` | `state/buttons/right` |
 
-The seven conditional entities are announced only when the hardware is there, so
-none of them sits at `unknown` waiting for a value that never arrives - the same
-rule `<P>/state/device` follows when it omits those fields.
+These entities are created only when the hardware is there, so none of them stays at
+`unknown` forever. `<P>/state/device` follows the same rule and leaves those fields out.
 
 | Entity | Component | `cmps` key | Reads | Announced when |
 |---|---|---|---|---|
+<!-- only esp32 esp32-s3 -->
+| Brightness mode | `select` | `brimode` | `cmd/settings` → `autoBrightness`; options `Manual` / `Auto` | a light-sensor pin is set (`pinLdr`) |
 | Light level | `sensor` | `light` | `state/device` → `lightLevel`; `%`, no `device_class` | a light-sensor pin is set (`pinLdr`) |
 | Temperature | `sensor` | `temp` | `state/device` → `temperature`; `°C` | a sensor is detected |
 | Humidity | `sensor` | `hum` | `state/device` → `humidity`; `%` | the sensor is humidity-capable |
@@ -573,45 +674,74 @@ rule `<P>/state/device` follows when it omits those fields.
 | Battery | `sensor` | `bat` | `state/device` → `batteryPercent`; `%` | a battery pin is set (`pinBattery`) |
 | Battery voltage | `sensor` | `batv` | `state/device` → `batteryVoltage`; `V` | a battery pin is set (`pinBattery`) |
 | Low battery | `binary_sensor` | `lowbat` | `state/device` → `lowBattery` | a battery pin is set (`pinBattery`) |
+<!-- /only -->
+<!-- only tc002 -->
+| Battery | `sensor` | `bat` | `state/device` → `batteryPercent`; `%` | the clock has reported its battery |
+| Battery voltage | `sensor` | `batv` | `state/device` → `batteryVoltage`; `V` | the clock has reported its battery |
+| Low battery | `binary_sensor` | `lowbat` | `state/device` → `lowBattery` | the clock has reported its battery |
+| Charging | `binary_sensor` | `chg` | `state/device` → `usbPower`; `device_class: battery_charging` | always |
+| Knob | `binary_sensor` | `btnk` | `state/buttons/knob` | always |
+| Knob turn | `event` | `knob` | `event/knob`; event types `clockwise` / `counterclockwise`, attribute `steps` | always |
+| Assist | `button` | `assist` | `cmd/voice/start` | Home Assistant Voice is available |
+<!-- /only -->
+<!-- only esp32 -->
+| Volume | `number` | `vol` | `cmd/settings` → `volume`; 0–100, step 5, `%` | the clock has a sound output (buzzer or DFPlayer) |
+<!-- /only -->
+<!-- only esp32-s3 -->
+| Volume | `number` | `vol` | `cmd/settings` → `volume`; 0–100, step 5, `%` | the clock has a sound output (buzzer, speaker or DFPlayer) |
+<!-- /only -->
+<!-- only tc002 -->
+| Volume | `number` | `vol` | `cmd/settings` → `volume`; 0–100, step 5, `%` | always |
+<!-- /only -->
+<!-- only esp32-s3 tc002 -->
+| Radio volume | `number` | `radvol` | `cmd/settings` → `radioVolume`; 0–100, step 5, `%` | the clock has a sound output and plays internet radio |
+<!-- /only -->
+| App volume | `number` | `appvol` | `cmd/settings` → `appVolume`; 0–100, step 5, `%` | the clock has a sound output |
+| Alert volume | `number` | `alrtvol` | `cmd/settings` → `alertVolume`; 0–100, step 5, `%` | the clock has a sound output |
+| Stop sound | `button` | `stopsnd` | `cmd/audio/stop` with `{}` | the clock has a sound output |
 
-A **fully equipped board** - battery pin, light sensor and a
-temperature/humidity sensor - registers **26** entities. A board with none of
-that hardware registers the 20 base entities and nothing else.
+<!-- only esp32 esp32-s3 -->
+A clock with a battery pin, a light sensor and a temperature/humidity sensor has **26** entities
+without the sound entities. A clock with none of this hardware has only the 19 base entities.
+<!-- /only -->
 
-Version, IP address, MQTT prefix, WiFi strength, Uptime, Free RAM and Battery
-voltage are marked `entity_category: diagnostic`, so Home Assistant files them
-under diagnostics instead of the main device card.
+Version, IP address, MQTT prefix, WiFi strength, Uptime, Free RAM and Battery voltage are marked
+`entity_category: diagnostic`, so Home Assistant shows them under diagnostics, not on the main
+device card.
 
-The three button `binary_sensor`s bind to the `<P>/state/buttons/...` topics,
-which report `1` while a button is held and `0` on release, so they work as
-Home Assistant automation triggers.
+The button `binary_sensor`s use the `<P>/state/buttons/...` topics. They are `1` while a
+button is held and `0` when it is released, so you can use them as automation triggers. After
+Home Assistant restarts they show `unknown` until the next press or until AWTRIX reconnects.<!-- only tc002 -->
+**Knob turn** fires once per `event/knob` message: `clockwise` or `counterclockwise`, with
+the number of clicks in `steps`.<!-- /only -->
 
 ### What the entities write
 
-- **Matrix - state** writes `power`: turns the panel on and off. (It reads
-  back as `matrixPower` in device state.)
-- **Matrix - brightness** writes `brightness`, which does nothing while
-  `autoBrightness` is on. The slider reads back the brightness actually in
-  force, so with auto-brightness on it drifts to whatever the light sensor is
-  driving rather than staying where you left it. Set **Brightness mode** to
-  `Manual` for the slider to control and reflect the panel.
-- **Matrix - RGB** writes `textColor`, the **global text color**, not a panel
-  tint.
-- **Indicator *n*** writes `indicators[n]`. The toggle sends white; use the
-  colour picker for any other colour. There is no "on with the previous colour"
-  command, and `blinkMs` / `fadeMs` are reachable only via
-  `<P>/cmd/indicators/<id>`.
+- **Matrix – state** writes `power`: turns the display on and off. (Shown as `matrixPower` in
+  device state.)
+- **Matrix – brightness** writes `brightness`.<!-- only esp32 esp32-s3 --> This does nothing while `autoBrightness` is on and
+  the clock has a light sensor. The slider shows the brightness the display really uses, so with
+  auto-brightness on it moves with the room light. Set **Brightness mode** to `Manual` to control
+  the display with the slider.<!-- /only -->
+- **Matrix – RGB** writes `textColor`, the **default text color** – it does not tint the display.
+- **Indicator *n*** writes `indicators[n]`. The switch turns it on in white; use the color picker
+  for other colors. There is no "on with the last color" command. `blinkMs` and `fadeMs` can only
+  be set with `<P>/cmd/indicators/<id>`.
 
-Entity states come from the state topics, so a change made over HTTP or
-`<P>/cmd/...` reaches Home Assistant on the next publish of the topic that
-carries it:
+Entity states come from the state topics. A change made over HTTP or `<P>/cmd/...` reaches Home
+Assistant the next time that state topic is published:
 
-- **Matrix power and the three indicators** ride `state/device`, which publishes
-  at most once per 250 ms - faster changes are merged into one message.
-- **Everything else on `state/device`**, brightness included, waits for the
-  `statsInterval` tick.
-- **The settings-backed entities** (Brightness mode, Transition effect,
-  Transition and the Matrix RGB colour) ride `state/settings`, which has no such
-  floor: every change publishes on the very next tick.
-- **Current app** rides `state/apps/active` and publishes as soon as the app
-  changes.
+- **Display power and the three indicators** are in `state/device`, which is then published within
+  250 ms – faster changes are combined into one message.
+- **Everything else in `state/device`**, brightness included, waits for the next `statsInterval`.
+- **Settings entities** (<!-- only esp32 esp32-s3 -->Brightness mode, <!-- /only -->Transition effect, Transition, the <!-- only esp32 -->three<!-- /only --><!-- only esp32-s3 tc002 -->four<!-- /only --> volumes and the
+  Matrix RGB color) are in `state/settings`, which is published right after every change.
+- **Current app** is in `state/apps/active`, published as soon as the app changes.
+
+## Related
+
+- [HTTP API](http.md) – the same commands over HTTP
+- [App & notification payload](payload.md) – what goes into `notify` and `apps/pushed`
+- [Device state](device.md) – the content of `state/device`
+- [Home Assistant](../guides/home-assistant.md)
+- [Errors](errors.md#errors-over-mqtt)

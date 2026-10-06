@@ -2,9 +2,11 @@
 
 #define FASTLED_INTERNAL
 #include <FastLED.h>
+#include <esp_heap_caps.h>
 
 #include "core/PinRules.h"
 #include "system/Log.h"
+#include "system/DisplayProbe.h"
 
 namespace awtrix {
 
@@ -17,12 +19,23 @@ template <int PIN>
 void addLedsOnPin(int ledCount) { FastLED.addLeds<NEOPIXEL, PIN>(g_leds, ledCount); }
 }
 
-void MatrixRenderer::begin(int pin, const MatrixLayout& layout, uint8_t brightness) {
+bool MatrixRenderer::begin(int pin, const MatrixLayout& layout, uint8_t brightness) {
+  if (g_leds) return ready();
   layout_ = layout;
-  ledsAllocated_ = layout_.ledCount();
   // FastLED keeps this pointer for good, so the buffer is allocated once and never resized —
   // a changed panel count needs a reboot, not another begin().
-  if (!g_leds) g_leds = new CRGB[ledsAllocated_];
+  // Keep the driver's source in internal memory; its RMT implementation also needs an internal
+  // RGB work buffer of the same size. No controller is registered until this allocation succeeds.
+  const std::size_t bytes = static_cast<std::size_t>(layout_.ledCount()) * sizeof(CRGB);
+  constexpr std::size_t kInternalReserve = 48u * 1024u;
+  if (heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) <
+      2u * bytes + kInternalReserve ||
+      heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < 2u * bytes)
+    return false;
+  g_leds = static_cast<CRGB*>(heap_caps_calloc(layout_.ledCount(), sizeof(CRGB),
+                                              MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+  if (!g_leds) return false;
+  ledsAllocated_ = layout_.ledCount();
   switch (pin) {
 #define X(p) \
   case p:    \
@@ -41,16 +54,18 @@ void MatrixRenderer::begin(int pin, const MatrixLayout& layout, uint8_t brightne
   FastLED.setBrightness(255);
   setBrightness(brightness);
   FastLED.clear(true);
+  return true;
 }
 
 void MatrixRenderer::setBrightness(uint8_t brightness) {
-  brightness_ = brightness;
-  applyGrade();
+  grade_.setBrightness(brightness);
 }
 
 int MatrixRenderer::xyToIndex(int x, int y) const { return layout_.xyToIndex(x, y); }
 
 void MatrixRenderer::show(const Canvas& canvas) {
+  if (!ready()) return;
+  const uint32_t mappingStart = displayprobe::start();
   for (int y = 0; y < layout_.height(); ++y) {
     for (int x = 0; x < layout_.width(); ++x) {
       const int idx = xyToIndex(x, y);
@@ -60,7 +75,11 @@ void MatrixRenderer::show(const Canvas& canvas) {
       g_leds[idx] = CRGB(driver.r, driver.g, driver.b);
     }
   }
+  displayprobe::record(displayprobe::Phase::Mapping, mappingStart);
+  const uint32_t outputStart = displayprobe::start();
   FastLED.show();
+  displayprobe::record(displayprobe::Phase::Output, outputStart);
+  displayprobe::presented();
 }
 
 }

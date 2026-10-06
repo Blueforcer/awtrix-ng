@@ -68,12 +68,14 @@ void operator delete[](void* p, const std::nothrow_t&) noexcept { deallocate(p);
 #include "../../src/media/GifPlayer.cpp"
 #include "../../src/media/MicroGif.cpp"
 #include "../../src/media/ScriptIcon.cpp"
+#include "../../src/platform/linux/images/RemoteScriptIcon.cpp"
 #include "media/DevicePageIcon.h"
 
 #include <base64.hpp>
 
 #include "../test_gifplayer/gif_fixtures.h"
 #include "../test_gifplayer/sized_gif_fixture.h"
+#include "../test_pageicons/fake_remote_images.h"
 
 namespace {
 const unsigned char* s_asset = nullptr;
@@ -92,7 +94,15 @@ void useAsset(const unsigned char* data, unsigned int len) {
 
 namespace awtrix {
 namespace media {
-bool readAsset(const std::string& path, PodBuffer<uint8_t>& out, bool* outOfMemory) {
+bool readAssetRange(std::string_view, std::size_t offset, uint8_t* out,
+                    std::size_t capacity, std::size_t& read, std::size_t& size) {
+  read = 0; size = s_assetLen;
+  if (!s_asset || s_assetOom || offset > size) return false;
+  read = std::min(capacity, size-offset);
+  std::memcpy(out,s_asset+offset,read);
+  return true;
+}
+bool readAsset(std::string_view path, PodBuffer<uint8_t>& out, bool* outOfMemory) {
   (void)path;
   if (outOfMemory) *outOfMemory = false;
   ++s_readAssetCalls;
@@ -111,7 +121,14 @@ bool readAsset(const std::string& path, PodBuffer<uint8_t>& out, bool* outOfMemo
 }
 
 namespace icon {
-bool draw(Canvas& canvas, const std::string&, int x, int y, bool* outOfMemory) {
+bool decodeNative(const uint8_t*, std::size_t, int, int, media::PodBuffer<uint32_t>&,
+                  int& width, int& height, bool* outOfMemory) {
+  width = height = 0;
+  if (outOfMemory) *outOfMemory = false;
+  return false;
+}
+
+bool draw(Canvas& canvas, std::string_view, int x, int y, bool* outOfMemory) {
   ++s_jpgCalls;
   if (outOfMemory) *outOfMemory = s_jpgOom;
   if (s_jpgOom || !s_jpgDraws) return false;
@@ -323,6 +340,65 @@ void test_unsafe_names_rejected() {
   TEST_ASSERT_FALSE(set->draw(c, "a/b", 0, 0, 0));
   TEST_ASSERT_FALSE(set->draw(c, "", 0, 0, 0));
   TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+}
+
+std::string dataUri(const char* type, const unsigned char* bytes, unsigned int length) {
+  std::string b64(encode_base64_length(length), ' ');
+  encode_base64(bytes, length, reinterpret_cast<unsigned char*>(&b64[0]));
+  return std::string("data:image/") + type + ";base64," + b64;
+}
+
+void test_data_uri_icon_draws_and_keeps_animating_from_the_cache() {
+  useAsset(nullptr, 0);
+  const std::string icon = dataUri("gif", kGif8x8TwoFrames, kGif8x8TwoFrames_len);
+  TEST_ASSERT_TRUE(icon.find('/') != std::string::npos);
+  ScriptIcon si;
+  auto set = si.createSet();
+  Canvas c(32, 8);
+  si.setPanelSize(c.width(), c.height());
+  TEST_ASSERT_TRUE(set->draw(c, icon, 0, 0, 0));
+  assertColorNear(0xFF0000u, c.getPixel(0, 0));
+  assertColorNear(0xFF0000u, c.getPixel(7, 7));
+  TEST_ASSERT_TRUE(set->draw(c, icon, 0, 0, 250));
+  assertColorNear(0x00FF00u, c.getPixel(0, 0));
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+}
+
+void test_data_uri_icons_are_cached_apart_and_decoded_by_their_type() {
+  useAsset(nullptr, 0);
+  s_jpgDraws = true;
+  const unsigned char jpeg[] = {0xFF, 0xD8, 0xFF, 0xD9};
+  const std::string gif = dataUri("gif", kGif8x8TwoFrames, kGif8x8TwoFrames_len);
+  const std::string jpg = dataUri("jpeg", jpeg, sizeof(jpeg));
+  ScriptIcon si;
+  auto set = si.createSet();
+  Canvas c(32, 8);
+  si.setPanelSize(c.width(), c.height());
+  TEST_ASSERT_TRUE(set->draw(c, gif, 0, 0, 0));
+  TEST_ASSERT_TRUE(set->draw(c, jpg, 8, 0, 0));
+  TEST_ASSERT_EQUAL_INT(1, s_jpgCalls);
+  assertColorNear(0xFF0000u, c.getPixel(0, 0));
+  assertColorNear(0x00AA00u, c.getPixel(8, 0));
+  TEST_ASSERT_TRUE(set->draw(c, gif, 0, 0, 10));
+  TEST_ASSERT_TRUE(set->draw(c, jpg, 8, 0, 10));
+  TEST_ASSERT_EQUAL_INT(1, s_jpgCalls);
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+}
+
+void test_unsupported_icon_text_is_rejected_without_io() {
+  useAsset(kGif8x8TwoFrames, kGif8x8TwoFrames_len);
+  std::string raw(encode_base64_length(kGif8x8TwoFrames_len), ' ');
+  encode_base64(kGif8x8TwoFrames, kGif8x8TwoFrames_len,
+                reinterpret_cast<unsigned char*>(&raw[0]));
+  ScriptIcon si;
+  auto set = si.createSet();
+  Canvas c(32, 8);
+  si.setPanelSize(c.width(), c.height());
+  TEST_ASSERT_FALSE(set->draw(c, raw, 0, 0, 0));
+  TEST_ASSERT_FALSE(set->draw(c, "data:image/png;base64," + raw, 0, 0, 0));
+  TEST_ASSERT_FALSE(set->draw(c, std::string(65, 'a'), 0, 0, 0));
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+  TEST_ASSERT_EQUAL_INT(0, s_jpgCalls);
 }
 
 void test_panel_sized_script_icon_draws_all_rows_and_columns() {
@@ -767,6 +843,80 @@ void test_long_name_needs_no_allocation_once_cached() {
   TEST_ASSERT_EQUAL_UINT(0, s_allocatedBytes);
 }
 
+namespace {
+const char* kCover = "http://192.168.1.5:8123/api/media_player_proxy/media_player.kitchen?cache=ab";
+}
+
+// The ESP32 has no picture source either and takes the same path.
+void test_url_icon_without_a_picture_source_draws_nothing_and_reads_nothing() {
+  ScriptIcon si;
+  auto set = si.createSet();
+  Canvas c(52, 16);
+  si.setPanelSize(c.width(), c.height());
+  TEST_ASSERT_FALSE(set->draw(c, kCover, 0, 0, 0));
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+  TEST_ASSERT_EQUAL_INT(0, s_jpgCalls);
+}
+
+void test_url_icon_appears_once_its_picture_settles() {
+  FakeRemoteImages remote;
+  ScriptIcon si;
+  si.setRemoteImages(&remote);
+  auto set = si.createSet();
+  Canvas c(52, 16);
+  si.setPanelSize(c.width(), c.height());
+  TEST_ASSERT_FALSE(set->draw(c, kCover, 2, 0, 0));
+  TEST_ASSERT_FALSE(set->draw(c, kCover, 2, 0, 25));
+  TEST_ASSERT_EQUAL_INT(1, remote.asks);
+  TEST_ASSERT_EQUAL_INT(16, remote.width);
+  TEST_ASSERT_EQUAL_INT(16, remote.height);
+  remote.still(16, 16, 0x0000FFu);
+  remote.settle(awtrix::media::RemoteState::kReady);
+  TEST_ASSERT_TRUE(set->draw(c, kCover, 2, 0, 50));
+  TEST_ASSERT_EQUAL_HEX32(0x0000FFu, c.getPixel(2, 0));
+  TEST_ASSERT_EQUAL_HEX32(0x0000FFu, c.getPixel(17, 15));
+  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(18, 15));
+  remote.settle(awtrix::media::RemoteState::kReady);
+  TEST_ASSERT_TRUE(set->draw(c, kCover, 2, 0, 75));
+  TEST_ASSERT_EQUAL_INT(2, remote.asks);
+  TEST_ASSERT_EQUAL_INT(0, s_readAssetCalls);
+}
+
+void test_failed_url_icon_is_asked_for_again_when_the_source_moves_on() {
+  FakeRemoteImages remote;
+  remote.state = awtrix::media::RemoteState::kFailed;
+  ScriptIcon si;
+  si.setRemoteImages(&remote);
+  auto set = si.createSet();
+  Canvas c(32, 8);
+  si.setPanelSize(c.width(), c.height());
+  TEST_ASSERT_FALSE(set->draw(c, kCover, 0, 0, 0));
+  TEST_ASSERT_FALSE(set->draw(c, kCover, 0, 0, 25));
+  TEST_ASSERT_EQUAL_INT(1, remote.asks);
+  remote.still(8, 8, 0x00FF00u);
+  remote.settle(awtrix::media::RemoteState::kReady);
+  TEST_ASSERT_TRUE(set->draw(c, kCover, 0, 0, 50));
+  TEST_ASSERT_EQUAL_INT(2, remote.asks);
+}
+
+void test_url_gif_plays_in_the_middle_of_its_square() {
+  FakeRemoteImages remote;
+  remote.gif(sizedGif(8, 8), 8, 8);
+  remote.state = awtrix::media::RemoteState::kReady;
+  ScriptIcon si;
+  si.setRemoteImages(&remote);
+  auto set = si.createSet();
+  Canvas c(52, 16);
+  si.setPanelSize(c.width(), c.height());
+  TEST_ASSERT_TRUE(set->draw(c, kCover, 10, 0, 0));
+  TEST_ASSERT_EQUAL_HEX32(0u, c.getPixel(13, 3));
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(14, 4));
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000u, c.getPixel(21, 11));
+  TEST_ASSERT_TRUE(set->draw(c, kCover, 10, 0, 100));
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(14, 4));
+  TEST_ASSERT_EQUAL_INT(1, remote.asks);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_good_icon_draws_and_caches);
@@ -778,6 +928,9 @@ int main(int, char**) {
   RUN_TEST(test_offset_is_honoured);
   RUN_TEST(test_invalidate_reloads_wide_icon);
   RUN_TEST(test_unsafe_names_rejected);
+  RUN_TEST(test_data_uri_icon_draws_and_keeps_animating_from_the_cache);
+  RUN_TEST(test_data_uri_icons_are_cached_apart_and_decoded_by_their_type);
+  RUN_TEST(test_unsupported_icon_text_is_rejected_without_io);
   RUN_TEST(test_panel_sized_script_icon_draws_all_rows_and_columns);
   RUN_TEST(test_script_icon_reloads_when_panel_bounds_change);
   RUN_TEST(test_destination_size_does_not_restart_script_animation);
@@ -806,5 +959,9 @@ int main(int, char**) {
   RUN_TEST(test_jpg_fallback_out_of_memory_is_retried_not_written_off);
   RUN_TEST(test_missing_jpg_stays_missing_until_invalidated);
   RUN_TEST(test_extreme_coordinates_draw_nothing_and_do_not_overflow);
+  RUN_TEST(test_url_icon_without_a_picture_source_draws_nothing_and_reads_nothing);
+  RUN_TEST(test_url_icon_appears_once_its_picture_settles);
+  RUN_TEST(test_failed_url_icon_is_asked_for_again_when_the_source_moves_on);
+  RUN_TEST(test_url_gif_plays_in_the_middle_of_its_square);
   return UNITY_END();
 }

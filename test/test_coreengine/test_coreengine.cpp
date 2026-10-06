@@ -1,4 +1,5 @@
-﻿#include <unity.h>
+#include "../EngineFakes.h"
+#include <unity.h>
 
 #include <algorithm>
 #include <map>
@@ -6,21 +7,17 @@
 
 #include "core/CoreEngine.h"
 #include "core/api/StateJson.h"
+#include "core/api/JsonReader.h"
+#include "core/apps/AppRegistry.h"
 #include "core/effects/EffectRegistry.h"
+#include "core/script/ScriptHost.h"
 #include "core/script/ScriptSourceService.h"
 
 using namespace awtrix;
 
 namespace {
-struct FDisplay : IDisplayService {
-  void sendScreen() override {}
-};
-struct FSystem : ISystemService {
-  void reboot() override {}
-  void sleep(uint64_t) override {}
-  void factoryReset() override {}
-  void resetSettings() override {}
-};
+using FDisplay = awtrix::test::NullDisplay;
+using FSystem = awtrix::test::NullSystem;
 
 struct FEffect : IEffect {
   std::string id_;
@@ -471,7 +468,8 @@ static void test_script_app_declining_is_skipped_by_the_rotation() {
   TEST_ASSERT_EQUAL_STRING("Silent", scripts.asked[0].c_str());
   TEST_ASSERT_EQUAL_STRING("Loud", scripts.asked[1].c_str());
 
-  TEST_ASSERT_TRUE(e.switchApp("{\"name\":\"Silent\",\"fast\":true}"));
+  DispatchDetail detail;
+  TEST_ASSERT_EQUAL(DispatchResult::Ok, e.switchApp("{\"name\":\"Silent\",\"fast\":true}", detail));
   TEST_ASSERT_EQUAL_STRING("Silent", e.currentAppId().c_str());
 }
 
@@ -656,6 +654,105 @@ static void test_apps_json_carries_the_icons_a_script_names() {
   TEST_ASSERT_TRUE(out.find("\"icons\":[\"2105\",\"2106\"]") != std::string::npos);
 }
 
+static void test_apps_json_says_which_requirements_are_missing() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  std::vector<script::StoredScript> stored;
+  script::StoredScript game;
+  game.name = "Snake";
+  game.meta.requirements = "pad Gamepad/AbC123xyz456 padlib";
+  stored.push_back(game);
+  script::StoredScript lib;
+  lib.name = "padlib";
+  lib.meta.module = true;
+  lib.meta.moduleName = "pad";
+  stored.push_back(lib);
+
+  std::string out;
+  appendAppsJson(out, e, nullptr, &stored);
+  TEST_ASSERT_TRUE(out.find("\"requires\":[{\"name\":\"pad\",\"missing\":false},"
+                            "{\"name\":\"Gamepad\",\"hub\":\"AbC123xyz456\",\"missing\":true},"
+                            "{\"name\":\"padlib\",\"missing\":true}]") != std::string::npos);
+  TEST_ASSERT_TRUE(out.find("\"import\":\"pad\"") != std::string::npos);
+}
+
+static std::map<std::string, bool> missingRequirements(const std::string& json, const char* name) {
+  api::JsonReader apps(json);
+  TEST_ASSERT_TRUE(apps.enterArray());
+  while (apps.nextElement()) {
+    if (api::memberValue(apps, "name").rawString() != name) {
+      TEST_ASSERT_TRUE(apps.skipValue());
+      continue;
+    }
+    auto requirements = api::memberValue(api::memberValue(apps, "meta"), "requires");
+    TEST_ASSERT_TRUE(requirements.enterArray());
+    std::map<std::string, bool> missing;
+    while (requirements.nextElement()) {
+      bool absent = false;
+      TEST_ASSERT_TRUE(api::memberValue(requirements, "missing").asBool(absent));
+      missing[std::string(api::memberValue(requirements, "name").rawString())] = absent;
+      TEST_ASSERT_TRUE(requirements.skipValue());
+    }
+    return missing;
+  }
+  TEST_FAIL_MESSAGE("script is missing from the app inventory");
+  return {};
+}
+
+static void test_live_requirements_use_script_names_and_module_import_names() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  AppRegistry registry;
+  script::ScriptServices services;
+  script::ScriptHost host(registry, services, nullptr, nullptr);
+  const std::string body = "class App\ndef draw() end\nend\nreturn App()";
+  TEST_ASSERT_TRUE(host.set("installed", body));
+  TEST_ASSERT_TRUE(host.set("dormant", "# @ondemand\n" + body));
+  TEST_ASSERT_TRUE(host.set("padlib", "# @module pad\nreturn module('pad')"));
+  TEST_ASSERT_TRUE(host.set("defaultmod", "# @module\nreturn module('defaultmod')"));
+  TEST_ASSERT_TRUE(host.set("consumer", "# @module\n# @requires installed\n# @requires dormant\n"
+                                        "# @requires pad\n# @requires padlib\n# @requires defaultmod\n"
+                                        "# @requires offline\n# @requires Time\nreturn module('consumer')"));
+  std::vector<script::StoredScript> stored(1);
+  stored[0].name = "offline";
+  std::string out;
+  appendAppsJson(out, e, &host, &stored);
+  const auto missing = missingRequirements(out, "consumer");
+  TEST_ASSERT_EQUAL_UINT(7, missing.size());
+  TEST_ASSERT_FALSE(missing.at("installed"));
+  TEST_ASSERT_FALSE(missing.at("dormant"));
+  TEST_ASSERT_FALSE(missing.at("pad"));
+  TEST_ASSERT_FALSE(missing.at("defaultmod"));
+  TEST_ASSERT_TRUE(missing.at("padlib"));
+  TEST_ASSERT_TRUE(missing.at("offline"));
+  TEST_ASSERT_TRUE(missing.at("Time"));
+}
+
+static void test_stored_requirements_use_script_names_and_module_import_names() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  std::vector<script::StoredScript> stored(4);
+  stored[0].name = "consumer";
+  stored[0].meta.requirements = "dormant pad padlib defaultmod absent Time";
+  stored[1].name = "dormant";
+  stored[1].meta.onDemand = true;
+  stored[2].name = "padlib";
+  stored[2].meta.module = true;
+  stored[2].meta.moduleName = "pad";
+  stored[3].name = "defaultmod";
+  stored[3].meta.module = true;
+  std::string out;
+  appendAppsJson(out, e, nullptr, &stored);
+  const auto missing = missingRequirements(out, "consumer");
+  TEST_ASSERT_EQUAL_UINT(6, missing.size());
+  TEST_ASSERT_FALSE(missing.at("dormant"));
+  TEST_ASSERT_FALSE(missing.at("pad"));
+  TEST_ASSERT_FALSE(missing.at("defaultmod"));
+  TEST_ASSERT_TRUE(missing.at("padlib"));
+  TEST_ASSERT_TRUE(missing.at("absent"));
+  TEST_ASSERT_TRUE(missing.at("Time"));
+}
+
 namespace {
 struct FHeadless : IScriptService {
   std::vector<std::string> headless;
@@ -828,6 +925,76 @@ static void test_disabled_alone_switches_off_without_resending_the_order() {
   TEST_ASSERT_EQUAL_UINT(4u, (unsigned)e.appHost().count());
 }
 
+static void test_switching_one_app_off_keeps_the_rest_of_the_off_list() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  std::string persisted;
+  e.setOrderPersist([&](const std::string& j) { persisted = j; });
+  e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Time\",\"Date\",\"Battery\"],\"disabled\":[\"Temperature\",\"Humidity\"]}"));
+
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
+                        rc(e.execute(cmd(CommandType::SetAppEnabled, "Date", "false"))));
+  TEST_ASSERT_FALSE(e.isEnabled("Date"));
+  TEST_ASSERT_FALSE(e.isEnabled("Temperature"));
+  TEST_ASSERT_FALSE(e.isEnabled("Humidity"));
+  TEST_ASSERT_EQUAL_UINT(2u, (unsigned)e.appHost().count());
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"order\":[\"Time\",\"Date\",\"Battery\"],\"disabled\":[\"Temperature\",\"Humidity\",\"Date\"]}",
+      persisted.c_str());
+}
+
+static void test_switching_an_app_back_on_returns_it_to_its_place() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  e.execute(cmd(CommandType::SetAppOrder, "", "{\"order\":[\"Time\",\"Date\",\"Battery\"],\"disabled\":[\"Temperature\",\"Humidity\"]}"));
+  e.execute(cmd(CommandType::SetAppEnabled, "Date", "false"));
+  TEST_ASSERT_EQUAL_STRING("Battery", e.appHost().ids()[1].c_str());
+
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
+                        rc(e.execute(cmd(CommandType::SetAppEnabled, "Date", "true"))));
+  TEST_ASSERT_TRUE(e.isEnabled("Date"));
+  TEST_ASSERT_FALSE(e.isEnabled("Temperature"));
+  TEST_ASSERT_EQUAL_UINT(3u, (unsigned)e.appHost().count());
+  TEST_ASSERT_EQUAL_STRING("Date", e.appHost().ids()[1].c_str());
+}
+
+static void test_switching_an_app_to_the_state_it_has_saves_nothing() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  int saves = 0;
+  e.setOrderPersist([&](const std::string&) { ++saves; });
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
+                        rc(e.execute(cmd(CommandType::SetAppEnabled, "Time", "true"))));
+  TEST_ASSERT_EQUAL_INT(0, saves);
+  e.execute(cmd(CommandType::SetAppEnabled, "Date", "false"));
+  e.execute(cmd(CommandType::SetAppEnabled, "Date", "false"));
+  TEST_ASSERT_EQUAL_INT(1, saves);
+}
+
+static void test_an_app_switched_off_before_it_arrives_stays_off() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
+                        rc(e.execute(cmd(CommandType::SetAppEnabled, "weather", "false"))));
+  e.execute(cmd(CommandType::SetPushedApp, "weather", "{\"text\":\"21\"}"));
+  TEST_ASSERT_NOT_NULL(e.pushedApp("weather"));
+  TEST_ASSERT_FALSE(e.isInLoop("weather"));
+}
+
+static void test_the_app_switch_takes_only_true_or_false() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  for (const char* body : {"", "1", "\"false\"", "{\"enabled\":false}", "false false", "off"}) {
+    TEST_ASSERT_EQUAL_INT_MESSAGE(rc(DispatchResult::ValidationError),
+                                  rc(e.execute(cmd(CommandType::SetAppEnabled, "Date", body))), body);
+    TEST_ASSERT_EQUAL_STRING("must be true or false", e.lastDetail().message.c_str());
+  }
+  TEST_ASSERT_TRUE(e.isEnabled("Date"));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok),
+                        rc(e.execute(cmd(CommandType::SetAppEnabled, "Date", " false\n"))));
+  TEST_ASSERT_FALSE(e.isEnabled("Date"));
+}
+
 static void test_an_object_body_with_neither_key_is_rejected() {
   sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
@@ -936,15 +1103,52 @@ static void test_nothing_is_switched_off_unless_it_is_named() {
   TEST_ASSERT_TRUE(e.isEnabled("Battery"));
 }
 
+static void test_builtin_apps_follow_the_runtime_and_the_sensors() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy, {"Time", "Status", "Temperature", "Battery"});
+  DispatchDetail detail;
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(e.setPushedApp("weather", "{\"text\":\"x\"}", detail)));
+  e.setTemperatureAvailable(false);
+  const std::vector<std::string> expected = {"Time", "Status", "Battery", "weather"};
+  const std::vector<std::string> known = e.knownApps();
+  TEST_ASSERT_EQUAL_UINT(expected.size(), known.size());
+  for (std::size_t i = 0; i < expected.size(); ++i) TEST_ASSERT_EQUAL_STRING(expected[i].c_str(), known[i].c_str());
+  TEST_ASSERT_TRUE(e.isInLoop("Status"));
+  TEST_ASSERT_FALSE(e.isInLoop("Date"));
+  e.setTemperatureAvailable(true);
+  TEST_ASSERT_TRUE(e.isInLoop("Temperature"));
+}
+
+static void test_an_arrangement_forgets_built_ins_the_device_dropped() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy, {"Time", "Temperature", "Humidity"});
+  DispatchDetail detail;
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(e.setPushedApp("Battery", "{\"text\":\"x\"}", detail)));
+  TEST_ASSERT_TRUE(e.setAppOrder(
+      "{\"order\":[\"Time\",\"Date\",\"Battery\",\"wetter\"],\"disabled\":[\"Date\"]}"));
+  const auto all = e.allApps();
+  TEST_ASSERT_TRUE(std::find(all.begin(), all.end(), "Date") == all.end());
+  TEST_ASSERT_TRUE(std::find(all.begin(), all.end(), "Battery") != all.end());
+  TEST_ASSERT_TRUE(std::find(all.begin(), all.end(), "wetter") != all.end());
+  TEST_ASSERT_TRUE(e.isEnabled("Date"));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_an_arrangement_forgets_built_ins_the_device_dropped);
   RUN_TEST(test_a_body_the_engine_cannot_read_leaves_the_arrangement_alone);
   RUN_TEST(test_nothing_is_switched_off_unless_it_is_named);
+  RUN_TEST(test_builtin_apps_follow_the_runtime_and_the_sensors);
   RUN_TEST(test_an_arranged_app_reports_its_slot_while_it_is_away);
   RUN_TEST(test_deleting_a_script_takes_its_name_out_of_the_arrangement);
   RUN_TEST(test_a_deleted_pushed_app_keeps_the_slot_it_was_given);
   RUN_TEST(test_a_reserved_slot_is_listed_while_its_app_is_away);
   RUN_TEST(test_disabled_alone_switches_off_without_resending_the_order);
+  RUN_TEST(test_switching_one_app_off_keeps_the_rest_of_the_off_list);
+  RUN_TEST(test_switching_an_app_back_on_returns_it_to_its_place);
+  RUN_TEST(test_switching_an_app_to_the_state_it_has_saves_nothing);
+  RUN_TEST(test_an_app_switched_off_before_it_arrives_stays_off);
+  RUN_TEST(test_the_app_switch_takes_only_true_or_false);
   RUN_TEST(test_an_object_body_with_neither_key_is_rejected);
   RUN_TEST(test_a_disabled_pushed_app_stays_disabled_across_a_reboot);
   RUN_TEST(test_an_explicit_disabled_list_leaves_unmentioned_apps_alone);
@@ -989,6 +1193,9 @@ int main(int, char**) {
   RUN_TEST(test_script_sources_stay_writable_without_an_interpreter);
   RUN_TEST(test_apps_json_lists_stored_scripts_without_an_interpreter);
   RUN_TEST(test_apps_json_carries_the_icons_a_script_names);
+  RUN_TEST(test_apps_json_says_which_requirements_are_missing);
+  RUN_TEST(test_live_requirements_use_script_names_and_module_import_names);
+  RUN_TEST(test_stored_requirements_use_script_names_and_module_import_names);
   RUN_TEST(test_a_headless_script_runs_without_being_drawn);
   RUN_TEST(test_the_app_order_switches_a_headless_script_on_and_off);
   RUN_TEST(test_clearing_the_headless_flag_puts_the_script_on_the_panel);

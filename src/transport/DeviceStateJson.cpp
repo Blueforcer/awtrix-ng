@@ -56,10 +56,12 @@ std::string buildDeviceStateJson(CoreEngine& engine, IBoard& board, const std::s
   facts.freeHeapBytes = heap_caps_get_free_size(kGuardHeapCaps);
   facts.minFreeHeapBytes = heap_caps_get_minimum_free_size(kGuardHeapCaps);
   facts.largestFreeBlockBytes = heap_caps_get_largest_free_block(kGuardHeapCaps);
+  facts.hasLargestFreeBlock = true;
   facts.psramTotalBytes = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
   facts.psramFreeBytes = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
   facts.resetReason = resetReasonName();
   facts.hasBattery = board.hasBattery();
+  facts.hasBatteryDivider = true;
   facts.hasLightSensor = board.hasLightSensor();
   facts.hasTemperature = sensors.hasSensor();
   facts.hasHumidity = sensors.hasHumidity();

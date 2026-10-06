@@ -190,10 +190,10 @@ static void test_escaping_matches() {
                w.member("quote", "say \"hi\"");
                w.member("backslash", "a\\b");
                w.member("control", std::string("tab\there\nand\rmore"));
-               w.member("utf8", "Grüße");
+               w.member("utf8", "Crème brûlée");
                w.endObject();
              }),
-             "{\"quote\":\"say \\\"hi\\\"\",\"backslash\":\"a\\\\b\",\"control\":\"tab\\there\\nand\\rmore\",\"utf8\":\"Grüße\"}");
+             "{\"quote\":\"say \\\"hi\\\"\",\"backslash\":\"a\\\\b\",\"control\":\"tab\\there\\nand\\rmore\",\"utf8\":\"Crème brûlée\"}");
 }
 
 static void test_empty_containers_match() {

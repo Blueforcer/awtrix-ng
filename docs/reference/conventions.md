@@ -1,77 +1,95 @@
 # Conventions
 
-These hold across the **whole API** - HTTP routes, MQTT topics, settings and payloads alike, and
-are not repeated per route or per field.
+Rules that hold across the **whole API** - HTTP routes, MQTT topics, settings and payloads. They
+are not repeated on each route or field.
 
 ## Reading the examples
 
-Every `curl` example writes the address of your AWTRIX as `<awtrix-ip>`. Substitute the address you
-reach it on: its IP address, or its mDNS hostname. See
-[Finding AWTRIX](../getting-started/discovery.md).
+Every `curl` example writes the address of your AWTRIX as `<awtrix-ip>`. Replace it with the
+address you reach AWTRIX on: its IP address, or its mDNS name (mDNS lets you use a name such as
+`awtrix.local` instead of an IP). See [Find your clock](../getting-started/discovery.md).
 
 ## Keys and durations
 
-* **Keys are `camelCase`**, everywhere, in every payload.
-* **Durations are integer milliseconds** and carry an `...Ms` suffix - `appDurationMs`, `blinkMs`,
+* **Keys are `camelCase`** in every payload.
+* **Durations are whole milliseconds** and their keys end in `Ms`: `appDurationMs`, `blinkMs`,
   `durationMs`, `fadeMs`, `holdMs`, `lifetimeMs`, `retryInMs`, `textBlinkMs`, `textFadeMs`,
-  `transitionDurationMs`. The one value that names a different unit is the read-only
-  `uptimeSeconds` in `GET /api/v1/device`.
+  `transitionDurationMs`. The only value in another unit is `uptimeSeconds` in
+  `GET /api/v1/device`, which you can only read.
 
 ## Colors
 
-Colors are **written back to you as `"#RRGGBB"`** (uppercase). On the way *in*, any of these
-is accepted for any color field:
+AWTRIX **always answers with colors as `"#RRGGBB"`** (uppercase). When you send a color, any of
+these forms works for any color field:
 
 | Form | Example | Notes |
 |---|---|---|
-| `"RRGGBB"` | `"FF8800"` | leading `#` optional |
-| `"RGB"` | `"F80"` | shorthand, each digit doubled |
-| `[r, g, b]` | `[255, 136, 0]` | each channel clamped to 0–255 |
-| `["HSV", h, s, v]` | `["HSV", 32, 100, 100]` | `h` wrapped into 0–359, `s`/`v` clamped to 0–100 |
+| `"RRGGBB"` | `"FF8800"` | the leading `#` is optional |
+| `"RGB"` | `"F80"` | short form, each digit is doubled |
+| `[r, g, b]` | `[255, 136, 0]` | each channel is clamped to 0–255 |
+| `["HSV", h, s, v]` | `["HSV", 32, 100, 100]` | `h` wraps around into 0–359, `s` and `v` are clamped to 0–100 |
 | packed integer | `16746496` | `0xRRGGBB` |
 
-Every channel is an **integer**; a fractional value is rejected.
+Every channel must be a **whole number**. A value with a fraction is rejected.
 
-`null` means **inherit or off** - it clears a nullable color back to its no-color meaning
-rather than setting it to black.
+`null` means **inherit or off**. On a color that allows `null`, it removes the color instead of
+setting it to black.
 
-Exact ranges, HSV wrapping and which keys are nullable: [Colors](visuals.md#colors).
+Exact ranges, HSV wrapping and which keys allow `null`: [Colors](visuals.md#colors).
 
-## `Content-Type` is mandatory
+## Send `Content-Type: application/json` {#content-type-is-mandatory}
 
-Send `Content-Type: application/json` on every request that carries a JSON body.
+Send `Content-Type: application/json` with every request that has a JSON body. This is what
+AWTRIX checks:
 
-What is enforced is narrower than that, and knowing it does not help you: a `PUT` or `PATCH`
-declaring any other type is refused with `415 unsupportedMediaType` before the body is read, while
-a `POST` is not type-checked at all - its body simply arrives empty and the request fails as
-`400 invalidJson` instead. Both failures come from the same mistake, so treat the header as
-required everywhere.
+* On `PUT` and `PATCH`, a `Content-Type` other than `application/json` is rejected with
+  `415 unsupportedMediaType`, and nothing is applied.
+* A request **without** a `Content-Type` header is accepted; the body is read as JSON.
+* `POST` is not checked. A JSON body sent as `application/x-www-form-urlencoded` is read as JSON
+  like any other.
 
-`curl -d` sends `application/x-www-form-urlencoded` unless you say otherwise, which is why
-`-H "Content-Type: application/json"` appears on every `curl` example in these docs.
+So the header is not strictly required, but a wrong one breaks the request. Sending the right one
+makes every request behave the same way.
 
-A `POST` carrying [`X-HTTP-Method-Override`](http.md#method-override) is checked as the method it
-names, so an overridden `PATCH` needs the header just like a real one.
+`curl -d` sends `application/x-www-form-urlencoded` unless you say otherwise. That is why every
+`curl` example in these docs has `-H "Content-Type: application/json"`.
 
-The one exemption is `PUT /api/v1/apps/script/{name}`, which carries Berry source rather than JSON
-and accepts any content type. Empty bodies, and the exact status code per route:
+A `POST` with [`X-HTTP-Method-Override`](http.md#method-override) is checked as the method it
+names. An overridden `PATCH` needs the header just like a real one.
+
+Exceptions:
+
+* `PUT /api/v1/apps/script/{name}` takes the Berry source itself and accepts any content type.
+* `PUT /api/v1/apps/script-update/{name}` accepts any content type, but the body must be JSON.
+* File uploads use their own documented format.
+
+What an empty body does on each route, and the exact status codes:
 [Content-Type: the empty-body trap](errors.md#content-type-the-empty-body-trap).
 
 ## Errors
 
-Every failing request on the API carries the same body:
+Every failed request gets the same body:
 
 ```json
 { "error": { "code": "validationFailed", "message": "invalid value", "field": "brightness" } }
 ```
 
-`code` is a stable machine-readable identifier - match on it, never on `message`, which is English
-prose for humans. `field` is present only when a specific input key caused the failure. The one
-route that answers in its own shape is `POST /api/v1/restore`. See [Errors](errors.md).
+* `code` never changes - check this in your code.
+* `message` is an English text for people and may change - do not check it in your code.
+* `field` is only there when one specific key caused the error.
+
+The only route with a different answer is `POST /api/v1/restore`. See [Errors](errors.md).
 
 ## Authentication
 
-HTTP Basic auth is **off by default** - the whole API is open on your LAN. It turns on when you set
-`authEnabled`, which requires a username and password to be stored with it. From that point on it
-is enforced in **every** mode, including access-point (provisioning) mode - there is no first-boot
-or AP bypass. See [Authentication](http.md#authentication).
+Login is **off by default** - anyone on your network can use the API. It turns on when you set
+`authEnabled`, which needs a username and password saved with it. From then on, AWTRIX asks for
+them (HTTP Basic auth) in **every** mode, also in access-point (setup) mode. See
+[Authentication](http.md#authentication).
+
+## Related
+
+- [HTTP API](http.md)
+- [MQTT API](mqtt.md)
+- [Errors](errors.md)
+- [Limits](limits.md)

@@ -109,7 +109,7 @@ inline std::size_t sourceCeilingFor(bool wentThroughArena, std::size_t arenaCeil
 // One wording for every way a source upload can be turned away for room. The author cannot act
 // on which of them it was, only on the figure, and one message is one row in the reference.
 inline std::string sourceTooLargeMessage(std::size_t ceiling) {
-  return "script source exceeds the " + std::to_string(ceiling) + " bytes free to receive it";
+  return "source over " + std::to_string(ceiling) + " bytes";
 }
 
 }

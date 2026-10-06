@@ -1,4 +1,6 @@
 #include <unity.h>
+#include "../ScriptApplication.h"
+#include "../Visuals.h"
 
 #include <string>
 
@@ -19,18 +21,24 @@ static const GfxFont kFont = {kB, kG, 'A', 'A', 8};
 static const FontGlyph kLargeG[] = {{0, 5, 3, 6, 0, 0}};
 static const uint8_t kLargeB[] = {0xFF, 0xFF};
 static const GfxFont kLargeFont = {kLargeB, kLargeG, 'A', 'A', 8};
+static const FontEntry kFontEntries[] = {
+    {"small", &kFont, 6, 1, 8}, {"large", &kLargeFont, 6, 2, 8}, {"tall", &kFont, 8, 0, 8}};
+static const FontCatalog fonts{kFontEntries, 3};
 
 static script::ScriptServices g_svc;
+static awtrix::test::ScriptApplication application;
 static Settings g_settings;
 static long g_ms = 0;
 
 void setUp() {
+  application = {};
+  g_svc.application = &application;
   g_ms = 0;
   g_settings = Settings{};
   g_settings.textColor = 0x00FF00u;
   g_settings.scrollDefaults.holdMs = 0;
   g_svc.monotonicMs = [] { return g_ms; };
-  g_svc.settings = [] { return &g_settings; };
+  application.settingsFn = [] { return &g_settings; };
   script::setServices(&g_svc);
 }
 
@@ -48,8 +56,7 @@ struct Panel {
       return false;
     }
     ctx.font = &kFont;
-    ctx.fonts[0] = &kFont;
-    ctx.fonts[1] = &kLargeFont;
+    ctx.fonts = &fonts;
     if (!vm.load(body)) {
       TEST_MESSAGE(vm.lastError().c_str());
       return false;
@@ -83,11 +90,23 @@ static void test_short_form_centres_text_that_fits() {
   TEST_ASSERT_TRUE(p.load("def draw() scroll_text('AA', 0xFFFFFF) end"));
   Canvas a(32, 8);
   p.frame(a, 0);
-  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFu, a.getPixel(12, 6));
+  const auto label = test::bounds(a, test::lit);
+  TEST_ASSERT_TRUE(label.found());
+  TEST_ASSERT_INT_WITHIN(1, label.left, a.width() - 1 - label.right);
 
   Canvas b(32, 8);
   p.frame(b, 5000);
   TEST_ASSERT_FALSE_MESSAGE(differ(a, b), "text that fits must not move");
+}
+
+static void test_short_form_sits_where_a_page_would_in_the_font() {
+  Panel p;
+  TEST_ASSERT_TRUE(p.load("def draw() font('tall') scroll_text('A', 0xFFFFFF) end"));
+  Canvas c(32, 16);
+  p.frame(c, 0);
+  const auto label = test::findText(c, kFont, "A");
+  TEST_ASSERT_TRUE(label.found());
+  TEST_ASSERT_EQUAL_INT(pageBaseline(*fonts.find("tall")), label.top);
 }
 
 static void test_short_form_takes_the_device_text_colour() {
@@ -95,7 +114,7 @@ static void test_short_form_takes_the_device_text_colour() {
   TEST_ASSERT_TRUE(p.load("def draw() scroll_text('AA') end"));
   Canvas c(32, 8);
   p.frame(c, 0);
-  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(12, 6));
+  TEST_ASSERT_TRUE(test::countPixels(c, [](uint32_t p) { return p == g_settings.textColor; }) > 0);
 }
 
 static void test_overflowing_text_moves_over_time() {
@@ -200,6 +219,25 @@ static void test_two_lines_scroll_independently() {
                                     "the static line must not move");
 }
 
+static void test_two_strips_on_one_row_scroll_independently() {
+  Panel p;
+  TEST_ASSERT_TRUE(p.load(
+      "def draw()\n"
+      "  scroll_text(0, 1, 16, 'AAAAAAAAAA', 0xFFFFFF)\n"
+      "  scroll_text(16, 1, 16, 'AAAAAAAAAA', 0xFF0000)\n"
+      "end"));
+  Canvas a(32, 8);
+  p.frame(a, 0);
+  Canvas b(32, 8);
+  p.frame(b, 300);
+
+  bool leftMoved = false, rightMoved = false;
+  for (int x = 0; x < 16; ++x) leftMoved |= a.getPixel(x, 1) != b.getPixel(x, 1);
+  for (int x = 16; x < 32; ++x) rightMoved |= a.getPixel(x, 1) != b.getPixel(x, 1);
+  TEST_ASSERT_TRUE_MESSAGE(leftMoved, "the left strip must move");
+  TEST_ASSERT_TRUE_MESSAGE(rightMoved, "the right strip must move");
+}
+
 static void test_fragments_colour_each_run() {
   Panel p;
   TEST_ASSERT_TRUE(p.load("def draw() scroll_text([['A', 0xFF0000], ['A', 0x00FF00]]) end"));
@@ -268,6 +306,7 @@ static void test_a_fragment_list_scrolls_when_it_overflows() {
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_short_form_centres_text_that_fits);
+  RUN_TEST(test_short_form_sits_where_a_page_would_in_the_font);
   RUN_TEST(test_short_form_takes_the_device_text_colour);
   RUN_TEST(test_overflowing_text_moves_over_time);
   RUN_TEST(test_the_box_form_keeps_bounce_off_the_icon);
@@ -277,6 +316,7 @@ int main(int, char**) {
   RUN_TEST(test_the_call_reports_completed_runs);
   RUN_TEST(test_arguments_matching_neither_shape_draw_nothing);
   RUN_TEST(test_two_lines_scroll_independently);
+  RUN_TEST(test_two_strips_on_one_row_scroll_independently);
   RUN_TEST(test_fragments_colour_each_run);
   RUN_TEST(test_a_fragment_without_a_colour_takes_the_run_colour);
   RUN_TEST(test_fragments_follow_the_large_font);

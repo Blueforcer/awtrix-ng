@@ -5,7 +5,10 @@
 
 #include "core/api/JsonReader.h"
 #include "core/api/JsonText.h"
+#include "core/api/ScriptSoundsApi.h"
 #include "core/sound/AudioRouter.h"
+#include "core/sound/SoundMp3.h"
+#include "core/sound/SoundSpec.h"
 
 namespace awtrix {
 namespace api {
@@ -28,14 +31,6 @@ int indicatorId(const std::string& tail) {
   return tail[0] - '0';
 }
 
-HttpResult errorResult(int status, const char* code, const std::string& message,
-                       const std::string& field = "") {
-  HttpResult r;
-  r.status = status;
-  r.body = errorJson(code, message, field);
-  return r;
-}
-
 std::string mqttError(const char* code, const std::string& message, const std::string& field) {
   std::string out = "{\"ok\":false,";
   const std::string err = errorJson(code, message, field);
@@ -50,137 +45,101 @@ std::string mqttError(const std::string& httpBody) {
   return out;
 }
 
-// One key per source. A station, index or url is a stream; the rest are one-shots whose source
-// travels in cmd.arg.
-RouteOutcome routeAudioPlay(const std::string& body, Source src, Command& cmd,
+// The body is one sound object and travels as sent: the dispatcher reads it, and every transport
+// runs it at once, so a mistake in it is still the answer to this request.
+RouteOutcome routeAudioPlay(std::string& body, Source src, Command& cmd,
                             HttpResult& immediate) {
-  JsonReader atSound, atMp3, atMelody, atTrack, atRtttl, atStation, atIndex, atUrl;
-  const Member keys[] = {{"sound", &atSound},   {"mp3", &atMp3},         {"melody", &atMelody},
-                         {"track", &atTrack},   {"rtttl", &atRtttl},     {"station", &atStation},
-                         {"index", &atIndex},   {"url", &atUrl}};
-  constexpr std::size_t kKeyCount = sizeof(keys) / sizeof(keys[0]);
-  if (!readMembers(body, keys, kKeyCount)) {
-    immediate = errorResult(400, "invalidJson",
-                            src == Source::Mqtt ? "payload is not valid JSON"
-                                                : "request body is not valid JSON");
+  if (!isWellFormed(body)) {
+    immediate = errorResult(400, "invalidJson", "invalid JSON");
     return RouteOutcome::Respond;
   }
-  int count = 0;
-  // The key the sender wrote, not a fixed guess.
-  const char* firstKey = "";
-  for (const Member& k : keys) {
-    if (!present(*k.value)) continue;
-    if (count == 0) firstKey = k.key;
-    ++count;
-  }
-  static constexpr const char* kOneOf =
-      "exactly one of \"sound\", \"mp3\", \"melody\", \"track\", \"rtttl\", \"station\", "
-      "\"index\" or \"url\"";
-  if (count > 1) {
-    immediate = errorResult(422, "validationFailed", std::string(kOneOf) + " is allowed", firstKey);
-    return RouteOutcome::Respond;
-  }
-  if (count == 0) {
-    immediate = errorResult(422, "validationFailed", std::string(kOneOf) + " is required", "");
-    return RouteOutcome::Respond;
-  }
-
-  // A stream keeps the payload as sent: the radio dispatch reads station, index or url itself.
-  if (present(atStation) || present(atIndex) || present(atUrl)) {
-    cmd = make(CommandType::PlayStream, src);
-    cmd.payload = body;
-    return RouteOutcome::Routed;
-  }
-
-  auto oneShot = [&cmd, src](sound::Source source, const std::string& value) {
-    cmd = make(CommandType::PlayAudio, src);
-    cmd.arg = static_cast<int>(source);
-    cmd.payload = value;
-    return RouteOutcome::Routed;
-  };
-
-  if (present(atTrack)) {
-    long long track = 0;
-    if (!atTrack.isNumber() || !atTrack.isInteger() || !atTrack.asLong(track) ||
-        track < sound::kMinTrack || track > sound::kMaxTrack) {
-      immediate = errorResult(422, "validationFailed",
-                              "must be a number between 1 and 2999", "track");
-      return RouteOutcome::Respond;
-    }
-    // int, not the long long the reader handed back: the firmware links newlib-nano, whose printf
-    // has no %lld, so std::to_string(long long) yields an empty string on the device and nothing
-    // on the host can catch it. The range check above makes the narrowing safe.
-    return oneShot(sound::Source::Track, std::to_string(static_cast<int>(track)));
-  }
-
-  // Not parsed here: every transport dispatches inline, so the router's rejection reaches the
-  // caller either way.
-  std::string value;
-  if (atSound.appendString(value)) return oneShot(sound::Source::Auto, value);
-  if (atMp3.appendString(value)) return oneShot(sound::Source::Mp3, value);
-  if (atMelody.appendString(value)) return oneShot(sound::Source::Melody, value);
-  if (atRtttl.appendString(value)) return oneShot(sound::Source::Rtttl, value);
-  immediate = errorResult(422, "validationFailed", std::string(kOneOf) + " must be a string",
-                          firstKey);
-  return RouteOutcome::Respond;
+  cmd = make(CommandType::PlayAudio, src);
+  cmd.arg = static_cast<int>(sound::PlayAs::Once);
+  cmd.payload = std::move(body);
+  return RouteOutcome::Routed;
 }
 
 RouteOutcome routeAudioStop(const std::string& body, Source src, Command& cmd,
                             HttpResult& immediate) {
   cmd = make(CommandType::StopAudio, src);
-  cmd.arg = static_cast<int>(sound::StopScope::All);
+  cmd.arg = static_cast<int>(sound::Stop::All);
   if (body.empty()) return RouteOutcome::Routed;
-
-  JsonReader atScope;
-  if (!readMembers(body, {{"scope", &atScope}})) {
-    immediate = errorResult(400, "invalidJson",
-                            src == Source::Mqtt ? "payload is not valid JSON"
-                                                : "request body is not valid JSON");
+  if (!isWellFormed(body)) {
+    immediate = errorResult(400, "invalidJson", "invalid JSON");
     return RouteOutcome::Respond;
   }
-  if (!present(atScope)) return RouteOutcome::Routed;
-
-  std::string scope;
-  if (atScope.appendString(scope)) {
-    if (scope == "all") return RouteOutcome::Routed;
-    if (scope == "sounds") {
-      cmd.arg = static_cast<int>(sound::StopScope::Sounds);
-      return RouteOutcome::Routed;
-    }
-    if (scope == "stream") {
-      cmd.arg = static_cast<int>(sound::StopScope::Stream);
-      return RouteOutcome::Routed;
-    }
+  JsonReader it{std::string_view(body)};
+  if (!it.enterObject()) {
+    immediate = errorResult(422, "validationFailed", "must be an object");
+    return RouteOutcome::Respond;
   }
-  immediate = errorResult(422, "validationFailed",
-                          "must be \"sounds\", \"stream\" or \"all\"", "scope");
-  return RouteOutcome::Respond;
+  while (it.nextMember()) {
+    if (!it.keyEquals("group")) {
+      immediate = errorResult(422, "validationFailed", "unknown field", std::string(it.key()));
+      return RouteOutcome::Respond;
+    }
+    std::string group;
+    if (it.isString()) it.appendString(group);
+    if (group == "alert") {
+      cmd.arg = static_cast<int>(sound::Stop::Alert);
+    } else if (group == "app") {
+      cmd.arg = static_cast<int>(sound::Stop::App);
+    } else if (group == "radio") {
+      cmd.arg = static_cast<int>(sound::Stop::Radio);
+    } else {
+      immediate = errorResult(422, "validationFailed", "must be alert, app or radio", "group");
+      return RouteOutcome::Respond;
+    }
+    if (!it.skipValue()) break;
+  }
+  return RouteOutcome::Routed;
 }
 
 }
 
+// Script and sound-folder names share one rule; fixed routes under /api/v1/apps/ are reserved.
 bool isValidAppName(const std::string& name) {
-  if (name.empty() || name.size() > 32) return false;
-  for (char c : name) {
-    const bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-                    c == '_' || c == '-';
-    if (!ok) return false;
-  }
-  return true;
+  for (std::string_view route : {"active", "next", "previous", "order"})
+    if (name == route) return false;
+  return sound::validName(name);
 }
 
-std::string configAppName(const std::string& path) {
-  constexpr std::string_view kSuffix = "/config";
+std::string appSubresourceName(const std::string& path, std::string_view suffix) {
   const std::string tail = tailAfter(path, "/api/v1/apps/");
-  if (tail.size() <= kSuffix.size()) return {};
-  if (tail.compare(tail.size() - kSuffix.size(), kSuffix.size(), kSuffix) != 0) return {};
-  return tail.substr(0, tail.size() - kSuffix.size());
+  if (tail.size() <= suffix.size()) return {};
+  if (tail.compare(tail.size() - suffix.size(), suffix.size(), suffix) != 0) return {};
+  return tail.substr(0, tail.size() - suffix.size());
+}
+
+std::string appConfigName(const std::string& path, bool& builtin) {
+  std::string name = appSubresourceName(path, "/config");
+  builtin = name.rfind("builtin/", 0) == 0;
+  if (builtin) name.erase(0, sizeof("builtin/") - 1);
+  return name;
 }
 
 // Script uploads carry Berry source, not JSON, so the server has to pass the body through raw.
+// A script's sounds share the prefix but are files, not source.
 bool isRawBodyWrite(const std::string& method, const std::string& path) {
-  return method == "PUT" && (!tailAfter(path, "/api/v1/apps/script/").empty() ||
-                            !tailAfter(path, "/api/v1/apps/script-update/").empty());
+  if (method != "PUT") return false;
+  if (!tailAfter(path, "/api/v1/apps/script-update/").empty()) return true;
+  return !tailAfter(path, "/api/v1/apps/script/").empty() && !scriptsounds::match(path).matched;
+}
+
+bool acceptsBodyContentType(const std::string& method, const std::string& path,
+                            const std::string& contentType) {
+  if ((method != "PUT" && method != "PATCH") || isRawBodyWrite(method, path)) return true;
+  if (contentType.empty()) return true;
+  if (contentType.find_first_of("\r\n") != std::string::npos ||
+      contentType.find('\0') != std::string::npos) return false;
+  const auto start = contentType.find_first_not_of(" \t");
+  const auto semicolon = contentType.find(';');
+  const auto end = contentType.find_last_not_of(" \t", semicolon == std::string::npos
+      ? std::string::npos : (semicolon == 0 ? 0 : semicolon - 1));
+  if (start == std::string::npos || end == std::string::npos || end < start) return false;
+  std::string token = contentType.substr(start, end - start + 1);
+  for (char& c : token) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+  return token == "application/json";
 }
 
 MethodResolution resolveHttpMethod(const std::string& method, const std::string& path,
@@ -196,15 +155,15 @@ MethodResolution resolveHttpMethod(const std::string& method, const std::string&
     if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
 
   if (method != "POST") {
-    out.error = "X-HTTP-Method-Override is only accepted on POST";
+    out.error = "method override needs POST";
     return out;
   }
   if (want != "PUT" && want != "PATCH" && want != "DELETE") {
-    out.error = "X-HTTP-Method-Override must be PUT, PATCH or DELETE";
+    out.error = "expected PUT, PATCH or DELETE";
     return out;
   }
   if (isRawBodyWrite(want, path)) {
-    out.error = "X-HTTP-Method-Override cannot be used to upload a script source";
+    out.error = "no method override for scripts";
     return out;
   }
   out.method = std::move(want);
@@ -224,17 +183,16 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
 
   auto command = [&](CommandType t) {
     cmd = make(t, src);
-    cmd.payload = body;
+    cmd.payload = std::move(body);
     return RouteOutcome::Routed;
   };
   auto methodNotAllowed = [&](const char* allowed) {
     immediate = errorResult(405, "methodNotAllowed",
-                            std::string("allowed method(s): ") + allowed);
+                            std::string("allowed: ") + allowed);
     return RouteOutcome::Respond;
   };
-  auto requireBody = [&](const char* hint) {
-    immediate = errorResult(422, "validationFailed",
-                            std::string("a JSON body is required; ") + hint);
+  auto requireBody = [&](const char* message) {
+    immediate = errorResult(422, "validationFailed", message);
     return RouteOutcome::Respond;
   };
 
@@ -278,7 +236,7 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
   }
 
   auto badName = [&]() {
-    immediate = errorResult(400, "invalidName", "name must match [A-Za-z0-9_-]{1,32}", "name");
+    immediate = errorResult(400, "invalidName", "invalid name", "name");
     return RouteOutcome::Respond;
   };
 
@@ -287,11 +245,10 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
     if (!name.empty()) {
       if (!put) return methodNotAllowed("PUT");
       if (!isValidAppName(name)) return badName();
-      if (body.empty() || body == "{}")
-        return requireBody("use DELETE /api/v1/apps/{name} to remove the app");
+      if (isEmptyObject(body)) return requireBody("body required");
       cmd = make(CommandType::SetPushedApp, src);
       cmd.name = name;
-      cmd.payload = body;
+      cmd.payload = std::move(body);
       return RouteOutcome::Routed;
     }
   }
@@ -300,6 +257,9 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
     if (get) return RouteOutcome::NoMatch;
     return methodNotAllowed("GET");
   }
+
+  // A script's sounds are files, served by the transport like the other uploads.
+  if (scriptsounds::match(path).matched) return RouteOutcome::NoMatch;
 
   {
     const std::string updateName = tailAfter(path, "/api/v1/apps/script-update/");
@@ -317,7 +277,7 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
       if (!put) return methodNotAllowed("GET, PUT");
       if (!isValidAppName(name)) return badName();
       if (body.empty()) {
-        immediate = errorResult(422, "validationFailed", "request body must be the script source",
+        immediate = errorResult(422, "validationFailed", "body must be the script",
                                 "source");
         return RouteOutcome::Respond;
       }
@@ -329,23 +289,44 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
   }
 
   {
-    const std::string tail = tailAfter(path, "/api/v1/apps/");
-    const std::string suffix = "/config";
-    if (tail.size() > suffix.size() &&
-        tail.compare(tail.size() - suffix.size(), suffix.size(), suffix) == 0) {
-      const std::string name = tail.substr(0, tail.size() - suffix.size());
-      if (get) return RouteOutcome::NoMatch;
-      if (!patch) return methodNotAllowed("GET, PATCH");
+    const std::string name = appSubresourceName(path, "/enabled");
+    if (!name.empty()) {
+      if (!put) return methodNotAllowed("PUT");
       if (!isValidAppName(name)) return badName();
-      if (body.empty()) return requireBody("send the settings to change");
-      cmd = make(CommandType::ScriptConfigSet, src);
+      cmd = make(CommandType::SetAppEnabled, src);
       cmd.name = name;
       cmd.payload = std::move(body);
       return RouteOutcome::Routed;
     }
   }
 
-  // Reached only after the pushed/, script/ and /config prefixes above, so any leftover slash
+  {
+    struct Subresource {
+      std::string_view suffix;
+      CommandType type;
+      const char* hint;
+    };
+    static constexpr Subresource kSubresources[] = {
+        {"/config", CommandType::ScriptConfigSet, "body required"},
+        {"/data", CommandType::ScriptDataSet, "body required"},
+    };
+    for (const Subresource& sub : kSubresources) {
+      bool builtin = false;
+      const std::string name = sub.suffix == "/config" ? appConfigName(path, builtin) :
+                                                        appSubresourceName(path, sub.suffix);
+      if (name.empty() && !builtin) continue;
+      if (get) return RouteOutcome::NoMatch;
+      if (!patch) return methodNotAllowed("GET, PATCH");
+      if (!isValidAppName(name)) return badName();
+      if (body.empty()) return requireBody(sub.hint);
+      cmd = make(builtin ? CommandType::BuiltinAppConfigSet : sub.type, src);
+      cmd.name = name;
+      cmd.payload = std::move(body);
+      return RouteOutcome::Routed;
+    }
+  }
+
+  // Reached only after the pushed/, script/, /config and /data routes above, so any leftover slash
   // simply fails the name check.
   {
     const std::string name = tailAfter(path, "/api/v1/apps/");
@@ -376,7 +357,7 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
   }
   if (path == "/api/v1/display/moodlight") {
     if (put) {
-      if (body.empty() || body == "{}") return requireBody("use DELETE to turn the mood light off");
+      if (isEmptyObject(body)) return requireBody("body required");
       return command(CommandType::Moodlight);
     }
     if (del) {
@@ -392,14 +373,14 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
     if (!tail.empty()) {
       const int id = indicatorId(tail);
       if (id == 0) {
-        immediate = errorResult(404, "notFound", "indicator id must be 1..3");
+        immediate = errorResult(404, "notFound", "id must be 1..3");
         return RouteOutcome::Respond;
       }
       if (put) {
-        if (body.empty() || body == "{}") return requireBody("use DELETE to turn the indicator off");
+        if (isEmptyObject(body)) return requireBody("body required");
         cmd = make(CommandType::SetIndicator, src);
         cmd.arg = id;
-        cmd.payload = body;
+        cmd.payload = std::move(body);
         return RouteOutcome::Routed;
       }
       if (del) {
@@ -414,13 +395,13 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
 
   if (path == "/api/v1/audio/play") {
     if (post) {
-      if (body.empty()) return requireBody("name a sound, an MP3, a melody, a track, a station or a url");
+      if (body.empty()) return requireBody("body required");
       return routeAudioPlay(body, src, cmd, immediate);
     }
     return methodNotAllowed("POST");
   }
 
-  // Stops everything the output is doing, stream included, unless a narrower scope is named.
+  // Stops everything the output is doing, stream included, unless a group is named.
   if (path == "/api/v1/audio/stop") {
     if (post) return routeAudioStop(body, src, cmd, immediate);
     return methodNotAllowed("POST");
@@ -428,7 +409,7 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
 
   if (path == "/api/v1/audio/stations") {
     if (put) {
-      if (body.empty()) return requireBody("send {\"stations\":[...]}");
+      if (body.empty()) return requireBody("body required");
       return command(CommandType::SetRadioStations);
     }
     if (get) return RouteOutcome::NoMatch;
@@ -462,12 +443,12 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
 
 // MQTT has no verbs, so an empty payload stands for the DELETE form of a command and shows up as
 // cmd.clear.
-RouteOutcome routeMqtt(const std::string& suffix, const std::string& payload,
-                       Command& cmd, std::string& resultPayload) {
+RouteOutcome routeMqtt(const std::string& suffix, std::string& payload, Command& cmd,
+                       std::string& resultPayload) {
   const Source src = Source::Mqtt;
   auto command = [&](CommandType t) {
     cmd = make(t, src);
-    cmd.payload = payload;
+    cmd.payload = std::move(payload);
     return RouteOutcome::Routed;
   };
 
@@ -488,13 +469,26 @@ RouteOutcome routeMqtt(const std::string& suffix, const std::string& payload,
     const std::string name = tailAfter(op, "apps/pushed/");
     if (!name.empty()) {
       if (!isValidAppName(name)) {
-        resultPayload = mqttError("invalidName", "name must match [A-Za-z0-9_-]{1,32}", "name");
+        resultPayload = mqttError("invalidName", "invalid name", "name");
         return RouteOutcome::Respond;
       }
       cmd = make(CommandType::SetPushedApp, src);
       cmd.name = name;
-      cmd.payload = payload;
       cmd.clear = payload.empty();
+      cmd.payload = std::move(payload);
+      return RouteOutcome::Routed;
+    }
+  }
+  {
+    const std::string name = appSubresourceName("/api/v1/" + op, "/enabled");
+    if (!name.empty()) {
+      if (!isValidAppName(name)) {
+        resultPayload = mqttError("invalidName", "invalid name", "name");
+        return RouteOutcome::Respond;
+      }
+      cmd = make(CommandType::SetAppEnabled, src);
+      cmd.name = name;
+      cmd.payload = std::move(payload);
       return RouteOutcome::Routed;
     }
   }
@@ -508,8 +502,8 @@ RouteOutcome routeMqtt(const std::string& suffix, const std::string& payload,
   if (op == "display") return command(CommandType::SetDisplay);
   if (op == "display/moodlight") {
     cmd = make(CommandType::Moodlight, src);
-    cmd.payload = payload;
     cmd.clear = payload.empty();
+    cmd.payload = std::move(payload);
     return RouteOutcome::Routed;
   }
   {
@@ -519,8 +513,8 @@ RouteOutcome routeMqtt(const std::string& suffix, const std::string& payload,
       if (id == 0) return RouteOutcome::NoMatch;
       cmd = make(CommandType::SetIndicator, src);
       cmd.arg = id;
-      cmd.payload = payload;
       cmd.clear = payload.empty();
+      cmd.payload = std::move(payload);
       return RouteOutcome::Routed;
     }
   }
@@ -551,8 +545,9 @@ bool isResultEcho(const std::string& suffix) {
       suffix.compare(suffix.size() - kSfx.size(), kSfx.size(), kSfx) != 0)
     return false;
   Command probe;
+  std::string payload;
   std::string ignored;
-  return routeMqtt(suffix.substr(0, suffix.size() - kSfx.size()), "", probe, ignored) !=
+  return routeMqtt(suffix.substr(0, suffix.size() - kSfx.size()), payload, probe, ignored) !=
          RouteOutcome::NoMatch;
 }
 
@@ -567,6 +562,26 @@ std::string errorJson(const char* code, const std::string& message, const std::s
   }
   out += "}}";
   return out;
+}
+
+HttpResult errorResult(int status, const char* code, const std::string& message,
+                       const std::string& field) {
+  return {status, "application/json", errorJson(code, message, field)};
+}
+
+HttpResult errorResult(int status, const char* code, const char* message, const char* field) {
+  return errorResult(status, code, std::string(message), std::string(field));
+}
+
+HttpResult unauthorized(const char* message) { return errorResult(401, "unauthorized", message); }
+
+bool sameOrigin(std::string_view origin, std::string_view host,
+                std::size_t originCount, std::size_t hostCount, bool required) {
+  if (originCount == 0) return !required;
+  if (originCount != 1 || hostCount != 1 || host.empty()) return false;
+  if (origin.substr(0, 7) == "http://") return origin.substr(7) == host;
+  if (origin.substr(0, 8) == "https://") return origin.substr(8) == host;
+  return false;
 }
 
 namespace {
@@ -586,13 +601,13 @@ ErrorShape shapeFor(DispatchResult r) {
     case DispatchResult::NotFound:
       return {"notFound", 404, nullptr};
     case DispatchResult::Conflict:
-      return {"scriptChanged", 409, "script changed; check for updates again"};
+      return {"scriptChanged", 409, "script changed"};
     case DispatchResult::Capacity:
-      return {"insufficientStorage", 507, "storage capacity reached"};
+      return {"insufficientStorage", 507, "storage full"};
     case DispatchResult::Unavailable:
-      return {"unavailable", 503, "not available on this device"};
+      return {"unavailable", 503, "not available"};
     case DispatchResult::Busy:
-      return {"serviceBusy", 503, "device is busy, try again"};
+      return {"serviceBusy", 503, "busy, try again"};
     case DispatchResult::Failed:
     case DispatchResult::Unknown:
     default:
@@ -613,7 +628,9 @@ HttpResult httpResponse(const Command& cmd, DispatchResult r, const DispatchDeta
       res.status = 200;
       // Script writes answer 200 with the compile error inside the body: storing the script
       // succeeded, only running it did not.
-      if (cmd.type == CommandType::ScriptSet || cmd.type == CommandType::ScriptConfigSet) {
+      if (cmd.type == CommandType::ScriptSet || cmd.type == CommandType::ScriptConfigSet ||
+          cmd.type == CommandType::BuiltinAppConfigSet ||
+          cmd.type == CommandType::ScriptDataSet) {
         res.body = "{\"ok\":true,\"name\":";
         appendJsonString(res.body, cmd.name);
         if (detail.message.empty()) {
@@ -642,7 +659,7 @@ HttpResult httpResponse(const Command& cmd, DispatchResult r, const DispatchDeta
 
   const char* fallback = shape.message;
   if (r == DispatchResult::ParseError) {
-    fallback = "request body is not valid JSON";
+    fallback = "invalid JSON";
   } else if (r == DispatchResult::NotFound) {
     // Only the app case is guessed; the audio router writes its own message.
     fallback = cmd.type == CommandType::SwitchApp ? "app not found" : "not found";
@@ -655,9 +672,24 @@ std::string mqttResult(DispatchResult r, const DispatchDetail& detail) {
   if (r == DispatchResult::Ok) return "{\"ok\":true}";
   const ErrorShape shape = shapeFor(r);
   const char* fallback = shape.message;
-  if (r == DispatchResult::ParseError) fallback = "payload is not valid JSON";
+  if (r == DispatchResult::ParseError) fallback = "invalid JSON";
   else if (r == DispatchResult::NotFound) fallback = "not found";
   return mqttError(shape.code, messageFor(detail, fallback), detail.field);
+}
+
+std::string errorEvent(const char* source, const std::string& request, const std::string& body) {
+  static constexpr char kMqtt[] = "{\"ok\":false,";
+  static constexpr char kError[] = "\"error\":";
+  if (body.empty()) return {};
+  const std::size_t at = body.compare(0, sizeof(kMqtt) - 1, kMqtt) == 0 ? sizeof(kMqtt) - 1 : 1;
+  if (body.compare(at, sizeof(kError) - 1, kError) != 0) return {};
+  std::string out = "{\"source\":\"";
+  out += source;
+  out += "\",\"request\":";
+  appendJsonString(out, request);
+  out += ',';
+  out.append(body, at, std::string::npos);
+  return out;
 }
 
 }

@@ -6,6 +6,7 @@
 #include "core/StrCase.h"
 #include "core/render/ColorRamp.h"
 #include "core/render/PaletteFile.h"
+#include <map>
 #include "core/render/Palette.h"
 #include "core/render/PaletteStore.h"
 
@@ -281,6 +282,39 @@ static void test_dropped_user_palettes_are_released() {
   clearPaletteCache();
 }
 
+static std::map<std::string, std::string> paletteFiles;
+
+static bool loadFilePalette(const std::string& name, Palette& out) {
+  return loadPaletteFile(name, out, [](const std::string& leaf, std::string& text) {
+    const auto it = paletteFiles.find(leaf);
+    if (it == paletteFiles.end()) return false;
+    text = it->second;
+    return true;
+  }, [](const PaletteNameVisitor& visit) {
+    for (const auto& file : paletteFiles) if (visit(file.first)) break;
+  });
+}
+
+static void test_palette_file_lookup_prefers_exact_then_ignores_case() {
+  paletteFiles = {{"Heat.txt", "FF0000"}, {"heat.TXT", "0000FF"}, {"ignored.gif", "00FF00"}};
+  Palette palette;
+  TEST_ASSERT_TRUE(loadFilePalette("Heat", palette));
+  TEST_ASSERT_EQUAL_HEX32(0xFF0000, palette.entries[0]);
+  paletteFiles.erase("Heat.txt");
+  TEST_ASSERT_TRUE(loadFilePalette("HEAT", palette));
+  TEST_ASSERT_EQUAL_HEX32(0x0000FF, palette.entries[0]);
+  TEST_ASSERT_FALSE(loadFilePalette("ignored", palette));
+}
+
+static void test_palette_file_lookup_rejects_bad_content_and_paths() {
+  paletteFiles = {{"Heat.txt", "invalid"}, {"HEAT.TXT", "FF0000"}, {"../secret.txt", "FF0000"}};
+  Palette palette;
+  TEST_ASSERT_FALSE(loadFilePalette("Heat", palette));
+  TEST_ASSERT_FALSE(loadFilePalette("../secret", palette));
+  TEST_ASSERT_FALSE(loadFilePalette("folder/name", palette));
+  TEST_ASSERT_FALSE(loadFilePalette("missing", palette));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_named_palettes_match_fastled);
@@ -315,5 +349,7 @@ int main(int, char**) {
   RUN_TEST(test_a_file_overrides_the_builtin_of_the_same_name);
   RUN_TEST(test_dropping_the_file_restores_the_builtin);
   RUN_TEST(test_dropped_user_palettes_are_released);
+  RUN_TEST(test_palette_file_lookup_prefers_exact_then_ignores_case);
+  RUN_TEST(test_palette_file_lookup_rejects_bad_content_and_paths);
   return UNITY_END();
 }

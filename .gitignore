@@ -15,7 +15,9 @@ dist/
 
 # Build / OS
 /.cache/
+/build/
 *.bin
+!/tools/tc002/mcu/release/extension.bin
 *.elf
 *.o
 *.a
@@ -29,9 +31,6 @@ node_modules/
 secrets.h
 *.local
 
-# Host simulator data directory (icons/settings created at runtime)
-simdata/
-
 # MkDocs build output (built by .github/workflows/docs.yml, deployed to Pages)
 site/
 # Firmware for the browser flasher: downloaded from the newest release during
@@ -41,3 +40,20 @@ __pycache__/
 
 # Local Berry scripts (uploaded to the device, not part of the firmware)
 /Berry/
+
+docs/assets/tc002/image/sqfs2tar.js
+docs/assets/tc002/image/tar2sqfs.js
+docs/assets/tc002/image/*.wasm
+docs/assets/tc002/image/build.json
+docs/assets/tc002/image/sources/
+docs/assets/tc002/image/licenses/
+tools/tc002/browser-image/fixtures/stock.sqfs
+
+tools/tc002/desktop/native/target/
+tools/tc002/desktop/native/gen/
+tools/tc002/desktop/native/icons/android/
+tools/tc002/desktop/native/icons/ios/
+tools/tc002/desktop/native/icons/Square*Logo.png
+tools/tc002/desktop/native/icons/StoreLogo.png
+tools/tc002/desktop/native/icons/64x64.png
+tools/tc002/desktop/native/icons/icon.png

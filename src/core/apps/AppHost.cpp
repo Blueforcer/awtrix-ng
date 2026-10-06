@@ -108,6 +108,10 @@ void AppHost::tick(int64_t nowMs, long appDurationMs, long transitionDurationMs,
 void AppHost::next(int64_t nowMs) { beginTransition(1, nowMs); }
 void AppHost::previous(int64_t nowMs) { beginTransition(-1, nowMs); }
 
+void AppHost::restartTurn(int64_t nowMs) {
+  if (phase_ == AppPhase::Fixed) startPhase(AppPhase::Fixed, nowMs);
+}
+
 bool AppHost::switchTo(const std::string& id, int64_t nowMs) {
   for (int i = 0; i < static_cast<int>(apps_.size()); ++i) {
     if (apps_[i] == id) {

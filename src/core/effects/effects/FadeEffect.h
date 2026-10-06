@@ -1,10 +1,9 @@
 #pragma once
 
 #include <cstdint>
-#include <cmath>
 
+#include "core/effects/EffectMath.h"
 #include "core/effects/IEffect.h"
-#include "core/render/Color.h"
 
 namespace awtrix {
 
@@ -13,10 +12,11 @@ class FadeEffect : public IEffect {
   const std::string& id() const override { return id_; }
   float rate() const override { return rate::kContinuous; }
   void render(Canvas& c, int64_t frame) override {
-    // Whole-canvas pulse: it walks the palette if there is one, otherwise it breathes dark blue.
-    const float phase = std::sin(frame * kPhasePerStep) * 0.5f + 0.5f;
-    const int b = static_cast<int>(phase * 90.0f);
-    c.clear(paletteColor(static_cast<uint8_t>(phase * 255.0f), color::fromRgb(0, 0, b)));
+    // The whole palette spread once from top to bottom, every row slowly cycling through it.
+    for (int y = 0; y < c.height(); ++y) {
+      const uint8_t idx = static_cast<uint8_t>(frame + y * 256 / c.height());
+      c.fillRect(0, y, c.width(), 1, paletteColorOr(idx, [idx] { return fx::hueColor(idx, 60); }));
+    }
   }
 
  private:

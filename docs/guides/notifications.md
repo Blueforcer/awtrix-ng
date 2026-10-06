@@ -1,78 +1,127 @@
 # Your first notification
 
-A notification is a page that jumps the queue: it interrupts whatever AWTRIX is showing, says its piece, and disappears. It is the fastest way to get something onto the panel - no app to create, no state to clean up.
+This page shows you how to send a short message that interrupts the clock, and how to change its
+look, its sound and how long it stays.
 
-## Send one now
+!!! tip "New here?"
+    [How the display works](display.md) shows where things sit on the display and which text
+    moves by itself.
 
-Point this at AWTRIX and press enter:
+## What you get {#send-one-now}
 
+Replace `<awtrix-ip>` with the IP address of your clock and run:
+
+<!-- panel -->
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Hello"}'
 ```
 
-The panel shows `HELLO` for seven seconds, then goes back to the clock. You get back:
+The display shows `HELLO` for seven seconds, then the rotation goes on. The answer is:
 
 ```json
 {"ok":true}
 ```
 
-That is the whole of it. Everything from here is one more key in that JSON object.
+Everything else on this page is one more key in that JSON object. `<awtrix-ip>` can also be the
+hostname, `awtrixng-xxxxxx.local` by default. See [Find your clock](../getting-started/discovery.md).
 
-`<awtrix-ip>` is your device's IP address, or its hostname - `awtrixng-xxxxxx.local` by default - see [Finding AWTRIX](../getting-started/discovery.md). Send the `Content-Type` header on every request: it is [mandatory on the other routes](../reference/conventions.md#content-type-is-mandatory).
+## How it behaves
 
-### Why is it uppercase?
+A notification is shown once, on top of the [rotation](display.md#apps-take-turns), for seven
+seconds by default. The rotation
+[keeps turning behind it](pushed-apps.md#the-loop-keeps-turning-behind-a-notification), so
+afterwards you often see another app than before. Notifications that arrive meanwhile wait in a
+queue and are shown one after the other. The text moves only when it does not fit, and text you
+draw with `draw` never moves ([When text moves](display.md#when-text-moves)). The notification
+ends when its time is up, even in the middle of moving text. To keep it until the text has been
+read, add [`repeat`](#wait-until-long-text-has-been-read) next to `text`.
+<!-- only tc002 -->
 
-Because the global `uppercase` setting defaults to on, not because notifications are special. Send `"textCase": "asTyped"` to leave your text exactly as you typed it:
+**A notification is drawn at double size,** like a pushed app. So positions in `draw` count on a
+grid of 26 × 8: the last column is 25, the last row 7. See [The display](display.md#the-display).
+<!-- /only -->
 
+## Send it from Home Assistant {#from-home-assistant}
+
+Let Home Assistant send a notification from any automation. Add a REST command to your
+`configuration.yaml`:
+
+```yaml
+rest_command:
+  awtrix_notify:
+    url: "http://<awtrix-ip>/api/v1/notifications"
+    method: POST
+    content_type: "application/json"
+    payload: '{"text":"{{ message }}"}'
+```
+
+Restart Home Assistant. Then use it in any automation or script:
+
+```yaml
+action: rest_command.awtrix_notify
+data:
+  message: "Someone is at the door"
+```
+
+To send over MQTT instead, see [Over MQTT](#over-mqtt).
+
+## Keep upper and lower case {#why-is-it-uppercase}
+
+Text is shown in capitals, because the `uppercase` setting is on by default. Send
+`"textCase": "asTyped"` to keep your text exactly as you typed it:
+
+<!-- panel -->
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Hello","textCase":"asTyped"}'
 ```
 
-## Color
+## Show it in a color {#color}
 
-Add `textColor`:
+Give the text a color with `textColor`:
 
+<!-- panel motion=4 -->
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"Disk full","textColor":"#FF0000"}'
 ```
 
-`"#FF0000"` is one of several accepted spellings - `"FF0000"`, `"F00"`, `[255,0,0]`, `["HSV",0,100,100]` and the packed integer `16711680` all mean the same red. The full table is at [Colors](../reference/payload.md#colors).
+These all mean the same red: `"#FF0000"`, `"FF0000"`, `"F00"`, `[255,0,0]`, `["HSV",0,100,100]`
+and `16711680`. For several colors in one string, gradients, blinking and fading, see
+[Text & colors](text.md).
 
-For differently coloured runs inside one string, rainbow, gradients, blinking and fading, see the [Text & colors](text.md) guide.
+## Show an icon next to the text {#icons}
 
-## Icons
+`icon` takes the ID of an icon stored on the clock:
 
-`icon` takes an icon ID that lives on the AWTRIX filesystem:
-
+<!-- panel -->
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
-  -d '{"text":"Doorbell","icon":"1234","textColor":"#00AAFF"}'
+  -d '{"text":"29°C","icon":"sun","textColor":"#FFAA00"}'
 ```
 
-AWTRIX looks for `/ICONS/1234.gif` first, then `/ICONS/1234.jpg`. Only GIF and JPEG work - no PNG. If nothing matches, the notification still shows, just without the icon and without the reserved icon column.
+`sun` is an icon from the [AWTRIX Hub](icons.md#install-from-the-awtrix-hub). AWTRIX looks for
+`/ICONS/sun.gif` first, then `/ICONS/sun.jpg`. Only GIF and JPEG work, not PNG. If no file matches,
+the notification still shows, without the icon and without the space for it.
 
-You can also inline the image as base64 instead of uploading it first: any `icon` string longer than 64 characters is treated as inline data rather than an ID. Getting icons onto AWTRIX, and the base64 form, are covered in [Icons & assets](icons.md); the layout rules are at [Icon](../reference/payload.md#icon).
+You can also send the image itself instead of an ID, as a data URL:
+`data:image/gif;base64,…` or `data:image/jpeg;base64,…`.
+<!-- only tc002 -->
+A web address works too: [Pictures from the internet](icons.md#pictures-from-the-internet).
+<!-- /only -->
+How to get icons onto the clock: [Icons](icons.md).
 
-## Sound
+## Play a sound with it {#sound}
 
-Two ways, depending on where the melody lives.
+`sound` plays a sound when the notification appears. It takes the same sound as
+[`/api/v1/audio/play`](sounds.md#play-a-sound).
 
-**Inline** - pass an RTTTL string in `soundRtttl` and nothing needs to be on the filesystem:
-
-```bash
-curl -X POST http://<awtrix-ip>/api/v1/notifications \
-  -H 'Content-Type: application/json' \
-  -d '{"text":"Doorbell","icon":"1234","soundRtttl":"bell:d=4,o=5,b=120:c,e,g"}'
-```
-
-**From a file** - `sound` names a stored sound:
+**A stored sound** by its name:
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
@@ -80,17 +129,55 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -d '{"text":"Doorbell","sound":"chime"}'
 ```
 
-`sound` is a name, and AWTRIX picks the output: the uploaded MP3 `/MP3/chime.mp3` if there is one,
-else the melody `/MELODIES/chime.txt` on the buzzer, else a DFPlayer track when the name is a plain
-number. Uploading MP3s: [MP3s](sounds.md#mp3s).
+<!-- only esp32 -->
+AWTRIX plays the melody `/MELODIES/chime.txt`.
+<!-- /only -->
+<!-- only esp32-s3 tc002 -->
+AWTRIX looks for the name in this order:
 
-The melody plays once, when the notification first appears. Add `"soundLoop": true` to re-trigger it each time it finishes, for as long as the notification is on screen.
+1. the MP3 file `/MP3/chime.mp3`,
+2. the melody `/MELODIES/chime.txt`.
 
-Both keys need the global `soundEnabled` setting on. A name nothing is stored under plays nothing and still returns `200`; an RTTTL string that does not parse is rejected outright with `422 validationFailed` and the notification is not pushed. If you send both, only the RTTTL plays. More on melody format, uploading files and DFPlayer wiring: [Sound](sounds.md) and [Sound](../reference/payload.md#sound).
+A notification sent by a script looks in the script's [own sounds](scripting/sound.md) first. How
+to upload MP3 files: [MP3s](sounds.md#mp3s).
+<!-- /only -->
 
-## How long it stays
+**A melody in the request**, in RTTTL. Nothing needs to be stored on the clock:
 
-By default a notification shows for the global `appDurationMs` setting - **7000 ms** out of the box. Override it per notification with `durationMs`:
+```bash
+curl -X POST http://<awtrix-ip>/api/v1/notifications \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Doorbell","sound":{"rtttl":"bell:d=4,o=5,b=120:c,e,g"}}'
+```
+
+RTTTL is a short text format for ringtones: a name, the tempo, then the notes.
+
+<!-- only tc002 -->
+**Speech or a sound**, when your clock has a voice. The clock plays the first entry it can play:
+
+```bash
+curl -X POST http://<awtrix-ip>/api/v1/notifications \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Door","sound":[{"speech":"The front door is open."},"ding"]}'
+```
+<!-- /only -->
+
+The sound plays once, when the notification appears, at the alert volume
+([Volume](sounds.md#volume)). Add `"loop": true` inside the sound to repeat it for as long as the
+notification is shown. It stops as soon as the notification goes.
+
+```bash
+curl -X POST http://<awtrix-ip>/api/v1/notifications \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"ALARM","hold":true,"sound":{"file":"siren","loop":true}}'
+```
+
+More about sounds: [Sound](sounds.md).
+
+## Show it longer or shorter {#how-long-it-stays}
+
+A notification shows for the `appDurationMs` setting, **7000 ms** by default. Set a different time
+for one notification with `durationMs`, in milliseconds:
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
@@ -98,23 +185,42 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -d '{"text":"Quick","durationMs":2000}'
 ```
 
-Durations are integer **milliseconds**. `0` or negative falls back to the global setting.
+## Keep it until the text has been read {#wait-until-long-text-has-been-read}
 
-The duration decides on its own, however much text is left to scroll. Send `"repeat": 1` to keep the notification up until the text has run across the screen once instead - no shorter, and no longer either - or a higher number for more runs. With `durationMs` set it stays at least that long. See [`repeat`](../reference/payload.md#repeat).
+The notification ends when its time is up, even if the text is still moving. Add `repeat` to keep
+it until the text has run through:
 
-To make it stay until you say otherwise, use `hold`:
+<!-- panel motion=4 -->
+```bash
+curl -X POST http://<awtrix-ip>/api/v1/notifications \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"The washing machine has finished","repeat":1}'
+```
 
+`repeat` stands at the top level of the JSON, next to `text`. It does not go inside `scroll`.
+
+The notification then stays exactly as long as the text needs. A higher number means more passes.
+If you also set `durationMs`, it stays at least that long.
+
+## Keep it until you remove it
+
+Use `hold`:
+
+<!-- panel -->
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"ALARM","textColor":"#FF0000","hold":true}'
 ```
 
-`hold: true` ignores `durationMs` entirely. The notification stays on the panel until it is [dismissed](#dismissing) - nothing times it out. Combine it with `soundLoop` for an alarm that will not stop on its own.
+With `hold: true` the notification ignores `durationMs` and stays until you
+[dismiss](#dismissing) it. Add a sound with `"loop": true` for an alarm that does not stop by
+itself.
 
-### Waking a dark panel
+## Wake a dark display {#waking-a-dark-panel}
 
-If the matrix has been powered off (`PATCH /api/v1/display {"power":false}`) a notification is not drawn - unless it asks:
+When the display is switched off (`PATCH /api/v1/display {"power":false}`), notifications are not
+shown. Add `wakeup` to show one anyway:
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
@@ -122,90 +228,110 @@ curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -d '{"text":"Motion","wakeup":true}'
 ```
 
-`wakeup: true` skips display blanking for as long as that notification is the active one. When it ends, the panel goes dark again.
+The display lights up while this notification is shown and goes dark again when it ends.
 
-## Stacking and interrupting
+## Interrupt the notification shown {#stacking-and-interrupting}
 
-Notifications queue. Send three and they play back to back, in order - that is `stack: true`, the default.
+Notifications wait in a queue. Send three and they play one after the other, in order. This is
+`stack: true`, the default.
 
-Set `stack: false` when the new message makes the old one irrelevant. It **replaces** whatever is on screen right now, keeping anything queued behind it:
+Send `stack: false` when a new message makes the current one pointless. It **replaces** the
+notification shown. Notifications waiting behind it stay in the queue:
 
+<!-- panel -->
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"text":"URGENT","stack":false,"textColor":"#FF0000"}'
 ```
 
-Replacing restarts scroll, icon and sound from the top. On an empty queue, `stack: false` behaves like a normal push.
+The replacement starts from the beginning: scrolling, icon and sound. If nothing is showing,
+`stack: false` works like a normal notification.
 
-Two things to keep in mind when you stack:
+## Dismiss a notification {#dismissing}
 
-- `hold` pins only the front notification, and the queue does not advance until it is dismissed. Do not combine `hold` with a stream of stacked notifications.
-- The queue holds 32 notifications, counting the one on screen. A stacked push into a full queue is rejected with `507 insufficientStorage`, so a dropped message is reported rather than lost - treat it as "slow down". See [Limits](../reference/limits.md#apps-and-notifications).
-
-Post notifications one at a time: an array body carrying more than one object is rejected with `422 validationFailed`.
-
-## Dismissing
-
-Drop the notification currently on screen:
+Remove the notification shown before its time is up. On the clock, press select. In the web UI,
+press the **Bell** under the live picture on the **Dashboard**. Over the API:
 
 ```bash
 curl -X DELETE http://<awtrix-ip>/api/v1/notifications/active
 ```
 
-This is how you end a `hold`. It always returns `200 {"ok":true}`, even when nothing is showing. The next queued notification, if any, takes over immediately.
+This is how you end a `hold`. The answer is always `200 {"ok":true}`, even when nothing is showing.
+The next notification in the queue appears at once.
 
-### Dismissing a specific notification by name
+### Dismiss one by name {#dismissing-a-specific-notification-by-name}
 
-Give a notification a `name` when you push it, and you can retract *that* one later - wherever it sits in the queue, even if it is not the one on screen:
+Give a notification a `name`. You can then remove exactly that one later, even if it is still
+waiting in the queue:
 
 ```bash
-# push one that can be retracted later
+# send one with a name
 curl -X POST http://<awtrix-ip>/api/v1/notifications \
   -H 'Content-Type: application/json' \
   -d '{"name":"backup-job","text":"Backup running","hold":true}'
 
-# retract it, whatever else has arrived since
+# remove it later
 curl -X DELETE http://<awtrix-ip>/api/v1/notifications/backup-job
 ```
 
-Removing one that was still waiting is invisible and leaves the current notification running. You get `200 {"ok":true}` when a match was removed, or `404 notFound` when nothing in the queue carries that name.
+The answer is `200 {"ok":true}` when it was removed, and `404 notFound` when no notification with
+that name is in the queue. Removing a waiting notification does not disturb the one shown.
 
-`/api/v1/notifications/active` always means "whichever notification is on screen", so a notification named literally `active` cannot be addressed by name. Pick any other name. Full rules: [`DELETE /api/v1/notifications/{name}`](../reference/http.md#delete-apiv1notificationsname).
+`active` always means "the notification that is shown", so you cannot use `active` as a name.
 
 ## Over MQTT
 
-Every notification above works unchanged over MQTT - same JSON, different transport. Publish the payload to `<prefix>/cmd/notify`, `<prefix>/cmd/notify/dismiss` to drop the current one, and `<prefix>/cmd/notify/dismiss/<name>` to retract one by name:
+Every example on this page works over MQTT with the same JSON. Use these topics:
+
+| Topic | Does |
+|---|---|
+| `<prefix>/cmd/notify` | send a notification |
+| `<prefix>/cmd/notify/dismiss` | remove the notification shown |
+| `<prefix>/cmd/notify/dismiss/<name>` | remove the notification with that name |
 
 ```bash
-mosquitto_pub -h broker.local -t 'awtrix_ab12cd/cmd/notify' \
-  -m '{"text":"Hello","icon":"1234"}'
+mosquitto_pub -h broker.local -t 'a4cf12ab34cd/cmd/notify' \
+  -m '{"text":"Hello","icon":"sun"}'
 
-# retract the "backup-job" notification
-mosquitto_pub -h broker.local -t 'awtrix_ab12cd/cmd/notify/dismiss/backup-job' -m ''
+# remove the "backup-job" notification
+mosquitto_pub -h broker.local -t 'a4cf12ab34cd/cmd/notify/dismiss/backup-job' -m ''
 ```
 
-`<prefix>` defaults to the device UID unless you set `mqttPrefix`. Topics, the `/result` reply and broker setup: [MQTT topics](../reference/mqtt.md#notify) and the [MQTT automation](mqtt.md) guide.
+`<prefix>` is the device ID (the 12-character MAC address, like `a4cf12ab34cd` above) unless you
+set `mqttPrefix`. From Home Assistant, use the `mqtt.publish` action. See
+[Sending notifications from Home Assistant](home-assistant.md#sending-notifications-from-home-assistant)
+and the [MQTT](mqtt.md) guide.
 
-## When something looks wrong
+## Good to know
 
-The whole payload is applied or the whole payload is rejected - nothing is queued when a request trips. There are four outcomes:
+- **`repeat` inside `scroll` is refused** with `422` and `"field":"scroll.repeat"`. Put it next to
+  `text`.
+- **`hold` stops the queue.** The notifications behind it wait until you dismiss it, so do not mix
+  `hold` with a stream of stacked notifications.
+- **The queue holds 32 notifications,** counting the one shown. One more is refused with
+  `507 insufficientStorage`: send less often.
+- **A value of the wrong type is skipped, not refused.** `{"durationMs":"5000"}` answers `200` and
+  keeps the default time. Send numbers without quotes.
+- **A sound name that is not stored plays nothing.** The request still answers `200`, so check the
+  spelling of the name.
 
-| Response | When |
-|---|---|
-| `200 {"ok":true}` | accepted |
-| `400 invalidJson` | the body is not valid JSON |
-| `413 payloadTooLarge` | the body is over 8192 bytes - easy to hit with inline base64 icons |
-| `422 validationFailed` | with the offending key in `field` |
+## Details
 
-A `422` means an unknown top-level key, an unreadable colour, a mode word AWTRIX does not know, an `effect` or `overlay` name AWTRIX does not know, or a malformed `draw` or `scroll` value. Spelling matters for `effect` and `overlay` names; casing does not - `"plasma"`, `"Plasma"` and `"PLASMA"` all resolve.
-
-Everything else is only read when the JSON type matches. `{"durationMs":"5000"}` or `{"textCenter":"yes"}` returns `200` and the key is simply skipped, so that field keeps its default; numbers outside their range are clamped rather than rejected. `lifetimeMs` and `lifetimeExpiry` are accepted and never read - they only mean something for pushed apps. The [error reference](../reference/payload.md#errors) lists every case.
+- Every key, type, range and default: [App & notification payload](../reference/payload.md).
+  Start at [Notification-only keys](../reference/payload.md#notification-only-keys).
+- [`repeat`](../reference/payload.md#repeat), [Icon](../reference/payload.md#icon),
+  [Colors](../reference/payload.md#colors) and [Sound](../reference/payload.md#sound)
+- What is refused, and with which answer: [Errors](../reference/payload.md#errors)
+- The endpoints: [POST /api/v1/notifications](../reference/http.md#post-apiv1notifications) and
+  [DELETE /api/v1/notifications/{name}](../reference/http.md#delete-apiv1notificationsname)
+- Queue and request size: [Limits](../reference/limits.md#apps-and-notifications)
+- All topics: [MQTT topics](../reference/mqtt.md#notify)
 
 ## Related
 
-- **[App & notification payload](../reference/payload.md)** - the exhaustive field table: every key, type, range, default and interaction. Start at [Notification-only keys](../reference/payload.md#notification-only-keys).
-- **[Pushed apps](pushed-apps.md)** - for a page that lives in the rotation instead of interrupting it.
-- **[Charts & drawing](graphics.md)** - bars, line charts, progress bars and draw primitives, all of which work on notifications too.
-- **[Effects & overlays](effects.md)** - animated backgrounds and weather overlays.
-- **[HTTP API v1](../reference/http.md#post-apiv1notifications)** - the endpoint's own reference entry.
+- [Pushed apps](pushed-apps.md): an app that stays in the rotation instead of interrupting it
+- [Text & colors](text.md): fonts, colors and moving text
+- [Charts & drawing](graphics.md): bars, lines, progress bars and drawings, also on notifications
+- [Effects & overlays](effects.md): animated backgrounds and weather effects
+- [Sound](sounds.md): what your clock can play, and how loud

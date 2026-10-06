@@ -73,7 +73,17 @@ typedef struct {
     bfuncinfo *finfo;
     bclosure *cl;
     bbyte islocal;
+    /* AWTRIX: backport of upstream 6e6e6213 (#546) */
+    bbyte depth;  /* recursion depth for expr/block; bounded by BE_MAX_PARSER_DEPTH (must fit in bbyte) */
 } bparser;
+
+#define enter_recursion(parser) do { \
+    if (++(parser)->depth > BE_MAX_PARSER_DEPTH) { \
+        push_error((parser), "expression or block too deeply nested"); \
+    } \
+} while (0)
+
+#define leave_recursion(parser)  (--(parser)->depth)
 
 #if BE_USE_SCRIPT_COMPILER
 
@@ -969,18 +979,24 @@ static void suffix_alloc_reg(bparser *parser, bexpdesc *l)
 static void compound_assign(bparser *parser, int op, bexpdesc *l, bexpdesc *r)
 {
     int dst = -1;  /* destination register in case of compound assignment */
+    bexpdesc e = *l;
     if (op != OptAssign) { /* check left variable */
         check_var(parser, l);
         /* cache the register of the object when continuously assigning */
         dst = parser->finfo->freereg;
         suffix_alloc_reg(parser, l);
+        /* AWTRIX: backport of upstream 66d2d0f9 (#549) */
+        op = op < OptAndAssign ? op - OptAddAssign + OptAdd
+                : op - OptAndAssign + OptBitAnd;
+        /* Materialize the left operand here, before the right one is parsed,
+         * the way sub_expr() does it through be_code_prebinop(). Otherwise the
+         * code that loads it is emitted from binaryexp() below, by then the
+         * right side has opened its jump list, and the load lands inside it. */
+        be_code_prebinop(parser->finfo, op, &e, dst);
     }
     expr(parser, r); /* right expression */
     check_var(parser, r);
     if (op != OptAssign) { /* compound assignment */
-        bexpdesc e = *l;
-        op = op < OptAndAssign ? op - OptAddAssign + OptAdd
-                : op - OptAndAssign + OptBitAnd;
         be_code_binop(parser->finfo, op, &e, r, dst); /* coding operation */
         *r = e;
     }
@@ -1082,7 +1098,9 @@ static void cond_expr(bparser *parser, bexpdesc *e)
 static void sub_expr(bparser *parser, bexpdesc *e, int prio)
 {
     bfuncinfo *finfo = parser->finfo;
-    btokentype op = get_unary_op(parser);  /* check if first token in unary op */
+    btokentype op;
+    enter_recursion(parser);
+    op = get_unary_op(parser);  /* check if first token in unary op */
     if (op != OP_NOT_UNARY) {  /* unary op found */
         int line, res;
         scan_next_token(parser);  /* move to next token */
@@ -1103,7 +1121,7 @@ static void sub_expr(bparser *parser, bexpdesc *e, int prio)
         bexpdesc e2;
         check_var(parser, e);  /* check that left part is valid */
         scan_next_token(parser);  /* move to next token */
-        be_code_prebinop(finfo, op, e); /* and or */
+        be_code_prebinop(finfo, op, e, -1); /* and or */
         if (op == OptConnect) {
             parser->finfo->binfo->sideeffect = 1;
         }
@@ -1120,6 +1138,7 @@ static void sub_expr(bparser *parser, bexpdesc *e, int prio)
     if (prio == ASSIGN_OP_PRIO) {
         cond_expr(parser, e);
     }
+    leave_recursion(parser);
 }
 
 static void walrus_expr(bparser *parser, bexpdesc *e)
@@ -1128,19 +1147,42 @@ static void walrus_expr(bparser *parser, bexpdesc *e)
     sub_expr(parser, e, ASSIGN_OP_PRIO);    /* left expression */
     btokentype op = next_type(parser);
     if (op == OptWalrus) {
+        bfuncinfo *finfo = parser->finfo;
+        int base;
         check_symbol(parser, e);
         bexpdesc e1 = *e;           /* copy var to e1, e will get the result of expression */
         parser->finfo->binfo->sideeffect = 1;   /* has side effect */
         scan_next_token(parser);    /* skip ':=' */
+        base = finfo->freereg;      /* registers below are still in use by the enclosing expression */
         expr(parser, e);
         check_var(parser, e);
         if (check_newvar(parser, &e1)) { /* new variable */
-            new_var(parser, e1.v.s, &e1);
+            bstring *name = e1.v.s;     /* new_var() overwrites it with the register */
+            new_var(parser, name, &e1);
+            if (e1.type == ETLOCAL && e1.v.idx < base) {
+                /* AWTRIX: from upstream 997de1c7 (#553), which refuses every
+                 * variable created by ':='. A new local takes the register right
+                 * above the other locals; below `base` that register still holds
+                 * a temporary of the enclosing expression, which it would
+                 * overwrite. Only that case is refused here. */
+                parser->lexer.linenumber = line;
+                push_error(parser, "cannot create local '%s' with ':=' inside an expression, "
+                    "declare it with 'var' first", str(name));
+            }
         }
         if (be_code_setvar(parser->finfo, &e1, e, btrue /* do not release register */ )) {
             parser->lexer.linenumber = line;
             parser_error(parser,
                 "try to assign constant expressions.");
+        }
+        if (e1.type == ETLOCAL && e->type == ETLOCAL && finfo->freereg > base) {
+            /* AWTRIX: first part of upstream 997de1c7 (#553). The value is now
+             * held by the local variable: release the temporary registers used
+             * by the right side, e.g. the object of `l[i]`. Unlike upstream,
+             * `:=` may still create a local here, so never go below the
+             * locals. */
+            int nlocal = be_list_count(finfo->local);
+            finfo->freereg = (bbyte)(base > nlocal ? base : nlocal);
         }
     }
 }
@@ -1811,9 +1853,11 @@ static void stmtlist(bparser *parser)
 static void block(bparser *parser, int type)
 {
     bblockinfo binfo;
+    enter_recursion(parser);
     begin_block(parser->finfo, &binfo, type);
     stmtlist(parser);
     end_block(parser);
+    leave_recursion(parser);
 }
 
 static void mainfunc(bparser *parser, bclosure *cl)
@@ -1839,6 +1883,7 @@ bclosure* be_parser_source(bvm *vm,
     parser.finfo = NULL;
     parser.cl = cl;
     parser.islocal = (bbyte)islocal;
+    parser.depth = 0;
     var_setclosure(vm->top, cl);
     be_stackpush(vm);
     be_lexer_init(&parser.lexer, vm, fname, reader, data);

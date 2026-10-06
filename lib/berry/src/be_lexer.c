@@ -30,6 +30,8 @@
 #if BE_USE_SCRIPT_COMPILER
 
 /* IMPORTANT: This must follow the enum found in be_lexer.h !!! */
+/* AWTRIX: ":=" sits after "->" as OptWalrus does in the enum; upstream
+ * appends it after "static", which shifts every keyword name by one */
 static const char* const token_strings[] = {
     "NONE", "EOS", "ID", "INT", "REAL", "STR",
     "=", "+=","-=", "*=", "/=", "%=", "&=", "|=",
@@ -37,11 +39,10 @@ static const char* const token_strings[] = {
     "<", "<=", "==", "!=", ">", ">=", "&", "|",
     "^", "<<", ">>", "..", "&&", "||", "!", "~",
     "(", "(", ")", "[", "]", "{", "}", ".", ",", ";",
-    ":", "?", "->", "if", "elif", "else", "while",
+    ":", "?", "->", ":=", "if", "elif", "else", "while",
     "for", "def", "end", "class", "break", "continue",
     "return", "true", "false", "nil", "var", "do",
     "import", "as", "try", "except", "raise", "static",
-    ":=",
 };
 
 void be_lexerror(blexer *lexer, const char *msg)
@@ -247,6 +248,10 @@ static void tr_string(blexer *lexer)
             be_lexerror(lexer, "unfinished string");
             break;
         case '\\':
+            /* AWTRIX: backport of upstream 6e6e6213 (#546) */
+            if (src >= end) {
+                be_lexerror(lexer, "invalid escape sequence");
+            }
             if (*src != 'u') {
                 switch (*src) {
                 case 'a': c = '\a'; break;
@@ -260,8 +265,17 @@ static void tr_string(blexer *lexer)
                 case '\'': c = '\''; break;
                 case '"': c = '"'; break;
                 case '?': c = '?'; break;
-                case 'x': c = read_hex(lexer, ++src); ++src; break;
+                case 'x':
+                    if (end - src < 3) {  /* need 'x' + 2 hex digits */
+                        be_lexerror(lexer, "invalid hexadecimal number");
+                    }
+                    c = read_hex(lexer, ++src);
+                    ++src;
+                    break;
                 default:
+                    if (end - src < 3) {  /* need 3 octal digits */
+                        be_lexerror(lexer, "invalid octal number");
+                    }
                     c = read_oct(lexer, src);
                     if (c != EOS) {
                         src += 2;
@@ -272,6 +286,9 @@ static void tr_string(blexer *lexer)
                 *dst++ = (char)c;
             } else {
                 /* unicode encoding, ex "\uF054" is equivalent to "\xEF\x81\x94"*/
+                if (end - src < 5) {  /* need 'u' + 4 hex digits */
+                    be_lexerror(lexer, "incorrect '\\u' encoding");
+                }
                 dst = be_load_unicode(dst, src + 1);
                 src += 5;
                 if (dst == NULL) {
@@ -300,6 +317,9 @@ static int skip_newline(blexer *lexer)
         next(lexer); /* skip "\n\r" or "\r\n" */
     }
     lexer->linenumber++;
+#if BE_USE_PREPROCESSOR
+    lexer->pp_at_line_start = btrue;
+#endif
     return lexer->reader.cursor;
 }
 
@@ -354,7 +374,11 @@ static btokentype scan_dot_real(blexer *lexer)
     if (is_digit(lgetc(lexer))) {
         match(lexer, is_digit);
         scan_realexp(lexer);
+        /* AWTRIX: backport of upstream 6e6e6213 (#546); without the NUL the
+         * real reads whatever the previous token left in the buffer */
+        save_char(lexer, '\0');
         setreal(lexer, be_str2real(lexbuf(lexer), NULL));
+        --lexer->buf.len;  /* drop the trailing NUL we just added */
         return TokenReal;
     }
     return OptDot;

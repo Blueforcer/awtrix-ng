@@ -1,233 +1,218 @@
 # Troubleshooting
 
-Each entry is a symptom, what to check, and what to do about it.
+Find the symptom you see, read the cause, then follow the fix. The entries are grouped by what is
+going wrong.
 
 ---
 
-## The Content-Type trap (read this first)
+## Setup & network
 
-**Symptom.** A write route answers with an error even though the JSON you sent is
-valid.
+### A pulsing dot sits in the corner of the display {#a-pulsing-dot-sits-in-the-corner-of-the-panel}
 
-A `Content-Type` header is not required, but if you send one on a `PUT` or
-`PATCH` it must be `application/json`. A form-encoded body - curl's default when
-you use `-d`, and the default for many HTTP clients and browser forms - is
-refused before it is read:
+A single pixel fades in and out at the left edge of the display, over whatever app is showing.
 
-```json
-{"error":{"code":"unsupportedMediaType","message":"Content-Type must be application/json"}}
-```
+**Cause.** A connection AWTRIX should have is missing. The color tells you which one:
 
-A `POST` is not checked this way. The form body simply never reaches the JSON
-parser, so it arrives empty - and an empty body is not valid JSON, which is
-`400 invalidJson`.
+- **Red, top-left corner**: AWTRIX is not on your Wi-Fi network.
+- **Yellow, bottom-left corner**: AWTRIX is on the network but cannot reach your MQTT broker.
+  See [MQTT never connects](#mqtt-never-connects).
 
-An empty body is never read as "clear". Removing an app, turning the mood light
-off and clearing an indicator each have their own `DELETE` route, and the routes
-that would otherwise be ambiguous answer `422` and name the one you want.
+Only one dot lights at a time: without Wi-Fi there is no MQTT either, so a network outage shows
+the red dot alone. You cannot switch the dots off. They go away by themselves once the connection
+is back.
 
-**Fix - send the header explicitly:**
+**Fix for a red dot.** AWTRIX keeps trying on its own, so a dot that clears after a minute needs
+nothing from you. If it stays:
 
-```bash
-curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/weather \
-  -H "Content-Type: application/json" \
-  -d '{"text":"22°C"}'
-```
+1. Check that your router is on and the network reaches the place where the clock stands.
+2. Move the clock closer to the router. A weak signal is the usual cause of a dot that comes and
+   goes.
+3. If you changed your Wi-Fi password, give AWTRIX the new one. See
+   [I need the setup hotspot back](#i-need-the-access-point-back-new-router-new-wi-fi-password).
 
-`curl --json '...'` (curl 7.82 and later) sets it for you. In browsers, `fetch`
-must set `headers: {"Content-Type": "application/json"}`. The status code each
-route answers for an empty or `{}` body is listed in
-[the empty-body trap](../reference/errors.md#content-type-the-empty-body-trap).
+Once AWTRIX is back online, `GET /api/v1/device` shows what happened. In the `wifi` and `mqtt`
+objects, `lastError` keeps the last reason and `connects` counts how often the connection came
+back. `"state": "connected"` with `"lastError": "lost"` and `connects` at 12 means the clock has
+been dropping off your network all day: a signal or router problem, not a faulty clock. See
+[Connection status](../reference/device.md#connection-status).
+
+If a red dot shows and you can still open the web UI, you are connected to the clock's own setup
+hotspot, not to your network. See [Connect to Wi-Fi](../getting-started/first-boot.md).
+
+### AWTRIX doesn't show up on the network {#finding-awtrix-on-the-network}
+
+`<hostname>.local` does not open and no discovery tool finds the clock.
+
+**Cause.** The clock never joined your Wi-Fi, your network blocks `.local` names, or it blocks
+discovery.
+
+**Fix. Check in this order:**
+
+1. **It never joined your Wi-Fi.** `AP MODE` on the display means it opened its setup hotspot.
+   Follow [Connect to Wi-Fi](../getting-started/first-boot.md).
+2. **`.local` names don't work on your network.** mDNS (the feature that lets you open
+   `http://awtrix.local` instead of an IP address) is blocked by some routers, VLANs and Android
+   versions. Use the IP address instead: the display shows it each time the clock starts<!-- only tc002 -->,
+   and the Status app shows it at any time<!-- /only -->. Your router's list of connected devices shows it under its hostname:
+   `awtrixng-<last 6 hex digits of the MAC>` by default, for example `awtrixng-a1b2c3`.
+3. **Discovery is blocked.** AWTRIX answers the text `FIND_AWTRIXNG` sent as a broadcast to UDP
+   port **4210**, and replies to port **4211** on your computer. Your tool must listen on UDP 4211 even when it sends from another port. "AP isolation" (client isolation) on the router blocks
+   this. Turn it off, or put AWTRIX and your computer on the same subnet.
+
+The full procedure, with working examples: [Find your clock](../getting-started/discovery.md).
+
+### The setup hotspot never appears {#the-provisioning-access-point-never-appears}
+
+A new or reset AWTRIX, or one that lost its network, shows no Wi-Fi network to join.
+
+**Cause.** The hotspot opens only after the clock gave up joining your network, and its name is
+easy to miss.
+
+**Fix:**
+
+1. Wait about 15 seconds after power-on. The hotspot opens only after the join attempt times out.<!-- only esp32 esp32-s3 -->
+   You can change this time with `wifiConnectTimeout`.<!-- /only -->
+2. Look for the **hostname**, not for "AWTRIX": `awtrixng-<last 6 hex digits of the MAC>` by
+   default, for example `awtrixng-a1b2c3`, or the hostname you set.
+3. Join it. The network is **open**: there is no password.
+4. The setup page should open by itself. If it doesn't, browse to `192.168.4.1`.
+
+<!-- only esp32 esp32-s3 -->Setup always runs on port 80, whatever `webPort` says. <!-- /only -->If you switched on
+login (`authEnabled`), it applies here too. See [Connect to Wi-Fi](../getting-started/first-boot.md).
+
+### I need the setup hotspot back: new router, new Wi-Fi password {#i-need-the-access-point-back-new-router-new-wi-fi-password}
+
+AWTRIX is set up for a network that is gone or has a new password, so it cannot join and you cannot reach it.
+
+**Cause.** The stored Wi-Fi name or password is wrong.
+
+**Fix:**
+
+<!-- only tc002 -->
+1. Wait until the connection attempt fails and the setup hotspot opens.
+2. Join the hotspot and enter the new network name and password. You do not need USB.
+
+Nothing is erased.
+<!-- /only -->
+<!-- only esp32 esp32-s3 -->
+1. Hold the **select** (middle) button while you power AWTRIX on, and keep holding for a
+   second. The display shows `SETUP`.
+2. Join the open network named after the hostname.
+3. Save the new network name and password.
+
+Nothing is erased. A normal restart goes back to the stored network, so pressing the button by
+accident only costs a restart.
+<!-- /only -->
+To erase everything, use `POST /api/v1/device/factory-reset` once the clock is back on your
+network. Setup step by step: [Connect to Wi-Fi](../getting-started/first-boot.md).
+
+### AWTRIX hangs or restarts after you install a script {#scripts-eat-the-memory-and-awtrix-never-comes-up}
+
+After you install or edit a script, the display stays on the boot logo, the clock restarts by itself,
+or the web UI times out.
+
+**Cause.** All scripts share the clock's memory. One script that needs too much, or too many
+scripts at once, leave nothing for the rest.
+
+<!-- only esp32 esp32-s3 -->
+**Fix:**
+
+1. Hold **left and right together** while you switch AWTRIX on, and keep holding for three
+   seconds. The display shows `NOSCR` and AWTRIX starts without running any script.
+2. Open the web UI. The **Scripts** tab still works: you can open, edit, save and delete scripts.
+3. Fix or delete the script that caused the problem.
+4. Switch **System → Run scripts** back on and restart. Your change takes effect on that start.
+
+This is the same switch as **System → Run scripts**, and it stays off until you turn it back on.
+Nothing is deleted. Holding the buttons for less than three seconds does nothing.
+<!-- /only -->
+<!-- only tc002 -->
+**Fix:** a script cannot take the memory the rest of the clock needs, so the web UI usually stays
+reachable:
+
+1. Open the web UI. In the **Scripts** tab, fix or delete the script that caused the problem.
+2. If that is not enough, switch off **System → Run scripts** and restart the clock. Your scripts
+   stay installed and editable. Switch it back on once the script is fixed.
+
+If the web UI does not open at all, the only way back is the reset button. It erases all settings,
+Wi-Fi and uploaded files. See
+[When the clock does not start](../guides/reset-recovery.md#when-awtrix-ng-cannot-start).
+<!-- /only -->
+
+<!-- only esp32 esp32-s3 -->
+### AWTRIX sits on the weakest access point {#awtrix-sits-on-the-weakest-access-point}
+
+Several access points share one network name (a router plus repeaters, or a mesh) and the signal
+is poor even next to the nearest one.
+
+**Cause.** AWTRIX joins the strongest access point it sees **at boot** and stays with it as long
+as the link holds, even after you move it.
+
+**Fix:**
+
+1. Read `wifiRssi` from `GET /api/v1/device`. That is your normal signal level.
+2. Set a roaming threshold below it. −75 dBm is a good start:
+
+    ```bash
+    curl -X PUT http://<awtrix-ip>/api/v1/system \
+      -H "Content-Type: application/json" -d '{"wifiRoamRssi":-75}'
+    ```
+
+The signal has to stay below the threshold for about 30 seconds before AWTRIX looks for a better
+access point, and then it waits five minutes before it tries again. **Roaming is a reconnect**: the
+connection drops for a second or two each time, and MQTT with it. If you set the threshold too
+close to your normal signal, the clock reconnects again and again. `0` turns roaming off and is the
+default. See [System configuration → Wi-Fi](../reference/system.md#wi-fi).
+
+### Discovery reports the wrong port {#discovery-reports-the-wrong-port}
+
+The `.local` name resolves, but the API does not answer on the port you expect.
+
+**Cause.** AWTRIX has not been restarted since you changed `webPort`.
+
+**Fix.** Restart AWTRIX. mDNS and UDP discovery both announce `webPort` (discovery appends
+`:port` to its reply), and both use 80 when `webPort` is `0`. After a restart the two always
+agree.
+<!-- /only -->
 
 ---
 
-## Nothing appears on the panel
+## Display {#panel-display}
 
-**Symptom.** A command is accepted with `200`, but the panel does not change.
+### Nothing appears on the display {#nothing-appears-on-the-panel}
 
-**Check what is drawing over it.** Four things beat the app loop, in this order -
-the first one that is active wins:
+A command is accepted with `200`, but the display does not change.
 
-1. **The panel is off.** `GET /api/v1/display` reports `power`. Turn it on by
-   sending `{"power":true}` to `PATCH /api/v1/display`.
-2. **The mood light is on.** It fills the panel with one colour. Turn it off with
+**Cause.** Something else is drawing over your apps, or your app is not in the rotation.
+
+**Fix. Check in this order.** <!-- only esp32 esp32-s3 -->Four<!-- /only --><!-- only tc002 -->Three<!-- /only --> things beat the rotation. The first one that is active wins:
+
+1. **The display is off.** `GET /api/v1/display` reports `power`. Send `{"power":true}` to
+   `PATCH /api/v1/display`.
+2. **The mood light is on.** It fills the display with one color. Turn it off with
    `DELETE /api/v1/display/moodlight`.
-3. **AWTRIX is in provisioning mode.** The panel shows a rainbow `AP MODE` and
-   draws nothing else - see [First boot](../getting-started/first-boot.md).
-4. **An Art-Net stream is running.** Incoming frames replace the app loop until
-   they stop - see [Art-Net](../guides/artnet.md).
+<!-- only esp32 esp32-s3 -->
+3. **The clock is in setup mode.** The display shows a rainbow `AP MODE` and nothing else. See
+   [Connect to Wi-Fi](../getting-started/first-boot.md).
+4. **An Art-Net stream is running.** Incoming frames replace the rotation until they stop. See
+   [Art-Net](../guides/artnet.md).
+<!-- /only -->
+<!-- only tc002 -->
+3. **The clock is in setup mode.** The display shows `AP MODE` with the hotspot name and address,
+   and nothing else. See [Connect to Wi-Fi](../getting-started/first-boot.md).
+<!-- /only -->
 
-If none of those apply, the app may not be in the rotation. `GET /api/v1/apps`
-lists every app AWTRIX knows about: `inLoop: false` means your app order left it
-out, and a script that failed carries the error that stopped it.
+If none of these apply, check the app itself. `GET /api/v1/apps` lists every app: `inLoop: false`
+means your app order leaves it out, and a script that failed shows the error that stopped it. See
+[Arrange the rotation](../guides/pushed-apps.md#reordering-switching-off-and-duplicating).
 
----
+<!-- only esp32 esp32-s3 -->
+### My fixed brightness has no effect {#my-fixed-brightness-has-no-effect}
 
-## A pulsing dot sits in the corner of the panel
+You `PATCH` `brightness` in `/api/v1/settings` and the display does not follow it.
 
-**Symptom.** A single pixel breathes in and out at the far left of the panel, over
-whatever app is showing.
-
-That is AWTRIX telling you a connection it should have is missing. The colour says
-which one:
-
-- **Red, top-left corner** - AWTRIX is not on your WiFi network.
-- **Yellow, bottom-left corner** - AWTRIX is on the network, but not talking to your
-  MQTT broker. See [MQTT never connects](#mqtt-never-connects) below.
-
-Only one dot lights at a time. Without WiFi there is no MQTT either, so a network
-outage shows the red dot alone. The dots cannot be switched off, and they disappear on
-their own the moment the connection is back.
-
-**What to do about a red dot.** AWTRIX keeps trying by itself, so a dot that clears
-after a minute needs nothing from you. If it stays:
-
-1. Check your router is up and the network is reachable from where the device sits.
-2. Move the device closer to the router, or the router closer to the device. Weak
-   signal is the usual cause of a dot that comes and goes.
-3. If you changed your WiFi password, AWTRIX cannot know that. Hold the **select**
-   button (the middle one) while powering it on to get its setup screen back, then
-   re-enter the network - see [First boot](../getting-started/first-boot.md).
-
-While the WiFi is down, the dot is the only signal you get: with no network, nothing
-can reach the device to ask it anything. Once AWTRIX is back on, `GET /api/v1/device`
-tells you what happened. In the `wifi` and `mqtt` objects, `lastError` keeps the reason
-across the recovery and `connects` counts how often the connection came back. A device
-reporting `"state": "connected"` with `"lastError": "lost"` and a `connects` of 12 has
-been dropping off your network all day - that is a signal or router problem, not a
-device fault. See [Connection status](../reference/device.md#connection-status).
-
-If a red dot is showing and you can still reach the web UI, you are connected to the
-device's own setup network rather than to AWTRIX on yours - see
-[First boot](../getting-started/first-boot.md).
-
----
-
-## Finding AWTRIX on the network
-
-### AWTRIX doesn't show up at all
-
-**Symptom.** `<hostname>.local` doesn't resolve and no discovery tool finds it.
-
-**Check, in order:**
-
-1. **It never joined your Wi-Fi.** A rainbow `AP MODE` on the panel means AWTRIX
-   fell back to its own access point. Join that network and configure Wi-Fi -
-   see [First boot](../getting-started/first-boot.md).
-2. **mDNS (`.local`) isn't working on your network.** Some routers, VLANs and
-   Android versions don't forward it. Fall back to the raw IP address: AWTRIX
-   scrolls it across the panel once at boot, and your router's DHCP client list
-   shows it under its hostname - `awtrixng-<last 6 hex of the MAC>` by default,
-   e.g. `awtrixng-a1b2c3`.
-3. **UDP discovery is blocked.** AWTRIX answers the text `FIND_AWTRIXNG` sent as
-   a broadcast to UDP port **4210**, and replies to port **4211** on your
-   machine - not the port you sent from - so your client has to bind UDP 4211.
-   Client isolation ("AP isolation") on the router blocks this; disable it, or
-   put AWTRIX and your client on the same subnet.
-
-The full procedure, with working snippets:
-[Finding AWTRIX](../getting-started/discovery.md).
-
-### The provisioning access point never appears
-
-**Symptom.** A freshly flashed AWTRIX, or one that lost its network, shows no
-Wi-Fi network to join.
-
-**Check:**
-
-- The access point opens only **after** the join attempt times out
-  (`wifiConnectTimeout`, 15 s by default). Wait that long after power-on.
-- The network name is the **hostname**, `awtrixng-<last 6 hex of the MAC>` by
-  default - e.g. `awtrixng-a1b2c3`, or whatever hostname you set. It is easy to
-  miss when you are scanning for something starting with `AWTRIX`.
-- The network is **open** - there is no password.
-
-Once you have joined, the captive portal should open by itself; if it doesn't,
-browse to `192.168.4.1`. Provisioning is always served on port 80, whatever
-`webPort` says, and if `authEnabled` is set the login applies here too. See
-[First boot](../getting-started/first-boot.md).
-
-### I need the access point back - new router, new Wi-Fi password
-
-**Symptom.** AWTRIX is configured for a network that no longer exists, so it sits
-in its access point or keeps failing to join, and the API is out of reach.
-
-**Fix.** Hold the **select** button (the middle one) while powering AWTRIX on,
-and keep holding for a second. The panel shows `SETUP` and it comes up in
-provisioning mode whatever is stored. Join the open network named after the
-hostname and save the new credentials.
-
-Nothing is erased - an ordinary restart goes back to trying the stored
-credentials, so triggering this by accident costs a reboot and no more. To wipe
-everything, use `POST /api/v1/device/factory-reset` once you are back on the
-network.
-
-### Scripts eat the memory and AWTRIX never comes up
-
-**Symptom.** After installing or editing a script, AWTRIX no longer comes up
-properly: the panel stays on the boot logo, restarts by itself, or answers so
-slowly that the web UI times out. All scripts share the device's memory, so one
-that asks for too much - or simply too many at once - can leave nothing for the
-rest, and there is no moment where you could switch it off.
-
-**Fix.** Hold **left and right together** while switching AWTRIX on, and keep
-holding for three seconds. The panel shows `NOSCR` and AWTRIX starts without
-running any script, so the web UI answers again. This is the same switch as
-**System → Run scripts**, and it stays off until you turn it back on.
-
-Nothing is deleted, and the **Scripts tab still works**: your scripts are listed,
-open in the editor, and can be saved or deleted as usual. Only nothing runs. Fix
-or delete the script that caused it, switch **Run scripts** back on, and restart -
-your edit takes effect on that start.
-
-Holding the buttons on a normal start does nothing unless you hold both for the
-full three seconds.
-
-### AWTRIX sits on the weakest access point
-
-**Symptom.** Several access points share one network name - a router plus
-repeaters, or a mesh - and the reported signal is poor even next to the nearest
-one.
-
-**Check.** AWTRIX joins the strongest access point it can see **at boot**, and
-stays associated for as long as the link holds. Moving it, or restarting the
-nearest radio, leaves it on a distant one.
-
-**Fix.** Enable roaming with a threshold below your normal signal level. Read
-`wifiRssi` from `GET /api/v1/device` first and pick something under it; −75 dBm
-is a reasonable start.
-
-```bash
-curl -X PUT http://<awtrix-ip>/api/v1/system \
-  -H "Content-Type: application/json" -d '{"wifiRoamRssi":-75}'
-```
-
-The link has to stay below the threshold for about 30 seconds before AWTRIX acts,
-and it will not try again for five minutes. **Roaming is a reconnect, not a
-handover** - the connection drops for a second or two each time, taking MQTT with
-it. Set the threshold too close to your normal signal and it reconnects
-repeatedly, which leaves you worse off than staying put. `0` turns it off, and is
-the default.
-
-### Discovery reports the wrong port
-
-**Symptom.** The `.local` name resolves but the API doesn't answer on the port
-you expect.
-
-mDNS announces `webPort` and the UDP discovery reply appends `:port`; both fall
-back to 80 when `webPort` is `0`. The two always agree, so a mismatch means
-AWTRIX has not been rebooted since you changed the port.
-
----
-
-## My fixed brightness has no effect
-
-**Symptom.** You `PATCH` `brightness` in `/api/v1/settings` and the panel doesn't
-follow it.
-
-**Check.** `autoBrightness`. While it is on, the panel follows the light sensor
-between `minBrightness` and `maxBrightness`, and the fixed `brightness` value is
-ignored.
+**Cause.** Auto-brightness is on. The display follows the light sensor between `minBrightness` and
+`maxBrightness` and ignores the fixed `brightness` value.
 
 **Fix.** Turn auto-brightness off in the same request:
 
@@ -237,162 +222,131 @@ curl -X PATCH http://<awtrix-ip>/api/v1/settings \
   -d '{"autoBrightness":false,"brightness":120}'
 ```
 
-## Auto-brightness is backwards - a bright room dims the panel
+See [Brightness & sensors](../guides/brightness.md).
 
-**Symptom.** With auto-brightness on, the panel goes *dim* in bright light and
-*bright* in the dark.
+### Auto-brightness is backwards: a bright room dims the display {#auto-brightness-is-backwards-a-bright-room-dims-the-panel}
 
-**Fix.** Set `ldrOnGround` to invert the reading - a light sensor wired against
-ground reads high in the dark.
+With auto-brightness on, the display gets *dim* in bright light and *bright* in the dark.
 
-```bash
-curl -X PUT http://<awtrix-ip>/api/v1/system \
-  -H "Content-Type: application/json" -d '{"ldrOnGround":true}'
-```
+**Cause.** Your light sensor is wired against ground, so it reads high in the dark.
 
-If the range is wrong rather than inverted, check the two limits as well - they
-default to `10` and `220`:
+**Fix.**
 
-```bash
-curl -X PUT http://<awtrix-ip>/api/v1/system \
-  -H "Content-Type: application/json" \
-  -d '{"minBrightness":10,"maxBrightness":220}'
-```
+1. Set `ldrOnGround` to invert the reading:
+
+    ```bash
+    curl -X PUT http://<awtrix-ip>/api/v1/system \
+      -H "Content-Type: application/json" -d '{"ldrOnGround":true}'
+    ```
+
+2. If the range is wrong rather than inverted, check the two limits. They default to `10` and
+   `220`:
+
+    ```bash
+    curl -X PUT http://<awtrix-ip>/api/v1/system \
+      -H "Content-Type: application/json" \
+      -d '{"minBrightness":10,"maxBrightness":220}'
+    ```
 
 See [Brightness & sensors](../guides/brightness.md).
 
-## The clock shows the wrong time, or sits at 00:00
+<!-- /only -->
+---
 
-Three symptoms with three different answers.
+## Time
 
-**Stuck at 00:00 on 1 January.** AWTRIX has never reached an NTP server. The sync
-is re-armed every time the Wi-Fi comes up, so this normally clears within seconds
-of connecting. If it persists, something is in the way - a router that blocks
-outbound UDP 123, or a network that runs its own NTP host. Point `ntpServer` at
-that host:
+### The clock shows the wrong time, or sits at 00:00 {#the-clock-shows-the-wrong-time-or-sits-at-0000}
+
+There are three different symptoms, each with its own cause.
+
+**Stuck at 00:00 on 1 January.**
+Cause: AWTRIX has never reached a time server (NTP). This normally clears within seconds of
+joining the Wi-Fi. If it stays, something blocks it: a router that blocks outgoing UDP port 123,
+or a network with its own time server.
+Fix: set `ntpServer` to the time server of your network:
 
 ```bash
 curl -X PUT http://<awtrix-ip>/api/v1/system \
   -H "Content-Type: application/json" -d '{"ntpServer":"192.168.1.1"}'
 ```
 
-**Off by whole hours.** The `tz` string is wrong for your location. Pick your
-city again under Settings → System → Time; the picker writes a rule that already
-carries the daylight-saving dates. Writing `tz` by hand over the API is **not
-validated**, so a malformed string gives you the wrong offset rather than an
-error.
+**Off by whole hours.**
+Cause: the time zone (`tz`) is wrong for your location.
+Fix: pick your city again under **System → Time** in the web UI. The picker sets a rule that already
+includes the daylight-saving dates. A `tz` string you write by hand over the API is **not
+checked**, so a malformed one gives you a wrong offset instead of an error.
 
-**Off by minutes.** NTP never succeeded and the clock is free-running. Check that
-the time server is reachable rather than adjusting anything - there is no manual
-offset.
+**Off by a few minutes.**
+Cause: the clock never reached a time server and runs on its own.
+Fix: make sure the time server is reachable. There is no manual offset.
 
-Both `tz` and `ntpServer` apply immediately, with no reboot. See
+`tz` and `ntpServer` take effect at once, without a restart. See
 [System configuration → Time](../reference/system.md#time).
 
 ---
 
-## Updating a pushed app returns 422
+## Sound
 
-**Symptom.** `PUT /api/v1/apps/pushed/{name}` answers `422` with
-`a JSON body is required; use DELETE /api/v1/apps/{name} to remove the app`.
+### No sound at all {#no-sound-at-all}
 
-**Check.** The body arrived empty - usually the `Content-Type` trap above - or
-you sent literally `{}`. Neither is a valid update, and neither is treated as a
-delete.
+Notifications<!-- only esp32 --> or melodies<!-- /only --><!-- only esp32-s3 tc002 -->, melodies or MP3s<!-- /only --> play silently.
 
-**Fix.** Send a non-empty JSON object with `Content-Type: application/json`. A
-`PUT` replaces the app rather than merging into it, so to change one field send
-the full object you want stored:
+**Cause.** The master volume or the volume of the sound's group is `0`. What you hear is the
+master volume times the group's share, so either one at `0` is silence.
 
-```bash
-curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/clock \
-  -H "Content-Type: application/json" \
-  -d '{"text":"hi","textColor":"#00FF00"}'
-```
+**Fix:**
 
-Removing an app is `DELETE /api/v1/apps/{name}` - note the path, without
-`pushed`. A `DELETE` on the `pushed` path answers `405 allowed method(s): PUT`.
+1. Open the **Audio** tab and look at the **Mixer** section. **Master** must be above 0.
+2. Check the slider of the group you use: **Alerts** for notifications and
+   `/api/v1/audio/play`, **Apps** for scripts<!-- only esp32-s3 tc002 -->, **Radio** for the radio<!-- /only -->.
 
-## My notification request returns `400 invalidJson` but my JSON is valid
-
-**Symptom.** `POST /api/v1/notifications` answers
-`400 {"error":{"code":"invalidJson","message":"request body is not valid JSON"}}`
-even though the JSON you pasted parses fine elsewhere.
-
-**Check.** The body arrived empty - the `Content-Type` trap again. The same 400
-appears for `PATCH /api/v1/settings` and `PATCH /api/v1/display`.
-
-**Fix.** Set `Content-Type: application/json`.
-
-An oversized body is a different failure: anything above 8192 bytes is rejected
-up front with `413 payloadTooLarge`. If you are pushing a large base64 icon, that
-is the limit you are hitting.
-
-## The mood light won't turn on
-
-**Symptom.** `PUT /api/v1/display/moodlight` does not put the panel into
-mood-light mode.
-
-**Check.** A `422` means the body arrived empty, which a wrong `Content-Type`
-does to it. An empty body is not accepted here; turning the mood light off is
-`DELETE /api/v1/display/moodlight`.
-
-**Fix.** Send the mood-light object with the JSON content type:
+Or set both with one request:
 
 ```bash
-curl -X PUT http://<awtrix-ip>/api/v1/display/moodlight \
-  -H "Content-Type: application/json" \
-  -d '{"brightness":120,"color":"#FF8800"}'
+curl -X PATCH http://<awtrix-ip>/api/v1/settings \
+  -H "Content-Type: application/json" -d '{"volume":60,"alertVolume":100}'
 ```
+
+<!-- only tc002 -->
+[The knob](../guides/device-controls.md#the-knob) sets the master volume. An X next to the
+speaker means it is at 0.
+<!-- /only -->
+
+A script's sound is also not played while an alert plays. See
+[What plays over what](../guides/sounds.md#what-plays-over-what).
+
+### A sound request answers 503 {#a-sound-request-answers-503}
+
+A request to play a melody, MP3, track or song answers `503 unavailable`.
+
+**Cause.** Your clock cannot play that kind of sound<!-- only esp32 esp32-s3 -->, for example a melody on a board without a buzzer<!-- /only -->.
+For a list of sounds, it can play none of the entries.
+
+**Fix.** Check which outputs your clock has under `audio` in `GET /api/v1/capabilities`, and use
+one of those. See [Sound](../guides/sounds.md).
+
+### A sound request answers 404 {#a-sound-request-answers-404}
+
+**Cause.** No melody or MP3 with that name is stored on the clock. The message is
+`nothing called "x"`, or `no file "Racer/x"` for a script's sound.
+
+**Fix.** Check the spelling, or upload the file first. The **Audio** tab of the web UI lists what
+is stored. See [Sound](../guides/sounds.md).
 
 ---
 
-## Enabling MQTT or login was rejected with 422
+## MQTT & Home Assistant
 
-**Symptom.** `PUT /api/v1/system` answers `422 validationFailed` when you set
-`mqttEnabled` or `authEnabled` to `true`, and nothing was saved.
+### MQTT never connects {#mqtt-never-connects}
 
-**Check.** A gate can only be armed once it has what it needs: `mqttEnabled`
-needs a non-empty `mqttHost`, and `authEnabled` needs a non-empty `authUser`
-**and** `authPass`. The `field` in the error names the missing key.
+No state topics arrive and Home Assistant stays empty, but AWTRIX is online and the web UI works.
 
-**Fix.** Send the required fields in the same request:
+**Cause.** MQTT is switched off, or AWTRIX cannot reach the broker.
 
-```bash
-# turn HTTP authentication on
-curl -X PUT http://<awtrix-ip>/api/v1/system \
-  -H "Content-Type: application/json" \
-  -d '{"authEnabled":true,"authUser":"admin","authPass":"s3cret"}'
+**Fix. Check in this order:**
 
-# turn MQTT on
-curl -X PUT http://<awtrix-ip>/api/v1/system \
-  -H "Content-Type: application/json" \
-  -d '{"mqttEnabled":true,"mqttHost":"192.168.1.10","mqttPort":1883}'
-```
-
-To turn either back off, flip its gate on its own - the stored host and
-credentials are kept, so re-enabling later needs no retyping:
-
-```bash
-# this route is behind the auth check, so it needs the credentials currently set
-curl -u admin:s3cret -X PUT http://<awtrix-ip>/api/v1/system \
-  -H "Content-Type: application/json" -d '{"authEnabled":false}'
-```
-
-Authentication is off by default, so an unprovisioned AWTRIX is open. Once it is
-on, it applies in AP (provisioning) mode too.
-
-## MQTT never connects
-
-**Symptom.** No state topics arrive and Home Assistant stays empty, but AWTRIX is
-otherwise online and the web UI works.
-
-**Check, in order:**
-
-1. **`mqttEnabled` is `false`.** With the gate off nothing connects or
-   subscribes, whatever broker host is stored. Set it - together with a host, if
-   none is stored - and reboot, because the broker connection is read once at
-   boot:
+1. **MQTT is switched off (`mqttEnabled` is `false`).** Switch it on together with a broker
+   address, then restart, because the broker connection is read once at boot:
 
     ```bash
     curl -X PUT http://<awtrix-ip>/api/v1/system \
@@ -401,9 +355,8 @@ otherwise online and the web UI works.
     curl -X POST http://<awtrix-ip>/api/v1/device/reboot
     ```
 
-2. **The broker is not reachable.** The connection state says why. The web UI
-   shows it as the **Connection** line on the MQTT tab, and the API reports the
-   same thing:
+2. **The broker is not reachable.** The web UI shows the reason in the **Connection** line under
+   **System → MQTT**. The API reports the same:
 
     ```bash
     curl -s http://<awtrix-ip>/api/v1/device | jq .mqtt
@@ -414,62 +367,200 @@ otherwise online and the web UI works.
      "attempts": 4, "retryInMs": 40000, "connects": 0, "error": "hostNotFound"}
     ```
 
-    The two you are most likely to see:
+    The two errors you are most likely to see:
 
-    - **`hostNotFound`** - the broker name did not resolve. A `.local` name needs
-      a responder answering for it on the same network as AWTRIX. If nothing
-      answers, enter the broker's IP address instead and reboot.
-    - **`refused`** - the address resolved but nothing accepted a connection
-      there. Check the port, and that the broker is reachable from the network
-      AWTRIX is on.
+    - **`hostNotFound`**: the broker name could not be found. A `.local` name only works if
+      something on the same network answers for it. If not, enter the broker's IP address and
+      restart.
+    - **`refused`**: the address was found, but nothing accepted the connection. Check the port,
+      and that the broker is reachable from the network AWTRIX is on.
 
-    Every code and what to do about it:
+    Every error and what to do about it:
     [Device state → What each error means](../reference/device.md#what-each-error-means).
 
-`GET /api/v1/logs` carries the same failures with the broker's own status code,
-which is worth having when you take the question to your broker's log. Full
-setup: [MQTT automation](../guides/mqtt.md).
+`GET /api/v1/logs` shows the same failures with the broker's own status code, which helps when you
+compare with your broker's log. Full setup: [MQTT](../guides/mqtt.md).
 
-## Home Assistant shows fewer entities than expected
+### Home Assistant shows no AWTRIX device {#home-assistant-shows-no-awtrix-device}
 
-**Symptom.** Fewer discovered entities than the published entity list leads you
-to expect.
+MQTT works, but no AWTRIX device appears in Home Assistant.
 
-**Check.** Entities follow the hardware. Temperature, humidity and pressure are
-created only for what the detected sensor actually measures, and the battery
-entities only when `pinBattery` is set. `GET /api/v1/device` is the test:
-whatever it omits there is also absent from Home Assistant. Which entity needs
-which part: [Home Assistant](../guides/home-assistant.md).
+**Cause.** Discovery is off, or your Home Assistant is older than 2024.11 and does not understand
+the discovery format AWTRIX uses.
+
+**Fix:**
+
+1. Switch discovery on: `{"haDiscovery":true}` on `PUT /api/v1/system`, or the *HA discovery*
+   toggle under **System → MQTT** in the web UI.
+2. Update Home Assistant to 2024.11 or newer.
+3. If your Home Assistant uses a different discovery prefix, set the same one in `haPrefix`.
+
+See [Home Assistant](../guides/home-assistant.md).
+
+### Home Assistant shows fewer entities than expected {#home-assistant-shows-fewer-entities-than-expected}
+
+**Cause.** Entities follow the hardware. Temperature, humidity and pressure appear only for what
+your sensor actually measures, the battery entities only when <!-- only esp32 esp32-s3 -->`pinBattery` is set<!-- /only --><!-- only tc002 -->a battery is fitted<!-- /only -->.
+
+**Fix.** Nothing to fix. `GET /api/v1/device` shows the same: whatever is missing there is also
+missing in Home Assistant. Which entity needs which part:
+[Home Assistant](../guides/home-assistant.md#what-lands-in-home-assistant).
 
 ---
 
-## A system field I set does nothing
+## API requests
 
-Every field `/api/v1/system` accepts is used, so a change with no visible effect
-is almost always one of two things:
+### The Content-Type trap {#the-content-type-trap-read-this-first}
 
-- **It needs a reboot.** Most system fields are read once at boot. The "Reboot"
-  column in [System configuration](../reference/system.md) says which. Send
-  `POST /api/v1/device/reboot` and check again.
-- **It was dropped as an unknown key.** `PUT /api/v1/system` is a partial merge
-  and does not reject unknown keys, so a typo is accepted with `200` and
-  discarded. The response body is the full resulting configuration - a key you
-  sent that is missing from it was never a real field.
+A `PUT` or `PATCH` answers `415` although the JSON you sent is valid:
 
-## Reboot, sleep and reset stop answering afterwards
+```json
+{"error":{"code":"unsupportedMediaType","message":"expected application/json"}}
+```
 
-**Symptom.** `POST /api/v1/device/reboot`, `/api/v1/device/sleep`,
-`/api/v1/device/factory-reset` or `/api/v1/settings/reset` answers, and then
-every request that follows fails until AWTRIX is back.
+**Cause.** The request carried a `Content-Type` header other than `application/json`. `curl -d`
+sends a form header unless you set another one, and so do many HTTP clients. AWTRIX refuses a
+`PUT` or `PATCH` with any other type before it reads the body. A request without a `Content-Type`
+header is read as JSON, and a `POST` is not checked. Script source uploads take the script text
+as it is.
 
-**This is expected.** These routes answer `200 {"ok":true}` first and act
-immediately afterwards, so AWTRIX is off the network for the next few seconds -
-or until the sleep timer expires. A follow-up request sent right away has nothing
-to talk to.
+**Fix.** Always send the JSON header:
 
-**What to do.** Wait, then poll `GET /api/v1/device`, which is the cheapest thing
-to ask for. A reboot is answering again within a couple of seconds. Do not
-re-send the command because the *next* request failed - the reboot already
+```bash
+curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/weather \
+  -H "Content-Type: application/json" \
+  -d '{"text":"22°C"}'
+```
+
+- `curl --json '...'` (curl 7.82 and later) sets the header for you.
+- In a browser, `fetch` needs `headers: {"Content-Type": "application/json"}`.
+- A Home Assistant `rest_command` needs `content_type: "application/json"`.
+
+The rules for every route: [Content-Type](../reference/conventions.md#content-type-is-mandatory).
+
+### Updating a pushed app returns 422 {#updating-a-pushed-app-returns-422}
+
+`PUT /api/v1/apps/pushed/{name}` answers `422` with
+`body required`.
+
+**Cause.** The body arrived empty, or you sent `{}`. Neither is a valid update, and neither
+deletes the app.
+
+**Fix.** Send a non-empty JSON object with `Content-Type: application/json`. A `PUT` replaces the
+app, it does not merge. To change one field, send the full object you want stored:
+
+```bash
+curl -X PUT http://<awtrix-ip>/api/v1/apps/pushed/clock \
+  -H "Content-Type: application/json" \
+  -d '{"text":"hi","textColor":"#00FF00"}'
+```
+
+To remove an app, use `DELETE /api/v1/apps/{name}`. Leave `pushed` out of the path. A `DELETE` on
+the `pushed` path answers `405 allowed: PUT`.
+
+An empty body never means "clear". Removing an app, turning the mood light off and clearing an
+indicator each have their own `DELETE` route. What each route answers for an empty or `{}` body
+is listed in [the empty-body trap](../reference/errors.md#content-type-the-empty-body-trap).
+
+### My notification returns `400 invalidJson` but my JSON is valid {#my-notification-request-returns-400-invalidjson-but-my-json-is-valid}
+
+`POST /api/v1/notifications` answers
+`400 {"error":{"code":"invalidJson","message":"invalid JSON"}}`, although your
+JSON is fine.
+
+**Cause.** What arrived is not the JSON you typed. On Windows, the shell changes the JSON before
+`curl` sees it: the command prompt and Windows PowerShell both drop the `"` inside it, and the
+command prompt also keeps the `'` around it. An empty body gets the same `400`, here and on
+`PATCH /api/v1/settings` and `PATCH /api/v1/display`.
+
+**Fix.** On Windows, save the JSON in a file and send the file with `-d @notification.json`, or use
+a shell that keeps the quotes, such as Git Bash or WSL. Elsewhere, check that your tool sends the
+body at all.
+
+A body over <!-- only esp32 esp32-s3 -->8192 bytes<!-- /only --><!-- only tc002 -->2 MiB<!-- /only --> is a different error: `413 payloadTooLarge`. If you send a
+large inline icon, that is the limit you hit.
+
+### The mood light won't turn on {#the-mood-light-wont-turn-on}
+
+`PUT /api/v1/display/moodlight` answers `422` with `body required`, and the display does not switch
+to the mood light.
+
+**Cause.** The body arrived empty, or you sent `{}`. Neither is accepted here. Turning the mood
+light off is `DELETE /api/v1/display/moodlight`.
+
+**Fix.** Send the mood-light object with the JSON header:
+
+```bash
+curl -X PUT http://<awtrix-ip>/api/v1/display/moodlight \
+  -H "Content-Type: application/json" \
+  -d '{"brightness":120,"color":"#FF8800"}'
+```
+
+### Switching on MQTT or login returns 422 {#enabling-mqtt-or-login-was-rejected-with-422}
+
+`PUT /api/v1/system` answers `422 validationFailed` when you set `mqttEnabled` or `authEnabled` to
+`true`, and nothing is saved.
+
+**Cause.** A required field is missing. `mqttEnabled` needs a non-empty `mqttHost`. `authEnabled`
+needs a non-empty `authUser` **and** `authPass`. The `field` in the error names the missing key.
+
+**Fix.** Send the required fields in the same request:
+
+```bash
+# switch login on
+curl -X PUT http://<awtrix-ip>/api/v1/system \
+  -H "Content-Type: application/json" \
+  -d '{"authEnabled":true,"authUser":"admin","authPass":"s3cret"}'
+
+# switch MQTT on
+curl -X PUT http://<awtrix-ip>/api/v1/system \
+  -H "Content-Type: application/json" \
+  -d '{"mqttEnabled":true,"mqttHost":"192.168.1.10","mqttPort":1883}'
+```
+
+To switch either off, send only its switch. The host and credentials stay stored, so you do not
+have to type them again later:
+
+```bash
+# once login is on, this request needs the current credentials too
+curl -u admin:s3cret -X PUT http://<awtrix-ip>/api/v1/system \
+  -H "Content-Type: application/json" -d '{"authEnabled":false}'
+```
+
+Login is off by default, so a new AWTRIX is open to everyone on your network. Once login is on, it
+also applies to the setup hotspot. See [Authentication](../reference/http.md#authentication) and
+[MQTT](../guides/mqtt.md).
+
+### A system setting I changed does nothing {#a-system-field-i-set-does-nothing}
+
+You changed a field with `PUT /api/v1/system`, got `200`, and nothing changed.
+
+**Cause.** The field needs a restart<!-- only esp32 esp32-s3 --> or the key was misspelled<!-- /only --><!-- only tc002 -->, the key was misspelled, or the field does not apply to this clock<!-- /only -->.
+
+**Fix:**
+
+1. **Restart.** Most system fields are read once at boot. The "Reboot" column in
+   [System configuration](../reference/system.md) shows which. Send
+   `POST /api/v1/device/reboot` and check again.
+2. **Check the spelling.** `PUT /api/v1/system` does not reject unknown keys: a typo is accepted
+   with `200` and thrown away. The answer contains the full configuration: a key you sent that is
+   missing there does not exist.
+<!-- only tc002 -->
+3. **The field does nothing on this clock.** `webPort` and `artnet` are accepted but not used.
+   The web server always uses port 80.
+<!-- /only -->
+
+### Reboot, sleep and reset stop answering afterwards {#reboot-sleep-and-reset-stop-answering-afterwards}
+
+`POST /api/v1/device/reboot`, `/api/v1/device/sleep`, `/api/v1/device/factory-reset` or
+`/api/v1/settings/reset` answers, and then every following request fails until AWTRIX is back.
+
+**Cause.** This is expected. These routes answer `200 {"ok":true}` first and then act at once, so
+AWTRIX is off the network for a few seconds after a restart.<!-- only esp32 esp32-s3 --> During sleep it stays offline
+until the sleep time is over.<!-- /only -->
+
+**Fix.** Wait, then ask `GET /api/v1/device` until it answers. After a reboot that takes a couple
+of seconds. Do not send the command again because the *next* request failed: it already
 happened.
 
 ```bash
@@ -478,17 +569,22 @@ sleep 5
 curl http://<awtrix-ip>/api/v1/device                  # back up
 ```
 
-If one of these routes gives you no body at all, the request never reached
-AWTRIX - check the address. A wrong or missing credential instead gets you a
-`401` with an `unauthorized` error body, not an empty response - check
+If one of these routes gives you no answer at all, the request never reached AWTRIX. Check the
+address. Wrong or missing login details give you `401` with an `unauthorized` error instead. Check
 `authEnabled` and your username and password.
 
-`sleep` needs `durationMs` as a positive integer, and AWTRIX wakes on that timer.
-`factory-reset` is available over HTTP only, not over MQTT.
+<!-- only esp32 esp32-s3 -->
+- **Sleep** needs a positive whole number `durationMs` and wakes up after that time.
+<!-- /only -->
+<!-- only tc002 -->
+- **Sleep** has no timed wake-up: the request stops the clock's software. To turn the display
+  off, use [display power](../guides/power.md#turn-the-matrix-off-and-on).
+<!-- /only -->
+- **Factory reset** works over HTTP only, not over MQTT.
 
 ## Related
 
-* [FAQ](faq.md) - the questions new owners ask first
-* [Errors](../reference/errors.md) - every error code, status code and validation message
-* [Finding AWTRIX](../getting-started/discovery.md) - by name, by discovery, or off the panel
-* [First boot](../getting-started/first-boot.md) - joining AWTRIX to your Wi-Fi
+* [FAQ](faq.md): the questions new owners ask first
+* [Errors](../reference/errors.md): every error code, status code and validation message
+* [Find your clock](../getting-started/discovery.md): by name, by discovery, or from the display
+* [Connect to Wi-Fi](../getting-started/first-boot.md): joining AWTRIX to your Wi-Fi

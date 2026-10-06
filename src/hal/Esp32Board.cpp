@@ -16,7 +16,8 @@ Esp32Board::Esp32Board(const DeviceConfig& cfg) {
     pins_ = pins::activeProfile().defaults;
     pinsWereInvalid_ = true;
   }
-  layout_ = sanitizeMatrixLayout(cfg.matrixLayout(), &layoutWasInvalid_);
+  layout_ = cfg.matrixLayout();
+  layoutWasInvalid_ = layout_.panelWidth != cfg.panelWidth || layout_.panels != cfg.panels;
   buzzer_.setPin(pins_.buzzer);
   dfplayer_.setPins(pins_.dfRx, pins_.dfTx);
   dfplayerWired_ = pins_.dfplayerEnabled && pins_.dfRx >= 0 && pins_.dfTx >= 0;
@@ -31,8 +32,9 @@ void Esp32Board::begin() {
   if (pins_.btnLeft >= 0) pinMode(pins_.btnLeft, INPUT_PULLUP);
   if (pins_.btnSelect >= 0) pinMode(pins_.btnSelect, INPUT_PULLUP);
   if (pins_.btnRight >= 0) pinMode(pins_.btnRight, INPUT_PULLUP);
-  // 120 is only the brightness for the first few frames; the periphery loop takes over immediately.
-  renderer_.begin(pins_.matrix, layout_, 120);
+  // 120 is only the brightness until the runtime's first frame applies the real level.
+  if (!renderer_.begin(pins_.matrix, layout_, 120))
+    logf("matrix: no output memory");
   // Both: LEDC and the UART share nothing, so a DFPlayer costs no melodies.
   if (pins_.buzzer >= 0) buzzer_.begin();
   if (dfplayerWired_) dfplayer_.begin();

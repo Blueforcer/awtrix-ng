@@ -2,16 +2,20 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
 #include "core/apps/IApp.h"
+#include "core/input/Buttons.h"
 #include "core/script/AsyncQueue.h"
 #include "core/script/BerryVM.h"
 #include "core/script/ScriptApp.h"
+#include "core/script/ScriptExtension.h"
 #include "core/script/ScriptMeta.h"
 #include "core/script/ScriptServices.h"
 #include "core/script/SharedState.h"
@@ -25,6 +29,7 @@ namespace awtrix::script {
 
 class ScriptHost {
  public:
+  using Native = int (*)(bvm*);
   using AppHook = std::function<void(const std::string& id)>;
 
   ScriptHost(AppRegistry& registry, ScriptServices& services, AppHook onInstalled,
@@ -34,6 +39,10 @@ class ScriptHost {
   ScriptHost& operator=(const ScriptHost&) = delete;
 
   const ScriptServices& services() const { return svc_; }
+  bool ready() const { return vmError_.empty(); }
+  void setExtensionLifecycle(ScriptExtensionLifecycle* extensions) {
+    svc_.extensionLifecycle = effective_.extensionLifecycle = extensions;
+  }
 
   void setRunningScripts(std::vector<std::string> running);
   bool active(const std::string& name) const;
@@ -47,11 +56,23 @@ class ScriptHost {
   void remove(const std::string& name);
   bool isModule(const std::string& name) const { return modules_.count(name) != 0; }
 
+  // An @ondemand script is installed without an instance and only built by launch(), from its
+  // stored source and store; unload() drops the instance again and keeps it installed.
+  bool isOnDemand(const std::string& name) const {
+    const ScriptMeta* meta = metaOf(name);
+    return meta && meta->onDemand;
+  }
+  bool isLoaded(const std::string& name) const { return apps_.count(name) != 0; }
+  bool launch(const std::string& name);
+  void unload(const std::string& name);
+
   void tick(const RenderCtx& ctx, const std::string& currentAppId,
             const std::string& incomingAppId = std::string());
   void staggerFirstLoops(int64_t stepMs);
   bool handleButton(const std::string& currentAppId, const std::string& btn);
-  bool handleButtonState(const std::string& currentAppId, int button, bool pressed);
+  // held: the button is still down. Not pressed but held means the clock took the press, for its
+  // menu: it ends for the app there, without a release.
+  bool handleButtonState(const std::string& currentAppId, int button, bool pressed, bool held = false);
   bool wantsShow(const std::string& name);
   long durationMs(const std::string& name) const;
   bool scrollHolds(const std::string& name) const;
@@ -59,9 +80,26 @@ class ScriptHost {
   void pushHttpResult(HttpResult r) { httpQueue_.push(std::move(r)); }
   void pushMqttMessage(MqttMessage m) { mqttQueue_.push(std::move(m)); }
 
-  std::size_t count() const { return apps_.size() + modules_.size(); }
+  void defineNative(const char* name, Native fn, void* self);
+  bool defineModule(const std::string& name, const std::string& source);
+  bool deliver(const std::string& app, const char* what, const char* function, const std::string& a, const std::string& b,
+               const std::string& c, const RenderCtx* ctx);
+  bool deliverHook(const std::string& app, const char* hook, const std::string& event, const RenderCtx* ctx);
+  void call(const char* function, const std::string& a, const std::string& b);
+
+  std::size_t count() const {
+    std::size_t n = apps_.size() + modules_.size();
+    for (const auto& kv : meta_)
+      if (kv.second.parsed.onDemand && !apps_.count(kv.first)) ++n;
+    return n;
+  }
   bool has(const std::string& name) const {
-    return apps_.count(name) != 0 || modules_.count(name) != 0;
+    return apps_.count(name) != 0 || modules_.count(name) != 0 || isOnDemand(name);
+  }
+  // The @ headers an installed script or module was read with; null for a name it does not know.
+  const ScriptMeta* metaOf(const std::string& name) const {
+    const auto it = meta_.find(name);
+    return it == meta_.end() ? nullptr : &it->second.parsed;
   }
   ScriptError errorOf(const std::string& name) const;
 
@@ -71,12 +109,18 @@ class ScriptHost {
     bool headless = false;
     bool module = false;
     bool config = false;
+    bool onDemand = false;
+    bool loaded = false;
     std::string importName;
     std::string metaName;
     std::string desc;
     std::string author;
     std::string version;
     std::string icons;
+    std::string requirements;
+    std::string needs;
+    int displayWidth = 0;
+    int displayHeight = 0;
   };
   std::map<std::string, Info> list() const;
 
@@ -115,7 +159,21 @@ class ScriptHost {
     ScriptError error;
   };
 
+  struct InstalledMeta {
+    ScriptMeta parsed;
+    std::unique_ptr<ScriptError> dormantError;
+  };
+
   void activate();
+  void clearRefusal();
+  bool admit(const std::string& name, std::size_t sourceBytes, bool growsVm);
+  bool retire(const std::string& name);
+  static const std::string& seededStore(const ScriptMeta& meta, const std::string& source,
+                                        const std::string& storeJson, std::string& seeded);
+  void instantiate(const std::string& name, const ScriptMeta& meta, const std::string& source,
+                   const std::string& storeJson);
+  void installDormant(const std::string& name, const ScriptMeta& meta, const std::string& source,
+                      bool wasApp, std::unique_ptr<ScriptError> error);
   bool installModule(const std::string& name, const ScriptMeta& meta,
                      const std::string& source, const std::string& storeJson);
   bool refuseModule(const std::string& name, const ScriptMeta& meta);
@@ -124,6 +182,9 @@ class ScriptHost {
   void purge(const std::string& name);
   void reportFrameTimes();
   void drainStoreFlush();
+  void restartTurn() {
+    if (svc_.application) svc_.application->restartTurn();
+  }
   void drainHttp(const RenderCtx* ctx);
   void sweepHttp(const RenderCtx* ctx);
   void drainTimers(const RenderCtx* ctx);
@@ -153,7 +214,7 @@ class ScriptHost {
     int64_t repeatAt = 0;
     std::string owner;
   };
-  HeldButton buttons_[3];
+  HeldButton buttons_[input::kButtonCount];
   std::string vmError_;
 
   std::vector<std::string> running_;
@@ -162,7 +223,7 @@ class ScriptHost {
   std::map<std::string, Module> modules_;
   // Script name -> the module import names its source mentions. Drives reloadDependents().
   std::map<std::string, std::vector<std::string>> imports_;
-  std::map<std::string, ScriptMeta> meta_;
+  std::map<std::string, InstalledMeta> meta_;
   std::map<uint32_t, HttpOwner> httpOwner_;
   std::map<std::string, std::vector<std::string>> mqttSubs_;
   AsyncQueue<HttpResult, 16> httpQueue_;

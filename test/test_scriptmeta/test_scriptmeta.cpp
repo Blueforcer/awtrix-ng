@@ -5,6 +5,12 @@
 
 #include "core/script/ScriptMeta.h"
 
+#include <fstream>
+#include <sstream>
+#include <vector>
+
+#include "core/api/JsonReader.h"
+
 using namespace awtrix;
 
 void setUp() {}
@@ -103,6 +109,17 @@ static void test_without_the_directive_a_script_is_not_a_module() {
   TEST_ASSERT_FALSE(m.module);
 }
 
+static void test_ondemand_is_a_bare_flag_in_any_case() {
+  TEST_ASSERT_TRUE(script::parseMeta("# @ondemand\ndef draw() end\n").onDemand);
+  TEST_ASSERT_TRUE(script::parseMeta("# @name Doom\n# @onDemand\n").onDemand);
+  TEST_ASSERT_FALSE(script::parseMeta("# @name Clock\n").onDemand);
+}
+
+static void test_modules_and_headless_scripts_are_never_ondemand() {
+  TEST_ASSERT_FALSE(script::parseMeta("# @module\n# @ondemand\n").onDemand);
+  TEST_ASSERT_FALSE(script::parseMeta("# @headless true\n# @ondemand\n").onDemand);
+}
+
 static void test_config_lines_are_flagged_but_not_read() {
   auto m = script::parseMeta(
       "# @name Weather\n"
@@ -181,6 +198,107 @@ static void test_the_list_is_capped() {
   TEST_ASSERT_EQUAL_INT((int)script::kIconsMax, (int)script::splitIcons(raw).size());
 }
 
+static void test_requires_lines_list_names_and_hub_ids() {
+  auto m = script::parseMeta("# @name Snake\n# @requires pad\n# @REQUIRES Gamepad AbC123xyz456 more\ndef draw() end\n");
+  auto r = script::splitRequires(m.requirements);
+  TEST_ASSERT_EQUAL_INT(2, (int)r.size());
+  TEST_ASSERT_EQUAL_STRING("pad", r[0].name.c_str());
+  TEST_ASSERT_EQUAL_STRING("", r[0].hub.c_str());
+  TEST_ASSERT_EQUAL_STRING("Gamepad", r[1].name.c_str());
+  TEST_ASSERT_EQUAL_STRING("AbC123xyz456", r[1].hub.c_str());
+}
+
+static void test_unusable_requires_lines_are_dropped_whole() {
+  auto m = script::parseMeta(
+      "# @requires\n# @requires pa.d\n# @requires pad short\n# @requires pad AbC123xyz45-\n"
+      "# @requires " + std::string(33, 'a') + "\n# @requires pad\n# @requires pad AbC123xyz456\n"
+      "def draw() end\n# @requires late\n");
+  auto r = script::splitRequires(m.requirements);
+  TEST_ASSERT_EQUAL_INT(1, (int)r.size());
+  TEST_ASSERT_EQUAL_STRING("pad", r[0].name.c_str());
+  TEST_ASSERT_EQUAL_STRING("", r[0].hub.c_str());
+}
+
+static void test_requires_are_capped() {
+  std::string header;
+  for (int i = 0; i < 12; ++i) header += "# @requires dep" + std::to_string(i) + "\n";
+  auto r = script::splitRequires(script::parseMeta(header + "def draw() end\n").requirements);
+  TEST_ASSERT_EQUAL_INT((int)script::kRequiresMax, (int)r.size());
+  TEST_ASSERT_EQUAL_STRING("dep7", r.back().name.c_str());
+}
+
+// The same header vectors run through the web UI and the AWTRIX Hub parsers. The native test
+// binary runs from the project directory, so the fixture is read by its repository path.
+static std::string readHeaderVectors() {
+  std::ifstream in("test/fixtures/script_header_vectors.json", std::ios::binary);
+  std::stringstream text;
+  text << in.rdbuf();
+  return text.str();
+}
+
+static std::vector<std::string> vectorStrings(api::JsonReader list) {
+  std::vector<std::string> out;
+  if (!list.enterArray()) return out;
+  while (list.nextElement()) {
+    std::string value;
+    list.appendString(value);
+    out.push_back(value);
+    list.skipValue();
+  }
+  return out;
+}
+
+static void test_header_matches_the_shared_vectors() {
+  const std::string text = readHeaderVectors();
+  TEST_ASSERT_FALSE_MESSAGE(text.empty(), "test/fixtures/script_header_vectors.json is not readable");
+  api::JsonReader cases = api::memberValue(api::JsonReader(text), "cases");
+  TEST_ASSERT_TRUE(cases.enterArray());
+  int count = 0;
+  while (cases.nextElement()) {
+    const api::JsonReader item = cases;
+    std::string name, source;
+    TEST_ASSERT_TRUE(api::memberValue(item, "name").appendString(name));
+    TEST_ASSERT_TRUE(api::memberValue(item, "source").appendString(source));
+    const script::ScriptMeta meta = script::parseMeta(source);
+
+    TEST_ASSERT_TRUE_MESSAGE(script::splitNeeds(meta.needs) == vectorStrings(api::memberValue(item, "needs")), name.c_str());
+    TEST_ASSERT_TRUE_MESSAGE(script::splitIcons(meta.icons) == vectorStrings(api::memberValue(item, "icons")), name.c_str());
+
+    api::JsonReader display = api::memberValue(item, "display");
+    long long width = 0, height = 0;
+    if (!display.isNull()) {
+      TEST_ASSERT_TRUE(display.enterArray());
+      TEST_ASSERT_TRUE(display.nextElement());
+      TEST_ASSERT_TRUE(display.asLong(width));
+      display.skipValue();
+      TEST_ASSERT_TRUE(display.nextElement());
+      TEST_ASSERT_TRUE(display.asLong(height));
+    }
+    TEST_ASSERT_EQUAL_INT_MESSAGE(width, meta.displayWidth, name.c_str());
+    TEST_ASSERT_EQUAL_INT_MESSAGE(height, meta.displayHeight, name.c_str());
+
+    const std::vector<script::Requirement> requirements = script::splitRequires(meta.requirements);
+    api::JsonReader expected = api::memberValue(item, "requires");
+    TEST_ASSERT_TRUE(expected.enterArray());
+    std::size_t i = 0;
+    while (expected.nextElement()) {
+      const api::JsonReader requirement = expected;
+      std::string wantName, wantHub;
+      api::memberValue(requirement, "name").appendString(wantName);
+      const api::JsonReader hub = api::memberValue(requirement, "hub");
+      if (!hub.isNull()) hub.appendString(wantHub);
+      TEST_ASSERT_TRUE_MESSAGE(i < requirements.size(), name.c_str());
+      TEST_ASSERT_EQUAL_STRING_MESSAGE(wantName.c_str(), requirements[i].name.c_str(), name.c_str());
+      TEST_ASSERT_EQUAL_STRING_MESSAGE(wantHub.c_str(), requirements[i].hub.c_str(), name.c_str());
+      ++i;
+      expected.skipValue();
+    }
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(i, requirements.size(), name.c_str());
+    ++count;
+    cases.skipValue();
+  }
+  TEST_ASSERT_TRUE(count > 10);
+}
 
 int main(int, char**) {
   UNITY_BEGIN();
@@ -196,6 +314,8 @@ int main(int, char**) {
   RUN_TEST(test_bare_module_flag_takes_the_file_name);
   RUN_TEST(test_module_can_name_its_import);
   RUN_TEST(test_without_the_directive_a_script_is_not_a_module);
+  RUN_TEST(test_ondemand_is_a_bare_flag_in_any_case);
+  RUN_TEST(test_modules_and_headless_scripts_are_never_ondemand);
   RUN_TEST(test_config_lines_are_flagged_but_not_read);
   RUN_TEST(test_a_bare_config_line_still_counts);
   RUN_TEST(test_icons_one_line);
@@ -207,5 +327,9 @@ int main(int, char**) {
   RUN_TEST(test_an_overlong_id_is_dropped);
   RUN_TEST(test_the_list_is_capped);
   RUN_TEST(test_the_stored_text_is_bounded);
+  RUN_TEST(test_requires_lines_list_names_and_hub_ids);
+  RUN_TEST(test_unusable_requires_lines_are_dropped_whole);
+  RUN_TEST(test_requires_are_capped);
+  RUN_TEST(test_header_matches_the_shared_vectors);
   return UNITY_END();
 }

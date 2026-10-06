@@ -1,157 +1,211 @@
 # Updating firmware
 
-Start an update in the web UI, or upload a firmware `.bin` yourself with the web UI or `curl`. AWTRIX writes it
-into its spare firmware slot, reboots, and comes back on the new version. Your settings and your
-uploaded files stay as they are.
+This page shows how to install a newer AWTRIX NG version on a clock that already runs AWTRIX NG.
+Settings and uploaded files are kept. If you want a separate copy of them, create a
+[backup](../getting-started/web-ui.md#backup-and-restore) first.
 
-## Upload a new image
+<!-- only esp32 esp32-s3 -->
+To install AWTRIX NG for the first time, see [Install AWTRIX NG](../getting-started/flashing.md).
+<!-- /only -->
+<!-- only tc002 -->
+To install AWTRIX NG for the first time, see [Install AWTRIX NG](../getting-started/tc002.md).
+<!-- /only -->
+
+## How it behaves
+
+The web UI asks GitHub for the newest release and downloads it in your browser. The clock itself
+never contacts GitHub.
+<!-- only esp32 esp32-s3 -->
+The clock writes the new firmware next to the running one and switches only after the whole image
+is checked, so a failed update leaves the clock as it was. Settings and uploaded files are stored
+apart from the firmware and stay.
+<!-- /only -->
+<!-- only tc002 -->
+The clock installs only a complete package for this clock that is newer than the installed
+version, and a refused package changes nothing. After the restart, the new version must keep
+running for one minute. Until then the clock refuses further uploads.
+<!-- /only -->
+
+## Update from the web UI
+
+The easiest way:
+
+1. Open the web UI and go to **System → Maintenance**.
+2. Press **Check for updates**.
+3. If a newer release has a file for your clock, the button turns into **Download & install**.
+   Press it, then press it again to confirm.
+4. Keep the page open and the clock powered until it restarts.
+
+A newer version number alone does not mean the release has a file for this clock. Without one, the
+button stays at **Check for updates**.
+
+## Upload a file yourself
+
+### Which file to download
+
+Download the file for your clock from the
+[releases page](https://github.com/Blueforcer/awtrix-ng/releases):
+
+<!-- only esp32 -->
+| Update file | Maximum upload |
+|---|---|
+| `firmware-awtrix-ng.bin` | 1,769,472 bytes |
+<!-- /only -->
+<!-- only esp32-s3 -->
+| Board | Update file | Maximum upload |
+|---|---|---|
+| Octal PSRAM | `firmware-awtrix-ng-s3-octal.bin` | 1,769,472 bytes |
+| Quad PSRAM | `firmware-awtrix-ng-s3-quad.bin` | 1,769,472 bytes |
+
+Choose the image by how the PSRAM is wired on your board. The memory size alone does not tell you.
+See [Which of the two images](../getting-started/flashing.md#which-of-the-two-s3-images).
+<!-- /only -->
+<!-- only tc002 -->
+| Update file | Maximum upload |
+|---|---|
+| `awtrix-ng-tc002.awup` | 8 MiB |
+
+If a release has no `awtrix-ng-tc002.awup`, it has no update for this clock.
+<!-- /only -->
+
+### Upload a new image
 
 === "Web UI"
 
-    **System → Maintenance → Upload firmware (.bin)**. Pick your `.bin` and the browser uploads it
-    with a progress bar. On success the UI toasts *"Rebooting - the page reloads automatically…"*
-    and reloads itself after 12 seconds.
+    Open **System → Maintenance**, press **Choose file…** next to **Upload firmware** and select
+    the file. Wait for the progress display. After the clock restarts, reload the page if it does
+    not reconnect by itself.
 
-=== "curl"
+<!-- only esp32 esp32-s3 -->
+=== "With curl"
 
+<!-- only esp32 -->
     ```bash
     curl -X POST http://<awtrix-ip>/update -F "firmware=@firmware-awtrix-ng.bin"
     ```
-
-    ```json
-    {"ok":true}
+<!-- /only -->
+<!-- only esp32-s3 -->
+    ```bash
+    curl -X POST http://<awtrix-ip>/update -F "firmware=@firmware-awtrix-ng-s3-octal.bin"
     ```
+<!-- /only -->
 
-    That reply means the image was written and verified, and it is the last thing you hear from the
-    running version - AWTRIX reboots into the new one straight after. Give it a few seconds and
-    reload.
+    Success is `200 {"ok":true}`. The image is written and checked, then the clock restarts into it.
 
-    `curl -F` sends the multipart upload this route expects; the name of the file field does not
-    matter.
-
-=== "With authentication"
-
-    If you turned on login under [Identity, web server and
-    authentication](../reference/system.md#identity-web-server-and-authentication), the upload
-    needs HTTP Basic auth like every other route:
+<!-- /only -->
+<!-- only tc002 -->
+=== "With curl"
 
     ```bash
-    curl -X POST http://<awtrix-ip>/update \
-      -u myuser:mypass \
-      -F "firmware=@firmware-awtrix-ng.bin"
+    curl -X POST http://<awtrix-ip>/update -F "firmware=@awtrix-ng-tc002.awup"
     ```
 
-While AWTRIX is in provisioning mode - running its own access point, before it has joined your
-Wi-Fi - firmware upload is disabled and answers `403 forbidden`. Join it to your network and
-upload over HTTP there, or flash it over USB, which needs no network at all.
+    Success is `200 {"ok":true,"applying":true}`. The package is accepted for installation. Wait
+    for the clock to restart, then check the running version.
 
-Status codes for the route: [Firmware upload](../reference/http.md#firmware-upload).
+<!-- /only -->
+=== "With authentication"
 
-## Checking for a newer release
+    Add `-u myuser:mypass` to the command when HTTP login is on. Use the same user name and password
+    as for the web UI.
 
-In the System page's Maintenance section, click **Check for updates** to compare the running
-version with the latest release on GitHub. Opening a page never starts a check. The check runs
-in your browser - AWTRIX itself never talks to GitHub - so it needs your computer or phone to be
-online, not the clock. The answer is kept for a few hours.
-
-When a newer release exists, the row names it, links its release notes through the document icon, and offers a
-**Download & install** button for exactly the file this board needs. Click it and confirm.
-Your browser downloads and verifies the firmware, then uploads it to AWTRIX. Keep the page open
-and the device powered until it restarts. Progress is shown during download and upload; the page
-reloads automatically afterwards. Settings and uploaded files are kept.
-
-The download and verification run entirely on your computer or phone. AWTRIX receives only the
-normal firmware upload. If a release has just appeared, its browser download may take a few
-minutes to become ready. Try again shortly, or download the image from the release page and use **Upload firmware**.
-The dashboard's version line shows *update available* until the update is done.
-
-## Which file to download
-
-Every release on the [releases page](https://github.com/Blueforcer/awtrix-ng/releases) carries one
-file per kind of board:
-
-| File | For |
-|---|---|
-| `firmware-awtrix-ng.bin` | Ulanzi TC001 and every other classic ESP32 - 32×8 clocks, AWTRIX 2 conversions, DIY builds |
-| `firmware-awtrix-ng-s3-octal.bin` | ESP32-S3 boards - the one to start with |
-| `firmware-awtrix-ng-s3-quad.bin` | ESP32-S3 boards whose PSRAM the other one does not find |
-
-One file covers every board of that kind, whatever its flash size - boards differ in their pin
-map, which you set on AWTRIX. See [Board presets](../reference/gpio.md#board-presets).
-
-Up to v1.0.15 the S3 file was called `firmware-awtrix-ng-s3.bin`, when it was the only one.
-
-The two S3 files differ in which PSRAM the board has. Uploading the wrong one changes nothing:
-AWTRIX refuses it with `400 wrongChip` and carries on running what it had. The **PSRAM** line on
-the device page tells you which you need - around 2 MB is quad, 8 MB is octal.
-
-!!! warning "Not `usb-awtrix-ng.zip`"
-    The `usb-*.bin` images in that zip are for a first flash over USB - see
-    [Flashing](../getting-started/flashing.md). A TC001 has a 4 MB ESP32, but
-    `usb-awtrix-ng-4mb.bin` is **not** the file you want here. To update a device that already
-    runs AWTRIX NG, take `firmware-awtrix-ng.bin`.
-
-An image built for the other chip, one built for the other kind of S3 PSRAM, and a USB install
-image are all refused with `400 wrongChip` before the new image is switched to, so uploading the
-wrong one costs you nothing but the upload.
-
-To upload a build of your own, `pio run -e awtrix` writes it to `.pio/build/awtrix/firmware.bin` -
-see [Building from source](../advanced/building.md).
-
-## An update that fails changes nothing
-
-The image is written into the spare slot as it arrives, never over the firmware that is running,
-and AWTRIX switches to it only once the whole image has arrived and been verified.
-
-So an upload that goes wrong - a cable pulled out, a truncated file, a corrupt image - is simply
-refused, and AWTRIX carries on running the firmware it already had. Upload it again.
-
-Your data survives an update too:
-
-* **Settings** and the **device configuration** are stored separately from the firmware.
-* **Icons, melodies and palettes** (`/ICONS`, `/MELODIES`, `/PALETTES`) are never part of a
-  firmware image. They are uploaded at runtime via
-  [`POST /api/v1/files`](../reference/http.md#post-apiv1files) and stay put across updates.
-
-There is no filesystem image to flash, and no step where you re-upload your icons.
-
-### Size limit
-
-A firmware image may not exceed **1,769,472 bytes (1.69 MB)** - the size of one firmware slot,
-which is the same on every board whatever its chip or flash size. An image larger than that is
-refused with `500` `internalError` before any of it is stored.
+`curl -F` sends the file as a form upload. Name the form field `firmware`.<!-- only tc002 --> The
+clock refuses any other field name.<!-- /only -->
 
 ## Confirm which version is running
 
-The web UI shows the running version beside the live preview. Over HTTP:
+The web UI shows the running version. You can also ask for it:
 
 ```bash
 curl http://<awtrix-ip>/api/v1/version
 ```
 
-```json
-{"version":"1.0.12"}
-```
+The answer is `{"version":"…"}`. `GET /version` returns the version as plain text, and
+[Device state](../reference/device.md#endpoint) includes it as `version`.
 
-`GET /version` returns the same string as `text/plain` if you want it without the JSON wrapper,
-and `version` is also a field of [`GET /api/v1/device`](../reference/device.md#endpoint).
+<!-- only tc002 -->
+## What to know about updates {#tc002-updates}
 
-## Recovering a device that will not boot
+- If the new version fails to start three times, the clock shows **USB RECOVERY**. See
+  [Reset & recovery](reset-recovery.md#when-awtrix-ng-cannot-start).
+- The clock keeps 1 MiB of storage free for settings and updates. A release can still need more
+  free space.
 
-If AWTRIX no longer answers on the network, reflash it over USB - see
-[Flashing](../getting-started/flashing.md). That path does not depend on the firmware currently on
-the chip, but flashing a `usb-*.bin` does erase your settings and Wi-Fi credentials, so you
-set AWTRIX up again from [First boot](../getting-started/first-boot.md).
+### Microphone controller updates {#mcu-updates}
 
-To start clean while AWTRIX still works, use **System → Maintenance → Erase everything** in the
-web UI, or [`POST /api/v1/device/factory-reset`](../reference/http.md#device). This wipes your
-settings, your Wi-Fi credentials and every file you uploaded - icons, melodies, palettes and
-scripts. Download anything you want to keep first.
+Some releases also update the clock's microphone controller. This happens by itself:
+
+1. The clock checks the installed controller version.
+2. For the first update, it downloads the original controller firmware from Ulanzi once, checks it
+   and keeps it on the clock. Later updates use that copy.
+3. It installs the update. The clock may restart afterwards.
+
+Keep the clock on USB power while this runs. If the download is not available, the clock works
+normally and tries again later.
+
+### Install an older version {#going-back-to-an-earlier-version}
+
+The web UI installs only newer versions. If you need an older one, ask on
+[Discord](https://discord.gg/5pbmeCrs3a).
+
+<!-- /only -->
+## When an update fails {#an-update-that-fails-changes-nothing}
+
+<!-- only esp32 -->
+An image for another chip is refused with `400 wrongChip`.
+<!-- /only -->
+<!-- only esp32-s3 -->
+An image for another chip or for the other PSRAM type is refused with `400 wrongChip`.
+<!-- /only -->
+<!-- only tc002 -->
+The answer names the reason. Settings, uploaded files and Wi-Fi are kept.
+
+| Error | What to do |
+|---|---|
+| `invalidPackage` | The file is damaged. Download an intact package again. |
+| `wrongTarget` | Select the `awtrix-ng-tc002.awup` package. |
+| `notNewer` | This clock already has that version or a newer one. |
+| `insufficientStorage` | The package is larger than the clock can hold. The answer names both sizes. Use the package from the releases page. |
+| `updateBusy` | Wait until the current upload, installation or confirmation has finished. |
+| `payloadTooLarge` / `insufficientMemory` | Check the package size and the free memory. The answer gives the details. |
+<!-- /only -->
+
+The size limits are in [Which file to download](#which-file-to-download). Exact status codes and
+answers are in [Firmware upload](../reference/http.md#firmware-upload).
+
+## Recovering a device that will not boot {#recovering-a-device-that-will-not-boot}
+
+<!-- only esp32 esp32-s3 -->
+See [Reset & recovery](reset-recovery.md#recovering-a-device-that-will-not-boot).
+<!-- /only -->
+<!-- only tc002 -->
+See [Reset & recovery](reset-recovery.md#when-awtrix-ng-cannot-start).
+<!-- /only -->
+
+## Good to know
+
+<!-- only esp32 -->
+- **The `usb-*.bin` files do not work for this upload.** They are for the first installation over
+  USB. Upload `firmware-awtrix-ng.bin`.
+<!-- /only -->
+<!-- only esp32-s3 -->
+- **The `usb-*.bin` files do not work for this upload.** They are for the first installation over
+  USB. Upload the `firmware-awtrix-ng-s3-…` file that matches your board.
+<!-- /only -->
+<!-- only tc002 -->
+- **The USB installer does not update AWTRIX NG.** It is only for clocks that still run the Ulanzi
+  app. Use the web UI or the upload above.
+- **Packages are not signed.** Download them only from the releases page or another source you
+  trust.
+<!-- /only -->
+- **The clock refuses firmware uploads while its setup hotspot is active.** Put the clock on your
+  Wi-Fi first, as in [Connect to Wi-Fi](../getting-started/first-boot.md).
+
+## Details
+
+- [HTTP API → Firmware upload](../reference/http.md#firmware-upload): every answer of `/update`
+- [Device state](../reference/device.md): the running version and the other values
 
 ## Related
 
-* [Firmware upload](../reference/http.md#firmware-upload) - status codes for `POST /update`
-* [Device](../reference/http.md#device) - the device routes
-* [Device state](../reference/device.md#endpoint) - `version`
-* [Flashing](../getting-started/flashing.md) - the first flash, and reflashing over USB
-* [Board presets](../reference/gpio.md#board-presets) - one image, every board of a chip
+- [Reset & recovery](reset-recovery.md): when the clock does not start

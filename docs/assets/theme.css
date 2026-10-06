@@ -1,0 +1,174 @@
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #f5f4f1;
+  --md-default-fg-color: rgba(36, 35, 33, 0.94);
+  --md-default-fg-color--light: rgba(36, 35, 33, 0.68);
+  --md-default-fg-color--lighter: rgba(36, 35, 33, 0.3);
+  --md-default-fg-color--lightest: rgba(36, 35, 33, 0.1);
+  --md-primary-fg-color: #f5f4f1;
+  --md-primary-fg-color--light: #fff;
+  --md-primary-fg-color--dark: #e2dfd8;
+  --md-primary-bg-color: #242321;
+  --md-primary-bg-color--light: rgba(36, 35, 33, 0.7);
+  --md-accent-fg-color: #ac470f;
+  --md-accent-fg-color--transparent: rgba(172, 71, 15, 0.1);
+  --md-accent-bg-color: #fff;
+  --md-typeset-a-color: #ac470f;
+  --md-code-bg-color: #f0eee9;
+  --md-code-fg-color: #242321;
+  --awtrix-card: #fff;
+  --awtrix-border: #e2dfd8;
+  --awtrix-dot: rgba(172, 71, 15, 0.07);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-hue: 40;
+  --md-default-bg-color: #171717;
+  --md-default-fg-color: rgba(243, 241, 236, 0.9);
+  --md-default-fg-color--light: rgba(243, 241, 236, 0.62);
+  --md-default-fg-color--lighter: rgba(243, 241, 236, 0.3);
+  --md-default-fg-color--lightest: rgba(243, 241, 236, 0.1);
+  --md-primary-fg-color: #171717;
+  --md-primary-fg-color--light: #222221;
+  --md-primary-fg-color--dark: #10100f;
+  --md-primary-bg-color: #f3f1ec;
+  --md-primary-bg-color--light: rgba(243, 241, 236, 0.7);
+  --md-accent-fg-color: #f5a568;
+  --md-accent-fg-color--transparent: rgba(245, 165, 104, 0.12);
+  --md-accent-bg-color: #23170e;
+  --md-typeset-a-color: #f5a568;
+  --md-code-bg-color: #222221;
+  --md-code-fg-color: #f3f1ec;
+  --md-footer-bg-color: #10100f;
+  --md-footer-bg-color--dark: #0b0b0a;
+  --awtrix-card: #222221;
+  --awtrix-border: #373632;
+  --awtrix-dot: rgba(245, 165, 104, 0.07);
+}
+
+body {
+  background-color: var(--md-default-bg-color);
+  background-image: radial-gradient(circle, var(--awtrix-dot) 1px, transparent 1.2px);
+  background-size: 16px 16px;
+}
+
+.md-header {
+  border-bottom: 1px solid var(--awtrix-border);
+  box-shadow: none;
+}
+
+.md-header[data-md-state="shadow"],
+.md-header--shadow {
+  box-shadow: 0 0.2rem 0.6rem rgba(0, 0, 0, 0.18);
+}
+
+.md-search__form {
+  background: var(--awtrix-card);
+  border: 1px solid var(--awtrix-border);
+  border-radius: 0.45rem;
+}
+
+.md-search__input,
+.md-search__input::placeholder,
+.md-search__icon {
+  color: var(--md-default-fg-color--light);
+}
+
+.md-typeset h1,
+.md-typeset h2 {
+  color: var(--md-default-fg-color);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.md-typeset h3 {
+  font-weight: 650;
+}
+
+.md-typeset a:hover {
+  color: var(--md-accent-fg-color);
+  text-decoration: underline;
+}
+
+.md-typeset .md-button {
+  color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  border-radius: 0.55rem;
+}
+
+.md-typeset .md-button:hover,
+.md-typeset .md-button:focus {
+  background-color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-bg-color);
+}
+
+.md-typeset .md-button--primary {
+  background-color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-bg-color);
+}
+
+.md-typeset .md-button--primary:hover,
+.md-typeset .md-button--primary:focus {
+  filter: brightness(1.08);
+  color: var(--md-accent-bg-color);
+}
+
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid > .card {
+  background: var(--awtrix-card);
+  border-color: var(--awtrix-border);
+  border-radius: 0.75rem;
+}
+
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid > .card:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: none;
+}
+
+.md-typeset table:not([class]) {
+  background: var(--awtrix-card);
+  border-color: var(--awtrix-border);
+  border-radius: 0.6rem;
+}
+
+.md-typeset .task-list-indicator::before {
+  background-color: var(--md-accent-fg-color);
+}
+
+.md-typeset pre > code,
+.md-typeset .highlight {
+  border-radius: 0.5rem;
+}
+
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: 0.6rem;
+  background: var(--awtrix-card);
+}
+
+[data-md-color-scheme="default"] .md-header .md-logo img {
+  filter: invert(0.86);
+}
+
+.md-typeset .video {
+  aspect-ratio: 16 / 9;
+  margin: 1em 0;
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+
+.md-typeset .video iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.md-typeset img.awx-panel {
+  display: block;
+  width: 100%;
+  max-width: 34rem;
+  height: auto;
+  margin: 0.2em 0 1.4em;
+}

@@ -1,0 +1,22 @@
+# The tools keep their tests beside them; this registers them.
+set(tools "${PROJECT_SOURCE_DIR}/tools")
+set(discover "${Python3_EXECUTABLE}" -m unittest discover -p "test_*.py" -s)
+add_awtrix_test(NAME system-build-tools COMMAND ${discover} "${tools}/system" TIMEOUT 300)
+add_awtrix_test(NAME tc002-install-tools COMMAND ${discover} "${tools}/tc002/install" TIMEOUT 300)
+add_awtrix_test(NAME tc002-mcu-bundle COMMAND ${discover} "${tools}/tc002/mcu")
+if(TARGET awtrix-tc002-mcu-prepare)
+  set_tests_properties(tc002-mcu-bundle PROPERTIES ENVIRONMENT "AWTRIX_MCU_PREPARE=$<TARGET_FILE:awtrix-tc002-mcu-prepare>")
+endif()
+if(TARGET awtrix-linux AND TARGET tc002_mcu_prepare)
+  add_awtrix_test(NAME tc002-mcu-runtime-prepare COMMAND "${Python3_EXECUTABLE}" "${tools}/tc002/mcu/test_prepare.py")
+  set_tests_properties(tc002-mcu-runtime-prepare PROPERTIES ENVIRONMENT
+    "AWTRIX_MCU_PREPARE=$<TARGET_FILE:awtrix-linux>;AWTRIX_MCU_PREPARE_MODE=runtime")
+endif()
+set_tests_properties(tc002-install-tools PROPERTIES ENVIRONMENT
+  "AWTRIX_TC002_HOST_FLASHER=$<TARGET_FILE:awtrix-tc002-flash>;AWTRIX_UPDATE_VERIFY=$<TARGET_FILE:awtrix-update-verify>")
+add_awtrix_test(NAME tc002-licenses COMMAND ${discover} "${tools}/tc002/licenses" TIMEOUT 300)
+add_awtrix_test(NAME tc002-device-tool COMMAND ${discover} "${tools}/tc002/lib" TIMEOUT 120)
+add_awtrix_test(NAME tc002-wifi-host-tool COMMAND "${Python3_EXECUTABLE}" "${tools}/tc002/test_tc002_wifi.py")
+add_awtrix_test(NAME tc002-fetch COMMAND bash "${tools}/tc002/lib/test_fetch.sh" PROPERTIES SKIP_RETURN_CODE 77)
+add_awtrix_test(NAME webui-build-script COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/test_build_webui.py")
+add_awtrix_test(NAME berry-api-script COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/test_berry_api.py")

@@ -1,18 +1,24 @@
 #include <unity.h>
+#include "../ScriptApplication.h"
 
 #include <string>
 
 #include "core/apps/AppRegistry.h"
 #include "core/script/ScriptHost.h"
+#include "platform/linux/script/ExtensionHost.h"
+#include "platform/linux/script/KnobScripting.h"
 
 using namespace awtrix;
 
 static int64_t now;
 static script::ScriptServices services;
+static awtrix::test::ScriptApplication application;
 
 void setUp() {
   now = 0;
   services = {};
+  application = {};
+  services.application = &application;
   services.monotonicMs = [] { return now; };
 }
 
@@ -162,7 +168,7 @@ static void test_timer_failure_is_contained_and_frees_capacity() {
 
 static const std::string gestures =
     "def on_button_event(btn, event)\n"
-    " self.trace += btn + ':' + event + ','\n return btn == 'select'\nend\n"
+    " self.trace += btn + ':' + event + ','\n return btn != 'left'\nend\n"
     "def on_button(btn) self.trace += 'legacy:' + btn + ','\n return true end";
 
 static void test_button_capture_long_repeat_release_and_legacy_fallback() {
@@ -170,27 +176,125 @@ static void test_button_capture_long_repeat_release_and_legacy_fallback() {
   script::ScriptHost host(registry, services, nullptr, nullptr);
   host.set("A", source(gestures));
   tick(host, 0);
-  TEST_ASSERT_TRUE(host.handleButtonState("A", 1, true));
-  now = 599;
-  host.handleButtonState("A", 1, true);
-  TEST_ASSERT_EQUAL_STRING("select:press,", trace(registry).c_str());
-  now = 600;
-  host.handleButtonState("A", 1, true);
-  now = 749;
-  host.handleButtonState("A", 1, true);
-  now = 750;
-  host.handleButtonState("A", 1, true);
+  TEST_ASSERT_TRUE(host.handleButtonState("A", 2, true));
+  now = 499;
+  host.handleButtonState("A", 2, true);
+  TEST_ASSERT_EQUAL_STRING("right:press,", trace(registry).c_str());
+  now = 500;
+  host.handleButtonState("A", 2, true);
+  now = 649;
+  host.handleButtonState("A", 2, true);
+  now = 650;
+  host.handleButtonState("A", 2, true);
   now = 10000;
-  host.handleButtonState("A", 1, true);
-  host.handleButtonState("A", 1, false);
-  host.handleButtonState("A", 1, false);
-  TEST_ASSERT_EQUAL_STRING("select:press,select:long,select:repeat,select:repeat,select:release,",
+  host.handleButtonState("A", 2, true);
+  host.handleButtonState("A", 2, false);
+  host.handleButtonState("A", 2, false);
+  TEST_ASSERT_EQUAL_STRING("right:press,right:long,right:repeat,right:repeat,right:release,",
                            trace(registry).c_str());
   TEST_ASSERT_TRUE(host.handleButtonState("A", 0, true));
   host.handleButtonState("A", 0, false);
   TEST_ASSERT_EQUAL_STRING(
-      "select:press,select:long,select:repeat,select:repeat,select:release,left:press,legacy:left,",
+      "right:press,right:long,right:repeat,right:repeat,right:release,left:press,legacy:left,",
       trace(registry).c_str());
+}
+
+// A button the app takes gives it its full time on screen again, for the press and every event
+// after it; a press the app leaves to the clock does not.
+static void test_a_taken_button_restarts_the_turn() {
+  AppRegistry registry;
+  int restarts = 0;
+  application.restartTurnFn = [&restarts] { ++restarts; };
+  script::ScriptHost host(registry, services, nullptr, nullptr);
+  host.set("A", source(gestures));
+  host.set("B", source("def on_button(btn) return false end"));
+  tick(host, 0);
+  host.handleButtonState("A", 2, true);
+  TEST_ASSERT_EQUAL_INT(1, restarts);
+  now = 500;
+  host.handleButtonState("A", 2, true);
+  host.handleButtonState("A", 2, false);
+  TEST_ASSERT_EQUAL_INT(3, restarts);
+  host.handleButtonState("A", 0, true);
+  host.handleButtonState("A", 0, false);
+  TEST_ASSERT_EQUAL_INT(4, restarts);
+  tick(host, 600, "B");
+  host.handleButtonState("B", 0, true);
+  host.handleButtonState("B", 0, false);
+  TEST_ASSERT_EQUAL_INT(4, restarts);
+}
+
+// The TC002 knob: a turn is taken detent by detent, a taken press brings long and release.
+static void test_knob_turns_press_long_and_release() {
+  AppRegistry registry;
+  int restarts = 0;
+  application.restartTurnFn = [&restarts] { ++restarts; };
+  script::KnobScripting input(services.monotonicMs, application.restartTurnFn);
+  script::ScriptHost host(registry, services, nullptr, nullptr);
+  script::ExtensionHost extensions(host, {&input});
+  host.set("A", source("def on_knob(event)\n self.trace += event + ','\n return event != 'left'\nend"));
+  host.set("B", source(""));
+  tick(host, 0);
+  TEST_ASSERT_TRUE(input.turn("A", 1));
+  TEST_ASSERT_FALSE(input.turn("A", -1));
+  TEST_ASSERT_TRUE(input.press("A"));
+  now = 499;
+  input.held("A");
+  now = 500;
+  input.held("A");
+  input.held("A");
+  TEST_ASSERT_TRUE(input.release("A"));
+  TEST_ASSERT_FALSE(input.release("A"));
+  TEST_ASSERT_EQUAL_STRING("right,left,press,long,release,", trace(registry).c_str());
+  TEST_ASSERT_EQUAL_INT(4, restarts);
+  tick(host, 600, "B");
+  TEST_ASSERT_FALSE(input.turn("B", 1));
+  TEST_ASSERT_FALSE(input.press("B"));
+  TEST_ASSERT_FALSE(input.release("B"));
+}
+
+// A press the app took stays out of the clock's hands until release, but does not follow to the
+// next app.
+static void test_knob_press_does_not_follow_a_switch() {
+  AppRegistry registry;
+  script::KnobScripting input(services.monotonicMs, application.restartTurnFn);
+  script::ScriptHost host(registry, services, nullptr, nullptr);
+  script::ExtensionHost extensions(host, {&input});
+  const std::string knob = "def on_knob(event)\n self.trace += event + ','\n return true\nend";
+  host.set("A", source(knob));
+  host.set("B", source(knob));
+  tick(host, 0, "A");
+  TEST_ASSERT_TRUE(input.press("A"));
+  tick(host, 100, "B");
+  now = 600;
+  input.held("B");
+  TEST_ASSERT_TRUE(input.release("B"));
+  TEST_ASSERT_EQUAL_STRING("press,", trace(registry, "A").c_str());
+  TEST_ASSERT_EQUAL_STRING("", trace(registry, "B").c_str());
+}
+
+// Holding select belongs to the device menu: a script that takes the press never sees long or
+// repeat for it. When the clock takes the press, it ends for the script without a release.
+static void test_select_never_reports_long_or_repeat() {
+  AppRegistry registry;
+  script::ScriptHost host(registry, services, nullptr, nullptr);
+  host.set("A", source(gestures));
+  tick(host, 0);
+  TEST_ASSERT_TRUE(host.handleButtonState("A", 1, true, true));
+  for (now = 100; now <= 3000; now += 100) host.handleButtonState("A", 1, true, true);
+  host.handleButtonState("A", 1, false, false);
+  TEST_ASSERT_EQUAL_STRING("select:press,select:release,", trace(registry).c_str());
+
+  TEST_ASSERT_TRUE(host.handleButtonState("A", 1, true, true));
+  now = 3500;
+  host.handleButtonState("A", 1, false, true);
+  host.handleButtonState("A", 1, false, true);
+  host.handleButtonState("A", 1, false, false);
+  TEST_ASSERT_EQUAL_STRING("select:press,select:release,select:press,", trace(registry).c_str());
+  TEST_ASSERT_TRUE(host.handleButtonState("A", 1, true, true));
+  host.handleButtonState("A", 1, false, false);
+  TEST_ASSERT_EQUAL_STRING("select:press,select:release,select:press,select:press,select:release,",
+                           trace(registry).c_str());
 }
 
 static void test_button_capture_does_not_transfer_after_switch_or_replace() {
@@ -250,6 +354,10 @@ int main(int, char**) {
   RUN_TEST(test_timer_hidden_disabled_and_long_uptime);
   RUN_TEST(test_timer_failure_is_contained_and_frees_capacity);
   RUN_TEST(test_button_capture_long_repeat_release_and_legacy_fallback);
+  RUN_TEST(test_a_taken_button_restarts_the_turn);
+  RUN_TEST(test_select_never_reports_long_or_repeat);
+  RUN_TEST(test_knob_turns_press_long_and_release);
+  RUN_TEST(test_knob_press_does_not_follow_a_switch);
   RUN_TEST(test_button_capture_does_not_transfer_after_switch_or_replace);
   RUN_TEST(test_button_disabled_error_and_legacy_only);
   return UNITY_END();

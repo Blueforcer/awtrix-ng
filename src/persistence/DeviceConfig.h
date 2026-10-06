@@ -2,17 +2,20 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "core/PinRules.h"
+#include "platform_settings/Config.h"
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
 #include "core/render/MatrixLayout.h"
+#include "core/sensing/AutoBrightness.h"
 
 namespace awtrix {
 
 // Installation-level configuration: wiring, credentials, network. Stored key by key in NVS and
 // only changed deliberately, unlike Settings, which the user changes all day and lives as JSON.
-struct DeviceConfig {
+struct DeviceConfig : PlatformConfig {
   std::string wifiSsid;
   std::string wifiPass;
   bool netStatic = false;
@@ -45,6 +48,7 @@ struct DeviceConfig {
   long brightnessSmoothing = 10000;
   int panelWidth = 32;
   int panels = 1;
+  mutable bool persistencePending = false;
   PanelStart panelStart = PanelStart::TopLeft;
   Wiring panelWiring = Wiring::Rows;
   PanelColorOrder panelColorOrder = PanelColorOrder::Grb;
@@ -54,6 +58,12 @@ struct DeviceConfig {
   bool dfplayer = false;
   std::string buttonCallback;
   bool artnet = false;
+  bool mirrorShare = false;
+  std::string mirrorShareApps = "*";
+  bool mirrorShareNotifications = true;
+  std::string mirrorFrom;
+  std::string mirrorFromApps = "*";
+  bool mirrorFromNotifications = true;
   long statsInterval = 10000;
   uint8_t tempDecimals = 0;
   bool debugMode = false;
@@ -80,7 +90,7 @@ struct DeviceConfig {
   int pinAmpEnable = pins::activeProfile().defaults.ampEnable;
 
   void load();
-  void save() const;
+  bool save() const;
   void write(api::JsonWriter& w, bool withSecrets = false) const;
   int applyRead(api::JsonReader r);
 
@@ -97,6 +107,17 @@ struct DeviceConfig {
     l.mirror = mirror;
     l.rotate180 = rotate;
     return sanitizeMatrixLayout(l);
+  }
+
+  LightConfig lightConfig() const {
+    LightConfig lc;
+    lc.factor = ldrFactor;
+    lc.gamma = ldrGamma;
+    lc.onGround = ldrOnGround;
+    lc.minBrightness = minBrightness;
+    lc.maxBrightness = maxBrightness;
+    lc.smoothingMs = brightnessSmoothing;
+    return lc;
   }
 
   pins::PinSet pinSet() const {

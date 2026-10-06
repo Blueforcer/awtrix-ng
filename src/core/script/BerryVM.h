@@ -14,7 +14,7 @@ class BerryVM {
   // VM heartbeat hook, so the granularity is a heartbeat period, not a single instruction.
   static constexpr long kInstructionLimit = 200000;
 
-  BerryVM();
+  explicit BerryVM(long instructionLimit = kInstructionLimit);
   ~BerryVM();
   BerryVM(const BerryVM&) = delete;
   BerryVM& operator=(const BerryVM&) = delete;
@@ -28,6 +28,8 @@ class BerryVM {
                const char* const* methods, int methodCount, uint32_t& implemented);
 
   bool loadModule(const std::string& importName, const std::string& source);
+  // Parses an app source the way loadApp() does and throws the result away: nothing runs.
+  bool compile(const std::string& source);
   void dropModule(const std::string& importName);
 
   bool method(const std::string& appKey, const char* name);
@@ -44,6 +46,10 @@ class BerryVM {
   void gcCollect();
 
   bool hasFunction(const char* name) const;
+  bool hasMethod(const std::string& appKey, const char* name);
+  // A global native carrying self, which nativeSelf() hands back inside fn.
+  void defineNative(const char* name, int (*fn)(bvm*), void* self);
+  static void* nativeSelf(bvm* vm);
   bool call(const char* name);
   bool call1(const char* name, const std::string& a);
   bool call2(const char* name, const std::string& a, const std::string& b);
@@ -64,6 +70,7 @@ class BerryVM {
   bool captureError(int rc);
 
   bvm* vm_ = nullptr;
+  const long instructionLimit_;
   std::string err_;
   // Non-empty until the prelude has run. Loading an app or a module refuses while it is
   // set, because both rely on prelude globals such as _app_anchor.

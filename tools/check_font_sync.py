@@ -34,11 +34,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
 import gen_font as gen
+import gen_matrix_fonts as matrix
 
 
 def main():
     for entry in gen.FONTS:
-        for filename in entry[1:3]:
+        for filename in entry[1:3] + entry[4:5]:
             if not filename:
                 continue
             path = os.path.join(gen.FONT_DIR, filename)
@@ -57,6 +58,14 @@ def main():
     detail = "  ".join(f"{n}: {g} glyphs, {s} shared, {f} filled in, {b} reseated"
                        for n, g, s, f, b in stats)
     print(f"font in sync: {detail}, {blob} bitmap bytes")
+    for output, selected in matrix.PROFILES:
+        expected, size = matrix.generate(selected)
+        if not output.exists() or output.read_text(encoding="utf-8") != expected:
+            print(f"{output.relative_to(matrix.ROOT)} is stale -- run python scripts/gen_matrix_fonts.py",
+                  file=sys.stderr)
+            return 1
+        print(f"{output.name} in sync: {len(selected) if selected is not None else 10} fonts, "
+              f"estimated {size} table bytes")
     return 0
 
 

@@ -5,18 +5,14 @@ project(awtrix_native_tests LANGUAGES C CXX)
 include(CTest)
 find_package(Threads REQUIRED)
 
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/ProjectOptions.cmake")
 set(CMAKE_CXX_EXTENSIONS ON)
 
 get_filename_component(AWTRIX_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
-set(NATIVE_LIBDEPS "${AWTRIX_ROOT}/.pio/libdeps/native")
-set(UNITY_ROOT "${NATIVE_LIBDEPS}/Unity")
-set(BASE64_ROOT "${NATIVE_LIBDEPS}/base64")
+set(AWTRIX_DEPS "${AWTRIX_ROOT}/.pio/libdeps/native")
+set(UNITY_ROOT "${AWTRIX_DEPS}/Unity")
 
-if(NOT EXISTS "${UNITY_ROOT}/src/unity.c" OR NOT EXISTS "${BASE64_ROOT}/src/base64.hpp")
+if(NOT EXISTS "${UNITY_ROOT}/src/unity.c" OR NOT EXISTS "${AWTRIX_DEPS}/base64/src/base64.hpp")
   message(FATAL_ERROR
     "Native dependencies are missing. Run `pio pkg install -e native` first.")
 endif()
@@ -24,40 +20,16 @@ endif()
 file(READ "${AWTRIX_ROOT}/version" AWTRIX_VERSION)
 string(STRIP "${AWTRIX_VERSION}" AWTRIX_VERSION)
 
-file(GLOB_RECURSE BERRY_SOURCES CONFIGURE_DEPENDS
-  "${AWTRIX_ROOT}/lib/berry/src/*.c"
-  "${AWTRIX_ROOT}/lib/berry/default/*.c"
-)
-add_library(berry STATIC ${BERRY_SOURCES})
-target_include_directories(berry PUBLIC
-  "${AWTRIX_ROOT}/lib/berry/src"
-  "${AWTRIX_ROOT}/lib/berry"
-  "${AWTRIX_ROOT}/lib/berry/default"
-)
-
-file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS
-  "${AWTRIX_ROOT}/src/core/*.c"
-  "${AWTRIX_ROOT}/src/core/*.cpp"
-)
-add_library(awtrix_core STATIC
-  ${CORE_SOURCES}
+include("${AWTRIX_ROOT}/cmake/Warnings.cmake")
+include("${AWTRIX_ROOT}/cmake/Core.cmake")
+include("${AWTRIX_ROOT}/cmake/ScriptExtensions.cmake")
+target_sources(awtrix_core PRIVATE
   "${AWTRIX_ROOT}/src/transport/ScriptMqttBridge.cpp"
 )
 target_compile_options(awtrix_core PRIVATE -O2)
-target_compile_definitions(awtrix_core PUBLIC
-  AWTRIX_NATIVE
-  PIO_UNIT_TESTING
-  UNIT_TEST
-  "AWTRIX_NG_VERSION=\"${AWTRIX_VERSION}\""
-)
-target_include_directories(awtrix_core PUBLIC
-  "${AWTRIX_ROOT}/src"
-  "${BASE64_ROOT}/src"
-)
-target_link_libraries(awtrix_core PUBLIC berry Threads::Threads)
+target_compile_definitions(awtrix_core PUBLIC PIO_UNIT_TESTING UNIT_TEST)
 
-add_library(unity STATIC "${UNITY_ROOT}/src/unity.c")
-target_include_directories(unity PUBLIC "${UNITY_ROOT}/src")
+include("${AWTRIX_ROOT}/cmake/Unity.cmake")
 
 file(GLOB TEST_DIRS LIST_DIRECTORIES true CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_LIST_DIR}/test_*"
@@ -74,9 +46,16 @@ foreach(TEST_DIR IN LISTS TEST_DIRS)
   endif()
 
   add_executable("${TEST_NAME}" ${TEST_SOURCES})
+  if(TEST_NAME STREQUAL "test_nativeimage")
+    target_sources("${TEST_NAME}" PRIVATE "${TEST_DIR}/jpeg_decoder.c")
+    target_include_directories("${TEST_NAME}" PRIVATE "${AWTRIX_ROOT}/lib/TJpg_Decoder/src")
+  endif()
   target_compile_options("${TEST_NAME}" PRIVATE -O2)
   target_compile_definitions("${TEST_NAME}" PRIVATE PIO_UNIT_TESTING UNIT_TEST)
   target_link_libraries("${TEST_NAME}" PRIVATE awtrix_core unity)
+  if(TEST_NAME STREQUAL "test_scripthost" OR TEST_NAME STREQUAL "test_scriptevents")
+    target_link_libraries("${TEST_NAME}" PRIVATE awtrix_script_extensions)
+  endif()
 
   if(WIN32)
     target_link_libraries("${TEST_NAME}" PRIVATE ws2_32)
@@ -90,3 +69,49 @@ foreach(TEST_DIR IN LISTS TEST_DIRS)
     WORKING_DIRECTORY "${AWTRIX_ROOT}"
   )
 endforeach()
+
+add_executable(test_font_compact
+  test_font/test_font.cpp
+  "${AWTRIX_ROOT}/src/core/render/Canvas.cpp"
+  "${AWTRIX_ROOT}/src/core/render/TextEncoding.cpp"
+  "${AWTRIX_ROOT}/src/core/render/TextRenderer.cpp"
+  "${AWTRIX_ROOT}/src/core/render/Color.cpp"
+  "${AWTRIX_ROOT}/src/core/render/ColorRamp.cpp"
+  "${AWTRIX_ROOT}/src/core/render/Palette.cpp"
+)
+target_include_directories(test_font_compact PRIVATE "${AWTRIX_ROOT}/src")
+target_compile_options(test_font_compact PRIVATE -O2)
+target_compile_definitions(test_font_compact PRIVATE AWTRIX_NATIVE PIO_UNIT_TESTING UNIT_TEST AWTRIX_COMPACT_FONTS=1)
+target_link_libraries(test_font_compact PRIVATE unity awtrix_warnings)
+if(WIN32)
+  target_link_options(test_font_compact PRIVATE -static-libstdc++ -static-libgcc)
+elseif(UNIX)
+  target_link_libraries(test_font_compact PRIVATE m)
+endif()
+add_test(NAME test_font_compact COMMAND test_font_compact)
+set_tests_properties(test_font_compact PROPERTIES WORKING_DIRECTORY "${AWTRIX_ROOT}")
+
+add_executable(test_settings_esp32
+  platform_settings/esp32.cpp
+  "${AWTRIX_ROOT}/src/core/render/ColorGrade.cpp"
+  "${AWTRIX_ROOT}/src/persistence/DeviceConfigJson.cpp"
+  "${AWTRIX_ROOT}/src/persistence/SystemConfigApply.cpp"
+  "${AWTRIX_ROOT}/src/core/mqtt/HaDiscovery.cpp"
+  "${AWTRIX_ROOT}/src/core/Settings.cpp"
+  "${AWTRIX_ROOT}/src/core/JsonColor.cpp"
+  "${AWTRIX_ROOT}/src/core/WeekdayBarConfig.cpp"
+  "${AWTRIX_ROOT}/src/core/payload/ScrollSpec.cpp"
+  "${AWTRIX_ROOT}/src/core/render/Color.cpp"
+  "${AWTRIX_ROOT}/src/core/apps/BuiltinAppConfig.cpp"
+)
+target_include_directories(test_settings_esp32 PRIVATE
+  "${AWTRIX_ROOT}/src/platform/esp32/include" "${AWTRIX_ROOT}/src")
+target_link_libraries(test_settings_esp32 PRIVATE awtrix_json unity awtrix_warnings)
+if(WIN32)
+  target_link_options(test_settings_esp32 PRIVATE -static-libstdc++ -static-libgcc)
+endif()
+add_test(NAME test_settings_esp32 COMMAND test_settings_esp32)
+
+add_test(NAME test_font_compact_tables
+  COMMAND "${CMAKE_COMMAND}" "-DNM=${CMAKE_NM}" "-DBINARY=$<TARGET_FILE:test_font_compact>"
+          -P "${CMAKE_CURRENT_LIST_DIR}/check_compact_fonts.cmake")
