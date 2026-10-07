@@ -49,7 +49,7 @@ After buying, install AWTRIX NG with the [Install on TC002](site:tc002/getting-s
 
 <div class="buy-shops" markdown>
 
-[:flag_de: Amazon.de](https://link.amazon/B06YWsfAs){ .md-button }
+[:flag_de: Amazon.de](https://link.amazon/B046kKU3n){ .md-button }
 
 </div>
 
