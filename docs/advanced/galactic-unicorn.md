@@ -176,7 +176,8 @@ Verified on **Pico 2 W** hardware: display at 42 fps, `mirror` and `rotate`,
 notifications, light sensor, Wi-Fi join, mDNS and NTP, HTTP smoke testing (every
 API check passes; the 80-request burst depends on the Wi-Fi link), watchdog
 recovery (`resetReason: "watchdog"`), settings kept across application UF2
-updates, and the scripting figures above. MQTT, Home Assistant, the buttons and
+updates, the scripting figures above, and MQTT with real Home Assistant
+discovery (21 entities, Matrix light control, notifications). The buttons and
 hearing a melody are not yet checked on that board.
 
 See [driver details](galactic-unicorn-display.md) and
