@@ -49,7 +49,7 @@ After buying, install AWTRIX NG with the [Install on TC002](site:tc002/getting-s
 
 <div class="buy-shops" markdown>
 
-[:flag_de: Amazon.de](https://link.amazon/B046kKU3n){ .md-button }
+[:flag_de: Amazon.de](https://www.amazon.de/-/en/ULANZI-TC002-Magnetic-Charging-Scoreboard/dp/B0HBV36JT3?&linkCode=ll2&tag=blueforcer09-21&linkId=6d80ac835e76fe617d66bcb134b189c3&ref_=as_li_ss_tl){ .md-button }
 
 </div>
 
