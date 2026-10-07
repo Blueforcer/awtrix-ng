@@ -78,6 +78,12 @@ Amazon.de also delivers to many other European countries.
 
 After buying, install AWTRIX NG from your browser: [Install on TC001](site:esp32/getting-started/flashing/).
 
+<div class="buy-shops" markdown>
+
+[:flag_de: Amazon.de](https://link.amazon/B0aYXVtms){ .md-button }
+
+</div>
+
 ### Ulanzi shop
 
 <div class="buy-shops" markdown>
