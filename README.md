@@ -94,11 +94,12 @@ and animations in the browser, and anything you make can be shared back.
 ## The AWTRIX NG app
 
 The **[AWTRIX NG app](https://blueforcer.github.io/awtrix-ng/guides/app/)** for
-[iPhone](https://apps.apple.com/app/id6819090967) and
+iPhone and
 [Android](https://play.google.com/store/apps/details?id=de.awtrix.ng) finds the clocks in your
 Wi-Fi, shows them live and brings the Hub to your phone. It sends Android notifications and your
 photos to the clock, and on the TC002 your phone becomes a gamepad. It is a one-time purchase with
 no subscription, no ads and no account, and every purchase supports the development of AWTRIX NG.
+The iPhone app is in review at Apple and waits for its release.
 
 ## Get started
 

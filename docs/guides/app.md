@@ -6,8 +6,11 @@ The AWTRIX NG app finds the clocks in your Wi-Fi, shows live what they display a
 On the TC002 your phone also becomes a gamepad and a microphone for announcements.
 <!-- /only -->
 
-[:material-apple: App Store](https://apps.apple.com/app/id6819090967){ .md-button .md-button--primary }
+*:material-apple: App Store*{ .md-button .md-button--disabled title="In review at Apple" }
 [:material-google-play: Google Play](https://play.google.com/store/apps/details?id=de.awtrix.ng){ .md-button .md-button--primary }
+
+The iPhone app is in review at Apple and waits for its release. The App Store button works once
+Apple has approved it.
 
 A one-time purchase: no subscription, no ads, no account. Buying it supports the development of
 AWTRIX NG.

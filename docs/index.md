@@ -73,9 +73,12 @@ click **Send to AWTRIX**, and it is on your clock.
 The AWTRIX NG app finds your clocks, shows live what they display and brings the Hub to your
 phone.<!-- only tc002 --> On the TC002 your phone also becomes a gamepad.<!-- /only -->
 
-[:material-apple: App Store](https://apps.apple.com/app/id6819090967){ .md-button .md-button--primary }
+*:material-apple: App Store*{ .md-button .md-button--disabled title="In review at Apple" }
 [:material-google-play: Google Play](https://play.google.com/store/apps/details?id=de.awtrix.ng){ .md-button .md-button--primary }
 [More about the app](guides/app.md){ .md-button }
+
+The iPhone app is in review at Apple and waits for its release. The App Store button works once
+Apple has approved it.
 
 </div>
 

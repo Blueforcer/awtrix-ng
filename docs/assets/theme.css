@@ -114,6 +114,15 @@ body {
   color: var(--md-accent-bg-color);
 }
 
+.md-typeset .md-button--disabled,
+.md-typeset .md-button--disabled:hover {
+  font-style: normal;
+  background-color: transparent;
+  color: var(--md-default-fg-color--light);
+  border-color: var(--md-default-fg-color--lighter);
+  cursor: not-allowed;
+}
+
 .md-typeset .grid.cards > ul > li,
 .md-typeset .grid > .card {
   background: var(--awtrix-card);
