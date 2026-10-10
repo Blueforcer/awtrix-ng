@@ -45,6 +45,7 @@ body:
       label: Where it happens
       options:
         - Ulanzi TC001
+        - Ulanzi TC002
         - AWTRIX 2 mainboard conversion
         - DIY ESP32 panel
         - DIY ESP32-S3 panel
