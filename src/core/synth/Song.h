@@ -57,7 +57,8 @@ using SongVector = std::vector<T, SongAllocator<T>>;
 constexpr uint32_t kTicksPerSixteenth = 12;
 constexpr uint32_t kTicksPerBeat = 4 * kTicksPerSixteenth;
 
-enum class Wave : uint8_t { Pulse, Saw, Tri, Sine, Noise };
+// The Chip waves sound like the triangle and noise of an 8-bit game console.
+enum class Wave : uint8_t { Pulse, Saw, Tri, Sine, Noise, ChipTri, ChipNoise, ChipMetal };
 enum class Filter : uint8_t { None, LowPass, BandPass, HighPass };
 
 // Everything a note of an instrument sounds like. Times are in ms, levels in 0..1. Plain data,
@@ -96,6 +97,9 @@ struct Patch {
   float gate = 0.9f;
   // The pitch of a step in a % pattern, as a MIDI note.
   uint8_t stepPitch = 60;
+  // The envelope moves in this many levels from silence to full, as on an 8-bit console; 0 moves
+  // it smoothly.
+  uint8_t levels = 0;
 };
 
 struct Instrument {

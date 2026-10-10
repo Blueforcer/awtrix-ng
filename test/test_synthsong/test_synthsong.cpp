@@ -309,6 +309,20 @@ static void test_instrument_settings() {
   TEST_ASSERT_EQUAL_UINT(42, p.stepPitch);
 }
 
+static void test_chip_waves_and_levels() {
+  const Song& s = ok(
+      "inst a wave=chiptri\ninst b wave=chipnoise levels=16\ninst c wave=chipmetal levels=2\n"
+      "inst d levels=64\ninst e levels=0\na: c");
+  TEST_ASSERT_TRUE(s.instruments[0].patch.wave == Wave::ChipTri);
+  TEST_ASSERT_TRUE(s.instruments[1].patch.wave == Wave::ChipNoise);
+  TEST_ASSERT_TRUE(s.instruments[2].patch.wave == Wave::ChipMetal);
+  TEST_ASSERT_EQUAL_UINT(0, s.instruments[0].patch.levels);
+  TEST_ASSERT_EQUAL_UINT(16, s.instruments[1].patch.levels);
+  TEST_ASSERT_EQUAL_UINT(2, s.instruments[2].patch.levels);
+  TEST_ASSERT_EQUAL_UINT(64, s.instruments[3].patch.levels);
+  TEST_ASSERT_EQUAL_UINT(0, s.instruments[4].patch.levels);
+}
+
 static void test_a_cutoff_alone_means_a_low_pass() {
   TEST_ASSERT_TRUE(ok("inst x cutoff=800\nx: c").instruments[0].patch.filter == Filter::LowPass);
   TEST_ASSERT_TRUE(ok("inst x\nx: c").instruments[0].patch.filter == Filter::None);
@@ -316,7 +330,12 @@ static void test_a_cutoff_alone_means_a_low_pass() {
 
 static void test_instrument_mistakes() {
   bad("inst\nx: c", "inst needs a name", 1, 5);
-  bad("inst x wave=square\nx: c", "wave is pulse, saw, tri, sine or noise", 1, 13);
+  bad("inst x wave=square\nx: c",
+      "wave is pulse, saw, tri, sine, noise, chiptri, chipnoise or chipmetal", 1, 13);
+  bad("inst x levels=1\nx: c", "levels must be 0 or between 2 and 64", 1, 15);
+  bad("inst x levels=65\nx: c", "levels must be between 0 and 64", 1, 15);
+  bad("inst x levels=7.5\nx: c", "levels must be a whole number", 1, 15);
+  bad("inst x levels=4/2\nx: c", "at most 1 value", 1, 17);
   bad("inst x duty=0\nx: c", "duty must be between 1 and 99", 1, 13);
   bad("inst x vibrato=1/2/3/4\nx: c", "at most 3 values", 1, 22);
   bad("inst x duty=2/3\nx: c", "at most 1 value", 1, 15);
@@ -450,6 +469,7 @@ int main(int, char**) {
   RUN_TEST(test_loop_points);
   RUN_TEST(test_song_settings);
   RUN_TEST(test_instrument_settings);
+  RUN_TEST(test_chip_waves_and_levels);
   RUN_TEST(test_a_cutoff_alone_means_a_low_pass);
   RUN_TEST(test_instrument_mistakes);
   RUN_TEST(test_comments_and_separators);

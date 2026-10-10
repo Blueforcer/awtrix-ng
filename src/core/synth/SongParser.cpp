@@ -97,7 +97,8 @@ const Field kFields[] = {
     {"gate", &Patch::gate, 100, 10000, true, 0, 0},
 };
 
-const char* const kWaves[] = {"pulse", "saw", "tri", "sine", "noise"};
+const char* const kWaves[] = {"pulse", "saw",     "tri",       "sine",
+                              "noise", "chiptri", "chipnoise", "chipmetal"};
 const char* const kFilters[] = {"lp", "bp", "hp"};
 
 void decimal(char* out, std::size_t size, int32_t hundredths) {
@@ -448,8 +449,10 @@ class Parser {
       return fail(parts[allowed].begin, "'%.*s' takes at most %u %s", key.size(), at(key),
                   static_cast<unsigned>(allowed), allowed == 1 ? "value" : "values joined by /");
     if (is(key, "wave")) {
-      const int wave = choice(value, kWaves, 5);
-      if (wave < 0) return fail(value.begin, "wave is pulse, saw, tri, sine or noise");
+      const int wave = choice(value, kWaves, 8);
+      if (wave < 0)
+        return fail(value.begin,
+                    "wave is pulse, saw, tri, sine, noise, chiptri, chipnoise or chipmetal");
       patch.wave = static_cast<Wave>(wave);
       return true;
     }
@@ -464,6 +467,13 @@ class Parser {
       int pitch = 0;
       if (!pitchName(value, pitch)) return false;
       patch.stepPitch = static_cast<uint8_t>(pitch);
+      return true;
+    }
+    if (is(key, "levels")) {
+      double levels = 0;
+      if (!whole(value, 0, 6400, "levels", levels)) return false;
+      if (levels == 1) return fail(value.begin, "levels must be 0 or between 2 and 64");
+      patch.levels = static_cast<uint8_t>(levels);
       return true;
     }
     if (!field) return fail(key.begin, "unknown instrument setting '%.*s'", key.size(), at(key));

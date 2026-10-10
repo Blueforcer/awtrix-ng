@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 
 namespace awtrix {
@@ -49,6 +50,27 @@ std::size_t within(float t, float low, float high, float perDt, std::size_t most
 }
 
 float triangle(float t) { return 1.0f - 4.0f * std::fabs(t - 0.5f); }
+
+// One of the 32 steps of an 8-bit console's triangle: 16 levels up, then down again.
+float chipStep(int step) {
+  step &= 31;
+  return static_cast<float>(step < 16 ? step : 31 - step) * (2.0f / 15.0f) - 1.0f;
+}
+
+// An 8-bit console clocks its noise register at 1.79 MHz over one of 16 dividers.
+constexpr float kChipClock = 1789773.0f;
+constexpr float kChipDividers[] = {4,   8,   16,  32,  64,  96,   128,  160,
+                                   202, 254, 380, 508, 762, 1016, 2034, 4068};
+
+// The register rate nearest to 32 times the pitch on a log scale, so c0 to g9 reach all 16.
+float chipNoiseRate(float hz) {
+  const float want = 32.0f * hz;
+  std::size_t k = 0;
+  while (k + 1 < std::size(kChipDividers) &&
+         want * want < (kChipClock / kChipDividers[k]) * (kChipClock / kChipDividers[k + 1]))
+    ++k;
+  return kChipClock / kChipDividers[k];
+}
 
 // A cubic soft clip: small signals unchanged, full scale at |x| = 1.5.
 float soft(float x) {
@@ -125,6 +147,12 @@ struct Player::Voice {
   float driveNorm = 1.0f;
   float tunedPitch = 0.0f;
   float tunedCutoff = 0.0f;
+  // The noise register of a Chip wave, how far it is to its next step, and how far a sample
+  // moves it.
+  uint16_t shift = 1;
+  uint8_t shiftTap = 1;
+  float shiftPhase = 0.0f;
+  float shiftInc = 0.0f;
 
   void start(const Patch& p, const Note& note, std::size_t t, uint64_t n, uint32_t gateSamples,
              uint32_t seed, uint32_t rate) {
@@ -155,6 +183,11 @@ struct Player::Voice {
     noise = p.noise;
     noiseCoef = p.noiseDecayMs > 0.0f ? perSample(p.noiseDecayMs, rate) : 1.0f;
     rng = seed | 1u;
+    // Metal starts where the console does, on its 93-step loop. Noise starts anywhere, so no
+    // note opens on the register's one long run of equal bits.
+    shift = p.wave == Wave::ChipMetal ? 1 : static_cast<uint16_t>((seed >> 17) | 1u);
+    shiftTap = p.wave == Wave::ChipMetal ? 6 : 1;
+    shiftPhase = 0.0f;
     ic1 = ic2 = 0.0f;
     k = 1.0f / (0.7071f + 11.0f * p.resonance);
     filterEnv = p.filterEnvHz;
@@ -208,6 +241,8 @@ struct Player::Voice {
       }
       perInc[0] = 1.0f / inc[0];
       subInc = 0.5f * step;
+      if (patch.wave == Wave::ChipNoise || patch.wave == Wave::ChipMetal)
+        shiftInc = chipNoiseRate(hz) * perRate;
     }
     if (patch.filter != Filter::None) {
       const float cutoff = std::min(std::max(patch.cutoffHz + filterEnv, 20.0f), 0.45f * fs);
@@ -277,6 +312,40 @@ struct Player::Voice {
           t = wrap(t + dt);
         }
         break;
+      case Wave::ChipTri: {
+        // Each step is smoothed like a pulse edge. Steps that come faster than a quarter of the
+        // sample rate fade into the plain triangle, gone at half of it, where they would alias.
+        const float du = 32.0f * dt;
+        const float steps = std::min(1.0f, 2.0f - 4.0f * du);
+        if (steps <= 0.0f) {
+          for (std::size_t i = 0; i < count; ++i) {
+            y[i] = triangle(t);
+            t = wrap(t + dt);
+          }
+          break;
+        }
+        const float perDu = 1.0f / du;
+        for (std::size_t i = 0; i < count; ++i) {
+          const float u = 32.0f * t;
+          const int step = static_cast<int>(u);
+          const float f = u - static_cast<float>(step);
+          float v = chipStep(step);
+          if (f < du) {
+            const float x = f * perDu;
+            v += 0.5f * (v - chipStep(step - 1)) * (x + x - x * x - 1.0f);
+          } else if (f > 1.0f - du) {
+            const float x = (f - 1.0f) * perDu;
+            v += 0.5f * (chipStep(step + 1) - v) * (x * x + x + x + 1.0f);
+          }
+          if (steps < 1.0f) {
+            const float plain = triangle(t);
+            v = plain + steps * (v - plain);
+          }
+          y[i] = v;
+          t = wrap(t + dt);
+        }
+        break;
+      }
       default:
         for (std::size_t i = 0; i < count; ++i) {
           y[i] = sine(t);
@@ -378,6 +447,36 @@ struct Player::Voice {
     return count;
   }
 
+  // The next sample of a Chip wave's noise register.
+  float shifted() {
+    for (shiftPhase += shiftInc; shiftPhase >= 1.0f; shiftPhase -= 1.0f) {
+      const unsigned feedback = (shift ^ (shift >> shiftTap)) & 1u;
+      shift = static_cast<uint16_t>((shift >> 1) | (feedback << 14));
+    }
+    return (shift & 1u) ? -1.0f : 1.0f;
+  }
+
+  // A block of a noise wave in y, and in more the noise= share that goes on top of it.
+  template <bool Shifted>
+  void noiseBlock(float* y, float* more, std::size_t count) {
+    for (std::size_t i = 0; i < count; ++i) {
+      y[i] = Shifted ? shifted() : white(rng);
+      more[i] = 0.0f;
+      if (noise > 0.0f) {
+        more[i] = noise * white(rng);
+        noise *= noiseCoef;
+      }
+    }
+  }
+
+  // Rounds the envelope to the instrument's levels, from silence to full.
+  void stepLevels(float* amp, std::size_t count) const {
+    const float top = static_cast<float>(patch.levels - 1);
+    const float perTop = 1.0f / top;
+    for (std::size_t i = 0; i < count; ++i)
+      amp[i] = static_cast<float>(static_cast<int>(amp[i] * top + 0.5f)) * perTop;
+  }
+
   // Adds up to frames samples into out and send; false once the voice has gone quiet.
   bool render(float* out, float* send, std::size_t frames, uint32_t rate) {
     float y[kControl];
@@ -388,16 +487,12 @@ struct Player::Voice {
       if (into == 0) control(rate);
       const std::size_t n = std::min(frames - done, kControl - into);
       age += static_cast<uint32_t>(n);
-      const bool noiseWave = patch.wave == Wave::Noise;
-      if (noiseWave) {
-        for (std::size_t i = 0; i < n; ++i) {
-          y[i] = white(rng);
-          more[i] = 0.0f;
-          if (noise > 0.0f) {
-            more[i] = noise * white(rng);
-            noise *= noiseCoef;
-          }
-        }
+      const bool noiseWave = patch.wave == Wave::Noise || patch.wave == Wave::ChipNoise ||
+                             patch.wave == Wave::ChipMetal;
+      if (patch.wave == Wave::Noise) {
+        noiseBlock<false>(y, more, n);
+      } else if (noiseWave) {
+        noiseBlock<true>(y, more, n);
       } else {
         oscillate(0, y, n);
         if (patch.unison > 0.0f) {
@@ -437,6 +532,7 @@ struct Player::Voice {
         for (std::size_t i = 0; i < n; ++i) y[i] = soft(y[i] * driveGain) * driveNorm;
       float* amp = more;
       const std::size_t sounding = envelope(amp, n, rate);
+      if (patch.levels) stepLevels(amp, sounding);
       const float scale = gain;
       const float echo = patch.echo;
       float* to = out + done;
@@ -666,7 +762,11 @@ void Player::boundary() {
   const double end = song_->endOf(effect_);
   if (tick_ < end - kEpsilon) return;
   if (song_->loops && !effect_) {
-    seek(song_->loopTick + (tick_ - end));
+    // The head lands between two samples, a little past the end; seeking past the loop tick
+    // would skip the notes on it.
+    const double overshoot = tick_ - end;
+    seek(song_->loopTick);
+    tick_ += overshoot;
   } else {
     ended_ = true;
     releaseAll();

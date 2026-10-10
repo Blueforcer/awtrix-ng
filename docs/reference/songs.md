@@ -110,7 +110,7 @@ each defined once.
 
 | Key | Value | Default | What it does |
 |---|---|---|---|
-| `wave=` | `pulse` `saw` `tri` `sine` `noise` | `pulse` | the basic sound: a hollow pulse, a bright sawtooth, a soft triangle, a pure sine, or noise with no pitch |
+| `wave=` | `pulse` `saw` `tri` `sine` `noise` `chiptri` `chipnoise` `chipmetal` | `pulse` | the basic sound: a hollow pulse, a bright sawtooth, a soft triangle, a pure sine, or noise with no pitch. The three `chip` waves sound like an [8-bit game console](#8-bit-sound) |
 | `duty=` | 1-99 % | `50` | the width of a `pulse` wave: 50 is a square, 25 and 12 sound thinner and more nasal |
 | `unison=` | 0-100 cents | `0` | a second oscillator this many cents away from the first, for a wide, chorused sound |
 | `sub=` | 0-100 % | `0` | adds a triangle one octave below |
@@ -120,6 +120,7 @@ each defined once.
 | `sustain=` | 0-100 % | `70` | the level a held note settles at. With `0` a note dies away by itself, like a plucked string or a drum |
 | `release=` | 0-20000 ms | `60` | how long a note takes to fade out once it lets go |
 | `gate=` | 1-100 % | `90` | how much of its written length a note holds before it lets go; lower is more staccato |
+| `levels=` | 0, or 2-64 | `0` | the loudness of a note moves in this many steps from silence to full instead of smoothly, so it fades out in audible steps. `levels=16` sounds like an 8-bit game console. `0` is smooth |
 | `pitch=` | -48 to 48 semitones, or `semitones/ms` | `0` | each note starts this far above its pitch (below, when negative) and falls to it. After a `/` the rate, 1-5000 ms, else 30. `pitch=24/25` is the thump of a kick drum |
 | `vibrato=` | `cents`, `cents/Hz` or `cents/Hz/ms` | `0`, 5.5 Hz, 0 ms | wobbles the pitch by up to 0-200 cents, 0.1-20 times a second, starting after the given delay (0-5000 ms) and fading in over 200 ms |
 | `glide=` | 0-5000 ms | `60` | how long a [slide](#slides) takes to reach its note |
@@ -162,6 +163,42 @@ pluck: a4:2 c5 e a e c a4 e |
 kick:  %X.......x.x..... |
 snare: %....X.......X... |
 hat:   %x.o.x.o.x.o.x.og |
+```
+
+### 8-bit sound
+
+Three waves sound like the music of an 8-bit game console:
+
+- `wave=chiptri` is a triangle in 32 coarse steps, the buzzing bass of those consoles. From f5 up
+  the steps lie above hearing, and it sounds like `tri`.
+- `wave=chipnoise` is noise whose pitch picks one of 16 colours, from a low rumble at c0 to a
+  bright hiss at g9. Neighbouring notes often give the same colour.
+- `wave=chipmetal` is a buzzing, metallic noise, for example for an open hi-hat. Every hit sounds
+  the same.
+
+For the whole sound, give every instrument `levels=16`, play melodies on `wave=pulse` with
+`duty=12`, `25` or `50`, and leave out `echo=`, `unison=` and the filter. `chiptri` plays about as
+loud as `tri`, the two noise waves about as loud as `pulse`.
+
+```text
+# 8-bit - two bars, loops
+bpm 144
+volume 70
+inst lead  wave=pulse duty=25 attack=0 decay=250 sustain=75 release=40 vibrato=18/5.6/160 levels=16 volume=58
+inst arp   wave=pulse duty=12 attack=0 decay=70 sustain=25 release=20 gate=60 levels=16 volume=34
+inst bass  wave=chiptri attack=0 sustain=100 release=15 gate=85 volume=150
+inst kick  wave=chiptri note=a#2 pitch=20/28 attack=0 decay=110 sustain=0 volume=150
+inst snare wave=chipnoise note=a4 attack=0 decay=110 sustain=0 levels=16 volume=40
+inst hat   wave=chipnoise note=g9 attack=0 decay=20 sustain=0 levels=16 volume=14
+inst open  wave=chipmetal note=a7 attack=0 decay=130 sustain=0 levels=16 volume=14
+
+lead:  e5:4 g c6:6 b5:2 | d5:4 g b:8 |
+arp:   (c5:1 e g e)4 | (b4:1 d5 g d)4 |
+bass:  (c2:2 c3)4 | (g1:2 g2)4 |
+kick:  (%x.......x.x.....)2
+snare: (%....x.......x...)2
+hat:   (%x.x.x.x.x.x.x...)2
+open:  (%..............x.)2
 ```
 
 ## Tracks
@@ -413,7 +450,7 @@ A few more, each with the text that caused it. The track lines sit on line 2, un
 | Text | Message |
 |---|---|
 | `bpm 10` | `bpm must be between 20 and 300 (line 1, column 5)` |
-| `inst lead wave=square` | `wave is pulse, saw, tri, sine or noise (line 1, column 16)` |
+| `inst lead wave=square` | `wave is pulse, saw, tri, sine, noise, chiptri, chipnoise or chipmetal (line 1, column 16)` |
 | `bass: c2`, with no `inst bass` | `track 'bass' has no instrument (line 2, column 7)` |
 | `lead: c4:2d4` | `expected a space after 'c4:2' (line 2, column 11)` |
 | `lead: c4 r _` | `_ without a note (line 2, column 12)` |

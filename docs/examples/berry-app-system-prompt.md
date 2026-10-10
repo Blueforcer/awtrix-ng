@@ -1104,14 +1104,16 @@ Song text in brief - the docs page *Song text* has the full reference:
   `beats N` (1-16, default 4), `loop N` (the bar it goes back to, default 1) or `loop off` (plays
   once), `volume N` (0-200 %), `echo time=N feedback=N damp=N` (time in sixteenths 0.25-64 and at
   most 2 s, feedback 0-90 %, damp 200-16000 Hz).
-- `inst NAME key=value ...` (up to 32): `wave=pulse|saw|tri|sine|noise` (pulse), `duty=1-99` (50),
-  `unison=0-100` cents, `sub=0-100`, `noise=0-100` or `noise=level/ms`, `attack=0-10000` ms (2),
-  `decay=1-20000` ms (200), `sustain=0-100` (70; 0 = dies away like a drum), `release=0-20000` ms
-  (60), `gate=1-100` % of the written length held (90), `pitch=semis` or `semis/ms` (-48..48; a
-  kick is `pitch=24/25`), `vibrato=cents/Hz/delayms`, `glide=0-5000` ms (60), `filter=lp|bp|hp`,
-  `cutoff=20-20000` Hz (alone it means a low-pass), `resonance=0-100`, `filterenv=Hz` or
-  `Hz/ms`, `drive=0-100`, `volume=0-200` (100), `echo=0-100` (send to the song's echo),
-  `note=c4` (the pitch of `%` steps).
+- `inst NAME key=value ...` (up to 32): `wave=pulse|saw|tri|sine|noise` (pulse) or the 8-bit
+  console waves `chiptri|chipnoise|chipmetal` (on the two noise waves the pitch picks one of 16
+  colours), `duty=1-99` (50), `unison=0-100` cents, `sub=0-100`, `noise=0-100` or
+  `noise=level/ms`, `attack=0-10000` ms (2), `decay=1-20000` ms (200), `sustain=0-100` (70; 0 =
+  dies away like a drum), `release=0-20000` ms (60), `gate=1-100` % of the written length held
+  (90), `pitch=semis` or `semis/ms` (-48..48; a kick is `pitch=24/25`), `vibrato=cents/Hz/delayms`,
+  `glide=0-5000` ms (60), `filter=lp|bp|hp`, `cutoff=20-20000` Hz (alone it means a low-pass),
+  `resonance=0-100`, `filterenv=Hz` or `Hz/ms`, `drive=0-100`, `volume=0-200` (100),
+  `echo=0-100` (send to the song's echo), `note=c4` (the pitch of `%` steps), `levels=0|2-64`
+  (the envelope moves in that many steps; 16 is an 8-bit console).
 - A track is `NAME: items` (up to 16) and plays the instrument of the same name; `@name` switches.
   All tracks start together; another line with the same name continues the track.
 - Items, separated by spaces: a note `c4`, `f#3`, `bb2` (letter, `#`/`b`, octave digit; the octave
