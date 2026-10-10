@@ -4,14 +4,14 @@ add_awtrix_test(NAME tc002-clock SOURCES test_tc002_clock.cpp "${TC002_RUNTIME_D
 add_awtrix_test(NAME tc002-status SOURCES test_tc002_status.cpp "${TC002_RUNTIME_DIR}/Tc002StatusApp.cpp"
   LIBRARIES awtrix_core unity SANITIZE)
 add_awtrix_test(NAME tc002-audio-script SOURCES test_audio_script.cpp LIBRARIES tc002_audio_script SANITIZE)
-add_awtrix_test(NAME tc002-speech SOURCES test_speech.cpp ${TC002_SPEECH_SOURCES} LIBRARIES awtrix_core SANITIZE)
+add_awtrix_test(NAME tc002-speech SOURCES test_speech.cpp ${TC002_SPEECH_SOURCES} ${TC002_SPEECH_VOICE_SOURCES}
+  LIBRARIES awtrix_core awtrix_posix SANITIZE COMMAND "${PROJECT_SOURCE_DIR}/assets/speech/voice.atts")
 add_awtrix_test(NAME tc002-speech-source SOURCES test_speech_source.cpp ${TC002_SPEECH_SOURCES}
   "${TC002_DIR}/audio/Tc002AudioMixer.cpp" "${TC002_DIR}/audio/Tc002AudioSources.cpp" LIBRARIES awtrix_core SANITIZE
   TIMEOUT 60)
-add_test(NAME tc002-speech-lexicon COMMAND tc002-speech-test --lexicon
-  "${PROJECT_SOURCE_DIR}/tools/speech/esdb35-us-application.tsv")
 add_awtrix_test(NAME tc002-speech-voice SOURCES test_speech_voice.cpp ${TC002_SPEECH_VOICE_SOURCES}
-  LIBRARIES awtrix_posix SANITIZE COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/speech" TIMEOUT 120)
+  "${TC002_SPEECH_DIR}/SpeechFrontend.cpp" LIBRARIES awtrix_core awtrix_posix SANITIZE COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/speech"
+  TIMEOUT 120)
 target_compile_options(tc002-speech-voice-test PRIVATE ${TC002_SPEECH_VOICE_OPTIONS})
 add_awtrix_test(NAME tc002-voice-overlay SOURCES test_voice_overlay.cpp
   "${TC002_DIR}/voice/VoiceOverlay.cpp" LIBRARIES awtrix_core)

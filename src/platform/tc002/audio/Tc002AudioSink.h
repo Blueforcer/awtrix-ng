@@ -90,7 +90,10 @@ class Tc002AudioSink final : public sound::IToneSink, public sound::IPcmSink {
   bool playSong(const std::string& text, bool nextBar);
   bool playFx(const std::string& text);
   bool playSongOnce(const std::string& text, sound::Group group);
-  bool speaks() const { return available() && voice_ != nullptr; }
+  bool speaks() const { return available() && voice() != nullptr; }
+  // The voice that speaks from the next speech on; one already speaking keeps its own. Any thread.
+  std::shared_ptr<speech::SpeechVoice> voice() const;
+  void setVoice(std::shared_ptr<speech::SpeechVoice> voice);
   bool checkSpeech(const std::string& text, DispatchDetail& detail);
   DispatchResult playSpeech(const std::string& text, sound::Group group, DispatchDetail& detail);
   bool songBeat(int64_t nowMs, double& beat) const;
@@ -160,6 +163,8 @@ class Tc002AudioSink final : public sound::IToneSink, public sound::IPcmSink {
     // Handed on to the one-shot's source, so a clip lives in one copy.
     std::shared_ptr<const std::string> clip;
     std::shared_ptr<const speech::Plan> speech;
+    // The voice whose frontend made the plan: phones are its own.
+    std::shared_ptr<speech::SpeechVoice> speechVoice;
     std::shared_ptr<const synth::Song> oneShotSong;
     std::vector<Effect> effects;
     // Host folders and files whose effects stop, in the order release() was asked.
@@ -205,7 +210,8 @@ class Tc002AudioSink final : public sound::IToneSink, public sound::IPcmSink {
   void systemGone(uint32_t seq);
   Tc002AudioPlayer::Tap analysisTap();
 
-  const std::shared_ptr<speech::SpeechVoice> voice_;
+  mutable std::mutex voiceMutex_;
+  std::shared_ptr<speech::SpeechVoice> voice_;
   CoreEngine& engine_;
   Tc002AudioLink link_;
   Tc002AudioPlayer player_;

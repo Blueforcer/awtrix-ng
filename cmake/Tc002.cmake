@@ -11,10 +11,9 @@ set_source_files_properties(
   "${PROJECT_SOURCE_DIR}/src/core/audio/PitchDetector.cpp"
   "${TC002_DIR}/audio/Tc002AudioMixer.cpp"
   PROPERTIES COMPILE_OPTIONS -O2)
-# Speech: the English text frontend and the worker that runs a voice for the mixer.
+# Speech: the text frontend a voice pack carries and the worker that runs a voice for the mixer.
 set(TC002_SPEECH_DIR "${TC002_DIR}/speech")
-set(TC002_SPEECH_SOURCES "${TC002_SPEECH_DIR}/SpeechText.cpp" "${TC002_SPEECH_DIR}/SpeechPronunciation.cpp"
-  "${TC002_SPEECH_DIR}/SpeechLexicon.cpp" "${TC002_SPEECH_DIR}/SpeechRequest.cpp"
+set(TC002_SPEECH_SOURCES "${TC002_SPEECH_DIR}/SpeechFrontend.cpp" "${TC002_SPEECH_DIR}/SpeechRequest.cpp"
   "${TC002_SPEECH_DIR}/SpeechSource.cpp")
 add_library(tc002_speech STATIC ${TC002_SPEECH_SOURCES})
 target_link_libraries(tc002_speech PUBLIC awtrix_core PRIVATE awtrix_warnings)
@@ -25,7 +24,7 @@ set(TC002_SPEECH_VOICE_SOURCES "${TC002_SPEECH_DIR}/SpeechModel.cpp" "${TC002_SP
 set(TC002_SPEECH_VOICE_OPTIONS -O2 -ffp-contract=off)
 add_library(tc002_speech_voice STATIC ${TC002_SPEECH_VOICE_SOURCES})
 target_compile_options(tc002_speech_voice PRIVATE ${TC002_SPEECH_VOICE_OPTIONS})
-target_link_libraries(tc002_speech_voice PUBLIC awtrix_posix PRIVATE awtrix_warnings)
+target_link_libraries(tc002_speech_voice PUBLIC tc002_speech awtrix_posix PRIVATE awtrix_warnings)
 
 add_library(tc002_contract STATIC "${TC002_DIR}/contract/SupervisorProtocol.cpp"
   "${TC002_DIR}/contract/Pcm16.cpp" "${TC002_DIR}/contract/MicrophoneStream.cpp" "${TC002_DIR}/contract/InputIdentity.cpp")
@@ -66,8 +65,9 @@ add_library(tc002_audio STATIC
   "${TC002_DIR}/audio/Tc002AudioRequests.cpp"
   "${TC002_DIR}/audio/Tc002AudioSongs.cpp"
   "${TC002_DIR}/audio/Tc002AudioPlayback.cpp"
-  "${TC002_DIR}/audio/Tc002AudioPlan.cpp")
-target_link_libraries(tc002_audio PUBLIC tc002_speech awtrix_host PRIVATE awtrix_warnings)
+  "${TC002_DIR}/audio/Tc002AudioPlan.cpp"
+  "${TC002_SPEECH_DIR}/VoicePacks.cpp")
+target_link_libraries(tc002_audio PUBLIC tc002_speech tc002_speech_voice awtrix_host PRIVATE awtrix_warnings)
 # The speaker helper awtrix-tc002-audio-pcm, the daemon's client of the awtrix_pcm driver.
 set(TC002_AUDIO_PCM_CORE "${TC002_DIR}/audio/helper/audio_helper.c" "${TC002_DIR}/audio/pcm/pcm_backend.c")
 set(TC002_AUDIO_PCM_FRAME "${TC002_DIR}/audio/helper/audio_owner.c" "${TC002_DIR}/audio/helper/audio_process.c")

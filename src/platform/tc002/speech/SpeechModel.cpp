@@ -20,9 +20,7 @@ constexpr std::size_t kHeaderBytes = 64;
 constexpr std::size_t kEntryBytes = 64;
 constexpr std::size_t kNameBytes = 40;
 constexpr std::size_t kMaxTensors = 1024;
-constexpr uint32_t kVersion = 1;
-constexpr uint32_t kTokenContract = 1;
-constexpr uint32_t kF32 = 0, kDense = 1, kU32 = 2;
+constexpr uint32_t kF32 = 0, kDense = 1, kU32 = 2, kBytes = 3;
 
 // The hyper-parameters at the start of the config tensor, in this order; the encoder dilations
 // follow them.
@@ -75,6 +73,21 @@ class Tensors {
       return nullptr;
     }
     return &entry;
+  }
+
+  // Rows of a float tensor whose rows the file chooses; 0 when it is missing or not float.
+  std::size_t rows(const std::string& name) const {
+    const auto it = tensors_.find(name);
+    return it == tensors_.end() || it->second.kind != kF32 ? 0 : it->second.rows;
+  }
+
+  // A byte tensor; false with the reason when a required one is missing or of another kind.
+  bool bytes(const std::string& name, bool required, std::string_view& out) {
+    const auto it = tensors_.find(name);
+    if (it == tensors_.end()) return !required || fail("missing tensor " + name);
+    if (it->second.kind != kBytes) return fail("tensor " + name + ": wrong shape");
+    out = {reinterpret_cast<const char*>(file_ + it->second.offset), it->second.bytes};
+    return true;
   }
 
   const uint32_t* config(std::size_t& count) {
@@ -165,6 +178,9 @@ bool checkEntry(const uint8_t* file, std::size_t size, std::size_t header, const
   const uint64_t cells = uint64_t{entry.rows} * entry.cols;
   const uint8_t* data = file + entry.offset;
   switch (entry.kind) {
+    case kBytes:
+      if (entry.rows != 1 || entry.stride != entry.cols || entry.bytes != entry.cols) return fail("wrong size");
+      return true;
     case kF32:
     case kU32:
       if (entry.stride != entry.cols || entry.bytes != cells * 4) return fail("wrong size");
@@ -242,7 +258,8 @@ bool SpeechModel::resolve(std::size_t size, std::string& error) {
     return false;
   };
   if (size < kHeaderBytes || std::memcmp(file, "ATTS", 4) != 0) return fail("not an ATTS file");
-  if (posix::le32(file + 4) != kVersion) return fail("version " + std::to_string(posix::le32(file + 4)) + " not supported");
+  version = posix::le32(file + 4);
+  if (version != 1 && version != 2) return fail("version " + std::to_string(version) + " not supported");
   if (posix::le32(file + 12) != size) return fail("size mismatch");
   std::array<uint8_t, 4> stored;
   std::memcpy(stored.data(), file + 16, 4);
@@ -260,7 +277,8 @@ bool SpeechModel::resolve(std::size_t size, std::string& error) {
   fftSize = posix::le32(file + 32);
   mels = posix::le32(file + 36);
   if (sampleRate != kSampleRate) return fail("sample rate " + std::to_string(sampleRate) + " not supported");
-  if (posix::le32(file + 40) != kTokenContract)
+  // Token contract 1 is the English frontend of v1 files; 2 is the frontend a v2 file carries.
+  if (posix::le32(file + 40) != version)
     return fail("token contract " + std::to_string(posix::le32(file + 40)) + " not supported");
   if (posix::le32(file + 44) != 0) return fail("flags not supported");
   if (fftSize < 16 || fftSize > 4096 || (fftSize & (fftSize - 1)) || !hop || hop > fftSize)
@@ -293,7 +311,12 @@ bool SpeechModel::resolve(std::size_t size, std::string& error) {
   const std::size_t d = config[DEnc], p = config[DPred], e = config[DDec], v = config[VocDim];
   maxDuration = config[MaxDuration];
   vocoderInKernel = config[VocInKernel];
-  if (!tensors.matrix("am.phone", kPhones, d, phones) || !tensors.matrix("am.stress", kStresses, d, stresses) ||
+  phoneCount = version == 1 ? kV1Phones : tensors.rows("am.phone");
+  if (phoneCount == 1 || phoneCount > kMaxPhones) return fail("tensor am.phone: wrong shape");
+  if (version == 2 && (!tensors.bytes("pack.info", true, info) || !tensors.bytes("fe.text", true, frontendText) ||
+                       !tensors.bytes("fe.lexicon", false, frontendLexicon)))
+    return false;
+  if (!tensors.matrix("am.phone", phoneCount, d, phones) || !tensors.matrix("am.stress", kStresses, d, stresses) ||
       !tensors.matrix("am.wordend", kWordEnds, d, wordEnds) ||
       !tensors.matrix("am.punct", kPunctuations, d, punctuations))
     return false;

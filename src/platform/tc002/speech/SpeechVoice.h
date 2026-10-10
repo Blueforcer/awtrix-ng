@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string_view>
 
 #include "platform/tc002/speech/SpeechTypes.h"
 
@@ -26,6 +27,9 @@ class SpeechVoice {
  public:
   virtual ~SpeechVoice() = default;
   virtual uint32_t rate() const = 0;
+  // UTF-8 text as this voice's plan, read by the frontend the voice was trained on. False when no
+  // word is left to say. Any thread, at any time.
+  virtual bool prepare(std::string_view text, Plan& out) const = 0;
   // On the utterance's worker thread; nullptr when the plan cannot be spoken.
   virtual std::unique_ptr<SpeechUtterance> start(const Plan& plan) = 0;
 };

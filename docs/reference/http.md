@@ -3256,6 +3256,65 @@ curl -X POST http://<awtrix-ip>/api/v1/voice \
   -H "Origin: http://<awtrix-ip>" \
   -d '{"enabled":false}'
 ```
+
+### GET /api/v1/speech/voice
+
+Reads which voice speaks. A voice comes as a voice pack: one `.atts` file with the voice and the
+rules of its language. The clock has a built-in English voice; you can upload one other pack in its
+place.
+
+This route, `POST` and `DELETE` below exist only on clocks with a speaker. Otherwise they answer
+`404`.
+
+**Request:** no body.
+
+**Response:** `200`:
+
+| Key | Type | Meaning |
+|---|---|---|
+| `name` | string or null | the voice's name, `null` when the clock has no voice |
+| `language` | string | its language, for example `en` or `de` |
+| `version` | string | the pack's version, `""` when it has none |
+| `bytes` | integer | the pack's size |
+| `uploaded` | boolean | `true`: your uploaded pack speaks. `false`: the built-in voice |
+| `maxBytes` | integer | the largest pack the clock takes, 2000000 |
+
+```bash
+curl http://<awtrix-ip>/api/v1/speech/voice
+```
+
+### POST /api/v1/speech/voice
+
+Uploads a voice pack. It replaces the voice you uploaded before, and speaks from the next speech on.
+The clock keeps it across restarts and updates.
+
+**Request:** the pack as the file of a `multipart/form-data` form, or as the raw body.
+
+**Response:** `200` with the same body as [`GET /api/v1/speech/voice`](#get-apiv1speechvoice).
+
+**Errors:**
+
+| Status | Condition |
+|---|---|
+| 400 | `validationFailed`: not a voice pack the clock can use; `message` says why |
+| 413 | `payloadTooLarge`: the request is over 2 MiB |
+| 507 | `insufficientStorage`: the pack does not fit into the free storage |
+
+```bash
+curl -F "voice=@my-voice.atts" http://<awtrix-ip>/api/v1/speech/voice
+```
+
+### DELETE /api/v1/speech/voice
+
+Removes the uploaded pack. The built-in voice speaks again.
+
+**Request:** no body.
+
+**Response:** `200` with the same body as [`GET /api/v1/speech/voice`](#get-apiv1speechvoice).
+
+```bash
+curl -X DELETE http://<awtrix-ip>/api/v1/speech/voice
+```
 <!-- /only -->
 
 ---
@@ -3778,6 +3837,9 @@ Any other path answers **404** `notFound` with the message `unknown route`.
 | DELETE | `/api/v1/mqtt/tls/ca` | [delete the broker's CA](#delete-apiv1mqtttlsca) |
 | GET | `/api/v1/voice` | [Home Assistant Voice state](#apiv1voice) |
 | POST | `/api/v1/voice` | [change Home Assistant Voice](#post-apiv1voice) |
+| GET | `/api/v1/speech/voice` | [which voice speaks](#get-apiv1speechvoice) |
+| POST | `/api/v1/speech/voice` | [upload a voice pack](#post-apiv1speechvoice) |
+| DELETE | `/api/v1/speech/voice` | [back to the built-in voice](#delete-apiv1speechvoice) |
 | GET | `/api/v1/oauth` | [scripts that sign in](#get-apiv1oauth) |
 | GET, POST, DELETE | `/api/v1/oauth/{name}` | [a script's sign-in](#get-apiv1oauthname) |
 | POST | `/api/v1/oauth/{name}/start` | [start a sign-in](#post-apiv1oauthnamestart) |

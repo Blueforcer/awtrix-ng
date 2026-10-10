@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cctype>
 #include <atomic>
 #include <cerrno>
 #include <cmath>
@@ -700,11 +701,20 @@ void test_sink_clips() {
         "clips play again after the voice");
 }
 
-// A steady tone at 24 kHz for as long as asked, cancelled or not.
+// A steady tone at 24 kHz for as long as asked, cancelled or not. It reads a letter as a phone.
 struct SteadyVoice : speech::SpeechVoice {
   std::size_t samples = 2400;
   std::atomic<int> cancels{0};
   uint32_t rate() const override { return 24000; }
+  bool prepare(std::string_view text, speech::Plan& out) const override {
+    out.count = 0;
+    for (const char c : text)
+      if (std::isalpha(static_cast<unsigned char>(c)) && out.count + 1 < speech::kMaxPhones)
+        out.phones[out.count++] = {static_cast<speech::PhoneId>(1), 0};
+    if (!out.count) return false;
+    out.phones[out.count++] = {speech::PhoneId::Silence, 0};
+    return true;
+  }
   std::unique_ptr<speech::SpeechUtterance> start(const speech::Plan&) override {
     struct Utterance : speech::SpeechUtterance {
       SteadyVoice& voice;

@@ -8,8 +8,8 @@ namespace awtrix::speech {
 
 constexpr std::size_t kMaxPhones = 1536;
 
-// What the text frontend hands a voice. A voice is trained on these values, so a new phone goes
-// at the end. A diphthong is one phone, not two.
+// A phone: an index into the voice pack's inventory, Silence always 0. The names are the English
+// pack's, whose order its voices are trained on. A diphthong is one phone, not two.
 enum class PhoneId : uint8_t {
   Silence, Ae, Aa, Eh, Ih, Iy, Ao, Uh, Uw, Ah, Schwa, Er,
   Ai, Au, Oi, Ou, Ei,
@@ -33,8 +33,5 @@ struct Plan {
   std::array<char, kMaxPhones> boundaries{};
   std::size_t count = 0;
 };
-constexpr bool isVowel(PhoneId sound) {
-  return sound >= PhoneId::Ae && sound <= PhoneId::Ei;
-}
 
 }

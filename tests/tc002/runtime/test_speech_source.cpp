@@ -60,6 +60,7 @@ struct FakeVoice : SpeechVoice {
   std::vector<std::thread::id> threads;
 
   uint32_t rate() const override { return 24000; }
+  bool prepare(std::string_view, Plan&) const override { return false; }
   std::unique_ptr<SpeechUtterance> start(const Plan&) override;
 };
 

@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSIONS = {".cpp", ".h", ".hpp", ".c", ".be", ".inc"}
-GENERATED = {"WebUiAsset.h", "PreludeSolidified.h", "SpeechLexiconData.h"}
+GENERATED = {"WebUiAsset.h", "PreludeSolidified.h"}
 TOKEN = re.compile(r'''//[^\n]*|/\*[\s\S]*?\*/|'(?:\\.|[^'\\])'|R"([^ ()\\\t\r\n]*)\(([\s\S]*?)\)\1"|"(?:\\.|[^"\\])*"''')
 INLINE = re.compile(r"`([^`]+)`")
 JSON_MESSAGE = re.compile(r'"message"\s*:\s*("(?:\\.|[^"\\])*")')

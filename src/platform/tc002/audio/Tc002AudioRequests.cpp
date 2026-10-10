@@ -162,14 +162,34 @@ bool Tc002AudioSink::loopFile(const std::string& file) {
   return true;
 }
 
+std::shared_ptr<speech::SpeechVoice> Tc002AudioSink::voice() const {
+  std::lock_guard<std::mutex> lock(voiceMutex_);
+  return voice_;
+}
+
+void Tc002AudioSink::setVoice(std::shared_ptr<speech::SpeechVoice> voice) {
+  std::lock_guard<std::mutex> lock(voiceMutex_);
+  voice_ = std::move(voice);
+}
+
 bool Tc002AudioSink::checkSpeech(const std::string& text, DispatchDetail& detail) {
+  const auto speaker = voice();
+  if (!speaker) {
+    detail.message = "no voice";
+    return false;
+  }
   auto plan = std::make_unique<speech::Plan>();
-  return speech::readText(text, *plan, detail);
+  return speech::readText(*speaker, text, *plan, detail);
 }
 
 DispatchResult Tc002AudioSink::playSpeech(const std::string& text, sound::Group group, DispatchDetail& detail) {
+  const auto speaker = voice();
+  if (!speaker) {
+    detail.message = "speaker unavailable";
+    return DispatchResult::Unavailable;
+  }
   auto plan = std::make_shared<speech::Plan>();
-  if (!speech::readText(text, *plan, detail)) return DispatchResult::ValidationError;
+  if (!speech::readText(*speaker, text, *plan, detail)) return DispatchResult::ValidationError;
   if (!speaks() || voiceOwned_.load()) {
     detail.message = "speaker unavailable";
     return DispatchResult::Unavailable;
@@ -181,6 +201,7 @@ DispatchResult Tc002AudioSink::playSpeech(const std::string& text, sound::Group 
     request_.oneShot = Kind::Speech;
     request_.oneShotGroup = group;
     request_.speech = std::move(plan);
+    request_.speechVoice = speaker;
   }
   wake();
   return DispatchResult::Ok;
@@ -212,6 +233,7 @@ void Tc002AudioSink::setVoiceOwned(bool owned) {
   if (owned) {
     std::lock_guard<std::mutex> lock(mutex_);
     ++request_.oneShotSeq; request_.oneShot = Kind::None; request_.clip.reset(); request_.speech.reset();
+    request_.speechVoice.reset();
     request_.oneShotSong.reset();
     ++request_.effectsStopSeq; request_.effects.clear(); effectsPending_ = 0;
   }
@@ -257,6 +279,7 @@ void Tc002AudioSink::endOneShotRequest() {
     request_.oneShot = Kind::None;
     request_.clip.reset();
     request_.speech.reset();
+    request_.speechVoice.reset();
     request_.oneShotSong.reset();
     ++request_.oneShotSeq;
   }

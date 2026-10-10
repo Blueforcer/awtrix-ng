@@ -430,7 +430,7 @@
       "version": null
     },
     {
-      "files_sha256": "3c58937348663cb7af3e766ca13dd616d7c260bc1edc2a91fd42b769c5fa2081",
+      "files_sha256": "87160b22d5171060857f93bc1b2b054e51e7d52ed524047dbfc7e2827b3fc2ca",
       "id": "cmudict-scowl",
       "license": {
         "file": "LICENSES/CMUdict-SCOWL.txt",
@@ -441,20 +441,20 @@
       "name": "CMUdict pronunciations selected with SCOWL",
       "notice": "CMUdict",
       "origin": {
-        "note": "a selection of CMUdict entries (tools/speech/esdb35-us-application.tsv, chosen with the ESDB/SCOWL spelling list rel-2026.02.25) compiled into SpeechLexiconData.h by tools/speech/generate_lexicon.py; inputs pinned in tools/speech/sources.json",
+        "note": "a selection of CMUdict entries, chosen with the ESDB/SCOWL spelling list rel-2026.02.25, compiled into the English voice pack's lexicon (assets/speech/voice.atts, tensor fe.lexicon)",
         "reference": "74790861f652b15e4ac49015a90074ad62a27690",
         "url": "https://github.com/cmusphinx/cmudict"
       },
       "patches": [
         {
           "files": [
-            "src/platform/tc002/speech/SpeechLexiconData.h"
+            "assets/speech/voice.atts"
           ],
           "summary": "the selected entries encoded as a lookup table; pronunciations unchanged"
         }
       ],
       "paths": [
-        "src/platform/tc002/speech/SpeechLexiconData.h"
+        "assets/speech/voice.atts"
       ],
       "review": {
         "date": "2026-10-02",

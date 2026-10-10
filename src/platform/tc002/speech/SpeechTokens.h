@@ -29,7 +29,7 @@ constexpr std::size_t kMaxChunkPhones = 127;
 constexpr std::size_t kMinChunkPhones = 8;
 
 // Whether every phone and stress of the plan has a token.
-bool tokenizable(const Plan& plan);
+bool tokenizable(const Plan& plan, std::size_t phones);
 // A chunk per sentence. A sentence longer than kMaxChunkPhones is cut after its last pause within
 // the limit, a phrase that long after its last whole word. A sentence or piece shorter than
 // kMinChunkPhones joins its neighbour while the two fit into one chunk.

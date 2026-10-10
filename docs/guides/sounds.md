@@ -494,8 +494,9 @@ curl -X POST http://<awtrix-ip>/api/v1/audio/play \
 <!-- only tc002 -->
 ## Speech
 
-A clock with a voice reads English text aloud. Your clock has a voice when
-`speech` is `true` under `audio` in
+A clock with a voice reads text aloud, in the language of its voice. The built-in voice speaks
+English; a [voice pack](#another-voice-or-language) brings another voice or language. Your clock
+has a voice when `speech` is `true` under `audio` in
 [`GET /api/v1/capabilities`](../reference/http.md#get-apiv1capabilities).
 
 ```bash
@@ -518,7 +519,7 @@ The display shows `Door open`, and the clock says the whole sentence.
 On a clock without a voice, that notification shows without sound. To play a sound there instead,
 give a list: `"sound":[{"speech":"The front door is open."},"ding"]`.
 
-How the clock reads the text:
+How the built-in English voice reads the text:
 
 - Up to 512 bytes of text. A plain letter is one byte. A letter with an accent, or a sign like
   `°`, is two or three.
@@ -530,11 +531,34 @@ How the clock reads the text:
 - Anything else, emoji for example, is skipped.
 - A very long text stops after the last word that fits.
 
+A voice in another language reads numbers, times and signs that language's way. A German voice
+reads `14:30 Uhr` as "vierzehn Uhr dreißig" and `21,5 °C` as "einundzwanzig Komma fünf Grad
+Celsius".
+
 While [Home Assistant Voice](voice.md) uses the speaker, the clock does not speak.
 
 If the clock does not speak, check that the text contains words and fits within 512 bytes.
 The clock also needs speech support and an available speaker. The exact responses are listed in
 [Audio playback errors](../reference/errors.md#audio-playback).
+
+### Another voice or language
+
+A voice pack is one `.atts` file: a voice and the rules of its language. Your clock keeps one
+uploaded pack in place of the built-in voice, across restarts and updates.
+
+1. Open **System → Speech voice**.
+2. Press **Upload** and choose the `.atts` file. The badge shows the new voice and its language.
+3. Type a sentence next to **Test** and press **Speak**.
+4. **Use built-in** removes your pack. Press it twice to confirm.
+
+With the API:
+
+```bash
+curl -F "voice=@my-voice.atts" http://<awtrix-ip>/api/v1/speech/voice
+```
+
+Write texts in the voice's language. An English sentence read by a German voice sounds German.
+Details: [`/api/v1/speech/voice`](../reference/http.md#get-apiv1speechvoice).
 
 <!-- /only -->
 ## Repeat a sound

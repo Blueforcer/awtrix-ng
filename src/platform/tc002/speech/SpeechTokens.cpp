@@ -5,8 +5,6 @@
 namespace awtrix::speech {
 namespace {
 
-static_assert(static_cast<std::size_t>(PhoneId::J) + 1 == SpeechModel::kPhones,
-              "a new phone needs a new token contract");
 static_assert(Primary == 1 && Secondary == 2 && WordEnd == 4, "contract v1 reads stress from bits 0-1");
 
 uint8_t punctuation(char c) {
@@ -30,10 +28,10 @@ bool sentenceEnd(const Plan& plan, std::size_t i) {
 
 }
 
-bool tokenizable(const Plan& plan) {
+bool tokenizable(const Plan& plan, std::size_t phones) {
   for (std::size_t i = 0; i < plan.count; ++i) {
     const Phone& phone = plan.phones[i];
-    if (static_cast<std::size_t>(phone.sound) >= SpeechModel::kPhones ||
+    if (static_cast<std::size_t>(phone.sound) >= phones ||
         (phone.prosody & 3u) >= SpeechModel::kStresses)
       return false;
   }

@@ -4,7 +4,7 @@ const S={transitions:[],stats:null,ap:false,sysHost:'',sysUid:'',gpio:null,aud:n
 function readAudioCaps(caps){
   S.caps=caps;
   const a=caps.audio||{};
-  S.aud={rtttl:a.rtttl===true,track:a.track===true,mp3:a.mp3===true,radio:a.radio===true};
+  S.aud={rtttl:a.rtttl===true,track:a.track===true,mp3:a.mp3===true,radio:a.radio===true,speech:a.speech===true};
   S.microphone=caps.microphone===true;
   //linux:begin
   S.gamepad=caps.gamepad===true&&caps.ble===true;

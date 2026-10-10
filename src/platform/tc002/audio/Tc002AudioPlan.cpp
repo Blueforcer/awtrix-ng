@@ -91,6 +91,7 @@ void Tc002AudioSink::reconcile(int64_t nowMs) {
       request.systemSkipFrames = request_.systemSkipFrames;
       request.clip = std::move(request_.clip);
       request.speech = std::move(request_.speech);
+      request.speechVoice = std::move(request_.speechVoice);
       request.oneShotSong = std::move(request_.oneShotSong);
     }
     effects.swap(request_.effects);

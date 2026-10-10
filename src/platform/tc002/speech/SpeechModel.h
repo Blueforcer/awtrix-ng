@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace awtrix::speech {
@@ -48,13 +49,15 @@ struct PredictorLayers {
   DenseLayer out;
 };
 
-// A voice file, ATTS v1: an acoustic model from tokens to normalised log-mel frames and a vocoder
-// from those to magnitudes and phases of an inverse STFT. load() checks the whole file once; the
+// A voice file: an acoustic model from tokens to normalised log-mel frames and a vocoder from those
+// to magnitudes and phases of an inverse STFT. ATTS v2, a voice pack, also carries its name and
+// language and the text frontend the model was trained on. load() checks the whole file once; the
 // model never changes afterwards, so any number of utterances read it at the same time.
 class SpeechModel {
  public:
-  // Embedding rows of token contract v1.
-  static constexpr std::size_t kPhones = 41;
+  // Phone embedding rows of token contract 1, the English frontend of ATTS v1 files.
+  static constexpr std::size_t kV1Phones = 41;
+  static constexpr std::size_t kMaxPhones = 64;
   static constexpr std::size_t kStresses = 3;
   static constexpr std::size_t kWordEnds = 2;
   static constexpr std::size_t kPunctuations = 8;
@@ -66,7 +69,11 @@ class SpeechModel {
   static std::shared_ptr<const SpeechModel> load(const std::string& path, std::string& error);
   static std::shared_ptr<const SpeechModel> parse(const uint8_t* data, std::size_t size, std::string& error);
 
+  uint32_t version = 0;
   uint32_t sampleRate = 0;
+  std::size_t phoneCount = 0;
+  // v2 only, else empty: pack.info (JSON), fe.text and fe.lexicon.
+  std::string_view info, frontendText, frontendLexicon;
   std::size_t hop = 0;
   std::size_t fftSize = 0;
   std::size_t mels = 0;

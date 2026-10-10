@@ -118,6 +118,35 @@ function voiceSection(page){
     actionRow('',null,[save])]);
   poller(load,2000);
 }
+const SV='/api/v1/speech/voice';
+function speechVoiceSection(page){
+  const info=el('div',{class:'badge'});
+  const fileIn=el('input',{type:'file',accept:'.atts',style:'display:none'});
+  const up=el('button',null,t('svUpload'));up.addEventListener('click',()=>fileIn.click());
+  const done=r=>{paint(r.data);toast(t('saved'));};
+  const builtin=armable(el('button',{style:'display:none'},t('svBuiltin')),()=>req('DELETE',SV).then(done,toastErr));
+  const line=el('input',{type:'text',placeholder:t('svLineP'),'aria-label':t('svLine')});
+  const say=el('button',null,t('svSay'));
+  say.addEventListener('click',()=>post('/api/v1/audio/play',{speech:line.value.trim()||t('svLineP')}).catch(toastErr));
+  fileIn.addEventListener('change',async()=>{
+    const f=fileIn.files[0];fileIn.value='';
+    if(!f)return;
+    const fd=new FormData();fd.append('voice',f,f.name);
+    up.disabled=true;
+    try{done(await api(SV,{method:'POST',body:fd,timeout:60000}));}catch(e){toastErr(e);}
+    up.disabled=false;
+  });
+  function paint(d){
+    info.className='badge'+(d.name?' good':' bad');
+    info.replaceChildren(d.name?d.name+' · '+String(d.language).toUpperCase()+(d.uploaded?'':' · '+t('svBuiltinTag')):t('svNone'));
+    builtin.style.display=d.uploaded?'':'none';
+  }
+  page.section('speechvoice',t('svSection'),t('svSectionH'),[
+    actionRow(t('svActive'),null,[info,builtin]),
+    actionRow(t('svPack'),t('svPackH'),[up,fileIn]),
+    actionRow(t('svLine'),null,[line,say])]);
+  api(SV,{timeout:4000}).then(r=>paint(r.data),()=>{});
+}
 const IPSTATE={off:'mqoff',waiting:'ipWait',connecting:'mqbusy',ready:'mqup'};
 function brokerTrustRows(page){
   const cIn=el('input',{type:'file',accept:'.pem,.crt,.cer',multiple:''});

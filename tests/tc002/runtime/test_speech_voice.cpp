@@ -1,7 +1,7 @@
 #include "../../support.h"
 // The voice of an ATTS model against the model's reference runtime: a small voice with random
-// weights (tests/tc002/runtime/speech, written by tools/speech/make_voice_fixture.py) and what
-// tts/runtime.py made of four utterances. Also the loader's refusals, the token contract, the
+// weights (tests/tc002/runtime/speech) and what the model's reference runtime made of four
+// utterances. Also the loader's refusals, the token contract, the
 // chunks, cancelling, and the real-time factor of a voice of the shipped size.
 #include <algorithm>
 #include <atomic>
@@ -218,19 +218,36 @@ void testLoader(const std::string& dir, const std::vector<uint8_t>& file) {
   expectRefusal(file, "truncated", "size mismatch", [](auto& f) { f.resize(f.size() - 16); }, false);
   expectRefusal(file, "a flipped byte", "checksum mismatch", [](auto& f) { f[f.size() / 2] ^= 1; }, false);
   expectRefusal(file, "the checksum", "checksum mismatch", [](auto& f) { f[16] ^= 0x80; }, false);
-  expectRefusal(file, "version", "version 2 not supported", [](auto& f) { put32(f.data() + 4, 2); });
+  expectRefusal(file, "version", "version 3 not supported", [](auto& f) { put32(f.data() + 4, 3); });
   expectRefusal(file, "header bytes", "bad header", [](auto& f) { put32(f.data() + 8, u32(f.data() + 8) + 16); });
   expectRefusal(file, "tensor count", "bad header", [](auto& f) { put32(f.data() + 20, 0); });
   expectRefusal(file, "sample rate", "sample rate 22050 not supported", [](auto& f) { put32(f.data() + 24, 22050); });
   expectRefusal(file, "hop", "bad STFT", [](auto& f) { put32(f.data() + 28, 0); });
   expectRefusal(file, "FFT size", "bad STFT", [](auto& f) { put32(f.data() + 32, 1000); });
-  expectRefusal(file, "token contract", "token contract 2 not supported", [](auto& f) { put32(f.data() + 40, 2); });
+  expectRefusal(file, "token contract", "token contract 1 not supported", [](auto& f) { put32(f.data() + 40, 1); });
   expectRefusal(file, "flags", "flags not supported", [](auto& f) { put32(f.data() + 44, 1); });
 
   const EntryRef phone = entry(file, "am.phone");
   const EntryRef pw1 = entry(file, "am.enc.0.pw1");
   const EntryRef config = entry(file, "config");
-  check(phone.bytes && pw1.bytes && config.bytes, "the fixture's directory");
+  const EntryRef info = entry(file, "pack.info");
+  const EntryRef rules = entry(file, "fe.text");
+  check(phone.bytes && pw1.bytes && config.bytes && info.bytes && rules.bytes, "the fixture's directory");
+  if (model)
+    check(model->version == 2 && model->phoneCount == 41 && model->info.find("\"Fixture\"") != std::string::npos &&
+              model->frontendText.size() == rules.bytes && model->frontendLexicon.empty(),
+          "a voice pack's facts");
+  expectRefusal(file, "a pack without its frontend", "missing tensor fe.text",
+                [&](auto& f) { f[rules.at + 6] = 'x'; });
+  expectRefusal(file, "a pack without its info", "missing tensor pack.info",
+                [&](auto& f) { f[info.at + 8] = 'x'; });
+  expectRefusal(file, "a byte tensor of two rows", "tensor fe.text: wrong size",
+                [&](auto& f) { put32(f.data() + rules.at + 44, 2); });
+  {
+    auto copy = model;
+    std::string why;
+    check(ModelVoice::create(copy, why) != nullptr, "the fixture is a voice: " + why);
+  }
   expectRefusal(file, "an offset past the end", "tensor am.phone: out of bounds",
                 [&](auto& f) { put32(f.data() + phone.at + 56, static_cast<uint32_t>(f.size())); });
   expectRefusal(file, "an unaligned offset", "tensor am.phone: out of bounds",
@@ -347,9 +364,10 @@ void testChunks(const std::vector<Utterance>& utterances) {
   plan = {};
   addPhrase(plan, 2, 3, ',');
   plan.phones[0].prosody = 3;
-  check(!tokenizable(plan), "a stress outside the contract");
-  plan.phones[0] = {static_cast<PhoneId>(SpeechModel::kPhones), 0};
-  check(!tokenizable(plan), "a phone outside the contract");
+  check(!tokenizable(plan, SpeechModel::kV1Phones), "a stress outside the contract");
+  plan.phones[0] = {static_cast<PhoneId>(SpeechModel::kV1Phones), 0};
+  check(!tokenizable(plan, SpeechModel::kV1Phones), "a phone outside the model's inventory");
+  check(tokenizable(plan, SpeechModel::kV1Phones + 1), "a phone inside a larger inventory");
 }
 
 // ---- parity with the reference runtime ----
@@ -443,8 +461,19 @@ void testVocoder(const SpeechModel& model, const std::vector<Utterance>& utteran
   check(worst >= 0.99995 && largest <= 8, "the vocoder's samples match the reference");
 }
 
+std::shared_ptr<ModelVoice> voiceOf(const std::shared_ptr<const SpeechModel>& model) {
+  std::string error;
+  auto voice = ModelVoice::create(model, error);
+  check(voice != nullptr, "a voice of the model: " + error);
+  return voice;
+}
+
 void testVoice(const std::shared_ptr<const SpeechModel>& model, const std::vector<Utterance>& utterances) {
-  ModelVoice voice(model);
+  const auto made = voiceOf(model);
+  if (!made) return;
+  ModelVoice& voice = *made;
+  Plan said;
+  check(voice.prepare("Hello, world.", said) && said.count > 0, "the voice reads text with its own frontend");
   check(voice.rate() == 24000, "the voice's rate");
   double worst = 1;
   int largest = 0;
@@ -487,7 +516,9 @@ std::unique_ptr<Plan> longPlan(const std::vector<Utterance>& utterances, std::si
 }
 
 void testCancel(const std::shared_ptr<const SpeechModel>& model, const std::vector<Utterance>& utterances) {
-  ModelVoice voice(model);
+  const auto made = voiceOf(model);
+  if (!made) return;
+  ModelVoice& voice = *made;
   const auto plan = longPlan(utterances, 400);
   auto spoken = voice.start(*plan);
   int16_t block[512];
@@ -517,6 +548,11 @@ void testCancel(const std::shared_ptr<const SpeechModel>& model, const std::vect
 class Writer {
  public:
   explicit Writer(uint32_t seed) : random_(seed) {}
+
+  void text(const std::string& name, std::string_view value) {
+    add(name, 3, 1, static_cast<uint32_t>(value.size()), static_cast<uint32_t>(value.size()),
+        std::vector<uint8_t>(value.begin(), value.end()));
+  }
 
   void u32(const std::string& name, const std::vector<uint32_t>& values) {
     std::vector<uint8_t> blob(values.size() * 4);
@@ -579,8 +615,8 @@ class Writer {
       file.resize((file.size() + 15) / 16 * 16, 0);
     }
     std::memcpy(file.data(), "ATTS", 4);
-    const uint32_t fields[] = {1, static_cast<uint32_t>(header), static_cast<uint32_t>(file.size()), 0,
-                               static_cast<uint32_t>(tensors_.size()), 24000, 256, 1024, 100, 1, 0};
+    const uint32_t fields[] = {2, static_cast<uint32_t>(header), static_cast<uint32_t>(file.size()), 0,
+                               static_cast<uint32_t>(tensors_.size()), 24000, 256, 1024, 100, 2, 0};
     for (int k = 0; k < 11; ++k) put32(file.data() + 4 + 4 * k, fields[k]);
     put32(file.data() + 16, crc32(file.data(), file.size()));
     return file;
@@ -602,8 +638,10 @@ class Writer {
 
 // The layout of the model's design: d_enc 96, d_pred 48, d_dec 128, a vocoder of 128 channels with
 // five blocks; durations around seven frames, as speech has.
-std::vector<uint8_t> shippedSizeVoice() {
+std::vector<uint8_t> shippedSizeVoice(std::string_view frontend) {
   Writer w(1);
+  w.text("pack.info", R"({"name":"Benchmark","language":"en"})");
+  w.text("fe.text", frontend);
   w.u32("config", {96, 5, 3, 2, 48, 128, 7, 2, 2, 128, 3, 7, 5, 2, 255, 1, 2, 4});
   w.f32("am.phone", 41, 96, 0.0f, 0.5f);
   w.f32("am.stress", 3, 96, 0.0f, 0.5f);
@@ -626,13 +664,15 @@ std::vector<uint8_t> shippedSizeVoice() {
   return w.bytes();
 }
 
-void benchmark(const std::vector<Utterance>& utterances) {
-  const std::vector<uint8_t> file = shippedSizeVoice();
+void benchmark(const std::shared_ptr<const SpeechModel>& fixture, const std::vector<Utterance>& utterances) {
+  const std::vector<uint8_t> file = shippedSizeVoice(fixture->frontendText);
   std::string error;
   const auto model = SpeechModel::parse(file.data(), file.size(), error);
   check(model != nullptr, "a voice of the shipped size loads: " + error);
   if (!model) return;
-  ModelVoice voice(model);
+  const auto made = voiceOf(model);
+  if (!made) return;
+  ModelVoice& voice = *made;
   const auto plan = longPlan(utterances, 120);
   const auto started = Clock::now();
   auto spoken = voice.start(*plan);
@@ -670,7 +710,7 @@ int main(int argc, char** argv) {
   testVocoder(*model, utterances);
   testVoice(model, utterances);
   testCancel(model, utterances);
-  benchmark(utterances);
+  benchmark(model, utterances);
   if (failures) {
     std::printf("%d failure(s)\n", failures);
     return 1;

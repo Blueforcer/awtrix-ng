@@ -71,6 +71,7 @@
 #include "platform/tc002/runtime/Tc002Speaker.h"
 #include "platform/tc002/runtime/Tc002Target.h"
 #include "platform/tc002/runtime/Tc002Update.h"
+#include "platform/tc002/speech/VoicePacks.h"
 #include "platform/tc002/voice/KnobGesture.h"
 #include "platform/tc002/voice/VoiceRuntime.h"
 #include "system/MonotonicClock.h"
@@ -194,6 +195,7 @@ class LinuxRuntime {
   layout::Resources layoutResources_;
   std::optional<layout::LayoutPayload> layoutPayload_;
   std::unique_ptr<Tc002Speaker> speaker_;
+  std::optional<speech::VoicePacks> voicePacks_;
   std::optional<SupervisedRuntime> supervision_;
   std::optional<Tc002QuickSettings> quickSettings_;
   std::optional<LinuxDeviceFacts> deviceFacts_;

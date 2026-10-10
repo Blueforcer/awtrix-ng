@@ -27,7 +27,6 @@
 #include "platform/tc002/contract/RuntimeContract.h"
 #include "platform/tc002/runtime/BootIntroWide.h"
 #include "platform/tc002/runtime/MusicPitch.h"
-#include "platform/tc002/speech/SpeechModelVoice.h"
 #include "platform/tc002/voice/VoiceMqtt.h"
 #include "system/ApplicationBootstrap.h"
 #include "system/Log.h"
@@ -218,16 +217,17 @@ int LinuxRuntime::composeEngine() {
   layoutResources_ = {&awtrixFontCatalog(), &*iconA_, &app_->effects(), &app_->overlays()};
   layoutPayload_.emplace(DisplayProfile{width, height, false}, layoutResources_, layoutBudget_);
   payload::setKeyHandlers(layoutPayload_->handlers());
-  std::shared_ptr<speech::SpeechVoice> voiceModel;
-  if (!o_.speechVoice.empty()) {
-    std::string voiceError;
-    if (auto model = speech::SpeechModel::load(o_.speechVoice, voiceError))
-      voiceModel = std::make_shared<speech::ModelVoice>(std::move(model));
-    else
-      logf("speech: %s: %s; no voice", o_.speechVoice.c_str(), voiceError.c_str());
+  if (o_.speakerRequested) {
+    speaker_ = std::make_unique<Tc002Speaker>(engine(), audio_, Tc002Speaker::kDescriptor);
+    if (!o_.speechVoice.empty()) {
+      const auto uploaded = std::filesystem::u8path(host::dataDir()).parent_path() / "speech" / "voice.atts";
+      voicePacks_.emplace(o_.speechVoice, uploaded.string(), target_->uploadReserveBytes,
+                          [this](std::shared_ptr<speech::SpeechVoice> voice) {
+                            speaker_->setSpeechVoice(std::move(voice));
+                          });
+      voicePacks_->load();
+    }
   }
-  if (o_.speakerRequested)
-    speaker_ = std::make_unique<Tc002Speaker>(engine(), audio_, Tc002Speaker::kDescriptor, std::move(voiceModel));
   app_->markSensors(board());
   engine().state().runtime().tempDecimals = cfg_.tempDecimals;
   supervision_.emplace(link_, engine(), board(), cfg_, clock_);
@@ -344,6 +344,7 @@ void LinuxRuntime::composeScriptServices() {
   httpOptions_.platformHandler = [this, scriptSignIn = cfg_.scriptingEnabled](const httplib::Request& request,
                                                                              httplib::Response& response) {
     if (scriptSignIn && oauthApi_->handle(request, response)) return true;
+    if (voicePacks_ && voicePacks_->handle(request, response)) return true;
     return voice_ && voice_->handle(request, response);
   };
   analysis_.emplace(speaker_.get(), supervised ? &*microphone_ : nullptr);
