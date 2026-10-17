@@ -48,7 +48,9 @@ def now():
 
 
 def parse_mtd(text):
-    lines = text.strip().splitlines()
+    # The stock adbd answers through a terminal: lines end in \r\r\n, which splitlines() turns into
+    # blank lines between the entries.
+    lines = [line for line in text.strip().splitlines() if line.strip()]
     if not lines or lines[0].split() != ["dev:", "size", "erasesize", "name"]:
         raise BackupError("invalid /proc/mtd header")
     partitions, ids = [], set()
