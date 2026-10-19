@@ -10,6 +10,8 @@ namespace {
 unsigned cases = 0, callbacks = 0;
 std::string receivedTopic;
 std::vector<uint8_t> receivedPayload;
+std::string droppedTopic;
+uint32_t droppedSize = 0;
 
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
@@ -89,6 +91,46 @@ std::vector<uint8_t> publish(const std::string& topic, const std::vector<uint8_t
   return packet;
 }
 
+void dropped(const char* topic, uint32_t size) {
+  droppedTopic = topic;
+  droppedSize = size;
+}
+
+void oversizedPackets() {
+  for (const bool qos1 : {false, true}) {
+    Fixture fixture;
+    droppedTopic.clear(); droppedSize = 0;
+    fixture.client.setDroppedCallback(dropped);
+    const auto big = publish("evcc/state", std::vector<uint8_t>(9800, 0x41), qos1);
+    fixture.receive(big);
+    fixture.receive(publish("next", {'o', 'k'}));
+    require(fixture.client.loop() && fixture.socket.active, "oversized packet disconnected");
+    require(callbacks == 0 && droppedTopic == "evcc/state" && droppedSize == big.size(), "oversized packet not dropped");
+    if (qos1) require(fixture.socket.output == std::vector<uint8_t>({0x40, 2, 0, 7}), "dropped QoS1 not acknowledged");
+    else require(fixture.socket.output.empty(), "dropped QoS0 acknowledged");
+    require(fixture.client.loop() && fixture.client.connected(), "link lost after oversized packet");
+    require(callbacks == 1 && receivedTopic == "next" && receivedPayload == std::vector<uint8_t>({'o', 'k'}),
+            "packet after oversized one lost");
+    ++cases;
+  }
+}
+
+// Skipping costs a read per byte inside loop(); past the drain limit the link closes instead.
+void hugePackets() {
+  Fixture fixture;
+  droppedTopic = "unset"; droppedSize = 0;
+  fixture.client.setDroppedCallback([](const char* topic, uint32_t size) {
+    droppedTopic = topic ? topic : "";
+    droppedSize = size;
+  });
+  fixture.client.setDrainLimit(16384);
+  const auto huge = publish("cam/snapshot", std::vector<uint8_t>(20000, 0x41));
+  fixture.receive(huge);
+  require(!fixture.client.loop() && !fixture.client.connected(), "huge packet kept the link");
+  require(callbacks == 0 && droppedTopic.empty() && droppedSize == huge.size(), "huge packet not reported");
+  ++cases;
+}
+
 void validPackets() {
   for (const bool qos1 : {false, true}) {
     for (const std::vector<uint8_t>& payload : {std::vector<uint8_t>{}, std::vector<uint8_t>{'o', 'k'},
@@ -115,7 +157,7 @@ void invalidPackets() {
       {0x36, 0x05, 0x00, 0x01, 'a', 0, 7}, // reserved QoS
       {0x30, 0x80, 0x80, 0x80, 0x80, 0x00}, // malformed remaining length
       {0x30, 0x03, 0x00}, {0x30, 0x05, 0x00, 0x01, 'a'}, // truncated body
-      {0x30, 0xff, 0xff, 0xff, 0x7f} // huge body must be rejected without reading it
+      {0x30, 0xff, 0xff, 0xff, 0x7f} // huge body times out
   };
   for (const auto& packet : malformed) {
     for (const bool callback : {true, false}) {
@@ -156,6 +198,8 @@ int main() {
   try {
     validPackets();
     invalidPackets();
+    oversizedPackets();
+    hugePackets();
     streamedPackets();
     std::printf("MQTT parser: %u valid/malformed cases passed\n", cases);
     return 0;

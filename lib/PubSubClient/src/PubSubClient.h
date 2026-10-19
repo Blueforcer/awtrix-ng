@@ -97,6 +97,11 @@ private:
    unsigned long lastInActivity;
    bool pingOutstanding;
    MQTT_CALLBACK_SIGNATURE;
+   void (*dropped)(const char*, uint32_t) = nullptr;
+   uint32_t oversize = 0;
+   // A message larger than the buffer is read to its end and skipped up to this size; a larger
+   // one would hold up loop() for too long, so it closes the connection instead.
+   uint32_t drainLimit = 65536;
    uint32_t readPacket(uint8_t*);
    uint32_t rejectPacket();
    boolean readByte(uint8_t * result);
@@ -135,6 +140,9 @@ public:
    PubSubClient& setServer(uint8_t * ip, uint16_t port);
    PubSubClient& setServer(const char * domain, uint16_t port);
    PubSubClient& setCallback(MQTT_CALLBACK_SIGNATURE);
+   // topic is null for a message too large to skip, which closes the connection.
+   PubSubClient& setDroppedCallback(void (*dropped)(const char* topic, uint32_t size));
+   PubSubClient& setDrainLimit(uint32_t bytes);
    PubSubClient& setClient(Client& client);
    PubSubClient& setStream(Stream& stream);
    PubSubClient& setKeepAlive(uint16_t keepAlive);

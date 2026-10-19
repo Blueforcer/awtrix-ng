@@ -100,7 +100,7 @@
       "version": "1.1.0"
     },
     {
-      "files_sha256": "73a5a0e201a7d089c4aa23d44e9566d03948872d4abe925534cf4f028fa778c9",
+      "files_sha256": "f8be54500875535a4ab457ca5686f23439a0058d9f1733c19c92540271f4c140",
       "id": "pubsubclient",
       "license": {
         "file": "LICENSES/MIT-PubSubClient.txt",
@@ -124,7 +124,7 @@
             "lib/PubSubClient/README.awtrix.md",
             "lib/PubSubClient/library.json"
           ],
-          "summary": "awtrix.1: inbound length validation before topic and packet-id access; documented in lib/PubSubClient/README.awtrix.md, which records the original file hashes"
+          "summary": "awtrix.1: inbound length validation before topic and packet-id access; awtrix.2: oversized PUBLISH drained and dropped, QoS1 still acknowledged; documented in lib/PubSubClient/README.awtrix.md, which records the original file hashes"
         }
       ],
       "paths": [

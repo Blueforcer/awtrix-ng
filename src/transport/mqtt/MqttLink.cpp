@@ -10,7 +10,7 @@ using net::ResolveState;
 
 namespace {
 
-// An inbound packet has to fit in here whole or PubSubClient drops it silently; large draw and
+// An inbound packet has to fit in here whole or PubSubClient drops it with a log line; large draw and
 // notify commands are the reason it is this big. Outbound payloads are streamed and unaffected.
 constexpr uint16_t kMqttBufferBytes = 8192;
 
@@ -56,6 +56,13 @@ void MqttLink::begin(const DeviceConfig& cfg, const std::string& clientId,
     logf("mqtt: could not allocate a %u-byte packet buffer; large commands will be dropped",
          static_cast<unsigned>(kMqttBufferBytes));
   client_->setSocketTimeout(kHandshakeSeconds);
+  client_->setDroppedCallback([](const char* topic, uint32_t size) {
+    if (topic)
+      logf("mqtt: dropped a %u-byte message on %s, limit %u", static_cast<unsigned>(size), topic,
+           static_cast<unsigned>(kMqttBufferBytes));
+    else
+      logf("mqtt: a %u-byte message is too large to skip; reconnecting", static_cast<unsigned>(size));
+  });
   logf("mqtt: broker %s:%u, prefix %s", host_.c_str(), port_, prefix_.c_str());
 }
 

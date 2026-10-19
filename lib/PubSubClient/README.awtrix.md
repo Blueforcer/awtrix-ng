@@ -13,8 +13,17 @@ dependency. No TC002 port code is included. Original file SHA-256 values:
 | `LICENSE.txt` | `b416abfc7294f9279480389e4825463ac71b2b064b892aa7d95abd5d4b6edc63` |
 
 Local patch `awtrix.1` validates inbound lengths before copying or indexing topic
-and QoS1 packet-ID bytes. Malformed, unsupported QoS2/reserved-QoS, truncated and
-oversized nonstreamed packets disconnect without invoking the application callback.
+and QoS1 packet-ID bytes. Malformed, unsupported QoS2/reserved-QoS and truncated
+packets disconnect without invoking the application callback.
+
+Local patch `awtrix.2` reads a well-formed nonstreamed PUBLISH larger than the
+buffer to its end and drops it instead of disconnecting: the application callback
+is skipped, `setDroppedCallback` reports topic and packet size, and a QoS1 packet
+is still acknowledged so the broker does not redeliver it. Its topic must still
+fit the buffer. Only packets up to `setDrainLimit` bytes (default 64 KiB) are
+skipped this way, because loop() reads them byte by byte; a larger one closes
+the connection as before and is reported with a null topic.
+
 Streamed payloads remain supported when their topic/header fit the existing
 buffer. QoS0/QoS1 delivery and acknowledgement contracts remain unchanged.
 
