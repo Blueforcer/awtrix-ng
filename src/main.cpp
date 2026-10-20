@@ -303,10 +303,13 @@ void setup() {
   };
   showBootLogo();
   const bool forceAp = holdingSelectAtBoot();
-  if (!forceAp) g_bootAnim.start(*g_board, *g_canvas, awtrixFont(), bootT0);
+  auto startBootAnim = [bootT0] { g_bootAnim.start(*g_board, *g_canvas, awtrixFont(), bootT0); };
   // Network before the services that need it. forceAp skips the join attempt entirely; joining a
   // network from the provisioning portal reboots, so the whole setup below reruns with an IP.
-  g_net.begin(cfg, g_engine->state().runtime().wifi, forceAp);
+  // The animation waits for the join loop: starting the radio blocks interrupts for longer than
+  // the LED driver's refill slack, and frames sent meanwhile arrive shifted.
+  g_net.begin(cfg, g_engine->state().runtime().wifi, forceAp, startBootAnim);
+  if (!forceAp) startBootAnim();
   g_net.setOnJoinedFromAp([] { ESP.restart(); });
   applyTimeConfig(cfg, true);
   g_netWasConnected = g_net.isConnected();
