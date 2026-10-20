@@ -3254,6 +3254,10 @@ components:
           type: string
           description: |
             Optional category heading from `group=` in the declaration, clipped to 48 bytes. Shown as written without translation. Fields with the same nonempty group share a collapsible section. Omitted or empty groups leave the field outside sections. Presentation only: stored values and PATCH keys are unchanged.
+        hint:
+          type: string
+          description: |
+            Optional hint text from `hint=` in the declaration, clipped to 48 bytes. Shown as written without translation, grayed out inside an empty `text` or `number` box, the way a browser shows an HTML `placeholder`. Never a value: it is not stored, it is not the `default`, and a `PATCH` never carries it.
         min: { type: number }
         max: { type: number }
         step: { type: number }

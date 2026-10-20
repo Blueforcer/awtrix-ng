@@ -1200,7 +1200,7 @@ their current values.
   "name": "Weather",
   "fields": [
     {"key": "lat", "type": "text", "label": "Latitude",
-     "maxlen": 16, "default": "52.52", "value": "48.14"},
+     "hint": "52.52", "maxlen": 16, "default": "", "value": "48.14"},
     {"key": "metric", "type": "bool", "label": "Celsius", "default": true, "value": true},
     {"key": "every", "type": "number", "label": "Refresh", "unit": "min",
      "min": 1, "max": 60, "default": 15, "value": 30},
@@ -1220,11 +1220,15 @@ their current values.
 | `label` | the label, as the script author wrote it |
 | `default` | the script's default value, so an app can offer "reset" |
 | `value` | the current value: the default until somebody changes it |
-| `help`, `unit`, `group`, `min`, `max`, `step`, `maxlen`, `options` | only present when they apply |
+| `help`, `unit`, `group`, `hint`, `min`, `max`, `step`, `maxlen`, `options` | only present when they apply |
 | `warnings` | `@config` lines AWTRIX could not read, with their line numbers |
 
 A `color` is a **number** from `0` to `16777215`. Every other type has the JSON type its name
 suggests.
+
+`hint` is gray text for an empty box, at most 48 bytes. Show it the way a browser shows an
+HTML `placeholder`: grayed out, and gone as soon as there is a value. It is never sent back in a
+`PATCH`.
 
 **Errors:**
 

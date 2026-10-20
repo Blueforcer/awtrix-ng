@@ -766,6 +766,7 @@ UI: **Apps** tab → the gear button on that app's row. The script reads it with
 # @config  mode   select "Show"           default=now options=now,today,week
 # @config  bright slider "Brightness"     default=80 min=0 max=100 unit=%
 # @config  tint   color  "Colour"         default=#FF8800
+# @config  host   text   "Weather server" hint=192.168.1.10:8080
 ```
 
 The line is `# @config <key> <type> "<label>" <extras...>`. Only key and type are required; the
@@ -774,9 +775,10 @@ label is recognised by its quotes and falls back to the key.
 **The six types, and there are no others:** `bool` (switch), `text` (text box), `number` (number
 box), `slider`, `select` (needs `options=a,b,c`), `color` (colour picker).
 
-**The nine extras, and there are no others:** `default=`, `help=`, `unit=`, `group=`,
-`options=`, `min=`, `max=`, `step=`, `maxlen=`. `min`/`max`/`step` are for `number` and `slider`,
-`options` for `select`, `maxlen` for `text`; settings with the same `group=` share one foldable
+**The ten extras, and there are no others:** `default=`, `help=`, `unit=`, `group=`,
+`options=`, `min=`, `max=`, `step=`, `maxlen=`, `hint=`. `min`/`max`/`step` are for
+`number` and `slider`, `options` for `select`, `maxlen` for `text`, `hint` for `text` and
+`number`; settings with the same `group=` share one foldable
 section in the web UI. Quote any value containing a space: `default="New York"`. Write the label
 and the group in one language - the user's, if the conversation tells you which; AWTRIX does not
 translate.
@@ -793,9 +795,13 @@ Rules that matter when you write these:
   drawing call.
 - **Saving restarts the app**, so `init()` and `setup()` run again. Build anything derived from a
   setting - a URL, a parsed value - in `init()`.
+- **A `hint=` is never a value.** It is gray text in an empty box: the setting stays empty
+  and `store.get()` reads `""`. Use it for the shape of an answer only the user knows -
+  `hint=192.168.1.10:8080` for a host, `hint="Amsterdam"` for a city. A value the app
+  should really start with is a `default=`, and never both for one setting.
 - Keys are `[A-Za-z_][A-Za-z0-9_]*` up to 24 characters. Labels are cut at 48 characters, `help` at
-  96, `unit` at 8, a `select`'s options at 24 characters each, a text value at 256, or `maxlen` if
-  you set one.
+  96, `unit` at 8, `hint` at 48, a `select`'s options at 24 characters each, a text value at
+  256, or `maxlen` if you set one.
 - **Taking a `@config` line out deletes that value.** Never comment one out to test something - the
   user's choice is gone at the next save.
 - The device fills gaps rather than failing: a `slider` with no `min`/`max` becomes 0–100, a
@@ -1545,8 +1551,8 @@ on the panel.
    hardcoded constant the user would want to edit, no settings screen of your own, no "change line
    14 to…".
 2. Are the `@config` lines in the header above any code, each using one of the six types (`bool`,
-   `text`, `number`, `slider`, `select`, `color`) and only the nine extras (`default`, `help`,
-   `unit`, `group`, `options`, `min`, `max`, `step`, `maxlen`)?
+   `text`, `number`, `slider`, `select`, `color`) and only the ten extras (`default`, `help`,
+   `unit`, `group`, `options`, `min`, `max`, `step`, `maxlen`, `hint`)?
 3. Are there at most 12, and is each read with `store.get(key)` and **no** second argument?
 
 **Structure**

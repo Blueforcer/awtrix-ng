@@ -3,6 +3,7 @@ function cfgDef(f,builtin){
   const d={w:f.type==='bool'?'toggle':f.type,l:l||f.label||f.key,
     h:l?h:f.help||'',
     min:f.min,max:f.max,step:f.step,unit:f.unit,dflt:f.default,
+    ph:typeof f.hint==='string'?f.hint:'',
     nullable:!!f.nullable,numericColor:!!builtin||!!f.nullable,linkLabel:true};
   if(f.type==='select')d.opt=(f.options||[]).map(o=>{
     const x=opt&&opt.find(x=>String(x[0])===String(o));

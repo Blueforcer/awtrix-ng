@@ -404,6 +404,39 @@ static void test_text_without_maxlen_still_defaults_to_256() {
   TEST_ASSERT_FALSE(bad.ok);
 }
 
+// A hint is not a value: the field still starts empty, and the UI's "reset to defaults"
+// must not put the hint into the store.
+static void test_hint_is_never_a_value() {
+  const ConfigSchema s =
+      script::parseConfig("# @config host text \"Host\" hint=\"192.168.1.10:8080\"\n");
+  TEST_ASSERT_EQUAL_size_t(0, s.warnings.size());
+  TEST_ASSERT_EQUAL_size_t(1, s.fields.size());
+  TEST_ASSERT_EQUAL_STRING("192.168.1.10:8080", s.fields[0].hint.c_str());
+  TEST_ASSERT_EQUAL_STRING("\"\"", s.fields[0].defJson.c_str());
+
+  std::string out;
+  TEST_ASSERT_TRUE(script::appendConfigJson(out, "S", s, "{}"));
+  TEST_ASSERT_EQUAL_STRING(
+      "{\"name\":\"S\",\"fields\":["
+      "{\"key\":\"host\",\"type\":\"text\",\"label\":\"Host\","
+      "\"hint\":\"192.168.1.10:8080\",\"default\":\"\",\"value\":\"\"}],\"warnings\":[]}",
+      out.c_str());
+}
+
+static void test_hint_is_bounded_like_a_label_and_omitted_when_blank() {
+  const std::string hint(80, 'x');
+  const ConfigSchema s = script::parseConfig("# @config a text hint=\"" + hint + "\"\n"
+                                             "# @config b text hint=\"\"\n");
+  TEST_ASSERT_EQUAL_size_t(0, s.warnings.size());
+  TEST_ASSERT_EQUAL_STRING(std::string(48, 'x').c_str(), s.fields[0].hint.c_str());
+  TEST_ASSERT_TRUE(s.fields[1].hint.empty());
+
+  std::string out;
+  TEST_ASSERT_TRUE(script::appendConfigJson(out, "S", s, "{}"));
+  TEST_ASSERT_TRUE(out.find("{\"key\":\"b\",\"type\":\"text\",\"label\":\"b\",\"default\"") !=
+                   std::string::npos);
+}
+
 static void test_patch_rejects_a_body_that_is_not_an_object() {
   const ConfigSchema s = script::parseConfig(kWeather);
   const script::StorePatch array = script::applyConfigPatch(s, "{}", "[1,2]");
@@ -457,6 +490,8 @@ int main() {
   RUN_TEST(test_text_length_counts_characters_not_bytes);
   RUN_TEST(test_a_declared_maxlen_above_the_default_is_honored);
   RUN_TEST(test_text_without_maxlen_still_defaults_to_256);
+  RUN_TEST(test_hint_is_never_a_value);
+  RUN_TEST(test_hint_is_bounded_like_a_label_and_omitted_when_blank);
   RUN_TEST(test_patch_rejects_a_body_that_is_not_an_object);
   return UNITY_END();
 }

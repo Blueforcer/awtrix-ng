@@ -113,8 +113,8 @@ required. Without a label, the key is shown.
 | Type | Shows as | Extras |
 |---|---|---|
 | `bool` | a switch | |
-| `text` | a text box | `maxlen=` (256 if you leave it out) |
-| `number` | a number box | `min=` `max=` `step=` `unit=` |
+| `text` | a text box | `maxlen=` (256 if you leave it out), `hint=` |
+| `number` | a number box | `min=` `max=` `step=` `unit=` `hint=` |
 | `slider` | a slider | `min=` `max=` `step=` `unit=` (0–100 if you leave them out) |
 | `select` | a dropdown | `options=a,b,c`, required |
 | `color` | a color picker | |
@@ -134,6 +134,19 @@ Put a value with a space in quotes: `default="New York"`, `help="Where you live"
 
 **A color is a number.** Write the default like an HTML color, `default=#FF8800`, and
 `store.get("tint")` returns `0xFF8800`, ready to draw with.
+
+### Show a hint instead of a value
+
+`hint=` puts gray text in an empty box. The user sees the shape of the answer without
+getting a value nobody chose:
+
+```berry
+# @config  host  text  "Clock host"  hint=192.168.1.10:8080
+```
+
+The box stays empty until the user types, and `store.get("host")` reads `""`. Use `default=` for a
+value the app should really start with, and `hint=` for an example of one. Text boxes and
+number boxes show it.
 
 ### Put settings in groups
 
@@ -191,7 +204,10 @@ the categories.
   at the top of the settings names it.
 - **Removing a setting removes its value.** Values your code wrote with `store.set()` are never
   touched.
-- The group name is shown exactly as written, up to 48 bytes, without translation.
+- The group name is shown exactly as written, up to 48 bytes, without translation. A
+  `hint=` is shown the same way, up to 48 bytes.
+- A `hint=` is never a value: it is not saved, and **Reset to defaults** leaves the box
+  empty.
 - Categories appear in the order they first occur. Settings within each category keep their
   declaration order.
 - Settings without a group, or with `group=""`, stay outside the categories.

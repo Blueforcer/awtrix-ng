@@ -50,7 +50,8 @@ const WIDGETS={
     return{input,get:()=>numeric?Number(input.value):input.value,set:v=>input.value=String(v)};
   },
   number(ctl,def,value,onInput){
-    const input=el('input',{type:'number',min:def.min,max:def.max,step:def.step??1,value});
+    const input=el('input',{type:'number',min:def.min,max:def.max,step:def.step??1,value,
+      placeholder:def.ph||null});
     input.addEventListener('input',onInput);
     ctl.append(def.unit
       ?el('span',{class:'unitwrap',style:'--ul:'+def.unit.length+'ch'},input,el('span',{class:'unit'},def.unit))
@@ -175,7 +176,7 @@ const WIDGETS={
       set:v=>input.value=typeof v==='string'?v:JSON.stringify(v)};
   },
   text(ctl,def,value,onInput,key){
-    const input=el('input',{type:'text',value:value??''});
+    const input=el('input',{type:'text',value:value??'',placeholder:def.ph||null});
     if(def.list){
       const id='dl_'+key;input.setAttribute('list',id);
       if(!document.getElementById(id))document.body.append(el('datalist',{id},def.list.map(v=>el('option',{value:v}))));

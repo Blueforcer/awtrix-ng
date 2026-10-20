@@ -49,6 +49,8 @@ const CONFIG = {
     fields: [
       { key: 'city', type: 'text', label: 'City', maxlen: 16,
         default: 'Berlin', value: 'Rom' },
+      { key: 'host', type: 'text', label: 'Host', hint: '192.168.1.10:8080',
+        default: '', value: '' },
       { key: 'metric', type: 'bool', label: 'Celsius', default: true, value: false },
       { key: 'every', type: 'number', label: 'Refresh', unit: 'min',
         min: 1, max: 60, default: 15, value: 30 },
@@ -244,6 +246,11 @@ async function run() {
   };
   assert(ctl('city').querySelector('input[type=text]').value === 'Rom',
     'text renders as a text box holding the stored value');
+  const hostIn = ctl('host').querySelector('input[type=text]');
+  assert(hostIn.value === '' && hostIn.placeholder === '192.168.1.10:8080',
+    'a hint is gray text in an empty box, never the value');
+  assert(ctl('city').querySelector('input[type=text]').placeholder === '',
+    'and a field without one gets no hint');
   assert(ctl('metric').querySelector('input[type=checkbox]').checked === false,
     'bool renders as a switch');
   assert(ctl('every').querySelector('input[type=number]').value === '30' &&

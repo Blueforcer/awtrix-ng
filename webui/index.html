@@ -1790,7 +1790,8 @@ const WIDGETS={
     return{input,get:()=>numeric?Number(input.value):input.value,set:v=>input.value=String(v)};
   },
   number(ctl,def,value,onInput){
-    const input=el('input',{type:'number',min:def.min,max:def.max,step:def.step??1,value});
+    const input=el('input',{type:'number',min:def.min,max:def.max,step:def.step??1,value,
+      placeholder:def.ph||null});
     input.addEventListener('input',onInput);
     ctl.append(def.unit
       ?el('span',{class:'unitwrap',style:'--ul:'+def.unit.length+'ch'},input,el('span',{class:'unit'},def.unit))
@@ -1915,7 +1916,7 @@ const WIDGETS={
       set:v=>input.value=typeof v==='string'?v:JSON.stringify(v)};
   },
   text(ctl,def,value,onInput,key){
-    const input=el('input',{type:'text',value:value??''});
+    const input=el('input',{type:'text',value:value??'',placeholder:def.ph||null});
     if(def.list){
       const id='dl_'+key;input.setAttribute('list',id);
       if(!document.getElementById(id))document.body.append(el('datalist',{id},def.list.map(v=>el('option',{value:v}))));
@@ -2337,6 +2338,7 @@ function cfgDef(f,builtin){
   const d={w:f.type==='bool'?'toggle':f.type,l:l||f.label||f.key,
     h:l?h:f.help||'',
     min:f.min,max:f.max,step:f.step,unit:f.unit,dflt:f.default,
+    ph:typeof f.hint==='string'?f.hint:'',
     nullable:!!f.nullable,numericColor:!!builtin||!!f.nullable,linkLabel:true};
   if(f.type==='select')d.opt=(f.options||[]).map(o=>{
     const x=opt&&opt.find(x=>String(x[0])===String(o));
