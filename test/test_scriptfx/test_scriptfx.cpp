@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <string>
+#include <vector>
 
 #include "core/apps/IApp.h"
 #include "core/effects/EffectRegistry.h"
@@ -25,13 +26,18 @@ struct FakeFx : IEffect {
 };
 
 struct FakeOv : IEffect {
-  std::string id_ = "rain";
+  std::string id_;
+  explicit FakeOv(const char* n) : id_(n) {}
   const std::string& id() const override { return id_; }
   void render(Canvas& c, int64_t) override { c.setPixel(31, 0, 0xFF00FFu); }
 };
 
 static FakeFx g_fx("Plasma");
-static FakeOv g_ov;
+static FakeFx g_fxAurora("aurora");
+static FakeFx g_fxMatrix("Matrix");
+static FakeFx g_fxBrick("BrickBreaker");
+static FakeOv g_ov("rain");
+static FakeOv g_ovDrizzle("drizzle");
 static EffectRegistry g_fxReg;
 static EffectRegistry g_ovReg;
 static script::ScriptServices g_svc;
@@ -51,8 +57,13 @@ static void registerFx() {
   static bool once = false;
   if (once) return;
   once = true;
+  // Added out of order and in mixed case, so the listing tests see the registry's sorting.
   g_fxReg.add(&g_fx);
+  g_fxReg.add(&g_fxAurora);
+  g_fxReg.add(&g_fxMatrix);
+  g_fxReg.add(&g_fxBrick);
   g_ovReg.add(&g_ov);
+  g_ovReg.add(&g_ovDrizzle);
 }
 
 static bool load(script::BerryVM& vm, const char* user) {
@@ -66,6 +77,44 @@ static bool load(script::BerryVM& vm, const char* user) {
     return false;
   }
   return true;
+}
+
+static std::string joined(const std::vector<std::string>& names) {
+  std::string out;
+  for (const std::string& n : names) out += (out.empty() ? "" : ",") + n;
+  return out;
+}
+
+// init() runs with no canvas, like the constructor ScriptApp calls; draw() runs with one.
+static const char* kListing =
+    "class Lister\n"
+    "  var at_init\n"
+    "  def init() self.at_init = LIST().concat(',') end\n"
+    "end\n"
+    "lister = Lister()\n"
+    "def at_init() return lister.at_init end\n"
+    "def at_draw() return LIST().concat(',') end";
+
+static void expectListing(const char* call, const std::vector<std::string>& want) {
+  registerFx();
+  std::string source = kListing;
+  for (std::size_t at; (at = source.find("LIST")) != std::string::npos;) source.replace(at, 4, call);
+  script::BerryVM vm;
+  {
+    script::BindingScope s(nullptr, nullptr, "T");
+    TEST_ASSERT_TRUE(load(vm, source.c_str()));
+  }
+  std::string atInit, atDraw;
+  {
+    script::BindingScope s(nullptr, nullptr, "T");
+    TEST_ASSERT_TRUE(vm.callString("at_init", atInit));
+  }
+  Canvas c(32, 8);
+  RenderCtx ctx;
+  script::BindingScope s(&c, &ctx, "T");
+  TEST_ASSERT_TRUE(vm.callString("at_draw", atDraw));
+  TEST_ASSERT_EQUAL_STRING(joined(want).c_str(), atInit.c_str());
+  TEST_ASSERT_EQUAL_STRING(joined(want).c_str(), atDraw.c_str());
 }
 
 static void draw(const char* user, Canvas& c) {
@@ -137,6 +186,49 @@ static void test_no_registry_returns_false() {
   TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(0, 0));
 }
 
+static void test_effects_lists_registry_names_in_init_and_draw() {
+  registerFx();
+  TEST_ASSERT_EQUAL_STRING("aurora,BrickBreaker,Matrix,Plasma", joined(g_fxReg.names()).c_str());
+  expectListing("effects", g_fxReg.names());
+}
+
+static void test_overlays_lists_registry_names_in_init_and_draw() {
+  registerFx();
+  TEST_ASSERT_EQUAL_STRING("drizzle,rain", joined(g_ovReg.names()).c_str());
+  expectListing("overlays", g_ovReg.names());
+}
+
+static void test_every_listed_name_draws() {
+  Canvas c(32, 8);
+  draw("def draw()\n"
+       "  var ok = effects().size() == 4 && overlays().size() == 2\n"
+       "  for n : effects() ok = effect(n) && ok end\n"
+       "  for n : overlays() ok = overlay(n) && ok end\n"
+       "  pixel(1, 1, ok ? 0x00FF00 : 0xFF0000)\n"
+       "end",
+       c);
+  TEST_ASSERT_EQUAL_HEX32(0x00FF00u, c.getPixel(1, 1));
+}
+
+static void test_no_registry_lists_nothing() {
+  registerFx();
+  const char* probe =
+      "def sizes() return classname(effects()) + ':' + str(effects().size()) + ',' +"
+      " classname(overlays()) + ':' + str(overlays().size()) end";
+  g_svc.effects = nullptr;
+  g_svc.overlays = nullptr;
+  script::BerryVM vm;
+  TEST_ASSERT_TRUE(load(vm, probe));
+  std::string out;
+  script::BindingScope s(nullptr, nullptr, "T");
+  TEST_ASSERT_TRUE(vm.callString("sizes", out));
+  TEST_ASSERT_EQUAL_STRING("list:0,list:0", out.c_str());
+
+  script::setServices(nullptr);
+  TEST_ASSERT_TRUE(vm.callString("sizes", out));
+  TEST_ASSERT_EQUAL_STRING("list:0,list:0", out.c_str());
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_effect_fills_background_case_insensitive);
@@ -147,5 +239,9 @@ int main(int, char**) {
   RUN_TEST(test_overlay_draws_on_top_without_clearing);
   RUN_TEST(test_no_canvas_is_a_silent_noop);
   RUN_TEST(test_no_registry_returns_false);
+  RUN_TEST(test_effects_lists_registry_names_in_init_and_draw);
+  RUN_TEST(test_overlays_lists_registry_names_in_init_and_draw);
+  RUN_TEST(test_every_listed_name_draws);
+  RUN_TEST(test_no_registry_lists_nothing);
   return UNITY_END();
 }

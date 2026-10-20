@@ -628,6 +628,24 @@ int b_render_from(bvm* vm, const EffectRegistry* reg) {
 int b_effect(bvm* vm) { return b_render_from(vm, g_svc ? g_svc->effects : nullptr); }
 int b_overlay(bvm* vm) { return b_render_from(vm, g_svc ? g_svc->overlays : nullptr); }
 
+// The same names, in the same order, as /api/v1/capabilities. Needs no canvas, so it answers in
+// every hook; an empty list rather than nil when there is no registry, so .size() always works.
+int b_names_from(bvm* vm, const EffectRegistry* reg) {
+  be_newobject(vm, "list");
+  if (reg) {
+    for (const std::string& n : reg->names()) {
+      be_pushstring(vm, n.c_str());
+      be_data_push(vm, -2);
+      be_pop(vm, 1);
+    }
+  }
+  be_pop(vm, 1);
+  be_return(vm);
+}
+
+int b_effects(bvm* vm) { return b_names_from(vm, g_svc ? g_svc->effects : nullptr); }
+int b_overlays(bvm* vm) { return b_names_from(vm, g_svc ? g_svc->overlays : nullptr); }
+
 
 const RuntimeState* runtime() {
   if (g_ctx.rctx && g_ctx.rctx->runtime) return g_ctx.rctx->runtime;
@@ -1250,6 +1268,8 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "line_chart", b_line_chart);        // line_chart(list, paint?, autoscale?, x0?)
   be_regfunc(b, "effect", b_effect);                // effect(name, settings?)
   be_regfunc(b, "overlay", b_overlay);              // overlay(name, settings?)
+  be_regfunc(b, "effects", b_effects);              // effects()
+  be_regfunc(b, "overlays", b_overlays);            // overlays()
 
   be_regfunc(b, "hour", b_hour);                    // hour()
   be_regfunc(b, "minute", b_minute);                // minute()

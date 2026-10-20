@@ -17,7 +17,7 @@
 
 #include "be_constobj.h"
 
-// input-sha256: 24ae3a5a3fbd4016764315b6a49cf9b8021dc25613c84e282a499031f2e3fa33
+// input-sha256: 55e871bfa1638ee272ceaf3ff355e30df0d72c09519fc4f4ae6ef92fd89ea4c8
 
 
 /********************************************************************
@@ -2839,6 +2839,7 @@ static const bvalue awtrix_binding_name_anchor[]
   be_nested_str(clear),
   be_nested_str(day),
   be_nested_str(effect),
+  be_nested_str(effects),
   be_nested_str(epoch_ms),
   be_nested_str(font),
   be_nested_str(height),
@@ -2852,6 +2853,7 @@ static const bvalue awtrix_binding_name_anchor[]
   be_nested_str(month),
   be_nested_str(now_ms),
   be_nested_str(overlay),
+  be_nested_str(overlays),
   be_nested_str(pixel),
   be_nested_str(progress),
   be_nested_str(ramp_text),

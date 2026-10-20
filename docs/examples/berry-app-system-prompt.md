@@ -399,6 +399,11 @@ inside `draw()` allocates forty times a second.
 
 **The 6 overlay names:** `rain` · `snow` · `drizzle` · `storm` · `thunder` · `frost`
 
+`effects()` and `overlays()` return these names as a list of strings, in the order
+`GET /api/v1/capabilities` lists them. They work in every method, not only `draw()`. To pick one at
+random, read the list once in `init()` (`self.names = effects()`) and index it with
+`math.rand() % self.names.size()` instead of copying the names into the script.
+
 **Settings map** - all keys optional:
 
 | Key | Type | Meaning |

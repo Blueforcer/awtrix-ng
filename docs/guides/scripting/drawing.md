@@ -515,6 +515,38 @@ return Calm()
 For text, icon and chart areas that AWTRIX lays out for you, see [Layouts](../layouts.md).
 <!-- /only -->
 
+### The effects this clock has
+
+`effects()` returns the names of the effects as a list, and `overlays()` the names of the
+overlays. The names and their order are the same as in `GET /api/v1/capabilities`. Both work in
+every method, so read them once in `init()`.
+
+This app shows a random effect each time it comes into the rotation:
+
+```berry
+import math
+
+class Shuffle
+  var names
+  var pick
+
+  def init()
+    self.names = effects()
+    self.pick = self.names[0]
+  end
+
+  def on_show()
+    self.pick = self.names[math.rand() % self.names.size()]
+  end
+
+  def draw()
+    effect(self.pick)
+  end
+end
+
+return Shuffle()
+```
+
 ## Good to know
 
 - **The font resets every frame.** Call `font()` in `draw()`, not in `setup()`.
@@ -529,7 +561,7 @@ For text, icon and chart areas that AWTRIX lays out for you, see [Layouts](../la
 ## Details {#panel-and-drawing}
 
 Every drawing call. They work only in `draw()`. Anywhere else they do nothing and raise no
-error. `width()`, `height()` and the measuring calls work in every hook.
+error. `width()`, `height()`, `effects()`, `overlays()` and the measuring calls work in every hook.
 
 | Call | Does | Example |
 |---|---|---|
@@ -555,6 +587,8 @@ error. `width()`, `height()` and the measuring calls work in every hook.
 | `progress(pct, color?, bg?, x0?)` | a progress bar in the bottom row, 0–100 | `progress(64)` |
 | `effect(name, settings?)` | animated background | `effect("Plasma", self.fx)` |
 | `overlay(name, settings?)` | weather overlay, drawn on top | `overlay("snow")` |
+| `effects()` | the names of the effects, as a list | `self.names = effects()` |
+| `overlays()` | the names of the overlays, as a list | `self.names = overlays()` |
 | `rgb(r, g, b)` | a color from red, green, blue (0–255 each) | `pixel(0, 0, rgb(255, 128, 0))` |
 | `hsv(h, s, v)` | a color from hue (0–360), saturation and brightness (0–100) | `hsv(second() * 6, 100, 100)` |
 

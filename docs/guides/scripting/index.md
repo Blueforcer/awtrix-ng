@@ -152,7 +152,7 @@ follow the link. In the editor, **Ctrl-.** lists every call.
 | [Writing text](drawing.md#panel-and-drawing) | `text()` `text_width()` `text_ink_width()` `font()` |
 | [Text that moves or shades](drawing.md#styled-and-scrolling-text) | `scroll_text()` `ramp_text()` |
 | [Charts and bars](drawing.md#charts-and-progress) | `bar_chart()` `line_chart()` `progress()` |
-| [Animated backgrounds](drawing.md#effects-and-overlays) | `effect()` `overlay()` |
+| [Animated backgrounds](drawing.md#effects-and-overlays) | `effect()` `overlay()` `effects()` `overlays()` |
 <!-- only tc002 -->
 | [Text, icon and chart regions](../layouts.md) | `layout.prepare()` `layout.update()` `layout.draw()` `layout.release()` |
 <!-- /only -->
