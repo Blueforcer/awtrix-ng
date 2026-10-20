@@ -764,6 +764,10 @@ struct FHeadless : IScriptService {
   bool scriptIsHeadless(const std::string& name) override {
     return std::find(headless.begin(), headless.end(), name) != headless.end();
   }
+  bool scriptIsParked(const std::string& name) override {
+    return std::find(parked.begin(), parked.end(), name) != parked.end();
+  }
+  std::vector<std::string> parked;
   void setRunningScripts(const std::vector<std::string>& r) override { running = r; }
   bool runs(const std::string& name) const {
     return std::find(running.begin(), running.end(), name) != running.end();
@@ -791,6 +795,22 @@ static void test_a_headless_script_runs_without_being_drawn() {
   TEST_ASSERT_FALSE(e.isInLoop("Doorbell"));
   TEST_ASSERT_TRUE(e.isEnabled("Doorbell"));
   TEST_ASSERT_TRUE(scripts.runs("Doorbell"));
+  TEST_ASSERT_TRUE(e.isInLoop("Weather"));
+}
+
+static void test_a_script_without_an_instance_is_left_out_of_the_rotation() {
+  FHeadless scripts;
+  scripts.parked.push_back("Weather");
+
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  e.setScriptService(&scripts);
+  e.syncScriptApp("Weather");
+
+  TEST_ASSERT_FALSE(e.isInLoop("Weather"));
+  TEST_ASSERT_TRUE(scripts.runs("Weather"));
+  scripts.parked.clear();
+  e.syncScriptApp("Weather");
   TEST_ASSERT_TRUE(e.isInLoop("Weather"));
 }
 
@@ -1197,6 +1217,7 @@ int main(int, char**) {
   RUN_TEST(test_live_requirements_use_script_names_and_module_import_names);
   RUN_TEST(test_stored_requirements_use_script_names_and_module_import_names);
   RUN_TEST(test_a_headless_script_runs_without_being_drawn);
+  RUN_TEST(test_a_script_without_an_instance_is_left_out_of_the_rotation);
   RUN_TEST(test_the_app_order_switches_a_headless_script_on_and_off);
   RUN_TEST(test_clearing_the_headless_flag_puts_the_script_on_the_panel);
   RUN_TEST(test_apps_json_separates_enabled_from_in_loop);

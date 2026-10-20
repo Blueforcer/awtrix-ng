@@ -3,6 +3,7 @@
 
 #include "berry.h"
 
+#include <algorithm>
 #include <cstring>
 #include <map>
 #include <set>
@@ -2908,8 +2909,160 @@ static void test_a_refused_replacement_keeps_the_dormant_error_and_metadata() {
   TEST_ASSERT_TRUE(host.list().empty());
 }
 
+namespace {
+
+struct ForgetCounter : script::ScriptExtensionLifecycle {
+  std::vector<std::string> forgotten;
+  bool reserves(const std::string&) const override { return false; }
+  void tick(const RenderCtx*) override {}
+  void forget(const std::string& app) override { forgotten.push_back(app); }
+  void hidden(const std::string&) override {}
+  void beginFrame(const std::string&) override {}
+  bool holds(const std::string&) const override { return false; }
+};
+
+}
+
+static const char* kMarksSetup =
+    "var n\ndef init() self.n = 0 end\n"
+    "def setup() shared.set('ran', 1) end\n"
+    "def loop() self.n += 1 end\ndef draw() end\n"
+    "def check() return str(self.n) end";
+
+static void test_a_switched_off_script_is_only_compiled() {
+  AppRegistry reg;
+  std::vector<std::string> installed;
+  script::ScriptHost host(reg, g_svc, [&](const std::string& n) { installed.push_back(n); }, nullptr);
+  host.setSwitchedOff([](const std::string& n) { return n == "A" || n == "B"; });
+
+  TEST_ASSERT_TRUE(host.set("A", app(kMarksSetup)));
+  TEST_ASSERT_NULL(reg.find("A"));
+  TEST_ASSERT_TRUE(host.has("A"));
+  TEST_ASSERT_TRUE(host.isParked("A"));
+  TEST_ASSERT_FALSE(host.isLoaded("A"));
+  TEST_ASSERT_TRUE(host.sharedSnapshot().empty());
+  TEST_ASSERT_FALSE(host.list().at("A").loaded);
+  TEST_ASSERT_EQUAL_UINT(1u, (unsigned)installed.size());
+
+  TEST_ASSERT_TRUE(host.set("B", "class App def draw( end\nreturn App()"));
+  TEST_ASSERT_FALSE(host.errorOf("B").empty());
+  TEST_ASSERT_FALSE(host.list().at("B").error.empty());
+
+  host.remove("A");
+  TEST_ASSERT_FALSE(host.has("A"));
+}
+
+static void test_switching_a_script_off_stops_it_and_on_starts_it_fresh() {
+  const std::string source = app(kMarksSetup);
+  g_svc.readSource = [&](const std::string& n, std::string& out) {
+    if (n != "A") return false;
+    out = source;
+    return true;
+  };
+  ForgetCounter extensions;
+  AppRegistry reg;
+  std::set<std::string> off;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.setExtensionLifecycle(&extensions);
+  host.setSwitchedOff([&](const std::string& n) { return off.count(n) != 0; });
+  host.set("A", source);
+  host.setRunningScripts({"A"});
+  RenderCtx ctx;
+  g_now = 1000;
+  host.tick(ctx, "A");
+  TEST_ASSERT_EQUAL_STRING("1", check(reg, "A").c_str());
+  TEST_ASSERT_EQUAL_UINT(1u, (unsigned)host.sharedSnapshot().size());
+
+  off.insert("A");
+  host.setRunningScripts({});
+  TEST_ASSERT_NOT_NULL(reg.find("A"));
+  g_now = 2000;
+  host.tick(ctx, "Time");
+  TEST_ASSERT_NULL(reg.find("A"));
+  TEST_ASSERT_TRUE(host.has("A"));
+  TEST_ASSERT_TRUE(host.isParked("A"));
+  TEST_ASSERT_TRUE(host.sharedSnapshot().empty());
+  TEST_ASSERT_TRUE(std::find(extensions.forgotten.begin(), extensions.forgotten.end(), "A") !=
+                   extensions.forgotten.end());
+
+  off.clear();
+  host.setRunningScripts({"A"});
+  g_now = 3000;
+  host.tick(ctx, "A");
+  TEST_ASSERT_NOT_NULL(reg.find("A"));
+  TEST_ASSERT_FALSE(host.isParked("A"));
+  TEST_ASSERT_EQUAL_STRING("1", check(reg, "A").c_str());
+  TEST_ASSERT_EQUAL_UINT(1u, (unsigned)host.sharedSnapshot().size());
+}
+
+static void test_a_script_that_cannot_start_shows_why_and_is_tried_again() {
+  const std::string source = app(kMarksSetup);
+  bool readable = false;
+  g_svc.readSource = [&](const std::string& n, std::string& out) {
+    if (n != "A" || !readable) return false;
+    out = source;
+    return true;
+  };
+  AppRegistry reg;
+  std::vector<std::string> installed;
+  std::set<std::string> off{"A"};
+  script::ScriptHost host(reg, g_svc, [&](const std::string& n) { installed.push_back(n); }, nullptr);
+  host.setSwitchedOff([&](const std::string& n) { return off.count(n) != 0; });
+  host.set("A", source);
+  installed.clear();
+
+  off.clear();
+  host.setRunningScripts({"A"});
+  RenderCtx ctx;
+  g_now = 1000;
+  host.tick(ctx, "Time");
+  TEST_ASSERT_TRUE(host.isParked("A"));
+  TEST_ASSERT_NULL(reg.find("A"));
+  TEST_ASSERT_FALSE(host.list().at("A").error.empty());
+  TEST_ASSERT_TRUE(installed.empty());
+
+  readable = true;
+  g_now = 5000;
+  host.tick(ctx, "Time");
+  TEST_ASSERT_TRUE_MESSAGE(host.isParked("A"), "the next try waits for its time");
+  g_now = 11000;
+  host.tick(ctx, "Time");
+  TEST_ASSERT_NOT_NULL(reg.find("A"));
+  TEST_ASSERT_TRUE(host.list().at("A").error.empty());
+  TEST_ASSERT_EQUAL_UINT(1u, (unsigned)installed.size());
+}
+
+static void test_saving_a_switched_off_script_keeps_it_stopped() {
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  bool off = false;
+  host.setSwitchedOff([&](const std::string&) { return off; });
+  host.set("A", app(kMarksSetup));
+  TEST_ASSERT_NOT_NULL(reg.find("A"));
+
+  off = true;
+  TEST_ASSERT_TRUE(host.set("A", app(kMarksSetup)));
+  TEST_ASSERT_NULL(reg.find("A"));
+  TEST_ASSERT_TRUE(host.isParked("A"));
+  TEST_ASSERT_TRUE(host.sharedSnapshot().empty());
+}
+
+static void test_a_switched_off_ondemand_script_is_left_alone() {
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.setSwitchedOff([](const std::string&) { return true; });
+  TEST_ASSERT_TRUE(host.set("G", "# @ondemand\n" + app(kMarksSetup)));
+  TEST_ASSERT_TRUE(host.isOnDemand("G"));
+  TEST_ASSERT_FALSE(host.isParked("G"));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_a_switched_off_script_is_only_compiled);
+  RUN_TEST(test_switching_a_script_off_stops_it_and_on_starts_it_fresh);
+  RUN_TEST(test_saving_a_switched_off_script_keeps_it_stopped);
+  RUN_TEST(test_a_script_that_cannot_start_shows_why_and_is_tried_again);
+  RUN_TEST(test_a_switched_off_ondemand_script_is_left_alone);
   RUN_TEST(test_an_ondemand_script_installs_without_an_instance);
   RUN_TEST(test_a_dormant_script_still_reports_a_syntax_error);
   RUN_TEST(test_launch_starts_fresh_and_unload_lets_the_game_save);

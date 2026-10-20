@@ -285,7 +285,7 @@ void CoreEngine::rebuildAppList() {
   std::vector<std::string> drawn;
   drawn.reserve(running.size());
   for (const auto& n : running) {
-    if (!scripts_ || !scripts_->scriptIsHeadless(n)) drawn.push_back(n);
+    if (!scripts_ || (!scripts_->scriptIsHeadless(n) && !scripts_->scriptIsParked(n))) drawn.push_back(n);
   }
   // A session has the panel to itself; headless scripts keep running underneath it.
   if (!session_.empty()) {

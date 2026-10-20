@@ -1,6 +1,6 @@
 ---
 name: awtrix-berry-app
-description: Write, install and debug Berry apps for an AWTRIX NG LED matrix clock (Ulanzi TC001 and other supported LED panels). Use when the user wants something shown on their AWTRIX or pixel clock, asks for an AWTRIX app, script or .ax file, or reports an ERR: frame or a script error on the panel.
+description: "Write, install and debug Berry apps for an AWTRIX NG LED matrix clock (Ulanzi TC001 and other supported LED panels). Use when the user wants something shown on their AWTRIX or pixel clock, asks for an AWTRIX app, script or .ax file, or reports an ERR: frame or a script error on the panel."
 license: PolyForm-Noncommercial-1.0.0
 compatibility: Installing and testing needs HTTP access to the device on the local network. Without it, write the script and hand it over for the web UI.
 metadata:

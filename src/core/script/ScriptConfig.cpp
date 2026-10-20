@@ -9,6 +9,7 @@
 #include "core/api/JsonText.h"
 #include "core/api/JsonWriter.h"
 #include "core/render/Color.h"
+#include "core/render/TextEncoding.h"
 #include "core/script/ScriptHeap.h"
 #include "core/script/ScriptMeta.h"
 
@@ -157,7 +158,7 @@ std::string colorJson(uint32_t v) {
 }
 
 void clip(std::string& s, std::size_t limit) {
-  if (s.size() > limit) s.resize(limit);
+  s.resize(text::clipCodepoints(s, limit).size());
 }
 
 std::string splitOptions(const std::string& value) {
@@ -226,7 +227,7 @@ bool coerce(const ConfigField& f, const JsonReader& r, std::string& out, std::st
       std::string s;
       if (!r.isString() || !r.appendString(s)) { why = "expected a string"; return false; }
       const std::size_t limit = f.maxLen ? f.maxLen : kMaxTextLen;
-      if (s.size() > limit) {
+      if (text::codepoints(s) > limit) {
         why = "longer than ";
         api::appendInt(why, static_cast<long long>(limit));
         why += " characters";

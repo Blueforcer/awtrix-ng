@@ -27,6 +27,7 @@ void configure(httplib::Client& client, const ClientLimits& limits) {
   client.set_write_timeout(limits.ioTimeoutSec, 0);
   client.set_max_timeout(std::chrono::milliseconds(limits.timeoutMs));
   client.set_follow_location(limits.followRedirects);
+  client.set_default_headers({{"User-Agent", "AWTRIX-NG"}});
   client.enable_server_certificate_verification(true);
   useTlsTrust(client);
 }

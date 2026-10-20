@@ -31,6 +31,7 @@ class ScriptHost {
  public:
   using Native = int (*)(bvm*);
   using AppHook = std::function<void(const std::string& id)>;
+  using NameCheck = std::function<bool(const std::string& id)>;
 
   ScriptHost(AppRegistry& registry, ScriptServices& services, AppHook onInstalled,
              AppHook onRemoved);
@@ -44,6 +45,9 @@ class ScriptHost {
     svc_.extensionLifecycle = effective_.extensionLifecycle = extensions;
   }
 
+  // A switched-off app is only compiled: no instance, no init() or setup(), nothing held. Switching
+  // it on starts it from its stored source, switching it off unloads it again.
+  void setSwitchedOff(NameCheck switchedOff) { switchedOff_ = std::move(switchedOff); }
   void setRunningScripts(std::vector<std::string> running);
   bool active(const std::string& name) const;
   bool isHeadless(const std::string& name) const;
@@ -63,6 +67,10 @@ class ScriptHost {
     return meta && meta->onDemand;
   }
   bool isLoaded(const std::string& name) const { return apps_.count(name) != 0; }
+  bool isParked(const std::string& name) const {
+    const auto it = meta_.find(name);
+    return it != meta_.end() && it->second.parked && !apps_.count(name);
+  }
   bool launch(const std::string& name);
   void unload(const std::string& name);
 
@@ -90,11 +98,11 @@ class ScriptHost {
   std::size_t count() const {
     std::size_t n = apps_.size() + modules_.size();
     for (const auto& kv : meta_)
-      if (kv.second.parsed.onDemand && !apps_.count(kv.first)) ++n;
+      if ((kv.second.parsed.onDemand || kv.second.parked) && !apps_.count(kv.first)) ++n;
     return n;
   }
   bool has(const std::string& name) const {
-    return apps_.count(name) != 0 || modules_.count(name) != 0 || isOnDemand(name);
+    return apps_.count(name) != 0 || modules_.count(name) != 0 || isOnDemand(name) || isParked(name);
   }
   // The @ headers an installed script or module was read with; null for a name it does not know.
   const ScriptMeta* metaOf(const std::string& name) const {
@@ -162,6 +170,7 @@ class ScriptHost {
   struct InstalledMeta {
     ScriptMeta parsed;
     std::unique_ptr<ScriptError> dormantError;
+    bool parked = false;
   };
 
   void activate();
@@ -173,7 +182,11 @@ class ScriptHost {
   void instantiate(const std::string& name, const ScriptMeta& meta, const std::string& source,
                    const std::string& storeJson);
   void installDormant(const std::string& name, const ScriptMeta& meta, const std::string& source,
-                      bool wasApp, std::unique_ptr<ScriptError> error);
+                      bool wasApp, std::unique_ptr<ScriptError> error, bool parked);
+  bool start(const std::string& name, const ScriptMeta& meta);
+  void stop(std::map<std::string, std::unique_ptr<ScriptApp>>::iterator it);
+  void applySwitches();
+  bool switchedOff(const std::string& name) const { return switchedOff_ && switchedOff_(name); }
   bool installModule(const std::string& name, const ScriptMeta& meta,
                      const std::string& source, const std::string& storeJson);
   bool refuseModule(const std::string& name, const ScriptMeta& meta);
@@ -219,6 +232,11 @@ class ScriptHost {
 
   std::vector<std::string> running_;
   bool runningKnown_ = false;
+  NameCheck switchedOff_;
+  bool switchesPending_ = false;
+  // A switched-on script that could not start, for example for lack of memory, is tried again then.
+  int64_t restartAtMs_ = -1;
+  static constexpr int64_t kRestartRetryMs = 10000;
   std::map<std::string, std::unique_ptr<ScriptApp>> apps_;
   std::map<std::string, Module> modules_;
   // Script name -> the module import names its source mentions. Drives reloadDependents().

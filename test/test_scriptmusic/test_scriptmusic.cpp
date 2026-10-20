@@ -20,6 +20,7 @@ static std::string g_log;
 static audio::FrameStats g_stats;
 static bool g_fresh = true;
 static int g_calls = 0;
+static bool g_onScreen = false;
 
 void setUp() {
   g_rt = RuntimeState{};
@@ -27,12 +28,14 @@ void setUp() {
   g_stats = audio::FrameStats{};
   g_fresh = true;
   g_calls = 0;
+  g_onScreen = false;
   g_svc = script::ScriptServices{};
   application = {};
   g_svc.application = &application;
   g_svc.log = [](const std::string& s) { g_log += s; };
-  g_svc.audioStats = [](int64_t, audio::FrameStats& out) {
+  g_svc.audioStats = [](int64_t, bool onScreen, audio::FrameStats& out) {
     ++g_calls;
+    g_onScreen = onScreen;
     if (!g_fresh) return false;
     out = g_stats;
     return true;
@@ -121,6 +124,16 @@ static void test_one_fetch_per_frame() {
   TEST_ASSERT_EQUAL_INT(2, g_calls);
 }
 
+static void test_only_a_drawing_app_is_on_screen() {
+  Canvas c(32, 8);
+  run("music.level()", 0, &c);
+  TEST_ASSERT_EQUAL_INT(1, g_calls);
+  TEST_ASSERT_TRUE(g_onScreen);
+  run("music.level()", 24);
+  TEST_ASSERT_EQUAL_INT(2, g_calls);
+  TEST_ASSERT_FALSE(g_onScreen);
+}
+
 static void test_station_and_title_follow_the_playing_station() {
   g_rt.radioPlaying = true;
   g_rt.radioStation = "SWR3";
@@ -156,6 +169,7 @@ int main(int, char**) {
   RUN_TEST(test_active_follows_any_other_sound_too);
   RUN_TEST(test_playback_query_does_not_start_microphone_analysis);
   RUN_TEST(test_one_fetch_per_frame);
+  RUN_TEST(test_only_a_drawing_app_is_on_screen);
   RUN_TEST(test_station_and_title_follow_the_playing_station);
   RUN_TEST(test_station_and_title_are_empty_once_the_radio_stops);
   RUN_TEST(test_bar_chart_takes_bands_directly);

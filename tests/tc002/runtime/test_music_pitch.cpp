@@ -132,36 +132,36 @@ void test_music_pitch_follows_the_source() {
     tc002::PlaybackPitch playback;
     Microphone mic;
     Player player{playback, 44100, 2, 440.0};
-    check(tc002::musicPitch(AnalysisSource::Playback, 0, &playback, &mic.input) == 0.f,
+    check(tc002::musicPitch(AnalysisSource::Playback, 0, &playback, &mic.input, true) == 0.f,
           "Playback with nothing heard answers 0");
     player.play(400);
     const int64_t now = player.nowMs();
-    check(near(tc002::musicPitch(AnalysisSource::Playback, now, &playback, &mic.input), 440),
+    check(near(tc002::musicPitch(AnalysisSource::Playback, now, &playback, &mic.input, true), 440),
           "Playback follows what the speaker plays");
     check(mic.sent.empty(), "Playback never switches the microphone on");
-    check(near(tc002::musicPitch(AnalysisSource::Automatic, now, &playback, &mic.input), 440),
+    check(near(tc002::musicPitch(AnalysisSource::Automatic, now, &playback, &mic.input, true), 440),
           "Automatic follows the speaker while something plays");
     check(mic.sent.empty(), "and leaves the microphone off meanwhile");
-    check(tc002::musicPitch(AnalysisSource::Microphone, now, &playback, &mic.input) == 0.f && mic.sent.size() == 1,
+    check(tc002::musicPitch(AnalysisSource::Microphone, now, &playback, &mic.input, true) == 0.f && mic.sent.size() == 1,
           "Microphone asks the microphone even while the speaker plays");
     mic.answer(262, now + 60);
-    check(near(tc002::musicPitch(AnalysisSource::Microphone, now + 70, &playback, &mic.input), 262),
+    check(near(tc002::musicPitch(AnalysisSource::Microphone, now + 70, &playback, &mic.input, true), 262),
           "and answers the voice, not the speaker");
     const int64_t silent = now + 130 + 300 + 1;
-    check(tc002::musicPitch(AnalysisSource::Playback, silent, &playback, &mic.input) == 0.f,
+    check(tc002::musicPitch(AnalysisSource::Playback, silent, &playback, &mic.input, true) == 0.f,
           "Playback answers 0 once the speaker fell silent");
     const auto requests = mic.sent.size();
-    check(tc002::musicPitch(AnalysisSource::Automatic, silent + 100, &playback, &mic.input) == 0.f &&
+    check(tc002::musicPitch(AnalysisSource::Automatic, silent + 100, &playback, &mic.input, true) == 0.f &&
               mic.sent.size() == requests + 1,
           "Automatic turns to the microphone once the speaker fell silent");
     mic.answer(330, silent + 160);
-    check(near(tc002::musicPitch(AnalysisSource::Automatic, silent + 170, &playback, &mic.input), 330),
+    check(near(tc002::musicPitch(AnalysisSource::Automatic, silent + 170, &playback, &mic.input, true), 330),
           "and hears the voice");
   }
   {
     tc002::PlaybackPitch playback;
     Microphone mic;
-    tc002::musicPitch(AnalysisSource::Microphone, 0, &playback, &mic.input);
+    tc002::musicPitch(AnalysisSource::Microphone, 0, &playback, &mic.input, true);
     Player player{playback, 44100, 2, 440.0};
     player.play(400);
     float hz = 0.f;
@@ -169,22 +169,27 @@ void test_music_pitch_follows_the_source() {
   }
   {
     Microphone mic;
-    check(tc002::musicPitch(AnalysisSource::Automatic, 1000, nullptr, &mic.input) == 0.f && mic.sent.size() == 1,
+    check(tc002::musicPitch(AnalysisSource::Automatic, 1000, nullptr, &mic.input, true) == 0.f && mic.sent.size() == 1,
           "without a speaker Automatic is the microphone");
     mic.answer(440, 1060);
-    check(near(tc002::musicPitch(AnalysisSource::Automatic, 1070, nullptr, &mic.input), 440), "and answers it");
+    check(near(tc002::musicPitch(AnalysisSource::Automatic, 1070, nullptr, &mic.input, true), 440), "and answers it");
     mic.input.setStreaming(true);
-    check(tc002::musicPitch(AnalysisSource::Automatic, 1080, nullptr, &mic.input) == 0.f,
+    check(tc002::musicPitch(AnalysisSource::Automatic, 1080, nullptr, &mic.input, true) == 0.f,
           "while the voice assistant owns the microphone, pitch answers 0");
+  }
+  {
+    Microphone mic;
+    check(tc002::musicPitch(AnalysisSource::Automatic, 1000, nullptr, &mic.input, false) == 0.f && mic.sent.empty(),
+          "a pitch that may not listen leaves the microphone off");
   }
   {
     tc002::PlaybackPitch playback;
     Player player{playback, 44100, 2, 440.0};
-    tc002::musicPitch(AnalysisSource::Automatic, 0, &playback, nullptr);
+    tc002::musicPitch(AnalysisSource::Automatic, 0, &playback, nullptr, true);
     player.play(400);
-    check(near(tc002::musicPitch(AnalysisSource::Automatic, player.nowMs(), &playback, nullptr), 440),
+    check(near(tc002::musicPitch(AnalysisSource::Automatic, player.nowMs(), &playback, nullptr, true), 440),
           "a TC002 without a microphone still hears the speaker");
-    check(tc002::musicPitch(AnalysisSource::Microphone, player.nowMs(), &playback, nullptr) == 0.f,
+    check(tc002::musicPitch(AnalysisSource::Microphone, player.nowMs(), &playback, nullptr, true) == 0.f,
           "and Microphone answers 0 there");
   }
 }

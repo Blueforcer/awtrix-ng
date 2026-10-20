@@ -22,8 +22,8 @@ int main() {
   audio::AnalysisRouter router(&playback, &mic);
   audio::FrameStats stats;
   check(requests.empty(), "constructing input does not acquire audio");
-  check(!router.analysis(audio::AnalysisSource::Automatic, 1000, stats) && requests.size() == 1, "automatic requests input when playback is idle");
-  router.analysis(audio::AnalysisSource::Microphone, 1020, stats);
+  check(!router.analysis(audio::AnalysisSource::Automatic, 1000, stats, true) && requests.size() == 1, "automatic requests input when playback is idle");
+  router.analysis(audio::AnalysisSource::Microphone, 1020, stats, true);
   check(requests.size() == 1, "one pending request");
   tc002::SupervisorMessage message;
   check(tc002::decodeSupervisorMessage(requests.back(), message), "request decodes");
@@ -35,7 +35,7 @@ int main() {
   check(wire.size() < tc002::kMaxSupervisorMessage && tc002::decodeSupervisorMessage(wire, message) &&
       message.microphonePcm.samples == pcm.samples, "signed PCM round-trips in one bounded datagram");
   mic.receive(message.microphonePcm, 1070);
-  check(router.analysis(audio::AnalysisSource::Microphone, 1080, stats), "input produces spectrum");
+  check(router.analysis(audio::AnalysisSource::Microphone, 1080, stats, true), "input produces spectrum");
   audio::SpectrumAnalyzer reference(audio::SpectrumAnalyzer::Scaling::Fixed);
   audio::FrameStats expected;
   reference.analyze(pcm.samples.data(), pcm.samples.size(), 1, 16000, expected);
@@ -44,9 +44,9 @@ int main() {
   mic.analysis(1090, stats);
   check(!stats.beat, "cached analysis never repeats a beat on later frames");
   playback.active = true;
-  check(router.analysis(audio::AnalysisSource::Automatic, 1100, stats) && stats.level == 123 && requests.size() == 1,
+  check(router.analysis(audio::AnalysisSource::Automatic, 1100, stats, true) && stats.level == 123 && requests.size() == 1,
         "automatic gives playback priority without microphone acquisition");
-  check(!router.analysis(audio::AnalysisSource::Microphone, 1200, stats) && requests.size() == 2,
+  check(!router.analysis(audio::AnalysisSource::Microphone, 1200, stats, true) && requests.size() == 2,
         "explicit microphone overrides playback and discards stale cached audio");
   mic.receive(pcm, 1250);
   check(!mic.analysis(1260, stats), "old request response cannot complete the current request");
@@ -59,7 +59,7 @@ int main() {
   check(requests.size() == count + 1, "timeout recovery remains bounded to one request");
   mic.deactivate();
   playback.active = false;
-  router.analysis(audio::AnalysisSource::Playback, 7100, stats);
+  router.analysis(audio::AnalysisSource::Playback, 7100, stats, true);
   check(requests.size() == count + 1, "playback-only never falls back to microphone");
   tc002::decodeSupervisorMessage(requests.back(), message);
   pcm.id = message.microphonePcm.id;
@@ -98,48 +98,79 @@ int main() {
       tone.id = request.microphonePcm.id;
       pitched.receive(tone, at);
     };
-    check(pitched.pitch(1000) == 0.f && sent.size() == 1, "the first pitch call answers 0 and starts the snapshots");
-    playbackOnly.analysis(audio::AnalysisSource::Playback, 1010, stats);
+    check(pitched.pitch(1000, true) == 0.f && sent.size() == 1, "the first pitch call answers 0 and starts the snapshots");
+    playbackOnly.analysis(audio::AnalysisSource::Playback, 1010, stats, true);
     answer(1070);
-    const float hz = pitched.pitch(1080);
+    const float hz = pitched.pitch(1080, true);
     check(std::fabs(1200 * std::log2(hz / 440.0)) < 5, "a 440 Hz window answers 440 Hz");
     check(!pitched.analysis(1090, stats), "a window taken for pitch alone does not feed switched-off analysis");
-    playbackOnly.analysis(audio::AnalysisSource::Playback, 1100, stats);
-    check(pitched.pitch(1180) == hz && sent.size() == 2, "switching microphone analysis off does not stop pitch");
+    playbackOnly.analysis(audio::AnalysisSource::Playback, 1100, stats, true);
+    check(pitched.pitch(1180, true) == hz && sent.size() == 2, "switching microphone analysis off does not stop pitch");
     answer(1190);
-    check(pitched.pitch(1200) == hz, "the next window answers too");
-    check(pitched.pitch(1490) == hz && pitched.pitch(1491) == 0.f, "a window older than 300 ms answers 0");
+    check(pitched.pitch(1200, true) == hz, "the next window answers too");
+    check(pitched.pitch(1490, true) == hz && pitched.pitch(1491, true) == 0.f, "a window older than 300 ms answers 0");
     answer(1500);
-    check(pitched.pitch(1510) == hz, "a fresh window answers again");
-    pitched.pitch(1600);
+    check(pitched.pitch(1510, true) == hz, "a fresh window answers again");
+    pitched.pitch(1600, true);
     pitched.setStreaming(true);
     const auto before = sent.size();
-    check(pitched.pitch(1620) == 0.f && pitched.pitch(1700) == 0.f && sent.size() == before,
+    check(pitched.pitch(1620, true) == 0.f && pitched.pitch(1700, true) == 0.f && sent.size() == before,
           "while the voice assistant streams, pitch answers 0 and requests nothing");
     answer(1710);
     pitched.setStreaming(false);
-    check(pitched.pitch(1720) == 0.f && sent.size() == before + 1,
+    check(pitched.pitch(1720, true) == 0.f && sent.size() == before + 1,
           "a window from the stream is never used; the next call requests a new one");
     answer(1780);
-    check(pitched.pitch(1790) == hz, "pitch resumes after the stream");
+    check(pitched.pitch(1790, true) == hz, "pitch resumes after the stream");
     const auto count = sent.size();
-    pitched.pitch(1900);
-    pitched.pitch(1910);
+    pitched.pitch(1900, true);
+    pitched.pitch(1910, true);
     check(sent.size() == count + 1, "one request in flight at a time");
     const auto sine = tone.samples;
     tone.samples.pop_back();
     answer(1950);
-    check(pitched.pitch(1960) == hz, "an incomplete window never replaces the last good one");
+    check(pitched.pitch(1960, true) == hz, "an incomplete window never replaces the last good one");
     tone.samples.assign(tc002::kMicrophonePcmSamples, 0);
-    pitched.pitch(2010);
+    pitched.pitch(2010, true);
     answer(2020);
-    check(pitched.pitch(2030) == 0.f, "silence answers 0");
+    check(pitched.pitch(2030, true) == 0.f, "silence answers 0");
     tc002::MicrophoneInput idle([&](std::string) { return true; });
     idle.analysis(1000, stats);
     tone.id = 1;
     tone.samples = sine;
     idle.receive(tone, 1050);
-    check(idle.pitch(1060) == 0.f, "a window nobody asked pitch of is not kept for it");
+    check(idle.pitch(1060, true) == 0.f, "a window nobody asked pitch of is not kept for it");
+  }
+  {
+    std::vector<std::string> sent;
+    tc002::MicrophoneInput quiet([&](std::string data) { sent.push_back(std::move(data)); return true; });
+    audio::AnalysisRouter router(nullptr, &quiet);
+    audio::FrameStats heard;
+    check(!router.analysis(audio::AnalysisSource::Microphone, 1000, heard, false) &&
+              !router.analysis(audio::AnalysisSource::Automatic, 1000, heard, false) && sent.empty(),
+          "a reading that may not listen never starts a capture");
+    check(quiet.pitch(1000, false) == 0.f && sent.empty(), "nor does a pitch that may not listen");
+    router.analysis(audio::AnalysisSource::Microphone, 1010, heard, true);
+    check(sent.size() == 1, "a reading that may listen starts one");
+    tc002::SupervisorMessage request;
+    check(tc002::decodeSupervisorMessage(sent.back(), request), "the capture request decodes");
+    tc002::MicrophonePcm tone;
+    tone.id = request.microphonePcm.id;
+    for (unsigned i = 0; i < tc002::kMicrophonePcmSamples; ++i)
+      tone.samples.push_back(static_cast<int16_t>(14000 * std::sin(i * 2 * 3.141592653589793 * 1000 / 16000)));
+    quiet.receive(tone, 1070);
+    check(router.analysis(audio::AnalysisSource::Microphone, 1080, heard, false) && heard.level > 0 &&
+              sent.size() == 1,
+          "a reading that may not listen answers what the microphone already heard");
+    check(!router.analysis(audio::AnalysisSource::Microphone, 1600, heard, false) && sent.size() == 1,
+          "and nothing once that window is older than 500 ms");
+    quiet.pitch(1700, true);
+    check(sent.size() == 2, "a pitch that may listen asks for a window");
+    check(tc002::decodeSupervisorMessage(sent.back(), request), "the pitch request decodes");
+    tone.id = request.microphonePcm.id;
+    quiet.receive(tone, 1760);
+    check(quiet.pitch(1770, false) > 0.f && sent.size() == 2,
+          "a pitch that may not listen answers from that window without asking for another");
   }
   audio::AnalysisEnvelope envelope;
   audio::FrameStats target;

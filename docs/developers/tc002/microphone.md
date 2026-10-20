@@ -32,9 +32,9 @@ within 300 ms, otherwise the microphone; the microphone is asked only when it is
 Both answer the fundamental found by `PitchDetector` (`core/audio/`, YIN, 70 to 1600 Hz), and a
 window older than 300 ms answers `0.0`.
 
-- **Microphone.** The first call starts the snapshot requests on its own; the newest window is
-  analysed at most once and only while a script asks. Any time while Voice streams it answers
-  `0.0`.
+- **Microphone.** The first call from `draw()` starts the snapshot requests on its own; calls
+  from anywhere else answer from the newest window and request none. The newest window is analysed
+  at most once and only while a script asks. Any time while Voice streams it answers `0.0`.
 - **Playback.** `PlaybackPitch` (`src/platform/tc002/audio/`) sits on the speaker's analysis tap.
   While a script asked within the last second, the audio thread folds each decoded block to mono
   at no more than 16 kHz (44.1 kHz becomes 14.7 kHz), detects one 1,024-sample window at a time and
@@ -69,9 +69,9 @@ playback-only visibility guard.
   state and a 500 ms analysis cache. Adaptive gain is kept between nearby windows and resets after a
   source change or a long gap. `AnalysisEnvelope` smooths display values by elapsed time (45 ms
   attack, 220 ms release), independent of the frame rate. Beat events stay discrete.
-- **Runtime adapter** (`MicrophoneInput`). Adapts the supervisor channel to `IAnalysisSource`. An
-  analysis call expresses demand. It keeps one request in flight, at least 100 ms apart, and drops
-  stale or superseded replies. A failed request keeps the last valid window until its normal
+- **Runtime adapter** (`MicrophoneInput`). Adapts the supervisor channel to `IListeningSource`. An
+  analysis call expresses demand; `heard()` answers from the cache without it. It keeps one request
+  in flight, at least 100 ms apart, and drops stale or superseded replies. A failed request keeps the last valid window until its normal
   expiry, so a brief conflict with a power query neither blanks the visualisation nor resets the
   gain. While Voice streams, it sends no snapshot requests.
 - **Supervisor** (`RuntimeChild`). Checks and rate-limits the runtime's requests. A generation
@@ -86,8 +86,11 @@ playback-only visibility guard.
   tty (`VMIN=0`) count as idle; poll errors and real hangups still close the UART. A Linux update
   drains a running capture during shutdown; an MCU firmware operation blocks the update hand-off.
 
-Microphone capture happens only while a consumer asks for analysis. `playback` never falls back to
-the microphone. Switching away drops cached and pending audio; an MCU capture already under way
+Microphone capture happens only while an app on the panel asks for analysis. The bindings tell the
+platform whether a reading comes from `draw()` (`onScreen` in `ScriptServices::audioStats`, the
+canvas in `ScriptExtensionHost` for `music.pitch()`), and `AnalysisRouter` lets the microphone listen
+only then. `loop()`, timers and handlers read what an app on the panel made it hear, so an app that
+is hidden or headless never starts a capture. `playback` never falls back to the microphone. Switching away drops cached and pending audio; an MCU capture already under way
 finishes without being published.
 
 ## Snapshot capture

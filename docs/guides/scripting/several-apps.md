@@ -53,9 +53,10 @@ What runs depends on the kind of app:
 | Marked [`@ondemand`](#start-from-the-device-menu) | only while someone started it | only while started |
 | Deactivated in the web UI | nothing runs | never |
 
-A deactivated app stays installed and keeps its [store](storage.md#storage). The switch on its row
-in the web UI starts it again. [How the display works](../display.md#apps-take-turns) explains the
-rotation.
+A deactivated app stays installed and keeps its [store](storage.md#storage). Its timers, requests and
+connections end when you switch it off. The switch on its row in the web UI starts it again from
+the beginning: `init()` and `setup()` run as after a save. [How the display works](../display.md#apps-take-turns)
+explains the rotation.
 
 ## Skip a turn {#sitting-a-round-out}
 

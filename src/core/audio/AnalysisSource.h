@@ -13,19 +13,29 @@ class IAnalysisSource {
   virtual void deactivate() {}
 };
 
+// A source that has to be asked before it hears anything, such as a microphone. heard() answers
+// from what it already has and never asks for more.
+class IListeningSource : public IAnalysisSource {
+ public:
+  virtual bool heard(int64_t nowMs, FrameStats& out) = 0;
+};
+
 enum class AnalysisSource { Automatic, Playback, Microphone };
 
 class AnalysisRouter {
  public:
-  AnalysisRouter(IAnalysisSource* playback, IAnalysisSource* microphone)
+  AnalysisRouter(IAnalysisSource* playback, IListeningSource* microphone)
       : playback_(playback), microphone_(microphone) {}
 
-  bool analysis(AnalysisSource source, int64_t nowMs, FrameStats& out) {
+  // listen: whether this reading may make the microphone listen. Without it the microphone only
+  // answers what it already heard.
+  bool analysis(AnalysisSource source, int64_t nowMs, FrameStats& out, bool listen) {
     if (source != AnalysisSource::Microphone && playback_ && playback_->analysis(nowMs, out)) {
       if (microphone_) microphone_->deactivate();
       return true;
     }
-    if (source != AnalysisSource::Playback && microphone_) return microphone_->analysis(nowMs, out);
+    if (source != AnalysisSource::Playback && microphone_)
+      return listen ? microphone_->analysis(nowMs, out) : microphone_->heard(nowMs, out);
     if (microphone_) microphone_->deactivate();
     out = {};
     return false;
@@ -33,7 +43,7 @@ class AnalysisRouter {
 
  private:
   IAnalysisSource* playback_;
-  IAnalysisSource* microphone_;
+  IListeningSource* microphone_;
 };
 
 }

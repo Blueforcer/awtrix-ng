@@ -112,6 +112,11 @@ class IScriptService {
     (void)name;
     return false;
   }
+  // Switched on, but not started yet: it has no instance to draw.
+  virtual bool scriptIsParked(const std::string& name) {
+    (void)name;
+    return false;
+  }
   virtual void setRunningScripts(const std::vector<std::string>& running) { (void)running; }
 
   // @ondemand scripts: installed, but outside the rotation and without an instance until the

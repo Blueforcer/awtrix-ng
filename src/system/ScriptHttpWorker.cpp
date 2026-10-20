@@ -7,6 +7,7 @@
 #include <WiFiClientSecure.h>
 
 #include <esp_heap_caps.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <utility>
@@ -196,7 +197,13 @@ void ScriptHttpWorker::fetch(const script::HttpRequest& req) {
   http.setReuse(false);
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   if (http.begin(client, req.url.c_str())) {
-    for (const auto& h : req.headers) http.addHeader(h.first.c_str(), h.second.c_str());
+    // addHeader() silently drops User-Agent; the agent has a setter of its own.
+    const char* agent = "AWTRIX-NG";
+    for (const auto& h : req.headers) {
+      if (strcasecmp(h.first.c_str(), "User-Agent") == 0) agent = h.second.c_str();
+      else http.addHeader(h.first.c_str(), h.second.c_str());
+    }
+    http.setUserAgent(agent);
 
     const int code = http.sendRequest(
         req.method.c_str(),

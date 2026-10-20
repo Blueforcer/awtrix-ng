@@ -27,8 +27,9 @@ struct ClientLimits {
   int ioTimeoutSec = 5;
 };
 
-// The timeouts, certificate checks and redirect policy every outgoing request of the runtime
-// shares.
+// The timeouts, certificate checks, redirect policy and User-Agent every outgoing request of the
+// runtime shares. httplib adds its own User-Agent only to requests without a content receiver;
+// a User-Agent the caller sets wins.
 void configure(httplib::Client& client, const ClientLimits& limits);
 
 // httplib starts the clock of its total timeout only in its own Get(), Post() and so on; a

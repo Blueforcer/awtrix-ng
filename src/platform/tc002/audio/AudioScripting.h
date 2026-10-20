@@ -11,7 +11,8 @@ namespace awtrix::tc002 {
 class AudioScripting final : public script::ScriptExtension {
  public:
   using Beat = std::function<bool(int64_t, double&)>;
-  using Pitch = std::function<float(int64_t)>;
+  // onScreen: asked from draw(); only then may the microphone start listening.
+  using Pitch = std::function<float(int64_t nowMs, bool onScreen)>;
   using Clock = std::function<int64_t()>;
   using Sound = std::function<int(script::SoundAction, const std::string&,
                                   const std::string&, std::string&)>;

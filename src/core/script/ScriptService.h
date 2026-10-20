@@ -117,6 +117,7 @@ class ScriptService : public IScriptService {
   long scriptDurationMs(const std::string& name) override { return host_.durationMs(name); }
   bool scriptScrollHolds(const std::string& name) override { return host_.scrollHolds(name); }
   bool scriptIsHeadless(const std::string& name) override { return host_.isHeadless(name); }
+  bool scriptIsParked(const std::string& name) override { return host_.isParked(name); }
 
   void setRunningScripts(const std::vector<std::string>& running) override {
     host_.setRunningScripts(running);

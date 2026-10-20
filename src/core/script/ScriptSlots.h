@@ -19,6 +19,7 @@ class ScriptSlots {
       host_.emplace(app.apps(), services,
           [&engine](const std::string& id) { engine.syncScriptApp(id); },
           [&engine](const std::string& id) { engine.removeScriptApp(id); });
+      host_->setSwitchedOff([&engine](const std::string& id) { return !engine.isEnabled(id); });
       running_.emplace(*host_, std::move(save), std::move(remove));
       engine.setScriptService(&*running_);
     } else {

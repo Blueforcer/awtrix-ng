@@ -84,8 +84,39 @@ def stale():
     return None
 
 
+def bad_header():
+    """Why the skill's YAML header would not load, or None.
+
+    Skill installers read name and description from it with a strict YAML
+    parser. An unquoted ": " inside the description made `npx skills add` skip
+    the skill with "No valid skills found" (#96), while every Markdown viewer
+    still showed it fine.
+    """
+    try:
+        import yaml
+    except ImportError:
+        raise SystemExit("gen_agent_skill: --check needs PyYAML (pip install pyyaml)")
+    src = MEMBERS[0][0]
+    rel = os.path.relpath(src, ROOT)
+    with open(src, encoding="utf-8") as f:
+        parts = f.read().split("---\n", 2)
+    if len(parts) < 3 or parts[0]:
+        return "%s has no YAML header" % rel
+    try:
+        header = yaml.safe_load(parts[1])
+    except yaml.YAMLError as e:
+        return "%s: the YAML header does not load (%s)" % (rel, str(e).splitlines()[0])
+    for key in ("name", "description"):
+        if not isinstance(header, dict) or not isinstance(header.get(key), str):
+            return "%s: the YAML header has no %s text" % (rel, key)
+    return None
+
+
 if __name__ == "__main__":
     if "--check" in sys.argv[1:]:
+        why = bad_header()
+        if why:
+            sys.exit("gen_agent_skill: %s." % why)
         why = stale()
         if why:
             sys.exit(

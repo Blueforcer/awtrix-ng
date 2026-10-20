@@ -1064,7 +1064,8 @@ int b_sound_playing(bvm* vm) {
 }
 
 // Fetched once per frame: bands(), level() and beat() in one draw() must agree, and the ring
-// reports a beat only once, so a second fetch would swallow it.
+// reports a beat only once, so a second fetch would swallow it. The first reading of a frame
+// decides whether a microphone may start listening; a later draw() in it asks a frame later.
 struct AudioCache {
   int64_t frameMs = -1;
   bool fresh = false;
@@ -1076,7 +1077,8 @@ const audio::FrameStats& audioStats(bool& fresh) {
   const int64_t now = g_ctx.rctx ? g_ctx.rctx->nowMs : nowMs();
   if (now != g_audio.frameMs) {
     g_audio.frameMs = now;
-    g_audio.fresh = g_svc && g_svc->audioStats && g_svc->audioStats(now, g_audio.stats);
+    g_audio.fresh = g_svc && g_svc->audioStats &&
+                    g_svc->audioStats(now, g_ctx.canvas != nullptr, g_audio.stats);
     if (!g_audio.fresh) g_audio.stats = audio::FrameStats{};
   }
   fresh = g_audio.fresh;

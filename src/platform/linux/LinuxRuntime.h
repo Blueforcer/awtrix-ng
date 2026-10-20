@@ -153,7 +153,7 @@ class LinuxRuntime {
   void applyConfig();
   bool voiceAllowedNow() const;
   bool startVoice(int64_t now);
-  float audioPitch(int64_t now);
+  float audioPitch(int64_t now, bool onScreen);
   CoreEngine& engine() { return app_->engine(); }
   LinuxBoard& board() { return *selectedBoard_; }
 

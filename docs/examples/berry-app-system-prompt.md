@@ -565,8 +565,10 @@ The other methods take the same shape, with an optional trailing `opts` map:
 `opts` keys are `headers` (a map), `cap`, `find` and `keep` (below), and `body` - which is how
 `http.request()` and `http.delete()` send one, and what `post`/`put`/`patch` fall back to when the
 body argument is `nil`. `Host`, `Content-Length`, `Transfer-Encoding` and `Connection` are set by
-the device and ignored if a script supplies them. A malformed header line fails the whole request
-immediately with `cb(nil, 0)`.
+the device and ignored if a script supplies them. Every request sends `User-Agent: AWTRIX-NG`, so
+APIs that refuse requests without one (GitHub) need no extra header; a `User-Agent` in `headers`
+replaces it, for APIs that want an app name or contact address there. A malformed header line fails
+the whole request immediately with `cb(nil, 0)`.
 
 Only `http://` and `https://`; `GET` and `HEAD` follow redirects, other methods do not. ESP32 HTTPS encrypts without certificate verification. TC002 verifies the certificate chain and hostname; trust or hostname failures fail the request. Script source is served back by
 `GET /api/v1/apps/script/<name>`, behind the device login only if one is configured - the default
@@ -1144,6 +1146,8 @@ Song text in brief - the docs page *Song text* has the full reference:
 Audio analysis as numbers: playback on speaker boards, or the selected input on the TC002.
 TC002 System > Audio > Music source selects Automatic (playback priority), Playback or Microphone.
 Microphone uses independent 66 ms PCM windows; playback analysis is timed to the speaker.
+Only `draw()` makes the microphone listen: in `loop()`, timers and handlers `music.*` answers
+what it hears for the app on the display, zeros while none listens, so read it in `draw()`.
 For microphone visuals omit a `should_show()` guard on `music.playing()`; it reports playback:
 
 | Call | Answer |

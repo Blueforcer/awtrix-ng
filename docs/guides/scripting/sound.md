@@ -538,6 +538,11 @@ end
 `music.playing()` reports playback only, whatever input is selected. It does not detect voices or
 room sound. So for a microphone visualizer, do not hide the app with a `should_show()` based on
 `music.playing()`.
+
+**The microphone listens only for the app on the display.** Reading `music.bands()`,
+`music.level()`, `music.beat()` or `music.pitch()` in `draw()` switches it on. In `loop()`, a timer
+or a button handler, the same calls answer what the microphone hears for the app on the display, and
+zeros while no app on the display listens. An app that is hidden cannot use the microphone.
 <!-- /only -->
 
 A spectrum display takes one line. `bar_chart()` with `autoscale` off draws a fixed 0-to-8 range,

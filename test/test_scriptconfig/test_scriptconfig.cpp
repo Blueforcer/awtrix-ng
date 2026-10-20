@@ -354,6 +354,16 @@ static void test_patch_rejects_text_over_its_length() {
   TEST_ASSERT_EQUAL_STRING("a", r.field.c_str());
 }
 
+static void test_text_length_counts_characters_not_bytes() {
+  const ConfigSchema s =
+      script::parseConfig("# @config m text default=\"M\xC3\x84RZ\" maxlen=3\n");
+  std::string out;
+  script::appendConfigJson(out, "S", s, "{}");
+  TEST_ASSERT_TRUE(out.find("\"default\":\"M\xC3\x84R\"") != std::string::npos);
+  TEST_ASSERT_TRUE(script::applyConfigPatch(s, "{}", "{\"m\":\"M\xC3\x84R\"}").ok);
+  TEST_ASSERT_FALSE(script::applyConfigPatch(s, "{}", "{\"m\":\"M\xC3\x84RZ\"}").ok);
+}
+
 static void test_a_select_may_offer_many_choices() {
   std::string line = "# @config pick select label=P options=";
   for (int i = 0; i < 30; ++i) line += (i ? "," : "") + std::string("o") + std::to_string(i);
@@ -444,6 +454,7 @@ int main() {
   RUN_TEST(test_patch_rejects_a_wrong_type_and_an_unoffered_option);
   RUN_TEST(test_patch_rejects_text_over_its_length);
   RUN_TEST(test_a_select_may_offer_many_choices);
+  RUN_TEST(test_text_length_counts_characters_not_bytes);
   RUN_TEST(test_a_declared_maxlen_above_the_default_is_honored);
   RUN_TEST(test_text_without_maxlen_still_defaults_to_256);
   RUN_TEST(test_patch_rejects_a_body_that_is_not_an_object);

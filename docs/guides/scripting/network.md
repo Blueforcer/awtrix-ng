@@ -436,6 +436,9 @@ Each call returns at once. `cb(body, status)` runs once, later. `opts` is an opt
 
 - AWTRIX sets `Host`, `Content-Length`, `Transfer-Encoding` and `Connection` itself and ignores
   them in your headers. All other headers are yours.
+- Every request names itself with `User-Agent: AWTRIX-NG`. Some APIs, for example GitHub's, refuse
+  a request without a `User-Agent`. If an API wants your app's name or a contact address there,
+  put your own `User-Agent` in `headers`. It replaces `AWTRIX-NG`.
 - A large `cap` only works when the device has that much memory free. If memory runs out while the
   answer is still arriving, the whole answer is dropped: your callback gets `(nil, status)` with
   the real status code. So do not rely on a big `cap`. Use `find`.

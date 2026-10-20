@@ -349,9 +349,9 @@ void LinuxRuntime::composeScriptServices() {
   };
   analysis_.emplace(speaker_.get(), supervised ? &*microphone_ : nullptr);
   app_->configureScripts(scriptServices_);
-  scriptServices_.audioStats = [this](int64_t now, awtrix::audio::FrameStats& out) {
+  scriptServices_.audioStats = [this](int64_t now, bool onScreen, awtrix::audio::FrameStats& out) {
     return analysis_->analysis(static_cast<audio::AnalysisSource>(engine().state().settings().musicSource), now,
-                               out);
+                               out, onScreen);
   };
   scriptServices_.http = &scriptHttp_;
   scriptServices_.mqtt = mqttAllowed_ ? &scriptMqtt_ : nullptr;
@@ -397,7 +397,7 @@ void LinuxRuntime::composeExtensions() {
     }
     x.audio = std::make_unique<tc002::AudioScripting>(
         [this](int64_t now, double& beat) { return speaker_ && speaker_->songBeat(now, beat); },
-        [this](int64_t now) { return audioPitch(now); }, [] { return monotonicMs(); },
+        [this](int64_t now, bool onScreen) { return audioPitch(now, onScreen); }, [] { return monotonicMs(); },
         [this](script::SoundAction action, const std::string& json, const std::string& owner,
                std::string& error) { return scriptServices_.application->sound(action, json, owner, error); });
     x.list.push_back(x.audio.get());
@@ -560,10 +560,10 @@ bool LinuxRuntime::startVoice(int64_t now) {
   return voice_->begin(now);
 }
 
-float LinuxRuntime::audioPitch(int64_t now) {
+float LinuxRuntime::audioPitch(int64_t now, bool onScreen) {
   return tc002::musicPitch(static_cast<audio::AnalysisSource>(engine().state().settings().musicSource), now,
                            speaker_ ? &speaker_->playbackPitch() : nullptr,
-                           o_.supervised ? &*microphone_ : nullptr);
+                           o_.supervised ? &*microphone_ : nullptr, onScreen);
 }
 
 }

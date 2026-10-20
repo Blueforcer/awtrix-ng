@@ -46,6 +46,10 @@ int main() {
     r.status = request.get_header_value("X-Test") == "sent" ? 201 : 400;
     r.set_content(request.body, "text/plain");
   });
+  server.Get("/agent", [](const auto& request, auto& r) {
+    r.set_content(std::to_string(request.get_header_value_count("User-Agent")) + " " +
+                      request.get_header_value("User-Agent"), "text/plain");
+  });
   server.Get("/wire-limit", [](const auto&, auto& r) {
     r.set_content(std::string(1024 * 1024, 'z'), "text/plain");
   });
@@ -85,9 +89,19 @@ int main() {
   response = awtrix::net::send(client, "GET", "/small", "", {},
                               [](const char*, std::size_t) { return false; });
   check(!response, "receiver refusal stops the sender");
+  std::string agent;
+  const auto collect = [&](const char* bytes, std::size_t count) { agent.append(bytes, count); return true; };
+  response = awtrix::net::send(client, "GET", "/agent", "", {}, collect);
+  check(response && agent == "1 AWTRIX-NG", "sender names the clock as User-Agent");
+  agent.clear();
+  response = awtrix::net::send(client, "GET", "/agent", "", {{"user-agent", "Script/1"}}, collect);
+  check(response && agent == "1 Script/1", "a caller's User-Agent replaces the default");
 
   awtrix::net::HttpGet get;
   std::string bytes;
+  check(get.fetch(origin + "/agent", {64, 15000, false}, bytes).failure ==
+            awtrix::net::HttpGet::Failure::None && bytes == "1 AWTRIX-NG",
+        "bounded fetch names the clock as User-Agent");
   check(get.fetch(origin + "/small", {12, 15000, false}, bytes).failure ==
             awtrix::net::HttpGet::Failure::None && bytes == "speech-bytes",
         "bounded memory receiver accepts its exact boundary");

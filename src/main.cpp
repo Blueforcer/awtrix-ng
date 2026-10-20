@@ -362,7 +362,7 @@ void setup() {
   bootstrap::configureScriptFiles(g_scriptSvc, g_scriptStore, g_scriptIcon);
 #if defined(AWTRIX_SOC_ESP32S3)
   if (g_radio)
-    g_scriptSvc.audioStats = [](int64_t now, audio::FrameStats& out) {
+    g_scriptSvc.audioStats = [](int64_t now, bool, audio::FrameStats& out) {
       return g_radio->analysis(now, out);
     };
 #endif

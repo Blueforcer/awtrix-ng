@@ -13,7 +13,7 @@ namespace awtrix::tc002 {
 
 // Adapter for the supervisor's bounded PCM input. Acquires only on demand, keeps
 // at most one request in flight, and never exposes incomplete UART captures.
-class MicrophoneInput final : public audio::IAnalysisSource {
+class MicrophoneInput final : public audio::IListeningSource {
  public:
   using Send = std::function<bool(std::string)>;
   explicit MicrophoneInput(Send send) : send_(std::move(send)) {}
@@ -21,16 +21,19 @@ class MicrophoneInput final : public audio::IAnalysisSource {
   bool analysis(int64_t nowMs, audio::FrameStats& out) override {
     wanted_ = true;
     request(nowMs);
-    return cache_.analysis(nowMs, out);
+    return heard(nowMs, out);
   }
+
+  bool heard(int64_t nowMs, audio::FrameStats& out) override { return cache_.analysis(nowMs, out); }
 
   // The fundamental of the newest window in Hz, or 0. It shares the snapshots with analysis()
   // but not its switch: deactivate() never stops it, musicPitch() decides when it is asked.
-  // Computed at most once per window, and only when asked.
-  float pitch(int64_t nowMs) {
+  // Computed at most once per window, and only when asked. Without listen it asks for no new
+  // window and answers from the newest one.
+  float pitch(int64_t nowMs, bool listen) {
     pitchAskedAt_ = nowMs;
     if (streaming_) return 0.f;
-    request(nowMs);
+    if (listen) request(nowMs);
     if (windowAt_ < 0 || nowMs < windowAt_ || nowMs - windowAt_ > kPitchMaxAgeMs) return 0.f;
     if (!pitchDone_) {
       pitch_ = detector_.detect(window_.data(), static_cast<int>(window_.size()), kMicrophonePcmRate);

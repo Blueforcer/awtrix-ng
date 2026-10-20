@@ -165,8 +165,9 @@ struct ScriptServices {
   std::function<std::size_t()> maxAllocHeap;
   std::function<void(const std::string&)> logDebug;
   IScriptApplication* application = nullptr;
-  // The analysed frame audible at nowMs; asking is what switches the analysis on.
-  std::function<bool(int64_t nowMs, audio::FrameStats& out)> audioStats;
+  // The analysed frame audible at nowMs; asking is what switches the analysis on. onScreen: asked
+  // from draw(), so the app is on the panel; only then may a microphone start listening.
+  std::function<bool(int64_t nowMs, bool onScreen, audio::FrameStats& out)> audioStats;
   std::function<bool(const std::string& name, std::string& out)> readSource;
   std::function<bool(const std::string& name, std::string& out)> readStore;
 };

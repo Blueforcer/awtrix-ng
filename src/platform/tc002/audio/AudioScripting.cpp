@@ -28,7 +28,8 @@ int AudioScripting::beat(bvm* vm) {
 
 int AudioScripting::pitch(bvm* vm) {
   auto& self = *static_cast<AudioScripting*>(script::BerryVM::nativeSelf(vm));
-  be_pushreal(vm, static_cast<breal>(self.pitch_ ? self.pitch_(self.now()) : 0));
+  const bool onScreen = script::ScriptExtensionHost::canvas() != nullptr;
+  be_pushreal(vm, static_cast<breal>(self.pitch_ ? self.pitch_(self.now(), onScreen) : 0));
   be_return(vm);
 }
 
