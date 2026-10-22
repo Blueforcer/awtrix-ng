@@ -158,6 +158,14 @@ bool GattServer::setValue(uint16_t valueHandle, Bytes value) {
 void GattServer::linkUp(int link) { links_[link] = Link{}; }
 void GattServer::linkDown(int link) { links_.erase(link); }
 
+bool GattServer::limitMtu(int link, uint16_t maximum) {
+  auto it = links_.find(link);
+  const uint16_t limit = std::max<uint16_t>(att::kDefaultMtu, std::min<uint16_t>(maximum, att::kMaxMtu));
+  if (it == links_.end() || it->second.mtu > limit) return false;
+  it->second.maxMtu = limit;
+  return true;
+}
+
 uint16_t GattServer::mtu(int link) const {
   auto it = links_.find(link);
   return it == links_.end() ? att::kDefaultMtu : it->second.mtu;
@@ -208,9 +216,9 @@ Bytes GattServer::handle(int link, const uint8_t* p, std::size_t n, int security
   switch (op) {
     case att::kMtuReq: {
       if (n < 3) return att::error(op, 0, att::kInvalidPdu);
-      state.mtu = std::max<uint16_t>(att::kDefaultMtu, std::min<uint16_t>(le16(p + 1), att::kMaxMtu));
+      state.mtu = std::max<uint16_t>(att::kDefaultMtu, std::min<uint16_t>(le16(p + 1), state.maxMtu));
       Bytes rsp{att::kMtuRsp};
-      put16(rsp, att::kMaxMtu);
+      put16(rsp, state.maxMtu);
       return rsp;
     }
     case att::kFindInfoReq: {

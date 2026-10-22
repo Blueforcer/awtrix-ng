@@ -47,7 +47,7 @@ class GattClient {
 
   explicit GattClient(Send send) : send_(std::move(send)) {}
 
-  void start(int64_t nowMs);
+  void start(int64_t nowMs, bool exchangeMtu = true);
   bool ready() const { return state_ == State::Ready; }
   bool broken() const { return state_ == State::Broken; }
   const std::string& error() const { return error_; }

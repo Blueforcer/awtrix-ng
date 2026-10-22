@@ -32,6 +32,9 @@ class LinuxBleRadio : public BleRadio {
     int connectAttempts = 3;
     int64_t retryDelayMs = 1000;
     int64_t secureTimeoutMs = 30000;
+    bool logConnectionParameters = false;
+    // Adapter-wide privacy enables distributing our local identity during pairing.
+    bool privacy = false;
     std::function<void(const std::string&)> log;
   };
 
@@ -49,6 +52,7 @@ class LinuxBleRadio : public BleRadio {
   bool secure(int link, int securityLevel) override;
   int security(int link) const override;
   Address peer(int link) const override;
+  bool requestSteadyTiming(int link) override;
   int advertisingSlots() const override { return slots_; }
   bool advertise(int instance, bool connectable, const Bytes& adv, const Bytes& scanResponse,
                  std::string& error) override;

@@ -61,6 +61,8 @@ enum MgmtOp : uint16_t {
   kUnpairDevice = 0x001b,
   kUserConfirmReply = 0x001c,
   kUserPasskeyNegativeReply = 0x001f,
+  kSetSecureConnections = 0x002d,
+  kSetPrivacy = 0x002f,
   kLoadIrks = 0x0030,
   kReadAdvFeatures = 0x003d,
   kAddAdvertising = 0x003e,

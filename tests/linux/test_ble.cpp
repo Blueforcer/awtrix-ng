@@ -127,7 +127,7 @@ void advertising() {
 }
 
 // A client and a server talking to each other directly: discovery, read, write, notify.
-void clientAgainstServer() {
+void clientAgainstServer(bool exchangeMtu = true) {
   GattServer server;
   server.setDeviceName("PEER");
   std::vector<uint16_t> handles;
@@ -139,7 +139,9 @@ void clientAgainstServer() {
   check(svc > 0 && handles.size() == 3, "a service with three characteristics is added");
   server.linkUp(1);
   std::deque<Bytes> toServer, toClient;
+  std::vector<Bytes> requests;
   GattClient client([&](const Bytes& pdu) {
+    requests.push_back(pdu);
     toServer.push_back(pdu);
     return true;
   });
@@ -164,10 +166,12 @@ void clientAgainstServer() {
       }
     }
   };
-  client.start(0);
+  client.start(0, exchangeMtu);
   run();
   check(ready, "discovery finishes");
-  check(client.mtu() == att::kMaxMtu, "both sides agree on the largest MTU");
+  check(client.mtu() == (exchangeMtu ? att::kMaxMtu : att::kDefaultMtu), "client uses the selected MTU policy");
+  check(requests.front()[0] == (exchangeMtu ? att::kMtuReq : att::kReadByGroupReq),
+        "default-MTU discovery starts directly with service discovery");
   check(client.services().size() == 3, "GAP, GATT and the script's service are found");
   const GattClient::Characteristic* c = client.find(uuid("fff0"), uuid("fff1"));
   check(c && c->value == handles[0] && c->clientConfig == handles[0] + 1, "the notify characteristic and its CCCD are found");
@@ -251,6 +255,55 @@ void encryptedSubscriptions() {
     server.removeService(service);
     check(server.drain(allowed).empty(), "removed values are not delivered from an old queue");
   }
+}
+
+void persistentLocalBleIdentity() {
+  char directory[] = "/tmp/awtrix-ble-identity-XXXXXX";
+  const char* made = ::mkdtemp(directory);
+  check(made != nullptr, "local identity fixture gets a private directory");
+  if (!made) return;
+  const std::string path = std::string(directory) + "/bonds.json";
+  const std::function<void(const std::string&)> log;
+  Bytes identity;
+  const Address peer = mkaddr("02:00:00:00:00:11");
+  Bytes ltk(BondStore::kLtkInfo, 0);
+  std::copy(peer.b.begin(), peer.b.end(), ltk.begin());
+  ltk[6] = 1;
+  {
+    BondStore seed(path, log);
+    seed.rememberLtk(ltk);
+  }
+  {
+    BondStore store(path, log);
+    store.load();
+    check(store.localIrk().empty(), "old bond files need no local identity field");
+    check(store.ensureLocalIrk(), "local identity is securely generated and persisted");
+    identity = store.localIrk();
+    check(identity.size() == 16 && std::any_of(identity.begin(), identity.end(), [](uint8_t b) { return b != 0; }),
+          "local identity is a nonzero 128-bit key");
+    check(store.ensureLocalIrk() && store.localIrk() == identity, "repeated setup preserves the local identity");
+    struct stat state{};
+    check(::stat(path.c_str(), &state) == 0 && (state.st_mode & 0777) == 0600,
+          "local identity shares the private pairing store");
+  }
+  {
+    BondStore restored(path, log);
+    restored.load();
+    check(restored.localIrk() == identity && restored.contains(peer), "local and peer keys survive reload together");
+    restored.forget(peer);
+  }
+  {
+    BondStore restored(path, log);
+    restored.load();
+    check(restored.localIrk() == identity && !restored.contains(peer),
+          "forgetting the final peer does not rotate the host identity");
+  }
+  const std::string missing = std::string(directory) + "/missing/bonds.json";
+  BondStore failed(missing, log);
+  check(!failed.ensureLocalIrk() && failed.localIrk().empty(),
+        "an identity that could not be persisted is not shared with a peer");
+  ::unlink(path.c_str());
+  check(::rmdir(directory) == 0, "local identity writes leave no temporary files");
 }
 
 void persistentBonds() {
@@ -792,13 +845,21 @@ struct PadRig {
   std::vector<uint16_t> handles;
   std::vector<std::string> logs;
   int64_t now = 1000;
-  PadRig() {
+  explicit PadRig(bool compactInput = false, bool readableInput = false) {
+    hub.log = [this](const std::string& line) { logs.push_back(line); };
     check(::mkdtemp(directory) != nullptr, "gamepad fixture gets a directory");
     path = std::string(directory) + "/gamepad.json";
     // The gamepad's report 1 and a second input report of the same length, report 2.
+    Bytes reportMap = eightBitDoMap();
+    if (compactInput) {
+      // Six vendor bytes instead of 23: a 16-byte input fits the default ATT MTU.
+      for (std::size_t i = 0; i + 1 < reportMap.size(); ++i)
+        if (reportMap[i] == 0x95 && reportMap[i + 1] == 0x17) reportMap[i + 1] = 6;
+    }
     radio.peerDb.addService(Uuid::from16(0x1812),
-                            {{Uuid::from16(0x2a4b), att::kPropRead, false, eightBitDoMap(), {}},
-                             {Uuid::from16(0x2a4d), att::kPropNotify, false, {}, {{Uuid::from16(0x2908), Bytes{1, 1}}}},
+                            {{Uuid::from16(0x2a4b), att::kPropRead, false, reportMap, {}},
+                             {Uuid::from16(0x2a4d), static_cast<uint8_t>(att::kPropNotify | (readableInput ? att::kPropRead : 0)),
+                              false, readableInput ? Bytes(16, 0) : Bytes{}, {{Uuid::from16(0x2908), Bytes{1, 1}}}},
                              {Uuid::from16(0x2a4d), att::kPropNotify, false, {}, {{Uuid::from16(0x2908), Bytes{2, 1}}}}},
                             handles);
     radio.peerDb.drain();
@@ -841,6 +902,82 @@ struct PadRig {
     step();
   }
 };
+
+
+
+
+void xboxUsesDefaultMtu() {
+  PadRig r(true, true);
+  r.pad->start(r.now);
+  r.pad->pair(r.now);
+  r.step();
+  r.advert("68:6C:E6:7A:21:A5", "Xbox");
+  check(r.radio.timingRequests.size() == 1, "Xbox requests the steady timing once");
+  check(std::none_of(r.radio.sent.begin(), r.radio.sent.end(), [](const auto& packet) {
+    return !packet.second.empty() && packet.second[0] == att::kMtuReq;
+  }), "Xbox discovery does not initiate MTU exchange");
+  for (int i = 0; i < 7; ++i) {
+    r.now += 3000;
+    r.hub.tick(r.now);
+    r.step();
+  }
+  check(r.status() == GamepadStatus::Connecting && r.buttons() == 0,
+        "a readable but silent input never establishes readiness or publishes controls");
+  check(std::none_of(r.radio.sent.begin(), r.radio.sent.end(), [&](const auto& packet) {
+    const Bytes& pdu = packet.second;
+    return !pdu.empty() && (pdu[0] == att::kWriteCmd ||
+           (pdu.size() == 3 && pdu[0] == att::kReadReq && le16(pdu.data() + 1) == r.handles[1]));
+  }), "a silent subscription does not poll input or rewrite its configuration");
+  Bytes input = eightBitDoReport(15, 1);
+  input.resize(16);
+  r.radio.notifyPeer(r.handles[1], input);
+  r.step();
+  check(r.status() == GamepadStatus::Ready && r.buttons() == 1,
+        "a 16-byte Xbox-style report establishes input at MTU 23");
+}
+
+void gamepadWaitsForEncryption() {
+  PadRig r;
+  r.radio.deferSecurity = true;
+  r.pad->start(r.now);
+  r.pad->pair(r.now);
+  r.step();
+  r.advert("68:6C:E6:7A:21:A5", "8BitDo Ultimate");
+  const int link = r.linkOf("68:6C:E6:7A:21:A5");
+  const auto readMap = [&] {
+    return std::any_of(r.radio.sent.begin(), r.radio.sent.end(), [&](const auto& packet) {
+      return packet.second.size() == 3 && packet.second[0] == att::kReadReq &&
+             le16(packet.second.data() + 1) == r.handles[0];
+    });
+  };
+  check(link >= 0 && r.status() == GamepadStatus::Connecting, "Xbox waits for encryption");
+  check(!readMap(), "HID report map is not read before security completes");
+  check(r.radio.sent.empty(), "gamepad sends no ATT discovery requests before encryption");
+  r.radio.levels[link] = 2;
+  r.radio.events.secured(link, true, "");
+  r.step();
+  check(readMap(), "HID report map is read after security completes");
+  check(r.radio.timingRequests.empty(), "other named gamepads keep their connection timing");
+  r.report(1);
+  check(r.status() == GamepadStatus::Ready && r.buttons() == 1, "encrypted gamepad reaches ready on input");
+}
+
+void gamepadSecurityFailure() {
+  PadRig r;
+  r.radio.deferSecurity = true;
+  r.pad->start(r.now);
+  r.pad->pair(r.now);
+  r.step();
+  r.advert("68:6C:E6:7A:21:A5", "8BitDo Ultimate");
+  r.radio.events.secured(r.linkOf("68:6C:E6:7A:21:A5"), false, "pairing failed (status 5)");
+  r.step();
+  check(r.status() == GamepadStatus::Pairing, "failed security returns to pairing for a retry");
+  check(std::any_of(r.logs.begin(), r.logs.end(), [](const std::string& line) {
+    return has(line, "connect/security/discovery: pairing failed (status 5)");
+  }), "security failure names its phase and preserves the reason");
+  std::string stored;
+  check(!posix::readText(r.path, stored), "failed security never remembers the gamepad");
+}
 
 void builtInGamepad() {
   PadRig r;
@@ -1077,7 +1214,79 @@ void pairingIsBoundedAndIdempotent() {
         "pairing timeout preserves the first controller");
 }
 
+void serverMtuLimitPreservesExistingNegotiation() {
+  GattServer server;
+  server.linkUp(1);
+  server.linkUp(2);
+  check(server.limitMtu(1, 23), "a new link can be limited to the default MTU");
+  const Bytes request{att::kMtuReq, 247, 0};
+  const Bytes limited = server.handle(1, request.data(), request.size(), 1);
+  check(limited == Bytes({att::kMtuRsp, 23, 0}) && server.mtu(1) == 23,
+        "a peer-initiated MTU exchange respects the gamepad limit");
+  const Bytes normal = server.handle(2, request.data(), request.size(), 1);
+  check(normal == Bytes({att::kMtuRsp, 247, 0}) && server.mtu(2) == 247,
+        "the gamepad MTU limit does not affect another link");
+  check(!server.limitMtu(2, 23) && server.mtu(2) == 247,
+        "an already negotiated larger MTU is not lowered in place");
+}
+
+void encryptedDiscoveryPreservesConnectionOwnership() {
+  for (int mode = 0; mode < 3; ++mode) {
+    for (int outcome = 0; outcome < 4; ++outcome) {
+      Rig r;
+      r.radio.deferSecurity = true;
+      r.call("a", "scan", "{}", 9);
+      const Address peer = mkaddr("02:00:00:00:00:23");
+      const auto accept = [&] {
+        r.radio.peers[7] = peer;
+        r.radio.levels[7] = 1;
+        r.radio.peerDb.linkUp(7);
+        r.radio.events.accepted(7, peer);
+      };
+      if (mode == 1) accept();
+      r.radio.timingSupported = mode != 1;
+      r.hub.call("a", "connect", R"({"addr":"02:00:00:00:00:23","secure":true,"exchangeMtu":false,"steadyTiming":true})", 1, r.now);
+      if (mode == 2) accept();
+      r.settle();
+      const int id = mode == 0 ? 100 : 7;
+      check(r.radio.sent.empty() && r.events.of("a", 1).empty(),
+            "outgoing, reused and replacement links wait for security before ATT discovery");
+      check(r.radio.timingRequests.empty(), "timing request waits for encryption");
+      if (outcome >= 2) {
+        if (outcome == 2) r.radio.events.disconnected(id);
+        else r.hub.forget("a", r.now);
+        r.radio.levels[id] = 2;
+        r.radio.events.secured(id, true, "");
+      } else {
+        if (outcome == 0) r.radio.levels[id] = 2;
+        r.radio.events.secured(id, outcome == 0, outcome == 0 ? "" : "security rejected");
+      }
+      r.settle();
+      check(r.radio.timingRequests == (outcome == 0 ? std::vector<int>{id} : std::vector<int>{}),
+            "only successful security requests timing once on the adopted physical link");
+      if (outcome == 0) {
+        check(!r.radio.sent.empty() && has(r.events.last("a", 1), "\"connected\":true"),
+              "confirmed security starts discovery on the correct physical link");
+        check(r.radio.sent.front().first == id, "discovery retains the adopted connection identity");
+        check(r.radio.sent.front().second[0] == att::kReadByGroupReq && has(r.events.last("a", 1), "\"mtu\":23"),
+              "default-MTU policy survives outgoing, incoming and replacement connections");
+      } else if (outcome == 3) {
+        check(r.radio.sent.empty() && r.events.of("a", 1).empty(),
+              "an abandoned request ignores late security completion");
+        if (mode == 1)
+          check(std::count(r.radio.disconnected.begin(), r.radio.disconnected.end(), 7) == 0,
+                "cancelling discovery leaves the borrowed incoming connection open");
+      } else {
+        check(r.radio.sent.empty() && has(r.events.last("a", 1), "\"error\""),
+              "failed security or a disconnect never starts ATT discovery");
+      }
+    }
+  }
+}
+
 int main() {
+  serverMtuLimitPreservesExistingNegotiation();
+  encryptedDiscoveryPreservesConnectionOwnership();
   uint8_t mac[6] = {};
   check(posix::parseMac("01:23:45:67:89:aB", mac) && mac[0] == 1 && mac[5] == 0xab, "MAC network byte order");
   check(posix::parseMac("01:23:45:67:89:aB", mac, true) && mac[0] == 0xab && mac[5] == 1, "MAC controller byte order");
@@ -1100,8 +1309,10 @@ int main() {
   types();
   advertising();
   clientAgainstServer();
+  clientAgainstServer(false);
   encryptedSubscriptions();
   persistentBonds();
+  persistentLocalBleIdentity();
   sharedScan();
   rateLimit();
   sharedConnection();
@@ -1121,6 +1332,9 @@ int main() {
   idlePowerOff();
   hidReports();
   builtInGamepad();
+  xboxUsesDefaultMtu();
+  gamepadWaitsForEncryption();
+  gamepadSecurityFailure();
   pairingEnds();
   retriesSlowDown();
   if (failures) std::printf("%d failure(s)\n", failures);

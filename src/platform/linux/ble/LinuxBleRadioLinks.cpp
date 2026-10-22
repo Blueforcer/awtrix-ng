@@ -299,11 +299,46 @@ int LinuxBleRadio::security(int id) const {
   return s.level;
 }
 
+bool LinuxBleRadio::requestSteadyTiming(int id) {
+  const auto it = links_.find(id);
+  if (it == links_.end() || !it->second.open) return false;
+  L2capConninfo info{};
+  socklen_t size = sizeof info;
+  if (::getsockopt(it->second.fd, kSolL2cap, kL2capConninfo, &info, &size) < 0 || size < sizeof info) {
+    note("ble: link " + std::to_string(id) + " steady timing skipped: no HCI handle");
+    return false;
+  }
+  const auto role = peripheralHandles_.find(info.handle);
+  if (role == peripheralHandles_.end() || role->second) {
+    note("ble: link " + std::to_string(id) + " steady timing skipped: central role not confirmed");
+    return false;
+  }
+  // 50 ms interval, no latency, 600 ms supervision timeout: interval units 1.25 ms, timeout units 10 ms.
+  Bytes params;
+  put16(params, info.handle);
+  put16(params, 40);
+  put16(params, 40);
+  put16(params, 0);
+  put16(params, 60);
+  put16(params, 0);
+  put16(params, 0);
+  const bool queued = hciCommand(0x2013, params);
+  note("ble: HCI " + std::to_string(info.handle) + " steady timing " + (queued ? "queued" : "send failed") +
+       ": interval 50ms, latency 0, timeout 600ms");
+  return queued;
+}
+
 bool LinuxBleRadio::secure(int id, int level) {
   auto it = links_.find(id);
   if (it == links_.end() || !it->second.open) return false;
   BtSecurity s{static_cast<uint8_t>(level), 0};
-  if (::setsockopt(it->second.fd, kSolBluetooth, kBtSecurity, &s, sizeof s) < 0) return false;
+  if (::setsockopt(it->second.fd, kSolBluetooth, kBtSecurity, &s, sizeof s) < 0) {
+    const int error = errno;
+    note("ble: " + it->second.peer.str() + " security request failed: " + std::strerror(error) +
+         " (errno " + std::to_string(error) + ")");
+    return false;
+  }
+  note("ble: " + it->second.peer.str() + " requesting security level " + std::to_string(level));
   it->second.secureTarget = level;
   it->second.secureDeadline = now_ + options_.secureTimeoutMs;
   return true;

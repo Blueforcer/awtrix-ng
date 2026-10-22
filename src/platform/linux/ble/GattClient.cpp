@@ -9,10 +9,10 @@ namespace awtrix::ble {
 // Longest value a read follows with blob reads; the ATT limit for an attribute value.
 constexpr std::size_t kMaxValue = 512;
 
-void GattClient::start(int64_t nowMs) {
+void GattClient::start(int64_t nowMs, bool exchangeMtu) {
   now_ = nowMs;
   state_ = State::Discovering;
-  queue(request(Kind::Mtu));
+  if (exchangeMtu) queue(request(Kind::Mtu));
   queue(request(Kind::Services, 0, 1));
   pump(nowMs);
 }

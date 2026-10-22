@@ -279,6 +279,11 @@ void BleHub::releaseUser(Key key, int id, bool tellScript) {
   }
   if (!l->second.users.empty() || !l->second.waiting.empty()) return;
   if (!l->second.outgoing) {
+    // A late security result must not restart discovery after the last client lets go.
+    l->second.secureDiscovery = false;
+    l->second.securingDiscovery = false;
+    l->second.exchangeMtu = true;
+    l->second.steadyTiming = false;
     retire(l->second, "disconnected");
     l->second.subscribers.clear();
     l->second.ready = true;

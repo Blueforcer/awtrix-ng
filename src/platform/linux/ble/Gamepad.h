@@ -78,7 +78,9 @@ class Gamepad {
   int64_t retryAt_ = -1;
   int failures_ = 0;
   uint32_t lastId_ = 0;
-  uint32_t scanId_ = 0, connId_ = 0, readId_ = 0, subId_ = 0;
+  uint32_t scanId_ = 0, connId_ = 0, pairId_ = 0, readId_ = 0, subId_ = 0;
+  unsigned ignoredReports_ = 0;
+  const char* phase_ = "idle";
   Known linking_;
   HidLayout layout_;
   GamepadStatus status_ = GamepadStatus::Unpaired;

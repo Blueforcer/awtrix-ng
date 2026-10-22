@@ -47,8 +47,17 @@ void LinuxBleRadio::mgmtEvent(const uint8_t* p, std::size_t n) {
       if (state_ != State::Off && index == index_) fail("the Bluetooth controller went away");
       break;
     case kNewLtk:
-      if (len >= 1 + BondStore::kLtkInfo && d[0])
-        bonds_.rememberLtk(Bytes(d + 1, d + 1 + BondStore::kLtkInfo));
+      if (index == index_ && len >= 1 + BondStore::kLtkInfo) {
+        static const char* const kTypes[] = {
+          "legacy (unauthenticated)", "legacy (authenticated)",
+          "LE Secure Connections (unauthenticated)", "LE Secure Connections (authenticated)",
+          "LE Secure Connections (debug)"
+        };
+        const std::string type = d[8] < 5 ? kTypes[d[8]] : "unknown type " + std::to_string(d[8]);
+        note("ble: " + fromWire(d + 1, d[7]).str() + " pairing completed: " + type +
+             ", key size " + std::to_string(d[10]) + " bytes, store hint " + std::to_string(d[0]));
+        if (d[0]) bonds_.rememberLtk(Bytes(d + 1, d + 1 + BondStore::kLtkInfo));
+      }
       break;
     case kNewIrk:
       if (len >= 1 + 6 + BondStore::kIrkInfo && d[0])
@@ -69,6 +78,7 @@ void LinuxBleRadio::mgmtEvent(const uint8_t* p, std::size_t n) {
     case kAuthFailed:
       if (len >= 8) {
         const Address who = fromWire(d, d[6]);
+        note("ble: " + who.str() + " authentication failed (status " + std::to_string(d[7]) + ")");
         for (auto& [id, link] : links_) {
           if (link.peer.b != who.b || !link.secureTarget) continue;
           link.secureTarget = 0;
@@ -125,6 +135,23 @@ void LinuxBleRadio::configure() {
   slots_ = mgmt(kReadAdvFeatures, {}, &features) == 0 && features.size() >= 7 ? features[6] : 0;
   mgmt(kSetIoCapability, {0x03});
   mgmt(kSetBondable, {0x01});
+  if (options_.privacy) {
+    if (!bonds_.ensureLocalIrk()) {
+      fail("cannot create and store the local BLE identity");
+      return;
+    }
+    Bytes params{0x01};
+    params.insert(params.end(), bonds_.localIrk().begin(), bonds_.localIrk().end());
+    const int privacy = mgmt(kSetPrivacy, params);
+    if (privacy != 0) {
+      fail("cannot enable BLE privacy (status " + std::to_string(privacy) + ")");
+      return;
+    }
+    note("ble: local BLE identity configured; LE privacy enabled for the whole adapter");
+  }
+  const int sc = mgmt(kSetSecureConnections, {0x01});
+  note(sc == 0 ? "ble: LE Secure Connections enabled" :
+       "ble: LE Secure Connections unavailable (status " + std::to_string(sc) + ")");
   mgmt(kSetConnectable, {0x01});
   Bytes irks;
   put16(irks, static_cast<uint16_t>(bonds_.irks().size()));

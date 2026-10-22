@@ -138,7 +138,7 @@ void LinuxBleRadio::hciEvent(const uint8_t* p, std::size_t n) {
     op = le16(p + 5);
     status = p[3];
   }
-  if (op == 0x0406 || op == 0x2006 || (op >= 0x200a && op <= 0x200e)) {
+  if (op == 0x0406 || op == 0x2006 || op == 0x2013 || (op >= 0x200a && op <= 0x200e)) {
     if (status) {
       if (!hciErrors_.count(op) || hciErrors_[op] != status) {
         char text[80];
@@ -148,6 +148,8 @@ void LinuxBleRadio::hciEvent(const uint8_t* p, std::size_t n) {
       hciErrors_[op] = status;
     } else {
       hciErrors_.erase(op);
+      if (op == 0x2013 && options_.logConnectionParameters)
+        note("ble: HCI 0x2013 accepted; waiting for connection update result");
     }
     if (op == 0x200d && status && directLink_) failDirect("the controller refused the connection (status " + std::to_string(status) + ")");
     // Unknown Connection Identifier: the link being disconnected is gone already. Only a cancel
@@ -155,8 +157,43 @@ void LinuxBleRadio::hciEvent(const uint8_t* p, std::size_t n) {
     if (op == 0x0406 && status == 0x02 && cancel_ && cancel_->handle) finishCancel();
     return;
   }
-  if (p[1] != 0x3e || p[2] < 19 || (p[3] != 0x01 && p[3] != 0x0a)) return;
+  if (p[1] != 0x3e || p[2] < 1) return;
+  if (p[3] == 0x03 && p[2] >= 10) {
+    if (options_.logConnectionParameters) {
+      char text[192];
+      if (p[4]) {
+        std::snprintf(text, sizeof text, "ble: HCI %u update failed (status 0x%02x)",
+                      le16(p + 5), p[4]);
+      } else {
+        std::snprintf(text, sizeof text,
+                      "ble: HCI %u updated: interval %.2fms, latency %u, timeout %ums",
+                      le16(p + 5), le16(p + 7) * 1.25, le16(p + 9), le16(p + 11) * 10);
+      }
+      note(text);
+    }
+    return;
+  }
+  if (p[3] == 0x06 && p[2] >= 11) {
+    if (options_.logConnectionParameters) {
+      char text[192];
+      std::snprintf(text, sizeof text,
+                    "ble: HCI %u peer request: interval %.2f..%.2fms, latency %u, timeout %ums",
+                    le16(p + 4), le16(p + 6) * 1.25, le16(p + 8) * 1.25, le16(p + 10), le16(p + 12) * 10);
+      note(text);
+    }
+    return;
+  }
+  if ((p[3] != 0x01 && p[3] != 0x0a) || p[2] < (p[3] == 0x0a ? 31 : 19)) return;
   status = p[4];
+  if (!status && options_.logConnectionParameters) {
+    const uint8_t* params = p + (p[3] == 0x0a ? 27 : 15);
+    char text[224];
+    std::snprintf(text, sizeof text,
+                  "ble: HCI %u connected: %s, interval %.2fms, latency %u, timeout %ums",
+                  le16(p + 5), p[7] == 0 ? "central" : "peripheral", le16(params) * 1.25,
+                  le16(params + 2), le16(params + 4) * 10);
+    note(text);
+  }
   if (!status) peripheralHandles_[le16(p + 5)] = p[7] != 0;
   if (!status && p[7] != 0) return;
   if (cancel_) {

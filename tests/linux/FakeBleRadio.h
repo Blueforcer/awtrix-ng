@@ -81,6 +81,7 @@ class FakeRadio : public BleRadio {
     return true;
   }
   bool secure(int link, int level) override {
+    if (deferSecurity) return true;
     later([this, link, level] {
       levels[link] = level;
       events.secured(link, true, "");
@@ -91,6 +92,13 @@ class FakeRadio : public BleRadio {
     auto it = levels.find(link);
     return it == levels.end() ? 1 : it->second;
   }
+  bool deferSecurity = false;
+  bool requestSteadyTiming(int link) override {
+    timingRequests.push_back(link);
+    return timingSupported;
+  }
+  std::vector<int> timingRequests;
+  bool timingSupported = true;
   Address peer(int link) const override {
     auto it = peers.find(link);
     return it == peers.end() ? Address() : it->second;

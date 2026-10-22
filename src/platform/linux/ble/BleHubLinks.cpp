@@ -14,10 +14,20 @@ std::string BleHub::connect(const Key& key, const std::string& args) {
   if (users_.count(key)) return error("already connecting");
   Address peer;
   if (!parseAddress(args, peer)) return error("bad address");
+  const bool secure = api::memberFlag(args, "secure");
+  const bool steadyTiming = api::memberFlag(args, "steadyTiming");
+  const bool exchangeMtu = !api::present(api::memberValue(args, "exchangeMtu")) || api::memberFlag(args, "exchangeMtu");
   // One link per peer, whoever opened it: a watch that connects back to us by itself is read
   // over the link it made, as a second connection to it would be refused.
   for (auto& [id, link] : links_) {
     if (link.peer.b != peer.b) continue;
+    link.secureDiscovery = link.secureDiscovery || secure;
+    if (!link.client) {
+      link.steadyTiming = link.steadyTiming || steadyTiming;
+      link.exchangeMtu = link.exchangeMtu && exchangeMtu;
+    } else if (steadyTiming && log) {
+      log("ble: link " + std::to_string(id) + " preserving timing of shared GATT client");
+    }
     users_[key] = id;
     if (link.client && link.ready) {
       link.users.insert(key);
@@ -32,11 +42,14 @@ std::string BleHub::connect(const Key& key, const std::string& args) {
   const std::size_t outgoing =
       static_cast<std::size_t>(std::count_if(links_.begin(), links_.end(), [](const auto& e) { return e.second.outgoing; }));
   if (outgoing >= limits_.links) return error("too many connections");
-  const int id = radio_.connect(peer, api::memberFlag(args, "secure") ? 2 : 1);
+  const int id = radio_.connect(peer, secure ? 2 : 1);
   if (id < 0) return error("connect failed");
   Link& link = links_[id];
   link.peer = peer;
   link.outgoing = true;
+  link.secureDiscovery = secure;
+  link.exchangeMtu = exchangeMtu;
+  link.steadyTiming = steadyTiming;
   link.waiting.insert(key);
   users_[key] = id;
   return kOk;
@@ -58,7 +71,29 @@ void BleHub::onConnected(int id, bool ok, const std::string& why) {
 
 void BleHub::startClient(int id) {
   Link& link = links_[id];
+  if (link.client || link.securingDiscovery) return;
+  if (!link.exchangeMtu && !server_.limitMtu(id, att::kDefaultMtu)) {
+    link.exchangeMtu = true;
+    if (log) log("ble: " + link.peer.str() + " preserving already negotiated ATT MTU on shared connection");
+  }
+  if (link.exchangeMtu) server_.limitMtu(id, att::kMaxMtu);
   link.ready = false;
+  if (link.secureDiscovery && radio_.security(id) < 2) {
+    link.securingDiscovery = true;
+    if (log) log("ble: " + link.peer.str() + " requesting encryption before GATT discovery");
+    if (!radio_.secure(id, 2)) {
+      radio_.disconnect(id);
+      dropLink(id, "cannot request encryption before GATT discovery");
+    }
+    return;
+  }
+  if (link.secureDiscovery && log) log("ble: " + link.peer.str() + " encrypted; starting GATT discovery");
+  if (link.steadyTiming) {
+    link.steadyTiming = false;
+    if (!radio_.requestSteadyTiming(id) && log)
+      log("ble: link " + std::to_string(id) + " steady timing not queued; continuing discovery");
+  }
+  if (!link.exchangeMtu && log) log("ble: " + link.peer.str() + " ATT MTU 23; no local MTU exchange (Xbox profile)");
   link.client = std::make_unique<GattClient>([this, id](const Bytes& pdu) { return radio_.send(id, pdu); });
   link.client->onReady = [this, id](bool ready) {
     auto l = links_.find(id);
@@ -71,6 +106,8 @@ void BleHub::startClient(int id) {
       return;
     }
     l->second.ready = true;
+    if (log) log("ble: " + l->second.peer.str() + " GATT discovery complete; ATT MTU " +
+                 std::to_string(l->second.client->mtu()));
     const std::set<Key> waiting = std::move(l->second.waiting);
     l->second.waiting.clear();
     for (const Key& k : waiting) {
@@ -90,7 +127,7 @@ void BleHub::startClient(int id) {
       if (sub != subscriptions_.end()) deliver(k, sub->second, out);
     }
   };
-  link.client->start(now_);
+  link.client->start(now_, link.exchangeMtu);
 }
 
 // After turning a connect down the kernel goes on connecting to that peer by itself, and the link
@@ -98,7 +135,7 @@ void BleHub::startClient(int id) {
 void BleHub::onAccepted(int id, const Address& peer) {
   int pending = -1;
   for (const auto& [other, candidate] : links_)
-    if (candidate.outgoing && !candidate.client && candidate.peer.b == peer.b) pending = other;
+    if (candidate.outgoing && !candidate.client && !candidate.securingDiscovery && candidate.peer.b == peer.b) pending = other;
   Link& link = links_[id];
   link.peer = peer;
   server_.linkUp(id);
@@ -106,6 +143,9 @@ void BleHub::onAccepted(int id, const Address& peer) {
   if (pending >= 0) {
     radio_.disconnect(pending);
     link.outgoing = true;
+    link.secureDiscovery = links_[pending].secureDiscovery;
+    link.exchangeMtu = links_[pending].exchangeMtu;
+    link.steadyTiming = links_[pending].steadyTiming;
     link.waiting = std::move(links_[pending].waiting);
     links_.erase(pending);
     for (const Key& k : link.waiting) users_[k] = id;
@@ -191,6 +231,15 @@ std::string BleHub::pair(const Key& key, const std::string& args) {
 void BleHub::onSecured(int id, bool ok, const std::string& why) {
   auto it = links_.find(id);
   if (it == links_.end()) return;
+  if (it->second.securingDiscovery) {
+    it->second.securingDiscovery = false;
+    if (ok) startClient(id);
+    else {
+      radio_.disconnect(id);
+      dropLink(id, why.empty() ? "encryption before GATT discovery failed" : why);
+    }
+    return;
+  }
   const std::vector<Key> waiting = std::move(it->second.pairing);
   it->second.pairing.clear();
   auto retries = std::move(it->second.afterSecure);

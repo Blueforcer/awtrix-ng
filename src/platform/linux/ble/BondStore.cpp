@@ -1,6 +1,8 @@
 #include "platform/linux/ble/BondStore.h"
 
 #include <algorithm>
+#include <cerrno>
+#include <sys/random.h>
 
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
@@ -23,6 +25,23 @@ void BondStore::rememberIrk(const Bytes& key) {
   }), irks_.end());
   irks_.push_back(key);
   save();
+}
+
+bool BondStore::ensureLocalIrk() {
+  if (!localIrk_.empty()) return true;
+  Bytes key(16);
+  std::size_t filled = 0;
+  while (filled < key.size()) {
+    const ssize_t n = getrandom(key.data() + filled, key.size() - filled, 0);
+    if (n < 0 && errno == EINTR) continue;
+    if (n <= 0) return false;
+    filled += static_cast<std::size_t>(n);
+  }
+  localIrk_ = std::move(key);
+  // A new identity must reach disk before it is shared with a peer.
+  if (save()) return true;
+  localIrk_.clear();
+  return false;
 }
 
 bool BondStore::contains(const Address& peer) const {
@@ -50,6 +69,11 @@ void BondStore::load() {
   if (path_.empty()) return;
   std::string text;
   if (!posix::readText(path_, text, 64 * 1024)) return;
+  std::string local;
+  Bytes key;
+  if (api::memberValue(api::JsonReader(text), "local_irk").appendString(local) &&
+      fromHex(local, key) && key.size() == 16 &&
+      std::any_of(key.begin(), key.end(), [](uint8_t b) { return b != 0; })) localIrk_ = std::move(key);
   auto read = [&](const char* name, std::size_t size, std::vector<Bytes>& out) {
     api::JsonReader list = api::memberValue(api::JsonReader(text), name);
     if (!list.enterArray()) return;
@@ -64,16 +88,20 @@ void BondStore::load() {
   read("irk", kIrkInfo, irks_);
 }
 
-void BondStore::save() const {
-  if (path_.empty()) return;
+bool BondStore::save() const {
+  if (path_.empty()) return true;
   std::string out;
   api::JsonWriter w(out);
   w.beginObject().key("ltk").beginArray();
   for (const Bytes& k : ltks_) w.value(toHex(k));
   w.endArray().key("irk").beginArray();
   for (const Bytes& k : irks_) w.value(toHex(k));
-  w.endArray().endObject();
-  if (!posix::replaceText(path_, out) && log_) log_("ble: cannot store pairing keys in " + path_);
+  w.endArray();
+  if (!localIrk_.empty()) w.key("local_irk").value(toHex(localIrk_));
+  w.endObject();
+  const bool saved = posix::replaceText(path_, out);
+  if (!saved && log_) log_("ble: cannot store pairing keys in " + path_);
+  return saved;
 }
 
 }  // namespace awtrix::ble

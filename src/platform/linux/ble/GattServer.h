@@ -40,6 +40,8 @@ class GattServer {
   void linkUp(int link);
   void linkDown(int link);
   uint16_t mtu(int link) const;
+  // Set before negotiation; a previously negotiated larger MTU cannot be lowered in place.
+  bool limitMtu(int link, uint16_t maximum);
 
   // The answer to one request from the peer; empty for commands and confirmations.
   Bytes handle(int link, const uint8_t* pdu, std::size_t n, int securityLevel);
@@ -68,6 +70,7 @@ class GattServer {
   };
   struct Link {
     uint16_t mtu = 23;
+    uint16_t maxMtu = 247;
     std::map<uint16_t, uint16_t> config;
     std::deque<Bytes> notifications;
     std::deque<Bytes> indications;

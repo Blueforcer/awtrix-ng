@@ -172,12 +172,14 @@ void LinuxBleRadio::tick(int64_t nowMs) {
     auto it = links_.find(id);
     if (it == links_.end()) continue;
     it->second.secureTarget = 0;
+    note("ble: " + it->second.peer.str() + " secured at level " + std::to_string(security(id)));
     if (events_.secured) events_.secured(id, true, "");
   }
   for (int id : expired) {
     auto it = links_.find(id);
     if (it == links_.end()) continue;
     it->second.secureTarget = 0;
+    note("ble: " + it->second.peer.str() + " security timed out at level " + std::to_string(security(id)));
     if (events_.secured) events_.secured(id, false, "pairing timed out");
   }
 }

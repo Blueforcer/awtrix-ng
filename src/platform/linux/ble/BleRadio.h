@@ -50,6 +50,9 @@ class BleRadio {
   virtual int security(int link) const = 0;
   virtual Address peer(int link) const = 0;
 
+  // Asks the peer for a 50 ms interval without latency; true means queued, not negotiated.
+  virtual bool requestSteadyTiming(int) { return false; }
+
   virtual int advertisingSlots() const = 0;
   virtual bool advertise(int instance, bool connectable, const Bytes& adv, const Bytes& scanResponse,
                          std::string& error) = 0;

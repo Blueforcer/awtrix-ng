@@ -19,6 +19,8 @@ constexpr auto kCallTimeout = std::chrono::milliseconds(1500);
 BleService::BleService(Options options, std::function<void(BleEvent)> sink)
     : options_(std::move(options)), sink_(std::move(sink)) {
   LinuxBleRadio::Options radio;
+  radio.logConnectionParameters = options_.gamepad;
+  radio.privacy = options_.gamepad;
   radio.bondsPath = options_.bondsPath;
   radio.log = [this](const std::string& line) {
     std::lock_guard<std::mutex> lock(logMutex_);

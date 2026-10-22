@@ -90,6 +90,9 @@ struct SocketController {
   std::deque<Incoming> incoming;
   std::vector<Bytes> commands;
   std::vector<Bytes> rawCommands;
+  std::vector<Bytes> managementCommands;
+  uint8_t secureConnectionsStatus = 0;
+  uint8_t privacyStatus = 0;
   std::vector<std::pair<int, int>> securityRequests;
   std::string kernelRelease = "4.9.84";
   bool controllerAttached = true;
@@ -125,6 +128,7 @@ struct SocketController {
 
   void answerManagement(int fd, const uint8_t* data) {
     const uint16_t op = word(data);
+    managementCommands.emplace_back(data, data + 6 + word(data + 4));
     Bytes result;
     if (op == 0x0003) result = controllerAttached ? Bytes{1, 0, 0, 0} : Bytes{0, 0};
     else if (op == 0x0004) result = {1, 0, 0, 0, 0, 2};
@@ -134,7 +138,7 @@ struct SocketController {
     appendWord(reply, word(data + 2));
     appendWord(reply, static_cast<uint16_t>(3 + result.size()));
     appendWord(reply, op);
-    reply.push_back(0);
+    reply.push_back(op == 0x002d ? secureConnectionsStatus : op == 0x002f ? privacyStatus : 0);
     reply.insert(reply.end(), result.begin(), result.end());
     sendTo(fd, reply);
   }
@@ -182,11 +186,16 @@ struct Fixture {
   bool powered = false;
   int64_t now = 100;
 
-  explicit Fixture(int attempts = 3, std::string release = "4.9.84") {
+  explicit Fixture(int attempts = 3, std::string release = "4.9.84", uint8_t scStatus = 0,
+                   bool logParameters = false, bool privacy = false, uint8_t privacyStatus = 0) {
     controller = &sockets;
     sockets.kernelRelease = std::move(release);
+    sockets.secureConnectionsStatus = scStatus;
+    sockets.privacyStatus = privacyStatus;
     LinuxBleRadio::Options options;
     options.connectAttempts = attempts;
+    options.logConnectionParameters = logParameters;
+    options.privacy = privacy;
     options.log = [this](const std::string& line) { logs.push_back(line); };
     radio = std::make_unique<LinuxBleRadio>(std::move(options));
     BleRadio::Events events;
@@ -198,7 +207,9 @@ struct Fixture {
     };
     radio->setEvents(std::move(events));
     radio->power(true);
-    check(powered && sockets.scanner >= 0 && sockets.listener >= 0, "radio powers through the socket backend");
+    if (privacy && privacyStatus != 0)
+      check(!powered, "a rejected pairing configuration does not power on");
+    else check(powered && sockets.scanner >= 0 && sockets.listener >= 0, "radio powers through the socket backend");
   }
 
   ~Fixture() {
@@ -250,6 +261,183 @@ struct Fixture {
     dispatch(sockets.scanner, POLLIN);
   }
 };
+
+void connectionParameterDiagnostics() {
+  Fixture fixture(3, "4.9.84", 0, true);
+  const auto send = [&](const Bytes& packet) {
+    fixture.sockets.sendTo(fixture.sockets.scanner, packet);
+    fixture.dispatch(fixture.sockets.scanner, POLLIN);
+  };
+  const auto logged = [&](const std::string& value) {
+    return std::any_of(fixture.logs.begin(), fixture.logs.end(), [&](const std::string& line) {
+      return line.find(value) != std::string::npos;
+    });
+  };
+  const auto commands = fixture.sockets.rawCommands.size();
+  for (bool enhanced : {false, true}) {
+    Bytes packet{4, 0x3e, static_cast<uint8_t>(enhanced ? 31 : 19),
+                 static_cast<uint8_t>(enhanced ? 0x0a : 1), 0, 18, 0,
+                 static_cast<uint8_t>(enhanced ? 1 : 0), 0};
+    packet.resize(enhanced ? 27 : 15, 0);
+    appendWord(packet, 7);
+    appendWord(packet, 2);
+    appendWord(packet, 300);
+    packet.push_back(0);
+    send(packet);
+  }
+  check(logged("central, interval 8.75ms, latency 2, timeout 3000ms") &&
+        logged("peripheral, interval 8.75ms, latency 2, timeout 3000ms"),
+        "ordinary and enhanced connection events decode role, offsets and units");
+  send({4, 0x3e, 10, 3, 0, 18, 0, 40, 0, 0, 0, 60, 0});
+  check(logged("updated: interval 50.00ms, latency 0, timeout 600ms"),
+        "successful update reports the applied parameters");
+  send({4, 0x3e, 10, 3, 0x1e, 18, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff});
+  check(logged("update failed (status 0x1e)") && !logged("81918.75"),
+        "failed update does not report undefined parameter fields");
+  send({4, 0x3e, 11, 6, 18, 0, 7, 0, 9, 0, 0, 0, 44, 1});
+  check(logged("peer request: interval 8.75..11.25ms, latency 0, timeout 3000ms"),
+        "remote requests report the requested interval range");
+  const auto count = fixture.logs.size();
+  send({4, 0x3e, 10, 3, 0, 18, 0});
+  send({4, 0x3e, 4, 6, 18, 0, 0});
+  send({4, 0x3e, 1, 0x0a});
+  check(fixture.logs.size() == count, "truncated parameter events are ignored");
+  check(fixture.sockets.rawCommands.size() == commands, "parameter diagnostics send no HCI commands");
+  for (const auto& line : fixture.logs)
+    check(line.size() < 120, "connection parameter log lines fit the clock log");
+}
+
+void steadyTimingUsesTheSocketHandle() {
+  for (bool incoming : {false, true}) {
+    Fixture fixture(3, "4.9.84", 0, true);
+    Address peer;
+    Address::parse("68:6C:E6:7A:21:A5", false, peer);
+    int id, fd;
+    if (incoming) {
+      fd = fixture.accept("68:6C:E6:7A:21:A5");
+      id = fixture.accepted.back();
+    } else {
+      id = fixture.radio->connect(peer, 2);
+      fd = fixture.sockets.outgoing;
+      check(!fixture.radio->requestSteadyTiming(id), "pending connections cannot request timing");
+      fixture.dispatch(fd, POLLOUT);
+    }
+    fixture.sockets.endpoints.at(fd).connectionHandle = 18;
+    check(!fixture.radio->requestSteadyTiming(id), "unknown HCI role cannot request timing");
+    fixture.leConnectionComplete(peer, 0, 18, incoming);
+    check(fixture.sockets.countCommand(0x2013) == 0, "connection event alone leaves timing unchanged");
+    fixture.sockets.unwritable = 0x2013;
+    check(!fixture.radio->requestSteadyTiming(id), "a failed HCI write is not reported as queued");
+    fixture.sockets.unwritable = 0;
+    check(fixture.radio->requestSteadyTiming(id), "both socket paths can request central timing");
+    const Bytes expected{1, 0x13, 0x20, 14, 18, 0, 40, 0, 40, 0, 0, 0, 60, 0, 0, 0, 0, 0};
+    check(fixture.sockets.rawCommands.back() == expected,
+          "LE Connection Update targets the socket handle with 50ms, zero latency and 600ms timeout");
+    fixture.sockets.sendTo(fixture.sockets.scanner, {4, 0x0f, 4, 0x0c, 1, 0x13, 0x20});
+    fixture.dispatch(fixture.sockets.scanner, POLLIN);
+    check(fixture.logs.back().find("HCI 0x2013 refused (status 0x0c)") != std::string::npos,
+          "controller refusal of the timing request is logged");
+    fixture.sockets.sendTo(fixture.sockets.scanner, {4, 0x0f, 4, 0, 1, 0x13, 0x20});
+    fixture.dispatch(fixture.sockets.scanner, POLLIN);
+    check(fixture.logs.back().find("accepted; waiting for connection update result") != std::string::npos,
+          "command acceptance does not claim negotiated timing");
+    fixture.disconnectionComplete(18);
+    check(!fixture.radio->requestSteadyTiming(id), "disconnection clears the handle role");
+    Bytes peripheral{4, 0x3e, 19, 1, 0, 18, 0, 1, 0};
+    peripheral.resize(22, 0);
+    fixture.sockets.sendTo(fixture.sockets.scanner, peripheral);
+    fixture.dispatch(fixture.sockets.scanner, POLLIN);
+    const auto count = fixture.sockets.countCommand(0x2013);
+    check(!fixture.radio->requestSteadyTiming(id) && fixture.sockets.countCommand(0x2013) == count,
+          "a handle reused for a peripheral connection is never updated");
+    fixture.radio->disconnect(id);
+    check(!fixture.radio->requestSteadyTiming(id), "closed links cannot request timing");
+  }
+}
+
+void pairingMethodMetadataContainsNoKeyMaterial() {
+  Fixture fixture;
+  int management = -1;
+  for (const auto& [fd, endpoint] : fixture.sockets.endpoints)
+    if (endpoint.kind == Kind::Management) management = fd;
+  check(management >= 0, "pairing metadata test has a management socket");
+  for (const auto type : {uint8_t{0}, uint8_t{2}, uint8_t{255}}) {
+    Bytes event;
+    appendWord(event, 0x000a);
+    appendWord(event, 0);
+    appendWord(event, 37);
+    Bytes parameters(37, 0xa5);
+    parameters[0] = 0;
+    parameters[7] = 1;
+    parameters[8] = type;
+    parameters[10] = 16;
+    event.insert(event.end(), parameters.begin(), parameters.end());
+    fixture.sockets.sendTo(management, event);
+    fixture.dispatch(management, POLLIN);
+    const auto& line = fixture.logs.back();
+    const std::string expected = type == 0 ? "legacy (unauthenticated)" :
+                                 type == 2 ? "LE Secure Connections (unauthenticated)" : "unknown type 255";
+    check(line.find(expected) != std::string::npos && line.find("key size 16 bytes") != std::string::npos,
+          "new pairing metadata distinguishes legacy, Secure Connections and unknown key types");
+    check(line.find("a5a5") == std::string::npos && line.find("A5A5") == std::string::npos,
+          "pairing diagnostics do not expose key bytes");
+  }
+}
+
+void localBleIdentityConfiguration() {
+  for (uint8_t status : {uint8_t{0}, uint8_t{0x0c}}) {
+    Fixture fixture(3, "4.9.84", 0, false, true, status);
+    const auto& commands = fixture.sockets.managementCommands;
+    const auto privacy = std::find_if(commands.begin(), commands.end(), [](const Bytes& command) {
+      return word(command.data()) == 0x002f;
+    });
+    const auto power = std::find_if(commands.begin(), commands.end(), [](const Bytes& command) {
+      return word(command.data()) == 0x0005;
+    });
+    check(privacy != commands.end() && privacy->size() == 23 && (*privacy)[6] == 1,
+          "Set Privacy carries normal privacy mode and a full local IRK");
+    check(status == 0 ? power != commands.end() && privacy < power : power == commands.end(),
+          "local BLE identity is configured before power and rejection does not silently continue");
+    if (status == 0) {
+      const Bytes original = *privacy;
+      const std::string encoded = awtrix::ble::toHex(Bytes(original.begin() + 7, original.end()));
+      fixture.radio->power(false);
+      fixture.radio->power(true);
+      const auto last = std::find_if(commands.rbegin(), commands.rend(), [](const Bytes& command) {
+        return word(command.data()) == 0x002f;
+      });
+      check(last != commands.rend() && *last == original, "radio power cycles preserve its local identity");
+      check(std::none_of(fixture.logs.begin(), fixture.logs.end(), [&](const std::string& line) {
+        return line.find(encoded) != std::string::npos;
+      }), "local identity bytes are never logged");
+    }
+  }
+  Fixture defaults;
+  check(std::none_of(defaults.sockets.managementCommands.begin(), defaults.sockets.managementCommands.end(),
+                     [](const Bytes& command) { return word(command.data()) == 0x002f; }),
+        "privacy is opt-in for radio users outside the gamepad test configuration");
+}
+
+void secureConnectionsConfiguration() {
+  for (uint8_t status : {uint8_t{0}, uint8_t{0x0c}}) {
+    Fixture fixture(3, "4.9.84", status);
+    const auto& commands = fixture.sockets.managementCommands;
+    auto secure = std::find_if(commands.begin(), commands.end(), [](const Bytes& command) {
+      return word(command.data()) == 0x002d;
+    });
+    auto power = std::find_if(commands.begin(), commands.end(), [](const Bytes& command) {
+      return word(command.data()) == 0x0005;
+    });
+    check(secure != commands.end() && power != commands.end() && secure < power &&
+              secure->size() == 7 && (*secure)[6] == 1,
+          "Secure Connections is enabled before power, without requiring SC-only mode");
+    const std::string expected = status == 0 ? "LE Secure Connections enabled" :
+                                             "LE Secure Connections unavailable (status 12)";
+    check(std::any_of(fixture.logs.begin(), fixture.logs.end(), [&](const std::string& line) {
+      return line.find(expected) != std::string::npos;
+    }), "Secure Connections result is visible, and unsupported controllers still power on");
+  }
+}
 
 void incomingRestoresScan() {
   Fixture fixture;
@@ -931,6 +1119,11 @@ extern "C" int __wrap_uname(utsname* information) {
 }
 
 int main() {
+  steadyTimingUsesTheSocketHandle();
+  pairingMethodMetadataContainsNoKeyMaterial();
+  secureConnectionsConfiguration();
+  localBleIdentityConfiguration();
+  connectionParameterDiagnostics();
   outgoingConnectionsAreQueued();
   cancelledQueuedConnectionDoesNotTouchTheActiveOne();
   newConnectionsCannotOvertakeTheQueue();

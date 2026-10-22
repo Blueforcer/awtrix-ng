@@ -60,7 +60,7 @@ void Gamepad::tick(int64_t nowMs) {
   now_ = nowMs;
   if (pairing_ && nowMs >= pairingUntil_) {
     pairing_ = false;
-    if (log_) log_("gamepad: pairing timed out");
+    if (log_) log_(std::string("gamepad: pairing timed out during ") + phase_);
     retryAt_ = -1;
     watch();
   }
@@ -99,11 +99,12 @@ void Gamepad::forget(int64_t nowMs) {
 
 void Gamepad::stopAll() {
   hub_.forget(owner_, now_);
-  scanId_ = connId_ = readId_ = subId_ = 0;
+  scanId_ = connId_ = pairId_ = readId_ = subId_ = 0;
 }
 
 void Gamepad::searchNew() {
   stopAll();
+  phase_ = "scan";
   publish(GamepadStatus::Pairing);
   scanId_ = next();
   if (isFailure(call("scan", R"({"uuid":"1812","active":true,"dedupe":0})", scanId_))) lost("cannot search");
@@ -126,15 +127,19 @@ void Gamepad::watch() {
 void Gamepad::link(const Address& address, const std::string& name) {
   stopAll();
   linking_ = {address, name};
+  phase_ = "connect/security/discovery";
+  ignoredReports_ = 0;
   publish(GamepadStatus::Connecting);
   std::string args;
-  peer(JsonWriter(args).beginObject(), address).endObject();
+  const bool xboxProfile = name.empty() || name.find("Xbox") != std::string::npos;
+  peer(JsonWriter(args).beginObject(), address).key("secure").value(true)
+      .key("exchangeMtu").value(!xboxProfile).key("steadyTiming").value(xboxProfile).endObject();
   connId_ = next();
   if (isFailure(call("connect", args, connId_))) lost("cannot connect");
 }
 
 void Gamepad::lost(const std::string& why) {
-  if (log_) log_("gamepad: " + why);
+  if (log_) log_(std::string("gamepad: ") + phase_ + ": " + why);
   stopAll();
   if (pairing_ && now_ >= pairingUntil_) pairing_ = false;
   publish(pairing_ ? GamepadStatus::Pairing : haveKnown_ ? GamepadStatus::Waiting : GamepadStatus::Unpaired);
@@ -164,6 +169,23 @@ void Gamepad::handle(const BleEvent& e, int64_t nowMs) {
       return;
     }
     if (!api::memberFlag(e.json, "connected")) return;
+    // Pair before reading HID attributes, as Xbox controllers require an encrypted session.
+    phase_ = "security";
+    if (log_) log_("gamepad: " + linking_.address.str() + " GATT discovery complete; checking encryption");
+    std::string args;
+    JsonWriter(args).beginObject().key("conn").value(static_cast<long long>(connId_)).endObject();
+    pairId_ = next();
+    if (isFailure(call("pair", args, pairId_))) lost("cannot request pairing");
+    return;
+  }
+  if (e.id == pairId_ && pairId_) {
+    pairId_ = 0;
+    if (!error.empty() || !api::memberFlag(e.json, "paired")) {
+      lost(error.empty() ? "pairing not confirmed" : error);
+      return;
+    }
+    phase_ = "report map";
+    if (log_) log_("gamepad: encrypted; reading report map");
     readId_ = next();
     if (isFailure(call("read", target(connId_, "2a4b"), readId_))) lost("cannot read the report map");
     return;
@@ -180,6 +202,8 @@ void Gamepad::handle(const BleEvent& e, int64_t nowMs) {
       lost(linking_.address.str() + " is not a gamepad");
       return;
     }
+    if (log_) log_("gamepad: report map " + std::to_string(map.size()) + " bytes; input report " +
+                   std::to_string(layout_.reportId) + " expects " + std::to_string(layout_.length) + " bytes");
     subscribe();
     return;
   }
@@ -190,9 +214,16 @@ void Gamepad::handle(const BleEvent& e, int64_t nowMs) {
     }
     hex_.clear();
     HidControls controls;
-    if (!api::memberValue(e.json, "data").appendString(hex_) || !fromHex(hex_, report_) ||
-        !readHidReport(report_, layout_, controls))
+    if (!api::memberValue(e.json, "data").appendString(hex_) || !fromHex(hex_, report_)) {
+      if (ignoredReports_++ < 3 && log_) log_("gamepad: ignored malformed input data");
       return;
+    }
+    if (!readHidReport(report_, layout_, controls)) {
+      if (ignoredReports_++ < 3 && log_)
+        log_("gamepad: ignored input of " + std::to_string(report_.size()) + " bytes; expected " +
+             std::to_string(layout_.length));
+      return;
+    }
     if (status_ != GamepadStatus::Ready) ready();
     if (onControls) onControls(controls);
   }
@@ -201,6 +232,8 @@ void Gamepad::handle(const BleEvent& e, int64_t nowMs) {
 // Only the Input Report characteristic that carries the gamepad's report: its Report Reference
 // descriptor names the report id and the type, 1 for input.
 void Gamepad::subscribe() {
+  phase_ = "subscription/first input";
+  if (log_) log_("gamepad: subscribing to input report " + std::to_string(layout_.reportId));
   std::string args;
   JsonWriter w(args);
   w.beginObject().key("conn").value(static_cast<long long>(connId_)).key("svc").value("1812").key("chr").value("2a4d");
@@ -214,6 +247,7 @@ void Gamepad::subscribe() {
 }
 
 void Gamepad::ready() {
+  phase_ = "ready";
   failures_ = 0;
   const bool changed = pairing_ || !haveKnown_ || known_.address.b != linking_.address.b;
   if (changed) {
