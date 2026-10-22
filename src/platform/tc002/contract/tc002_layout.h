@@ -39,6 +39,8 @@
 #define TC002_RES_PARTITION "res"
 #define TC002_LOOP_MODULE "/res/awtrix-ng/loop.ko"
 #define TC002_MTD_DIR "/dev/mtd"
+/* The ZKSWE flash driver that reports the clock's unique id (HardwareId.h). */
+#define TC002_UNIQUE_ID_DEVICE "/dev/oflash"
 #define TC002_MTD_BLOCK_DIR "/dev/block"
 
 /* Devices. */

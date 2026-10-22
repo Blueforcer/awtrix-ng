@@ -50,7 +50,9 @@ set(TC002_RUNTIME_SOURCES ${TC002_SUPERVISION_SOURCES}
   "${TC002_RUNTIME_DIR}/Tc002ClockApp.cpp" "${TC002_RUNTIME_DIR}/Tc002Input.cpp"
   "${TC002_RUNTIME_DIR}/Tc002QuickSettings.cpp" "${TC002_RUNTIME_DIR}/Tc002StatusApp.cpp"
   "${TC002_RUNTIME_DIR}/Tc002Provisioning.cpp"
-  "${TC002_RUNTIME_DIR}/Tc002Target.cpp" "${TC002_RUNTIME_DIR}/Tc002Update.cpp")
+  "${TC002_RUNTIME_DIR}/Tc002Target.cpp" "${TC002_RUNTIME_DIR}/Tc002Update.cpp"
+  "${TC002_RUNTIME_DIR}/Tc002Activation.cpp" "${TC002_RUNTIME_DIR}/Tc002ActivationApi.cpp"
+  "${TC002_RUNTIME_DIR}/Tc002ActivationHttp.cpp")
 set(TC002_BOOT_SCREEN_SOURCES "${TC002_RUNTIME_DIR}/BootIntroWide.cpp" "${TC002_RUNTIME_DIR}/BootInfoWide.cpp"
   "${TC002_RUNTIME_DIR}/TerminalFont.cpp")
 # The runtime's speaker: the sink with its mixer, sources and player, and speech in front of it.
@@ -123,6 +125,7 @@ add_library(tc002d_core STATIC
   "${TC002D_DIR}/ControlSocket.cpp"
   "${TC002D_DIR}/DeviceId.cpp"
   "${TC002D_DIR}/EventLoop.cpp"
+  "${TC002D_DIR}/HardwareId.cpp"
   "${TC002D_DIR}/HardwareLease.cpp"
   "${TC002D_DIR}/McuFrame.cpp"
   "${TC002D_DIR}/McuPcm.cpp"

@@ -2,7 +2,8 @@
 // contract (arguments, the descriptors of RuntimeContract.h, environment, session), records the
 // result in <data>/report-<pid>, the boot intro it was given in <data>/intro-<pid>, the CA and
 // web update flags in <data>/update-args-<pid>, its start reason as a line of <data>/starts and
-// its --uid ("none" without one) as a line of <data>/uids, then behaves according to <data>/mode:
+// its --uid ("none" without one) as a line of <data>/uids, its --activation-id ("none" without one)
+// as a line of <data>/activations, then behaves according to <data>/mode:
 //   ok        hello, ready, log every received datagram, send lines from <data>/outbox
 //   crash     exit 1 right away
 //   closed    close the supervisor channel, then exit 1 (a start that fails before readiness)
@@ -53,13 +54,15 @@ void writeAll(const std::string& path, const std::string& text, bool append) {
 }
 
 std::string contract(int argc, char** argv, const std::string& data, bool& audio, std::string& voice,
-                     std::string& intro, std::string& update, std::string& start, std::string& uid) {
+                     std::string& intro, std::string& update, std::string& start, std::string& uid,
+                     std::string& activation) {
   const char* expected[] = {nullptr, "--board", "tc002", "--tc002-input-fds", "100,101", "--supervisor-fd", "103",
                             "--data", nullptr, "--webui", nullptr, "--lan", "--port", nullptr,
                             "--start-reason", nullptr};
   constexpr int kBase = sizeof expected / sizeof expected[0];
   intro = "none";
   uid = "none";
+  activation = "none";
   voice = "none";
   if (argc < kBase) return "argument count " + std::to_string(argc);
   for (int i = 1; i < kBase; ++i)
@@ -71,6 +74,12 @@ std::string contract(int argc, char** argv, const std::string& data, bool& audio
   if (next + 1 < argc && std::strcmp(argv[next], "--uid") == 0) {
     uid = argv[next + 1];
     if (uid.size() != 12 || uid.find_first_not_of("0123456789abcdef") != std::string::npos) return "uid " + uid;
+    next += 2;
+  }
+  if (next + 1 < argc && std::strcmp(argv[next], "--activation-id") == 0) {
+    activation = argv[next + 1];
+    if (activation.size() != 64 || activation.find_first_not_of("0123456789abcdef") != std::string::npos)
+      return "activation id " + activation;
     next += 2;
   }
   audio = next + 1 < argc && std::strcmp(argv[next], "--tc002-audio-fd") == 0;
@@ -155,9 +164,11 @@ int main(int argc, char** argv) {
   std::string update;
   std::string start;
   std::string uid;
-  const std::string problem = contract(argc, argv, data, audio, voice, intro, update, start, uid);
+  std::string activation;
+  const std::string problem = contract(argc, argv, data, audio, voice, intro, update, start, uid, activation);
   writeAll(data + "/starts", start + "\n", true);
   writeAll(data + "/uids", uid + "\n", true);
+  writeAll(data + "/activations", activation + "\n", true);
   writeAll(data + "/intro-" + std::to_string(::getpid()), intro + "\n", false);
   writeAll(data + "/voice-" + std::to_string(::getpid()), voice + "\n", false);
   writeAll(data + "/update-args-" + std::to_string(::getpid()), update + "\n", false);

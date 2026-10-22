@@ -23,6 +23,8 @@ constexpr const char* kBluetoothFlag = "--tc002-ble";
 constexpr const char* kUpdateDirFlag = "--update-dir";
 constexpr const char* kStartReasonFlag = "--start-reason";
 constexpr const char* kUidFlag = "--uid";
+// The activation id (HardwareId.h in the daemon): 64 lowercase hex digits, reported once to the Hub.
+constexpr const char* kActivationFlag = "--activation-id";
 
 // Why the runtime starts, named like the ESP32's reset reasons (resetReason in /api/v1/device): the
 // first start after the clock powered on; after awtrix-tc002d rebooted the clock or restarted

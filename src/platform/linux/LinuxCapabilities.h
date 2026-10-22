@@ -21,6 +21,7 @@ class LinuxCapabilities {
   bool mqttTls = false;
   bool bootSound = false;
   bool enlargeApps = false;
+  bool activation = false;
 
   const DeviceCapabilities::Extra* needs() const { return modules_.data(); }
 
@@ -45,6 +46,7 @@ class LinuxCapabilities {
     if (mqttTls) writer.member("mqttTls", true);
     if (bootSound) writer.member("bootSound", true);
     if (enlargeApps) writer.member("enlargeApps", true);
+    if (activation) writer.member("activation", true);
   }
 
  private:

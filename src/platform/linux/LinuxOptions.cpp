@@ -2,6 +2,7 @@
 
 #include <cstdio>
 
+#include "core/Sha256Hex.h"
 #include "platform/posix/Text.h"
 #include "platform/tc002/contract/RuntimeContract.h"
 
@@ -24,9 +25,11 @@ void usage() {
               "   that cannot be read leaves the clock without speech)\n"
               "  [%s poweron|software|panic|watchdog] (supervised only: why this start happens)\n"
               "  [%s 12-HEX-DIGITS] (supervised only: the device id; else a random one, kept in DATA/identity\n"
-              "   when unsupervised)\n",
+              "   when unsupervised)\n"
+              "  [%s 64-HEX-DIGITS] (supervised only: reported once to the AWTRIX Hub as the clock's\n"
+              "   activation)\n",
               tc002::kInputFdsFlag, tc002::inputFdsValue().c_str(), tc002::kSupervisorFdFlag, tc002::kSupervisorFd,
-              tc002::kAudioFdFlag, tc002::kAudioFd, tc002::kStartReasonFlag, tc002::kUidFlag);
+              tc002::kAudioFdFlag, tc002::kAudioFd, tc002::kStartReasonFlag, tc002::kUidFlag, tc002::kActivationFlag);
   std::puts("  [--performance-report NEW_FILE] (private aggregate JSON written at exit)\n"
             "  [--boot-intro [--boot-sound FILE]] (power-on intro before the first app; the MP3 FILE\n"
             "   plays with it on the TC002 speaker)\n"
@@ -87,6 +90,7 @@ bool readValue(const std::string& arg, const char* value, LinuxOptions& o) {
   else if (arg == tc002::kUpdateDirFlag) return setOnce(o.updateOptions.workDirectory, value);
   else if (arg == tc002::kStartReasonFlag) return tc002::validStartReason(value) && setOnce(o.startReason, value);
   else if (arg == tc002::kUidFlag) return tc002::validUid(value) && setOnce(o.uid, value);
+  else if (arg == tc002::kActivationFlag) return isSha256Hex(value) && setOnce(o.activationId, value);
   else return false;
   return true;
 }
@@ -116,6 +120,9 @@ int parseLinuxOptions(int argc, char** argv, LinuxOptions& o) {
   }
   if (!o.uid.empty() && !o.supervised) {
     std::fprintf(stderr, "%s requires --supervisor-fd\n", tc002::kUidFlag); return 2;
+  }
+  if (!o.activationId.empty() && !o.supervised) {
+    std::fprintf(stderr, "%s requires --supervisor-fd\n", tc002::kActivationFlag); return 2;
   }
   if (o.bluetooth && !o.supervised) {
     std::fprintf(stderr, "%s requires --supervisor-fd\n", tc002::kBluetoothFlag); return 2;

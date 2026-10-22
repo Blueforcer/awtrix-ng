@@ -38,6 +38,8 @@ add_awtrix_test(NAME tc002-quick-settings SOURCES test_tc002_quick_settings.cpp 
   LIBRARIES awtrix_core)
 add_awtrix_test(NAME tc002-update SOURCES test_tc002_update.cpp "${TC002_RUNTIME_DIR}/Tc002Update.cpp"
   LIBRARIES awtrix_host tc002_contract tc002_update_verify awtrix_update_state)
+add_awtrix_test(NAME tc002-activation SOURCES test_tc002_activation.cpp "${TC002_RUNTIME_DIR}/Tc002Activation.cpp"
+  "${TC002_RUNTIME_DIR}/Tc002ActivationApi.cpp" LIBRARIES awtrix_host awtrix_posix Threads::Threads TIMEOUT 30)
 add_awtrix_test(NAME tc002-runtime-speaker SOURCES test_speaker.cpp LIBRARIES tc002_audio)
 add_awtrix_test(NAME tc002-audio-sink SOURCES test_audio_sink.cpp
   INCLUDES "${PROJECT_SOURCE_DIR}/test" LIBRARIES tc002_audio TIMEOUT 90)

@@ -2554,6 +2554,7 @@ These keys appear only while the feature is available:
 | `crypto` | `true`: scripts can `import crypto`, see [Hashing](../guides/hashing.md) |
 | `layout` | `true`: scripts can use prepared layouts |
 | `tcp` | `true`: scripts can `import tcp`, see [TCP in scripts](../guides/tcp.md) |
+| `activation` | `true`: the web UI asks **Help AWTRIX**. See [`GET /api/v1/activation`](#get-apiv1activation) |
 | `clockFaces` | the names the [`clockFace`](settings.md#tc002-clock-faces) setting accepts |
 
 `gamepad`, `gamepadRemote`, `oauth`, `crypto`, `layout` and `tcp` need scripting switched on. The `layouts` object
@@ -3319,6 +3320,52 @@ Removes the uploaded pack. The built-in voice speaks again.
 ```bash
 curl -X DELETE http://<awtrix-ip>/api/v1/speech/voice
 ```
+
+### GET /api/v1/activation
+
+Reads the answer to **Help AWTRIX**, the question whether this clock may be counted, to see how
+many clocks run AWTRIX NG and for a planned cooperation with Ulanzi. See [Activation](../getting-started/tc002.md#activation).
+
+This route and the one below exist only while [capabilities](#get-apiv1capabilities) say
+`"activation": true`. Otherwise they answer `404`.
+
+**Request:** no body.
+
+**Response:** `200`:
+
+| Key | Type | Meaning |
+|---|---|---|
+| `consent` | boolean | `true`: the clock may be counted, `false`: it may not. `null` while the question is unanswered |
+
+```bash
+curl http://<awtrix-ip>/api/v1/activation
+# {"consent":null}
+```
+
+### PUT /api/v1/activation
+
+Answers **Help AWTRIX** or changes the answer. With `true` the clock reports to the AWTRIX Hub
+once, as soon as it is online. With `false` it does not report, and a report that has not been
+sent yet is stopped. A report already sent stays sent. A factory reset deletes the answer, and the
+web UI asks again.
+
+**Request:**
+
+| Key | Type | Meaning |
+|---|---|---|
+| `consent` | boolean | `true` or `false` |
+
+**Response:** `200` with the same body as [`GET /api/v1/activation`](#get-apiv1activation).
+
+| Status | Meaning |
+|---|---|
+| 400 | `invalidJson`: the body is not JSON |
+| 422 | `validationFailed`: `consent` is not `true` or `false` |
+| 507 | `insufficientStorage`: the answer could not be saved |
+
+```bash
+curl -X PUT -H "Content-Type: application/json" -d '{"consent":true}' http://<awtrix-ip>/api/v1/activation
+```
 <!-- /only -->
 
 ---
@@ -3844,6 +3891,8 @@ Any other path answers **404** `notFound` with the message `unknown route`.
 | GET | `/api/v1/speech/voice` | [which voice speaks](#get-apiv1speechvoice) |
 | POST | `/api/v1/speech/voice` | [upload a voice pack](#post-apiv1speechvoice) |
 | DELETE | `/api/v1/speech/voice` | [back to the built-in voice](#delete-apiv1speechvoice) |
+| GET | `/api/v1/activation` | [the Help AWTRIX answer](#get-apiv1activation) |
+| PUT | `/api/v1/activation` | [answer Help AWTRIX](#put-apiv1activation) |
 | GET | `/api/v1/oauth` | [scripts that sign in](#get-apiv1oauth) |
 | GET, POST, DELETE | `/api/v1/oauth/{name}` | [a script's sign-in](#get-apiv1oauthname) |
 | POST | `/api/v1/oauth/{name}/start` | [start a sign-in](#post-apiv1oauthnamestart) |

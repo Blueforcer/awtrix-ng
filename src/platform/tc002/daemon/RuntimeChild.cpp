@@ -99,6 +99,10 @@ std::vector<std::string> RuntimeChild::arguments(bool audio) const {
     args.push_back(tc002::kUidFlag);
     args.push_back(deviceId_.value());
   }
+  if (!options_.activationId.empty()) {
+    args.push_back(tc002::kActivationFlag);
+    args.push_back(options_.activationId);
+  }
   if (audio) {
     args.push_back(tc002::kAudioFdFlag);
     args.push_back(std::to_string(kAudioFd));

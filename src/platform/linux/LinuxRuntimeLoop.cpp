@@ -132,6 +132,7 @@ void LinuxRuntime::tickNetwork(int64_t now) {
       logf("mqtt: broker certificate not trusted, SHA-256 %s", fingerprint.c_str());
   }
   mirror_.tick(now, lan && (!supervised || supervision_->networkConnected()));
+  if (activation_) activation_->tick(now, supervision_->networkConnected() && clock_.synchronized());
   http_.tick();
   extensions_.phones.poll();
   if (!mqttAllowed_) return;

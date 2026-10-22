@@ -185,6 +185,7 @@ struct Rig {
   // The start reason and the --uid of every runtime so far, oldest first.
   std::vector<std::string> starts() { return lines("starts"); }
   std::vector<std::string> uids() { return lines("uids"); }
+  std::vector<std::string> activations() { return lines("activations"); }
   std::vector<std::string> lines(const std::string& name) {
     std::vector<std::string> lines;
     const std::string text = readFile(data + "/" + name);
@@ -661,6 +662,20 @@ void startReasons() {
 }
 
 // The device id kept in data/state/uid (stored when not empty), waited for at most waitMs.
+void activationId() {
+  {
+    Rig rig("ok");
+    check(rig.until([&] { return rig.running(); }, 3000), "runtime ready without an activation id");
+    check(rig.activations() == std::vector<std::string>{"none"}, "no --activation-id without one");
+  }
+  {
+    const std::string id(64, 'a');
+    Rig rig("ok", [&](RuntimeOptions& options) { options.activationId = id; });
+    check(rig.until([&] { return rig.running(); }, 3000), "runtime ready with an activation id");
+    check(rig.activations() == std::vector<std::string>{id}, "the runtime gets the activation id");
+  }
+}
+
 std::function<void(RuntimeOptions&)> keptUid(const std::string& stored, int64_t waitMs) {
   return [stored, waitMs](RuntimeOptions& options) {
     options.uidPath = posix::parentDirectory(options.bootAttemptsPaths[0]) + "/uid";
@@ -957,6 +972,7 @@ int main(int argc, char** argv) {
   healthyRun();
   startReasons();
   deviceId();
+  activationId();
   forwardedLog();
   exitLinesReachTheNextRuntime();
   earlyLinesReachTheFirstRuntime();

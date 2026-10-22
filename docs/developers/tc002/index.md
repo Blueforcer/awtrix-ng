@@ -204,6 +204,15 @@ mDNS `id`. The driver reports the MAC seconds after the daemon started, so `Devi
 20 s for the MAC; a runtime that got no id (it takes a random one for that run) or another one is
 restarted once when the MAC arrives.
 
+The activation id is what the clock reports for the count of TC002 clocks, which is also the basis
+for a planned licence with Ulanzi ([what users are told](../../getting-started/tc002.md#activation)). At start, `HardwareId` asks the
+ZKSWE flash driver `/dev/oflash` for the clock's unique id, the two requests the vendor's
+`SecurityManager::getDevID()` sends: `_IOW('o', 3, int)` with the key `ZkSe`, then
+`_IOR('o', 5, 18 bytes)`, which returns 16 and fills 16 id bytes. The activation id is the
+lowercase hex SHA-256 of the ASCII label `AWTRIX-NG-TC002-ACTIVATION-1` followed by those 16
+bytes; the raw id never leaves the daemon. Every runtime gets it as `--activation-id`. An id of
+only `0x00` or only `0xFF` bytes, or a driver that does not answer, gives no flag and no report.
+
 The log is `/tmp/awtrix-tc002d/daemon.log`, bounded and rotated to `daemon.log.1`, mirrored to
 stderr; the runtime's own output appears there as `awtrix-linux`. Lines of the components `audio`,
 `ip`, `mcu`, `runtime`, `sntp`, `update` and `wifi` also go to the runtime and appear in the web UI
@@ -221,6 +230,7 @@ these descriptors (`RuntimeContract.h`): 100 the keys, 101 the knob, 103 the sup
 awtrix-linux --board tc002 --tc002-input-fds 100,101 --supervisor-fd 103
   --data /data/awtrix-ng/app --webui <root>/share/index.html.gz --lan --port 80
   --start-reason poweron|software|panic|watchdog [--uid <12 hex digits>]
+  [--activation-id <64 hex digits>]
   [--tc002-audio-fd 104 [--speech-voice <root>/share/speech/voice.atts]]
   [--boot-intro [--boot-sound <root>/share/boot.mp3]]
   [--ca-file <root>/share/ca-certificates.crt]
@@ -252,6 +262,7 @@ The TC002 code of the runtime is in `src/platform/tc002/runtime/` unless noted:
 | `SupervisedRuntime`, `SupervisorLink` | the runtime end of the channel: applies power, network and time state, forwards settings, requests reboot and factory reset |
 | `LinuxDeviceFacts`, `LinuxMemory` (`src/platform/linux/`) | `/api/v1/device` on Linux: start reason, uptime since boot (`CLOCK_BOOTTIME`), `MemAvailable` as free heap with its low-water mark |
 | `Tc002Update` | the web update in the runtime ([Flow](#flow), steps 1 to 3 and 8) |
+| `Tc002Activation`, `Tc002ActivationApi`, `Tc002ActivationHttp` | the capability `activation` tells the web UI to ask **Help AWTRIX**; `GET`/`PUT /api/v1/activation` read and keep the answer (`consent` is `null` until answered, then `true` or `false`) in `app/activation-consent`. Only after a yes, the runtime reports `--activation-id` once as `POST https://awtrix.de/api/v1/activations` with `{"id":"…"}` and nothing else, once the network is up and the time synchronized. A 2xx answer ends it and writes the id to `app/activation`, so later starts send nothing; no answer, 408, 429 or 5xx retry after 1, 5 and 30 minutes, then 2 and 6 hours; any other answer stops until the next start |
 | `Tc002ClockApp`, `Tc002StatusApp` | the TC002's clock (registered as `Time`, five faces by `clockFace`) and status page |
 | `Tc002Speaker`, `src/platform/tc002/audio/` | the speaker behind the engine's tone and PCM sinks: melodies, MP3 and radio over descriptor 104 |
 | `MicrophoneInput` | microphone snapshots for the audio visualisation ([Microphone](microphone.md)) |
@@ -272,7 +283,7 @@ The shared paths are in
 | Path | Content |
 |---|---|
 | `/tmp/awtrix-release/` | the release, mounted read-only from the release slot: `bin/`, `lib/modules/`, `share/`, `manifest.json` |
-| `/data/awtrix-ng/app/` | the runtime's data: settings, icons, MP3s, scripts |
+| `/data/awtrix-ng/app/` | the runtime's data: settings, icons, MP3s, scripts, `activation-consent` (`yes` or `no` from the web UI), `activation` (the activation id the Hub took) |
 | `/data/awtrix-ng/network/` | the Wi-Fi credential record |
 | `/data/awtrix-ng/state/` (0700) | `boot-attempts`, `update-state.json`, `update-result` (what the flash helper recorded for a web update), `uid`, `rebooted` (the daemon rebooted the clock), `loader.log`, `res-image.json` (what `flash-loader` wrote), `keep-adb-tcp` (developer flag, see [Debugging](#debugging-on-the-clock)), `autostart` (own program, see [Own program at start](#own-program-at-start)) |
 | `/res/lib/libawtrix-loader.so`, `/res/etc/EasyUI.cfg` | the loader and the configuration that names it |

@@ -1148,6 +1148,11 @@ const STR={
   oaSecretPkce:'Not every provider needs one.',
   oaSignIn:'Sign in',oaSignOut:'Sign out',oaDone:'Signed in',oaInvalid:'@oauth line invalid',
   oasignedIn:'Signed in',oasignedOut:'Not signed in',oapending:'Signing in…',oaerror:'Sign-in failed',
+  acTitle:'Help AWTRIX',
+  acWhy:'Counting TC002 clocks shows how many of them run AWTRIX NG. It is also the basis for a planned cooperation with Ulanzi, in which Ulanzi would support the project for every counted clock. That is the best way to make sure AWTRIX keeps running on future Ulanzi clocks.',
+  acWhat:'If you agree, this clock tells the AWTRIX Hub one time that it runs AWTRIX NG, with a code made from its chip ID. The report contains nothing about you: no name, no location, no usage data. It goes only to the Hub, not to Ulanzi. Ulanzi learns only how many clocks were counted. Your clock works exactly the same either way. Once sent, the report cannot be taken back: the Hub cannot tell which clock it came from.',
+  acState:'Status',acOff:'Not counted',acOffH:'You answered No. Count this clock to support AWTRIX.',acCount:'Count my clock',acDone:'Counted, thank you',
+  acYes:'Yes, count my clock',acNo:'No, thanks',acMore:'What exactly is sent?',acPrivacy:'Privacy policy',
   //linux:end
   mqRetry:'retry in',
   mqeNoWifi:'No Wi-Fi',mqeHost:'Host not found',mqeRefused:'Refused',
@@ -1520,6 +1525,7 @@ function readAudioCaps(caps){
   S.iphone=caps.ble===true;
   S.mqttTls=caps.mqttTls===true;
   S.oauth=caps.oauth===true;
+  S.activation=caps.activation===true;
   if(S.oauth)loadOauthApps();
   //linux:end
   if(typeof caps.sensors?.light==='boolean')S.light=caps.sensors.light;
@@ -4066,6 +4072,7 @@ function systemPage(view,data){
   if(S.voice)voiceSection(page);
   if(S.aud?.speech)speechVoiceSection(page);
   if(S.iphone)iphoneSection(page);
+  if(S.activation&&!S.ap)activationSection(page);
   if(S.mqttTls&&sysFields.mqttTls){
     const tl=sysFields.mqttTls,mp=sysFields.mqttPort;
     if(tl&&mp)tl.row.querySelector('input').addEventListener('change',()=>{
@@ -6281,6 +6288,40 @@ function viewFullscreen(){
   addEventListener('resize',()=>fit());
   pollScreen((px,d)=>{pw=d.width;ph=d.height;paint(ctx,px,pw,ph,fit());},250);
 }
+//linux:begin
+const activationConsent=async()=>(await api('/api/v1/activation')).data?.consent;
+function activationDialog(answered){
+  const d=el('dialog',{class:'card',style:'margin:auto;max-width:min(440px,calc(100vw - 32px));color:var(--fg);box-shadow:0 0 0 100vmax #000a','aria-labelledby':'actitle'});
+  const answer=async yes=>{
+    try{await api('/api/v1/activation',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({consent:yes})});d.close();d.remove();answered?.(yes);}
+    catch(e){toastErr(e);}
+  };
+  const link=(href,key)=>el('a',{class:'ghelp',href,target:'_blank',rel:'noopener'},t(key));
+  d.addEventListener('cancel',e=>e.preventDefault());
+  d.append(el('h2',{id:'actitle',tabindex:'-1',autofocus:''},t('acTitle')),el('p',null,t('acWhy')),el('p',null,t('acWhat')),
+    el('div',{style:'display:grid;grid-template-columns:1fr 1fr;gap:8px'},
+      el('button',{onclick:()=>answer(true)},t('acYes')),
+      el('button',{onclick:()=>answer(false)},t('acNo'))),
+    el('p',{class:'ghelp'},
+      link('https://blueforcer.github.io/awtrix-ng/tc002/getting-started/tc002/#activation','acMore'),' · ',
+      link('https://awtrix.de/privacy#tc002-activation','acPrivacy')));
+  document.body.append(d);
+  d.showModal();
+}
+async function askActivation(){
+  try{if(await activationConsent()!==null)return;}catch(e){return;}
+  activationDialog();
+}
+async function activationSection(page){
+  try{if(await activationConsent()!==false)return;}catch(e){return;}
+  const state=el('div',{class:'badge'},t('acOff'));
+  const count=el('button',{onclick:()=>activationDialog(yes=>{
+    if(!yes)return;
+    state.className='badge good';state.replaceChildren(t('acDone'));count.remove();
+  })},t('acCount'));
+  page.section('activation',t('acTitle'),'',[actionRow(t('acState'),t('acOffH'),[state,count])]);
+}
+//linux:end
 if(/\/fullscreen\/?$/.test(location.pathname)){
   viewFullscreen();
 }else{
@@ -6302,6 +6343,7 @@ new ResizeObserver(setChromeH).observe(topbar);
     readAudioCaps(caps);
     //linux:begin
     if(S.oauth&&/^#oauth(_error)?=/.test(location.hash))oauthReturn();
+    if(S.activation&&!S.ap)askActivation();
     //linux:end
     if(!anyAudioCap())nav();
   }catch(e){}

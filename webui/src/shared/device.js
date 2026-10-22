@@ -14,6 +14,7 @@ function readAudioCaps(caps){
   S.iphone=caps.ble===true;
   S.mqttTls=caps.mqttTls===true;
   S.oauth=caps.oauth===true;
+  S.activation=caps.activation===true;
   if(S.oauth)loadOauthApps();
   //linux:end
   if(typeof caps.sensors?.light==='boolean')S.light=caps.sensors.light;

@@ -209,6 +209,11 @@ const STR={
   oaSecretPkce:'Not every provider needs one.',
   oaSignIn:'Sign in',oaSignOut:'Sign out',oaDone:'Signed in',oaInvalid:'@oauth line invalid',
   oasignedIn:'Signed in',oasignedOut:'Not signed in',oapending:'Signing in…',oaerror:'Sign-in failed',
+  acTitle:'Help AWTRIX',
+  acWhy:'Counting TC002 clocks shows how many of them run AWTRIX NG. It is also the basis for a planned cooperation with Ulanzi, in which Ulanzi would support the project for every counted clock. That is the best way to make sure AWTRIX keeps running on future Ulanzi clocks.',
+  acWhat:'If you agree, this clock tells the AWTRIX Hub one time that it runs AWTRIX NG, with a code made from its chip ID. The report contains nothing about you: no name, no location, no usage data. It goes only to the Hub, not to Ulanzi. Ulanzi learns only how many clocks were counted. Your clock works exactly the same either way. Once sent, the report cannot be taken back: the Hub cannot tell which clock it came from.',
+  acState:'Status',acOff:'Not counted',acOffH:'You answered No. Count this clock to support AWTRIX.',acCount:'Count my clock',acDone:'Counted, thank you',
+  acYes:'Yes, count my clock',acNo:'No, thanks',acMore:'What exactly is sent?',acPrivacy:'Privacy policy',
   //linux:end
   mqRetry:'retry in',
   mqeNoWifi:'No Wi-Fi',mqeHost:'Host not found',mqeRefused:'Refused',

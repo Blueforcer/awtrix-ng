@@ -61,6 +61,9 @@
 #include "platform/tc002/audio/AudioScripting.h"
 #include "platform/tc002/runtime/MicrophoneInput.h"
 #include "platform/tc002/runtime/SupervisedRuntime.h"
+#include "platform/tc002/runtime/Tc002Activation.h"
+#include "platform/tc002/runtime/Tc002ActivationApi.h"
+#include "platform/tc002/runtime/Tc002ActivationHttp.h"
 #include "platform/tc002/runtime/SupervisorLink.h"
 #include "platform/tc002/runtime/Tc002Board.h"
 #include "platform/tc002/runtime/Tc002BootIntro.h"
@@ -237,6 +240,10 @@ class LinuxRuntime {
   std::unique_ptr<iphone::IphoneBridge> iphoneBridge_;
   HostButtonInput buttons_;
   std::optional<LinuxButtonWebhook> webhook_;
+  // Declared after the transport its thread posts with.
+  Tc002ActivationHttp activationHttp_;
+  std::optional<Tc002Activation> activation_;
+  std::optional<Tc002ActivationApi> activationApi_;
   std::optional<Tc002KnobRouter> knobRouter_;
   std::unique_ptr<BootSoundClock> bootSoundClock_;
   std::unique_ptr<Tc002BootIntro> intro_;

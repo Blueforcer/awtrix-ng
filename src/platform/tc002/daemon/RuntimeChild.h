@@ -68,6 +68,8 @@ struct RuntimeOptions {
   // once per daemon.
   std::string uidPath;
   int64_t uidWaitMs = 20000;
+  // Passed as kActivationFlag to every runtime when set (HardwareId.h).
+  std::string activationId;
   // The starts that show the power-on intro (--boot-intro), with bootSound playing along when set.
   IntroStarts introStarts = IntroStarts::None;
   std::string bootSound;

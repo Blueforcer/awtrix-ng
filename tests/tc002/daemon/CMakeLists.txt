@@ -5,7 +5,7 @@ foreach(fixture tc002d-fake-runtime tc002d-fake-audio)
 endforeach()
 
 set(fakes "$<TARGET_FILE:tc002d-fake-runtime>" "$<TARGET_FILE:tc002d-fake-audio>")
-foreach(contract autostart bt mcu mcupcm mcustream mcufirmware lease loop stock kernel process start)
+foreach(contract autostart bt hardwareid mcu mcupcm mcustream mcufirmware lease loop stock kernel process start)
   add_awtrix_test(NAME tc002d-${contract} SOURCES test_${contract}.cpp LIBRARIES tc002d_core Threads::Threads)
 endforeach()
 add_awtrix_test(NAME tc002d-control SOURCES test_control.cpp LIBRARIES tc002d_core Threads::Threads

@@ -304,6 +304,13 @@ void LinuxRuntime::composeConnectivity() {
   capabilities.mqttTls = o_.administration.lan;
   capabilities.bootSound = supervised && speaker_;
   capabilities.enlargeApps = pageZoom_->available();
+  if (supervised && !o_.activationId.empty()) {
+    activation_.emplace(o_.activationId, Tc002Activation::Paths{o_.data + "/activation-consent", o_.data + "/activation"},
+                        [this](const std::string& body) { return activationHttp_.post(body); },
+                        [this] { activationHttp_.interrupt(); });
+    activationApi_.emplace(*activation_);
+  }
+  capabilities.activation = activation_.has_value();
   std::string capabilitiesText =
       app_->capabilitiesJson(platform, [&](api::JsonWriter& writer) { capabilities.write(writer); });
   auto shared = std::make_shared<const std::string>(std::move(capabilitiesText));
@@ -433,6 +440,7 @@ void LinuxRuntime::composePlatformRoutes() {
       return speaker_ ? speaker_->routeAudio(method, path, request, body)
                       : tc002::routeClip<tc002::Tc002AudioSink>(method, path, request, body, nullptr, audio_);
     if (const int status = brokerTrustApi_ ? brokerTrustApi_->handle(method, path, request, body) : 0) return status;
+    if (const int status = activationApi_ ? activationApi_->handle(method, path, request, body) : 0) return status;
     if (const int status = extensions_.gamepadApi->handle(method, path, request, body)) return status;
     return iphoneBridge_ ? iphoneBridge_->handle(method, path, request, body) : 0;
   };

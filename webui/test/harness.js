@@ -48,6 +48,9 @@ function installGlobals(fetchImpl, canvasContext) {
     // jsdom has no layout, so it ships no ResizeObserver. Without a stub the UI
     // throws on construction and every run prints a jsdomError that is not one.
     window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+    // jsdom 24 has <dialog> without showModal(); open and close are enough for the tests.
+    window.HTMLDialogElement.prototype.showModal ??= function () { this.open = true; };
+    window.HTMLDialogElement.prototype.close ??= function () { this.open = false; };
     if (canvasContext) window.HTMLCanvasElement.prototype.getContext = () => canvasContext;
   };
 }
@@ -204,6 +207,10 @@ function mockFetch(store, netlog, win) {
     if (store.oauth && (p === '/api/v1/oauth' || p.startsWith('/api/v1/oauth/'))) {
       store.oauthCalls.push({ method, path: p, headers: opts.headers || {}, body: opts.body });
       const [answer, status] = store.oauth(method, p, opts.body ? JSON.parse(opts.body) : null);
+      return resp(answer, status < 400, status);
+    }
+    if (store.activation && p === '/api/v1/activation') {
+      const [answer, status] = store.activation(method, opts.body ? JSON.parse(opts.body) : null);
       return resp(answer, status < 400, status);
     }
     if (p === '/api/v1/device') return resp(store.device);
@@ -456,6 +463,8 @@ async function boot(opts) {
   if (opts && 'device' in opts) Object.assign(store.device, opts.device);
   // oauth(method, path, body) answers /api/v1/oauth... with [json, status].
   if (opts && 'oauth' in opts) { store.oauth = opts.oauth; store.oauthCalls = []; }
+  // activation(method, body) answers /api/v1/activation with [json, status].
+  if (opts && 'activation' in opts) store.activation = opts.activation;
   const netlog = [];
   store.netlog = netlog; // stubXhr logs uploads here too, so fetches and uploads share one order
   const dom = new JSDOM(opts && opts.html !== undefined ? opts.html : loadHtml(), {

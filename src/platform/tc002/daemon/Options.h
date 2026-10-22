@@ -62,6 +62,7 @@ struct DaemonOptions {
   std::string webIndexPath() const;
   std::string caFilePath() const { return root + "/share/ca-certificates.crt"; }
   std::string introShownPath() const { return sysRoot + "/tmp/awtrix-boot-intro.shown"; }
+  std::string uniqueIdDevice() const { return sysRoot + TC002_UNIQUE_ID_DEVICE; }
   // The loader's start counters of the release, the durable one and the one of this boot.
   std::vector<std::string> bootAttemptsPaths() const;
   IntroStarts introStarts() const;
