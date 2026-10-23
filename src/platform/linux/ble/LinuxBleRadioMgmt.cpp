@@ -135,19 +135,19 @@ void LinuxBleRadio::configure() {
   slots_ = mgmt(kReadAdvFeatures, {}, &features) == 0 && features.size() >= 7 ? features[6] : 0;
   mgmt(kSetIoCapability, {0x03});
   mgmt(kSetBondable, {0x01});
+  // Only some gamepads need privacy. Without it Bluetooth still serves everything else.
   if (options_.privacy) {
     if (!bonds_.ensureLocalIrk()) {
-      fail("cannot create and store the local BLE identity");
-      return;
+      note("ble: cannot store a local BLE identity; running without LE privacy");
+    } else {
+      Bytes params{0x01};
+      params.insert(params.end(), bonds_.localIrk().begin(), bonds_.localIrk().end());
+      const int privacy = mgmt(kSetPrivacy, params);
+      if (privacy != 0)
+        note("ble: LE privacy refused (status " + std::to_string(privacy) + "); running without it");
+      else
+        note("ble: local BLE identity configured; LE privacy enabled for the whole adapter");
     }
-    Bytes params{0x01};
-    params.insert(params.end(), bonds_.localIrk().begin(), bonds_.localIrk().end());
-    const int privacy = mgmt(kSetPrivacy, params);
-    if (privacy != 0) {
-      fail("cannot enable BLE privacy (status " + std::to_string(privacy) + ")");
-      return;
-    }
-    note("ble: local BLE identity configured; LE privacy enabled for the whole adapter");
   }
   const int sc = mgmt(kSetSecureConnections, {0x01});
   note(sc == 0 ? "ble: LE Secure Connections enabled" :

@@ -286,13 +286,13 @@ void WifiService::beginSupplicant() {
   session_.start(now_);
   if (accessPoint_) {
     stationDeadline_ = -1;
-    accessPointRetryAt_ = haveProfile_ ? now_ + kAccessPointRetryMs : -1;
+    accessPointRetryAt_ = nextAccessPointRetry();
     accessPointClientAt_ = now_;
     ssid_ = apName;
     setLink(WifiLink::Unconfigured);
     return;
   }
-  if (stationDeadline_ < 0) stationDeadline_ = now_ + kStationAttemptMs;
+  if (!joined_ && stationDeadline_ < 0) stationDeadline_ = now_ + kStationAttemptMs;
   ssid_ = wifi::displaySsid(profile_.ssid);
   if (link_ != WifiLink::Failed) setLink(WifiLink::Connecting);
   else publish();
@@ -308,10 +308,36 @@ void WifiService::beginAccessPoint() {
   restartSupplicant();
 }
 
+void WifiService::openSetupAccessPoint() {
+  now_ = system_->nowMs();
+  if (stopping_ || setupRequested_) return;
+  logEvent("setup access point requested");
+  setupRequested_ = true;
+  if (accessPoint_) {
+    accessPointRetryAt_ = -1;
+    return;
+  }
+  if (step_ == Step::SupplicantRunning) {
+    beginAccessPoint();
+    return;
+  }
+  accessPoint_ = true;
+  stationDeadline_ = -1;
+}
+
+int64_t WifiService::nextAccessPointRetry() const {
+  return haveProfile_ && !setupRequested_ ? now_ + kAccessPointRetryMs : -1;
+}
+
+bool WifiService::haveAddress() const {
+  const std::string& address = state_.network().ipv4;
+  return !address.empty() && address != "0.0.0.0";
+}
+
 void WifiService::linkTimers() {
   if (!accessPoint_ && link_ == WifiLink::Connected) {
-    const std::string& address = state_.network().ipv4;
-    if (!address.empty() && address != "0.0.0.0") addressDeadline_ = -1;
+    if (haveAddress()) { addressDeadline_ = -1; joined_ = true; }
+    else if (joined_) addressDeadline_ = -1;
     else if (addressDeadline_ < 0) addressDeadline_ = now_ + kAddressGraceMs;
     else if (now_ >= addressDeadline_) {
       logEvent("router did not provide an address; starting the setup access point");
@@ -427,6 +453,7 @@ void WifiService::supplicantExited(int status) {
   }
   ++supplicantRestarts_;
   if (supplicantStartedAt_ >= 0 && now_ - supplicantStartedAt_ >= kStableRunMs) failures_ = 0;
+  if (link_ == WifiLink::Connected) lostAt_ = now_;
   rssi_ = 0;
   if (link_ != WifiLink::Failed) link_ = WifiLink::Disconnected;
   publish();
@@ -475,6 +502,8 @@ void WifiService::applyProfile() {
   accessPointRetryAt_ = -1;
   wantAccessPointClients_ = false;
   accessPointEmptyAt_ = -1;
+  joined_ = setupRequested_ = false;
+  lostAt_ = -1;
   stationDeadline_ = now_ + kStationAttemptMs;
   addressDeadline_ = -1;
   scan_.clearError();
@@ -516,6 +545,8 @@ void WifiService::eraseCredentials() {
   pendingSsid_.clear();
   pendingCredentials_ = false;
   haveProfile_ = false;
+  joined_ = false;
+  lostAt_ = -1;
   applyProfileAt_ = -1;
   stationDeadline_ = -1;
   accessPointRetryAt_ = -1;
@@ -667,7 +698,7 @@ void WifiService::handleReply(Pending kind, const std::string& reply) {
   if (kind == Pending::AccessPointClients) {
     if (accessPoint_ && session_.attached() && link_ == WifiLink::AccessPoint && haveProfile_ &&
         applyProfileAt_ < 0 && !credentialsPending() && now_ - accessPointClientAt_ >= kAccessPointIdleMs &&
-        reply == "FAIL\n") {
+        reply.empty()) {
       accessPointEmptyAt_ = now_ + kProvisionReplyMs;
     }
     return;
@@ -714,7 +745,7 @@ void WifiService::handleEvent(const std::string& message) {
     else if (event.type == wifi::WpaEventType::StationConnected ||
              event.type == wifi::WpaEventType::StationDisconnected) {
       accessPointClientAt_ = now_;
-      accessPointRetryAt_ = haveProfile_ ? now_ + kAccessPointRetryMs : -1;
+      accessPointRetryAt_ = nextAccessPointRetry();
       wantAccessPointClients_ = false;
       accessPointEmptyAt_ = -1;
     }
@@ -733,15 +764,24 @@ void WifiService::handleEvent(const std::string& message) {
       break;
     case wifi::WpaEventType::Disconnected:
       rssi_ = 0;
+      if (link_ == WifiLink::Connected) {
+        lostAt_ = now_;
+        logEvent("connection lost (reason %d%s)", event.code, event.locallyGenerated ? ", ended by the clock" : "");
+      }
       if (link_ != WifiLink::Failed) setLink(WifiLink::Disconnected);
+      break;
+    case wifi::WpaEventType::AssociationRejected:
+      if (event.code != lastRejectStatus_) logEvent("association rejected (status %d)", event.code);
+      lastRejectStatus_ = event.code;
       break;
     case wifi::WpaEventType::TemporarilyDisabled:
       rssi_ = 0;
       if (event.wrongKey) {
         if (link_ != WifiLink::Failed) logEvent("association rejected: wrong key");
         setLink(WifiLink::Failed);
-      } else if (link_ != WifiLink::Failed) {
-        setLink(WifiLink::Disconnected);
+      } else {
+        logEvent("network temporarily disabled: %s", event.detail.empty() ? "unknown" : event.detail.c_str());
+        if (link_ != WifiLink::Failed) setLink(WifiLink::Disconnected);
       }
       break;
     case wifi::WpaEventType::Terminating:
@@ -972,16 +1012,21 @@ bool WifiService::stopped() const {
 
 void WifiService::setLink(WifiLink link) {
   if (link != WifiLink::Connected) addressDeadline_ = -1;
-  else if (link_ != WifiLink::Connected) addressDeadline_ = now_ + kAddressGraceMs;
+  else if (haveAddress()) joined_ = true;
+  else if (link_ != WifiLink::Connected && !joined_) addressDeadline_ = now_ + kAddressGraceMs;
   if (link == WifiLink::AccessPoint && link_ != WifiLink::AccessPoint) {
     accessPointClientAt_ = now_;
-    accessPointRetryAt_ = haveProfile_ ? now_ + kAccessPointRetryMs : -1;
+    accessPointRetryAt_ = nextAccessPointRetry();
+  }
+  if (link == WifiLink::Connected && link_ != WifiLink::Connected) {
+    if (lostAt_ >= 0) logEvent("connection back after %lld s", static_cast<long long>((now_ - lostAt_) / 1000));
+    lostAt_ = lastRejectStatus_ = -1;
   }
   link_ = link;
   if (link == WifiLink::Connected) { linkError_.clear(); stationDeadline_ = -1; }
   else {
     rssi_ = 0;
-    if (!accessPoint_ && haveProfile_ && stationDeadline_ < 0) stationDeadline_ = now_ + kStationAttemptMs;
+    if (!accessPoint_ && haveProfile_ && !joined_ && stationDeadline_ < 0) stationDeadline_ = now_ + kStationAttemptMs;
   }
   publish();
 }

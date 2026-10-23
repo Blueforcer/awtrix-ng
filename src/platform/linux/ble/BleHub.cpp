@@ -21,6 +21,9 @@ BleHub::BleHub(BleRadio& radio, Sink sink, Limits limits)
   BleRadio::Events e;
   e.power = [this](Power p, const std::string& why) { onPower(p, why); };
   e.advert = [this](const AdvReport& r) { scanner_.onAdvert(r); };
+  scanner_.log = [this](const std::string& text) {
+    if (log) log(text);
+  };
   e.connected = [this](int link, bool ok, const std::string& why) { onConnected(link, ok, why); };
   e.accepted = [this](int link, const Address& peer) { onAccepted(link, peer); };
   e.disconnected = [this](int link) { onDisconnected(link); };

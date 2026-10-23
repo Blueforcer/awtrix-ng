@@ -509,7 +509,11 @@ int LinuxRuntime::startServices() {
   std::fflush(stdout);
   startBootIntro();
   knobRouter_.emplace(Tc002KnobRouter::Targets{engine(), cfg_, buttons_, *webhook_, extensions_.knob.get(),
-                                               knobGesture_, *quickSettings_, voice_.get()});
+                                               knobGesture_, *quickSettings_, voice_.get(), [this] {
+    if (!o_.supervised) return;
+    logf("wifi: select held during the intro, asking for the setup hotspot");
+    if (!link_.send(tc002::encodeSetupAccessPoint())) logf("wifi: the supervisor channel refused the request");
+  }});
   bindPlatformCommands();
   return -1;
 }

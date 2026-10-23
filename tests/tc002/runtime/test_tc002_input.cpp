@@ -69,5 +69,19 @@ int main() {
   check(!decoder.event(false, EV_KEY, KEY_POWER, 1, sink), "power/reset never mapped");
   check(!decoder.event(false, EV_KEY, KEY_LEFT, 3, sink), "invalid key value rejected");
   check(!decoder.event(true, EV_REL, REL_X, 1, sink), "unexpected rotary format rejected");
+
+  awtrix::Tc002SetupHold hold;
+  check(!hold.button(1, true, false, 0) && !hold.tick(true, 5000), "select pressed before the intro is a normal press");
+  check(!hold.button(1, false, true, 5000), "its release stays normal too");
+  check(!hold.button(0, true, true, 0) && !hold.tick(true, 3000), "left during the intro is a normal press");
+  check(hold.button(1, true, true, 1000) && !hold.tick(true, 2999), "select during the intro is kept from the buttons");
+  check(hold.tick(true, 3000) && !hold.tick(true, 4000), "two seconds of select ask once");
+  check(hold.button(1, false, false, 9000), "its release after the intro is kept from the buttons as well");
+  check(!hold.button(1, true, false, 9500), "select after the intro is a normal press");
+  awtrix::Tc002SetupHold brief;
+  check(brief.button(1, true, true, 0) && brief.button(1, false, true, 1500) && !brief.tick(true, 2500),
+        "a short press during the intro asks nothing");
+  awtrix::Tc002SetupHold late;
+  check(late.button(1, true, true, 0) && !late.tick(false, 2500), "a hold the intro does not outlast asks nothing");
   std::puts("TC002 input contracts passed: ordered edges, knob detents and push, optional knob, overflow");
 }

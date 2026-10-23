@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <ftw.h>
 #include <limits.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,10 +44,15 @@
 #ifndef AWTRIX_LOADER_USB_RETRY_TICKS
 #error AWTRIX_LOADER_USB_RETRY_TICKS must match the loader under test
 #endif
+#if AWTRIX_LOADER_USB_RETRY_TICKS < 3
+#error rescue-keeps-usb needs a hold of 3 ticks or more to see one of them read usb_host
+#endif
 #ifndef AWTRIX_LOADER_DEPLOY_STALE_SECONDS
 #error AWTRIX_LOADER_DEPLOY_STALE_SECONDS must match the loader under test
 #endif
 #define TICK_MS AWTRIX_LOADER_USB_CHECK_MS
+#define HOLD_TICKS AWTRIX_LOADER_USB_RETRY_TICKS
+#define STALLED_MS (60 * TICK_MS)
 #define STALE_MS ((int)(AWTRIX_LOADER_DEPLOY_STALE_SECONDS * 1000))
 #define DEPLOY_DIR ROOT "/tmp/awtrix-install"
 #define DEPLOY_TOKEN DEPLOY_DIR "/lock.token"
@@ -293,31 +299,53 @@ static struct {
   int watch;
   int role_writes;
   int other_access;
+  ssize_t queued, taken;
+  char events[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
 } usb;
 
 static void watch_usb(void) {
   usb.role_writes = 0;
   usb.other_access = 0;
+  usb.queued = usb.taken = 0;
   usb.watch = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
   if (usb.watch < 0 ||
-      inotify_add_watch(usb.watch, USB_DIR, IN_OPEN | IN_ACCESS | IN_CLOSE_WRITE) < 0) {
+      inotify_add_watch(usb.watch, USB_DIR,
+                        IN_OPEN | IN_ACCESS | IN_CLOSE_WRITE | IN_CLOSE_NOWRITE | IN_MOVED_TO) < 0) {
     perror("inotify " USB_DIR);
     exit(2);
   }
 }
 
-static void collect_usb(void) {
-  char buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
-  ssize_t count;
-  while ((count = read(usb.watch, buffer, sizeof buffer)) > 0) {
-    for (const char* at = buffer; at < buffer + count;) {
-      const struct inotify_event* event = (const struct inotify_event*)at;
-      if (!event->len || strcmp(event->name, "otg_role"))
+/* What happened to otg_role: each loader tick reads it once, each of its role writes closes it
+ * written, and set_role_atomically() moves a new file over it. */
+enum role_event { ROLE_QUIET, ROLE_READ, ROLE_WRITTEN, ROLE_REPLACED };
+
+static enum role_event next_role_event(int limit_ms) {
+  for (;;) {
+    while (usb.taken < usb.queued) {
+      const struct inotify_event* event = (const struct inotify_event*)(usb.events + usb.taken);
+      usb.taken += (ssize_t)(sizeof *event + event->len);
+      if (!event->len || strcmp(event->name, "otg_role")) {
         ++usb.other_access;
-      else if (event->mask & IN_CLOSE_WRITE)
+      } else if (event->mask & IN_CLOSE_WRITE) {
         ++usb.role_writes;
-      at += sizeof *event + event->len;
+        return ROLE_WRITTEN;
+      } else if (event->mask & IN_CLOSE_NOWRITE) {
+        return ROLE_READ;
+      } else if (event->mask & IN_MOVED_TO) {
+        return ROLE_REPLACED;
+      }
     }
+    struct pollfd ready = {.fd = usb.watch, .events = POLLIN};
+    if (poll(&ready, 1, limit_ms) <= 0) return ROLE_QUIET;
+    usb.queued = read(usb.watch, usb.events, sizeof usb.events);
+    usb.taken = 0;
+    if (usb.queued < 0) usb.queued = 0;
+  }
+}
+
+static void collect_usb(void) {
+  while (next_role_event(0) != ROLE_QUIET) {
   }
   close(usb.watch);
   CHECK(usb.other_access == 0);
@@ -326,14 +354,6 @@ static void collect_usb(void) {
 static void set_role_atomically(const char* role) {
   write_text(ROOT "/otg_role.next", role, 0644);
   if (rename(ROOT "/otg_role.next", OTG_ROLE)) perror("rename");
-}
-
-static int role_restored_within(int limit_ms) {
-  for (int waited = 0; waited < limit_ms; waited += 50) {
-    if (contains(OTG_ROLE, "usb_device")) return 1;
-    usleep(50000);
-  }
-  return contains(OTG_ROLE, "usb_device");
 }
 
 static pid_t start(int close_stdin, int with_workspace) {
@@ -383,20 +403,57 @@ static void snapshot(pid_t pid, const char* name, char* buffer, size_t size) {
 }
 
 static struct {
-  int unknown_left, host_restored, held_back, retried;
+  int unknown_left, host_restored, held_back, retried, retries;
 } rescue_usb;
 
+struct role_events {
+  int reads, writes;
+};
+
+/* Takes role events up to `until` (1) or until the loader reads past `reads` or stalls (0). */
+static int take_role_events(enum role_event until, int reads, struct role_events* seen) {
+  memset(seen, 0, sizeof *seen);
+  for (;;) {
+    const enum role_event event = next_role_event(STALLED_MS);
+    if (event == ROLE_QUIET) return 0;
+    seen->reads += event == ROLE_READ;
+    seen->writes += event == ROLE_WRITTEN;
+    if (event == until) return 1;
+    if (reads && seen->reads > reads) return 0;
+  }
+}
+
+/* Counted in loader ticks, not time: a rescue shell behind its tick pipe takes the queued ticks
+ * in a burst, which can pass a whole hold before usb_host is back. Such a hold proves nothing and
+ * is repeated. */
 static void exercise_rescue_usb(void) {
   memset(&rescue_usb, 0, sizeof rescue_usb);
+  struct role_events seen;
   set_role_atomically("unkown\n");
-  usleep((useconds_t)(TICK_MS * 5 / 2) * 1000);
-  rescue_usb.unknown_left = contains(OTG_ROLE, "unkown");
+  rescue_usb.unknown_left = take_role_events(ROLE_REPLACED, 0, &seen) && !seen.writes &&
+                            !take_role_events(ROLE_WRITTEN, 1, &seen) && seen.reads > 1 &&
+                            contains(OTG_ROLE, "unkown");
   set_role_atomically("usb_host\n");
-  rescue_usb.host_restored = role_restored_within(2 * TICK_MS);
-  set_role_atomically("usb_host\n");
-  usleep((useconds_t)(TICK_MS * 3 / 2) * 1000);
-  rescue_usb.held_back = contains(OTG_ROLE, "usb_host");
-  rescue_usb.retried = role_restored_within((AWTRIX_LOADER_USB_RETRY_TICKS + 1) * TICK_MS);
+  rescue_usb.unknown_left &= take_role_events(ROLE_REPLACED, 0, &seen) && !seen.writes;
+  rescue_usb.host_restored =
+      take_role_events(ROLE_WRITTEN, 2, &seen) && contains(OTG_ROLE, "usb_device");
+  rescue_usb.retried = rescue_usb.host_restored;
+  for (int cycle = 0; cycle < 5 && rescue_usb.retried && !rescue_usb.held_back; ++cycle) {
+    struct role_events lag, hold;
+    set_role_atomically("usb_host\n");
+    take_role_events(ROLE_REPLACED, 0, &lag);
+    /* `late`: loader reads between its write and the replace, less our own read. The first read
+     * after the replace may still have opened the written file; from the next on, ticks see
+     * usb_host. */
+    const int late = lag.reads - 1, host_from = late + 2;
+    const int retry = take_role_events(ROLE_WRITTEN, HOLD_TICKS, &hold);
+    const int ticks = late + hold.reads;
+    rescue_usb.retries += retry;
+    if (lag.writes || (retry && ticks < HOLD_TICKS)) break;
+    rescue_usb.retried = retry && ticks <= (host_from > HOLD_TICKS ? host_from : HOLD_TICKS) &&
+                         contains(OTG_ROLE, "usb_device");
+    rescue_usb.held_back = ticks >= HOLD_TICKS && host_from < HOLD_TICKS;
+  }
 }
 
 static void run_rescue_exercising(enum idle_place place, void (*exercise)(void)) {
@@ -430,6 +487,7 @@ static void expect_rescue_usb_rules(void) {
   CHECK(rescue_usb.host_restored);
   CHECK(rescue_usb.held_back);
   CHECK(rescue_usb.retried);
+  CHECK(usb.role_writes == 1 + rescue_usb.retries);
 }
 
 static unsigned long long status_mask(const char* field) {
@@ -544,7 +602,6 @@ static void test_usb_role(void) {
   run_rescue_exercising(IDLE_IN_SHELL, exercise_rescue_usb);
   expect_rescue("never became healthy");
   expect_rescue_usb_rules();
-  CHECK(usb.role_writes == 2);
 
   scenario = "rescue-in-zkgui-keeps-usb";
   unlink(SHELL);
@@ -553,7 +610,6 @@ static void test_usb_role(void) {
   run_rescue_exercising(IDLE_IN_ZKGUI, exercise_rescue_usb);
   expect_rescue("never became healthy");
   expect_rescue_usb_rules();
-  CHECK(usb.role_writes == 2);
 
   scenario = "usb-role-missing";
   release_tree();

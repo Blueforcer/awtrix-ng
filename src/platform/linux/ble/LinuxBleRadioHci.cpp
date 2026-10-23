@@ -80,13 +80,15 @@ void LinuxBleRadio::resume() {
   restoreAdvertising();
 }
 
-// Scan 30 ms every 100 ms (background: every 640 ms); untouched while a connection starts,
-// then set again after all connects finish.
+// Scan 30 ms every 100 ms (background: every 640 ms, or every 160 ms while a link is open);
+// untouched while a connection starts, then set again after all connects finish. A link takes
+// part of each scan window: at 640 ms a waking gamepad took about 30 s to be seen.
 void LinuxBleRadio::applyScan() {
   if (scanFd_ < 0 || connecting()) return;
   hciCommand(0x200c, {0x00, 0x00});
   if (!scanWanted_) return;
-  const uint8_t interval = scanBackground_ ? 0x04 : 0x00;
+  const bool linked = std::any_of(links_.begin(), links_.end(), [](const auto& e) { return e.second.open; });
+  const uint8_t interval = scanBackground_ ? (linked ? 0x01 : 0x04) : 0x00;
   hciCommand(0x200b, {static_cast<uint8_t>(scanActive_ ? 1 : 0), static_cast<uint8_t>(scanBackground_ ? 0x00 : 0xa0),
                       interval, 0x30, 0x00, 0x00, 0x00});
   hciCommand(0x200c, {0x01, 0x00});

@@ -65,6 +65,24 @@ bool Tc002InputDecoder::event(bool knob, uint16_t type, uint16_t code, int32_t v
   return true;
 }
 
+bool Tc002SetupHold::button(int button, bool pressed, bool intro, int64_t now) {
+  if (button != 1) return false;
+  if (pressed) {
+    if (!intro) return false;
+    since_ = now;
+    return true;
+  }
+  if (since_ < 0) return false;
+  since_ = -1;
+  return true;
+}
+
+bool Tc002SetupHold::tick(bool intro, int64_t now) {
+  if (fired_ || !intro || since_ < 0 || now - since_ < kHoldMs) return false;
+  fired_ = true;
+  return true;
+}
+
 Tc002Input::~Tc002Input() {
   if (keys_ >= 0) close(keys_);
   if (knob_ >= 0) close(knob_);

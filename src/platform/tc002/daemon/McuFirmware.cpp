@@ -61,18 +61,27 @@ bool Identity::sameBuild(const Identity& other) const {
 }
 
 void Firmware::load(const std::string& directory, const std::string& journal) {
+  auto listener = std::move(listener_);
   *this = Firmware{};
+  listener_ = std::move(listener);
   journal_ = journal;
   std::string text;
   if (!journal.empty() && readFirmwareFile(journal, text, 4096)) {
     api::JsonReader r(text);
     const std::string phase = api::memberText(r, "phase");
     pendingDigest_ = api::memberText(r, "sha256");
+    const auto tries = api::memberValue(r, "attempts");
+    const auto error = api::memberValue(r, "error");
+    long long attempts = 1;
     if (!object(text) || !identity(r, pendingTarget_) || !isSha256Hex(pendingDigest_) ||
-        (phase != "attempt" && phase != "verified")) {
+        (phase != "attempt" && phase != "verified") ||
+        (api::present(tries) && (!tries.isInteger() || !tries.asLong(attempts) || attempts < 1 || attempts > 255)) ||
+        (api::present(error) && error.type() != api::JsonReader::Type::String)) {
       failed("invalid MCU update journal"); return;
     }
     pending_ = phase == "attempt";
+    attempts_ = static_cast<unsigned>(attempts);
+    lastError_ = api::memberText(r, "error");
   } else if (!journal.empty() && errno != ENOENT) {
     failed("cannot read MCU update journal"); return;
   }
@@ -132,50 +141,86 @@ bool Firmware::acceptPrepared(const std::string& binary) {
   return true;
 }
 
-bool Firmware::record(const char* phase, const Identity& i, const std::string& digest) {
+bool Firmware::record(const char* phase, const Identity& i, const std::string& digest, unsigned attempts,
+                      const std::string& error) {
   std::string text;
   api::JsonWriter json(text);
   json.beginObject().member("phase", phase).member("abi", i.abi).member("features", i.features)
       .member("family", i.family).member("version", i.version).member("build_tag", i.tag)
-      .member("sha256", digest).endObject();
+      .member("sha256", digest).member("attempts", attempts);
+  if (!error.empty()) json.member("error", error);
+  json.endObject();
   if (journal_.empty() || !posix::replaceText(journal_, text)) { failed("cannot persist MCU update journal"); return false; }
   return true;
 }
 
 bool Firmware::needed(const std::string& vendor, const Identity* current, bool malformed) {
   if (blocked_) return false;
-  if (malformed) { status_ = "invalid MCU identity; update blocked"; return false; }
+  if (malformed) { setStatus("invalid MCU identity; update blocked"); return false; }
   if (pending_) {
-    if (!current || !current->sameBuild(pendingTarget_)) {
-      status_ = "previous MCU attempt unverified; automatic retry blocked";
+    if (current && current->sameBuild(pendingTarget_)) {
+      if (!record("verified", pendingTarget_, pendingDigest_, attempts_)) return false;
+      pending_ = retrying_ = false;
+    } else if (nextAttempt() > kMaxAttempts) {
+      failed("MCU update unconfirmed after " + std::to_string(attempts_) + " attempts" +
+             (lastError_.empty() ? "" : " (last: " + lastError_ + ")") + "; automatic retry blocked");
       return false;
     }
-    if (!record("verified", pendingTarget_, pendingDigest_)) return false;
-    pending_ = false;
   }
-  if (extension_.empty()) { status_ = "unbundled"; return false; }
+  if (extension_.empty()) { setStatus("unbundled"); return false; }
   if (current) {
     if (current->abi != target_.abi || current->family != target_.family) {
-      status_ = "incompatible MCU identity"; return false;
+      setStatus("incompatible MCU identity"); return false;
     }
     if (current->version >= target_.version) {
-      if (current->version == target_.version && !current->sameBuild(target_)) status_ = "MCU version collision";
-      else if ((current->features & target_.features) != target_.features) status_ = "MCU features incompatible";
-      else status_ = current->version == target_.version ? "current" : "newer compatible MCU retained";
+      if (current->version == target_.version && !current->sameBuild(target_)) setStatus("MCU version collision");
+      else if ((current->features & target_.features) != target_.features) setStatus("MCU features incompatible");
+      else setStatus(current->version == target_.version ? "current" : "newer compatible MCU retained");
       return false;
     }
-  } else if (vendor != "V1.0.17") { status_ = "unknown legacy MCU; update blocked"; return false; }
-  status_ = "waiting for healthy AWTRIX and USB power";
+  } else if (vendor != "V1.0.17") { setStatus("unknown legacy MCU; update blocked"); return false; }
+  if (pending_ && !retrying_) {
+    retrying_ = true;
+    setStatus("retry " + std::to_string(nextAttempt()) + " of " + std::to_string(kMaxAttempts) +
+              " after an unconfirmed attempt" + (lastError_.empty() ? "" : ": " + lastError_));
+  }
+  setStatus("waiting for healthy AWTRIX and USB power");
   return true;
 }
 
+// The running MCU answered and is not the pending target, so that attempt changed nothing it
+// runs. A new image starts counting again.
+unsigned Firmware::nextAttempt() const {
+  return pending_ && pendingTarget_.sameBuild(target_) && pendingDigest_ == digest_ ? attempts_ + 1 : 1;
+}
+
 bool Firmware::recordAttempt() {
-  if (blocked_ || pending_ || image_.empty() || !record("attempt", target_, digest_)) return false;
+  const unsigned attempt = nextAttempt();
+  if (blocked_ || image_.empty() || attempt > kMaxAttempts || !record("attempt", target_, digest_, attempt)) return false;
   pending_ = true;
+  retrying_ = false;
   pendingTarget_ = target_;
   pendingDigest_ = digest_;
-  status_ = "transferring";
+  attempts_ = attempt;
+  lastError_.clear();
+  setStatus("installing build " + std::to_string(target_.version) + " (" + std::to_string(image_.size()) +
+            " bytes), attempt " + std::to_string(attempt) + " of " + std::to_string(kMaxAttempts));
   return true;
 }
-void Firmware::failed(const std::string& reason) { blocked_ = true; status_ = reason; }
+
+void Firmware::attemptFailed(const std::string& reason) {
+  if (pending_ && record("attempt", pendingTarget_, pendingDigest_, attempts_, reason)) lastError_ = reason;
+  failed(reason);
+}
+
+void Firmware::failed(const std::string& reason) {
+  blocked_ = true;
+  setStatus(reason);
+}
+
+void Firmware::setStatus(std::string_view status) {
+  if (status == status_) return;
+  status_.assign(status);
+  if (listener_) listener_(status_);
+}
 }

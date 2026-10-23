@@ -6,6 +6,7 @@
 
 #include "core/api/JsonWriter.h"
 #include "platform/posix/Files.h"
+#include "platform/tc002/daemon/BatteryGauge.h"
 #include "platform/tc002/daemon/McuFrame.h"
 #include "platform/tc002/daemon/McuPcm.h"
 #include "platform/tc002/daemon/McuStream.h"
@@ -16,7 +17,8 @@
 
 // Continuous owner of the MCU UART (raw 1.5 Mbaud 8N1). Queries version once, USB every second
 // and battery every ten seconds, one query in flight at a time. PCM requests temporarily own
-// the same protocol channel. A power value not refreshed for staleMs becomes unknown.
+// the same protocol channel. A power value not refreshed for staleMs becomes unknown. The battery
+// percentage comes from BatteryGauge, not from the MCU.
 // Acknowledgements and unknown commands are counted. The UART is reopened after errors.
 namespace awtrix {
 namespace tc002d {
@@ -73,8 +75,10 @@ class McuService : public Service {
   void closeUart(int64_t nowMs, const char* reason);
   void pump(int64_t nowMs);
   void handle(const mcu::Frame& frame, int64_t nowMs);
+  void batteryMeasured(int64_t nowMs);
   void publish(int64_t nowMs);
   void firmwareProgress(int64_t nowMs);
+  bool verificationExpired(int64_t nowMs);
   bool prepareFirmware(int64_t nowMs);
   void resetIdentity(int64_t nowMs);
   void flushPcm(int64_t nowMs);
@@ -130,6 +134,7 @@ class McuService : public Service {
   uint8_t usbRaw_ = 0, batteryFirst_ = 0;
   uint16_t batteryWord_ = 0;
   int64_t usbSeenAt_ = 0, batterySeenAt_ = 0;
+  BatteryGauge gauge_;
 
   uint64_t rxBytes_ = 0, frames_ = 0, acks_ = 0, unknown_ = 0, queries_ = 0, timeouts_ = 0, writeErrors_ = 0;
 };

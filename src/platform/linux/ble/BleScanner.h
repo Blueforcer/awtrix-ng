@@ -24,6 +24,9 @@ class BleScanner {
   void forgetBudget(const std::string& script) { buckets_.erase(script); }
   void apply();
   void resetRadio() { scanning_ = false; }
+  // Names who starts a scan, at most once in kScanLogMs per script, and who ends one that ran for
+  // kLongScanMs or longer: enough to see what keeps the controller scanning without flooding the log.
+  std::function<void(const std::string&)> log;
   void onAdvert(const AdvReport& report);
   std::optional<Address> addressFilter(const ResourceKey& key) const;
   void reportLinked(const ResourceKey& key, const Address& peer);
@@ -31,6 +34,7 @@ class BleScanner {
 
  private:
   struct Scan {
+    int64_t startedAt = 0;
     bool active = false;
     std::vector<Uuid> uuids;
     bool byAddress = false;
@@ -58,6 +62,9 @@ class BleScanner {
   std::map<ResourceKey, Scan> scans_;
   std::map<Address, Seen> seen_;
   std::map<std::string, Bucket> buckets_;
+  std::map<std::string, int64_t> scanLoggedAt_;
+  static constexpr int64_t kScanLogMs = 300000;
+  static constexpr int64_t kLongScanMs = 60000;
   bool scanning_ = false, scanActive_ = false, scanBackground_ = false;
 };
 

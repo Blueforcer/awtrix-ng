@@ -393,6 +393,33 @@ void sharedScan() {
   check(has(r.call("c", "scan", "{}", 30), "too many scans"), "the per-script scan limit holds");
 }
 
+void scanOwnersAreLogged() {
+  Rig r;
+  std::vector<std::string> lines;
+  r.hub.log = [&lines](const std::string& line) { lines.push_back(line); };
+  r.call("probe", "scan", R"({"active":true})", 1);
+  r.call("@gamepad:1", "scan", R"({"background":true})", 2);
+  const auto count = [&lines](const char* text) {
+    return std::count(lines.begin(), lines.end(), std::string(text));
+  };
+  check(count("ble: probe scans actively") == 1 && count("ble: @gamepad:1 scans in the background") == 1,
+        "the log names who starts each scan and how");
+  r.hub.forget("probe", r.now);
+  check(lines.size() == 2, "a short scan ends without a log line");
+  for (int i = 0; i < 5; ++i) {
+    r.now += 10000;
+    r.call("probe", "scan", R"({"active":true})", static_cast<uint32_t>(10 + i));
+    r.hub.forget("probe", r.now);
+  }
+  check(count("ble: probe scans actively") == 1, "a script that scans again and again is named once in five minutes");
+  r.now += 300000;
+  r.call("probe", "scan", R"({"active":true})", 20);
+  check(count("ble: probe scans actively") == 2, "and again after five minutes");
+  r.now += 61000;
+  r.hub.forget("probe", r.now);
+  check(count("ble: probe stopped scanning after 61 s") == 1, "a long scan names its end");
+}
+
 void rateLimit() {
   Rig r;
   r.call("a", "scan", R"({"dedupe":0})", 1);
@@ -884,6 +911,16 @@ struct PadRig {
     radio.advert(addr, 0, -50, advWith(name, 0x1812));
     step();
   }
+  void advertCompany(const char* addr, uint16_t company) {
+    AdvPayload p;
+    p.uuids.push_back(Uuid::from16(0x1812));
+    p.manufacturer.push_back({company, Bytes{1, 2}});
+    Bytes adv, rsp;
+    std::string e;
+    buildAdv(p, adv, rsp, e);
+    radio.advert(addr, 0, -50, adv);
+    step();
+  }
   void report(uint32_t buttons, int instance = 0) {
     radio.notifyPeer(handles[1 + instance], eightBitDoReport(15, buttons));
     step();
@@ -937,12 +974,12 @@ void xboxUsesDefaultMtu() {
 }
 
 void gamepadWaitsForEncryption() {
-  PadRig r;
+  PadRig r(true);
   r.radio.deferSecurity = true;
   r.pad->start(r.now);
   r.pad->pair(r.now);
   r.step();
-  r.advert("68:6C:E6:7A:21:A5", "8BitDo Ultimate");
+  r.advert("68:6C:E6:7A:21:A5", "Xbox");
   const int link = r.linkOf("68:6C:E6:7A:21:A5");
   const auto readMap = [&] {
     return std::any_of(r.radio.sent.begin(), r.radio.sent.end(), [&](const auto& packet) {
@@ -957,9 +994,49 @@ void gamepadWaitsForEncryption() {
   r.radio.events.secured(link, true, "");
   r.step();
   check(readMap(), "HID report map is read after security completes");
-  check(r.radio.timingRequests.empty(), "other named gamepads keep their connection timing");
-  r.report(1);
+  check(r.radio.timingRequests.size() == 1, "an Xbox asks for its steady timing after encryption");
+  Bytes input = eightBitDoReport(15, 1);
+  input.resize(16);
+  r.radio.notifyPeer(r.handles[1], input);
+  r.step();
   check(r.status() == GamepadStatus::Ready && r.buttons() == 1, "encrypted gamepad reaches ready on input");
+}
+
+// Other gamepads are read as before when they do not pair: only an Xbox needs encryption first.
+void gamepadWithoutPairing() {
+  PadRig r;
+  r.radio.deferSecurity = true;
+  r.pad->start(r.now);
+  r.pad->pair(r.now);
+  r.step();
+  r.advert("68:6C:E6:7A:21:A5", "8BitDo Ultimate");
+  const int link = r.linkOf("68:6C:E6:7A:21:A5");
+  check(link >= 0, "a non-Xbox gamepad connects without asking for security first");
+  r.radio.events.secured(link, false, "pairing not supported");
+  r.step();
+  r.report(1);
+  check(r.status() == GamepadStatus::Ready && r.buttons() == 1, "a gamepad that does not pair still works");
+  check(r.radio.timingRequests.empty(), "a non-Xbox gamepad keeps its connection timing");
+}
+
+// Only a name with Xbox or Microsoft's company ID picks the Xbox settings, not a missing name.
+void xboxIsRecognised() {
+  {
+    PadRig r(true, true);
+    r.pad->start(r.now);
+    r.pad->pair(r.now);
+    r.step();
+    r.advert("68:6C:E6:7A:21:A5", "");
+    check(r.radio.timingRequests.empty(), "an unnamed gamepad is not taken for an Xbox");
+  }
+  {
+    PadRig r(true, true);
+    r.pad->start(r.now);
+    r.pad->pair(r.now);
+    r.step();
+    r.advertCompany("68:6C:E6:7A:21:A5", 0x0006);
+    check(r.radio.timingRequests.size() == 1, "Microsoft's company ID marks an unnamed Xbox");
+  }
 }
 
 void gamepadSecurityFailure() {
@@ -968,7 +1045,7 @@ void gamepadSecurityFailure() {
   r.pad->start(r.now);
   r.pad->pair(r.now);
   r.step();
-  r.advert("68:6C:E6:7A:21:A5", "8BitDo Ultimate");
+  r.advert("68:6C:E6:7A:21:A5", "Xbox");
   r.radio.events.secured(r.linkOf("68:6C:E6:7A:21:A5"), false, "pairing failed (status 5)");
   r.step();
   check(r.status() == GamepadStatus::Pairing, "failed security returns to pairing for a retry");
@@ -1182,6 +1259,25 @@ void registryMigrationAndValidation() {
         "legacy files without optional name or address type still load");
 }
 
+// An unnamed pad stored before the xbox flag existed was linked as an Xbox, so it reconnects as one;
+// a stored flag wins over the name.
+void storedXboxFlag() {
+  for (const bool flagged : {false, true}) {
+    PadRig r(true, true);
+    const std::string entry = flagged
+        ? R"({"version":2,"devices":[{"id":1,"addr":"68:6C:E6:7A:21:A5","name":"","xbox":false}]})"
+        : R"({"version":2,"devices":[{"id":1,"addr":"68:6C:E6:7A:21:A5","name":""}]})";
+    check(posix::replaceText(r.path, entry), "stored gamepad fixture is written");
+    r.fresh();
+    r.pad->start(r.now);
+    r.step();
+    r.advert("68:6C:E6:7A:21:A5", "");
+    check(r.radio.timingRequests.size() == (flagged ? 0u : 1u),
+          flagged ? "a stored xbox=false keeps an unnamed pad off the Xbox settings"
+                  : "an unnamed pad stored without the flag reconnects as an Xbox");
+  }
+}
+
 void failedSaveWaitsForTheNextChange() {
   PadRig r;
   r.path = std::string(r.directory) + "/later/gamepad.json";
@@ -1314,6 +1410,7 @@ int main() {
   persistentBonds();
   persistentLocalBleIdentity();
   sharedScan();
+  scanOwnersAreLogged();
   rateLimit();
   sharedConnection();
   duplicateServices();
@@ -1333,6 +1430,9 @@ int main() {
   hidReports();
   builtInGamepad();
   xboxUsesDefaultMtu();
+  gamepadWithoutPairing();
+  xboxIsRecognised();
+  storedXboxFlag();
   gamepadWaitsForEncryption();
   gamepadSecurityFailure();
   pairingEnds();

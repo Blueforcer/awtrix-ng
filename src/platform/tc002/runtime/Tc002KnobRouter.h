@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 
 #include "platform/tc002/runtime/Tc002Input.h"
 
@@ -29,18 +30,21 @@ class Tc002KnobRouter {
     tc002::voice::KnobGesture& gesture;
     Tc002QuickSettings& quickSettings;
     tc002::voice::VoiceRuntime* voice;
+    std::function<void()> setupAccessPoint;
   };
 
   explicit Tc002KnobRouter(const Targets& targets) : t_(targets) {}
 
-  // panelBusy: the boot intro or an update owns the panel. False when the input failed.
-  bool poll(Tc002Input& input, int64_t now, bool panelBusy, bool scriptsRunning);
+  // panelBusy: the boot intro or an update owns the panel; intro: the boot intro runs.
+  // False when the input failed.
+  bool poll(Tc002Input& input, int64_t now, bool panelBusy, bool intro, bool scriptsRunning);
 
  private:
   void knob(Tc002InputDecoder::Knob knob, int64_t now, bool local, bool app);
   bool voiceBusy() const;
 
   Targets t_;
+  Tc002SetupHold setupHold_;
 };
 
 }

@@ -419,6 +419,30 @@ static void test_stale_scroll_completion_cannot_end_updated_layout() {
   TEST_ASSERT_FALSE(engine.appHost().inTransition());
 }
 
+// An automation sends the shown layout again while its text is still running. The update arrives
+// between two frames, and the turn is long over by then: the app must stay until the text ran through.
+static void test_an_update_keeps_an_unfinished_repeating_layout() {
+  sound::AudioRouter audio;
+  Display display; System system;
+  CoreEngine engine(audio,display,system);
+  engine.setFontCatalog(&fonts);
+  DispatchDetail error;
+  const char* payload=R"({"repeat":1,"layout":{"version":1,"regions":[{"id":"main","box":[0,0,32,8],"text":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}]}})";
+  TEST_ASSERT_EQUAL_INT(DispatchResult::Ok,engine.setPushedApp("native",payload,error));
+  TEST_ASSERT_EQUAL_INT(DispatchResult::Ok,engine.setPushedApp("other",R"({"text":"A"})",error));
+  engine.appHost().setApps({"native","other"});
+  engine.state().settings().autoTransition=true;
+  engine.state().settings().appDurationMs=7000;
+  engine.tick(0);
+  engine.setRotationHold(true);
+  engine.tick(8000);
+  TEST_ASSERT_FALSE(engine.appHost().inTransition());
+  TEST_ASSERT_EQUAL_INT(DispatchResult::Ok,engine.setPushedApp("native",payload,error));
+  engine.appHost().setApps({"native","other"});
+  engine.tick(8020);
+  TEST_ASSERT_FALSE_MESSAGE(engine.appHost().inTransition(),"an update must not end an unfinished text");
+}
+
 static void test_settings_and_assets_clear_completion_before_engine_tick() {
   for (bool assetEvent : {false, true}) {
     sound::AudioRouter audio;
@@ -783,6 +807,7 @@ int main(int,char**) {
   RUN_TEST(test_enlarged_pages_leave_a_layout_at_panel_size);
   RUN_TEST(test_asset_dimension_change_reprepares_atomically);
   RUN_TEST(test_stale_scroll_completion_cannot_end_updated_layout);
+  RUN_TEST(test_an_update_keeps_an_unfinished_repeating_layout);
   RUN_TEST(test_settings_and_assets_clear_completion_before_engine_tick);
   RUN_TEST(test_asset_invalidation_reaches_hidden_and_queued_layouts);
   RUN_TEST(test_storage_failure_rejects_parse_and_update_without_partial_replacement);

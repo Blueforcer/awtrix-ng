@@ -144,6 +144,7 @@ MessageType typeFromName(std::string_view name) {
   if (name == "address") return MessageType::Address;
   if (name == "reboot") return MessageType::Reboot;
   if (name == "factoryReset") return MessageType::FactoryReset;
+  if (name == "setupAccessPoint") return MessageType::SetupAccessPoint;
   if (name == "wifiScan") return MessageType::WifiScan;
   if (name == "wifiScanResult") return MessageType::WifiScanResult;
   if (name == "updateReady") return MessageType::UpdateReady;
@@ -223,6 +224,7 @@ std::string encodePower(const PowerStatus& power) {
   api::JsonWriter json(out);
   begin(json, "power");
   json.member("usbPower", power.usbPower)
+      .member("usbKnown", power.usbKnown)
       .member("batteryPercent", power.batteryPercent)
       .member("batteryMillivolts", power.batteryMillivolts);
   return finish(json, out);
@@ -321,6 +323,13 @@ std::string encodeFactoryReset() {
   return finish(json, out);
 }
 
+std::string encodeSetupAccessPoint() {
+  std::string out;
+  api::JsonWriter json(out);
+  begin(json, "setupAccessPoint");
+  return finish(json, out);
+}
+
 std::string encodeWifiScan() {
   std::string out;
   api::JsonWriter json(out);
@@ -414,7 +423,8 @@ bool decodeSupervisorMessage(std::string_view datagram, SupervisorMessage& out) 
     }
     case MessageType::Power: {
       auto& p = message.power;
-      ok = field("usbPower").asBool(p.usbPower) &&
+      const api::JsonReader known = field("usbKnown");
+      ok = field("usbPower").asBool(p.usbPower) && (!api::present(known) || known.asBool(p.usbKnown)) &&
            readInt(field("batteryPercent"), -1, 100, p.batteryPercent) &&
            readInt(field("batteryMillivolts"), -1, 10000, p.batteryMillivolts);
       break;
@@ -462,6 +472,7 @@ bool decodeSupervisorMessage(std::string_view datagram, SupervisorMessage& out) 
       break;
     case MessageType::Reboot:
     case MessageType::FactoryReset:
+    case MessageType::SetupAccessPoint:
     case MessageType::WifiScan:
       break;
     case MessageType::WifiScanResult:

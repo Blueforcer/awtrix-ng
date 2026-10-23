@@ -15,6 +15,7 @@ void appendDeviceState(api::JsonWriter& json, const DeviceState& state) {
   const auto& network = state.network();
   json.key("power").beginObject()
       .member("usbPower", power.usbPower)
+      .member("usbKnown", power.usbKnown)
       .member("batteryPercent", power.batteryPercent)
       .member("batteryMillivolts", power.batteryMillivolts)
       .endObject();
@@ -57,12 +58,14 @@ std::string okReply() { return "{\"ok\":true}"; }
 
 void StateLog::power() {
   const auto& p = state_.power();
-  if (powerKnown_ && p.usbPower == usb_ && p.batteryPercent == percent_) return;
+  if (powerKnown_ && p.usbKnown == usbKnown_ && p.usbPower == usb_ && p.batteryPercent == percent_) return;
   powerKnown_ = true;
+  usbKnown_ = p.usbKnown;
   usb_ = p.usbPower;
   percent_ = p.batteryPercent;
   ++lines_;
-  Log::line("state", "power usb=%d battery=%d%% %dmV", p.usbPower ? 1 : 0, p.batteryPercent, p.batteryMillivolts);
+  Log::line("state", "power usb=%s battery=%d%% %dmV", !p.usbKnown ? "unknown" : p.usbPower ? "1" : "0",
+            p.batteryPercent, p.batteryMillivolts);
 }
 
 void StateLog::network(int64_t nowMs) {

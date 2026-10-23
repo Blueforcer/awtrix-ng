@@ -61,20 +61,23 @@ the kernel guards without changing controller connection limits or the AON block
 
 ## Xbox 1914 pairing
 
-Gamepad sessions request encryption before GATT discovery, including incoming
-ATT sockets adopted from a pending connection. Security failure or cancellation
-prevents discovery. Only a valid input notification makes the gamepad Ready.
+A gamepad counts as an Xbox when its name contains `Xbox` or its advert carries
+Microsoft's company ID (0x0006); the registry stores that as `xbox`. An Xbox
+session requests encryption before GATT discovery, including incoming ATT sockets
+adopted from a pending connection, and a security failure or cancellation
+prevents discovery. Other gamepads connect as before, ask for pairing after
+discovery and are read without encryption when they do not pair. Only a valid
+input notification makes a gamepad Ready.
 
 With gamepad support enabled, the radio configures LE privacy using a persistent
 local Identity Resolving Key (IRK). `BondStore` generates this 128-bit key with
 `getrandom` and atomically saves it as `local_irk` beside peer bonds. Removing a
 peer preserves the local identity across radio and clock restarts. Existing bond
 files remain readable. An empty store path keeps keys in memory only. Failure to
-generate, persist or configure the identity stops Bluetooth startup. Key bytes
-are never logged.
+generate, persist or configure the identity is logged, and Bluetooth starts
+without privacy. Key bytes are never logged.
 
-LE Secure Connections is enabled when supported. Xbox-named or unnamed gamepads
-use ATT MTU 23 without a local exchange and request a 50 ms interval, zero
+LE Secure Connections is enabled when supported. An Xbox uses ATT MTU 23 without a local exchange and request a 50 ms interval, zero
 peripheral latency and a 600 ms
 supervision timeout after encryption. Existing shared-client settings are
 preserved. Long report maps remain readable through Read Blob requests. Timing

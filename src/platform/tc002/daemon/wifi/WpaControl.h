@@ -17,12 +17,17 @@ struct WpaStatus {
   std::string mode;
 };
 
-enum class WpaEventType { Other, Connected, Disconnected, TemporarilyDisabled, Terminating, ScanResults,
-  AccessPointEnabled, AccessPointDisabled, StationConnected, StationDisconnected };
+enum class WpaEventType { Other, Connected, Disconnected, AssociationRejected, TemporarilyDisabled, Terminating,
+  ScanResults, AccessPointEnabled, AccessPointDisabled, StationConnected, StationDisconnected };
 
 struct WpaEvent {
   WpaEventType type = WpaEventType::Other;
   bool wrongKey = false;
+  // Disconnected: the 802.11 reason code; AssociationRejected: the status code; -1 when absent.
+  int code = -1;
+  bool locallyGenerated = false;
+  // TemporarilyDisabled: the supplicant's reason token (CONN_FAILED, WRONG_KEY, ...).
+  std::string detail;
 };
 
 bool parseStatus(std::string_view reply, WpaStatus& out);

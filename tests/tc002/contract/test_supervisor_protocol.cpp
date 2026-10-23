@@ -61,8 +61,15 @@ int main() {
   power.batteryPercent = 76;
   power.batteryMillivolts = 4120;
   check(decodeSupervisorMessage(encodePower(power), message), "power decodes");
-  check(message.type == MessageType::Power && message.power.usbPower &&
+  check(message.type == MessageType::Power && message.power.usbPower && message.power.usbKnown &&
         message.power.batteryPercent == 76 && message.power.batteryMillivolts == 4120, "power round trip");
+  power.usbKnown = false;
+  check(decodeSupervisorMessage(encodePower(power), message) && !message.power.usbKnown, "unknown USB supply round trip");
+  check(decodeSupervisorMessage("{\"v\":2,\"type\":\"power\",\"usbPower\":false,\"batteryPercent\":5,"
+                                "\"batteryMillivolts\":1}", message) && message.power.usbKnown,
+        "a report without usbKnown states the supply");
+  check(!decodeSupervisorMessage("{\"v\":2,\"type\":\"power\",\"usbPower\":true,\"usbKnown\":1,\"batteryPercent\":5,"
+                                 "\"batteryMillivolts\":1}", message), "non-bool usbKnown refused");
 
   NetworkStatus network;
   network.link = WifiLink::Connected;
@@ -150,6 +157,8 @@ int main() {
   check(decodeSupervisorMessage(encodeFactoryReset(), message) && message.type == MessageType::FactoryReset,
         "factory reset");
   check(encodeFactoryReset() == "{\"v\":2,\"type\":\"factoryReset\"}", "factory reset wire form");
+  check(decodeSupervisorMessage(encodeSetupAccessPoint(), message) && message.type == MessageType::SetupAccessPoint &&
+            encodeSetupAccessPoint() == "{\"v\":2,\"type\":\"setupAccessPoint\"}", "setup access point");
   check(decodeSupervisorMessage(encodeWifiScan(), message) && message.type == MessageType::WifiScan, "wifi scan");
   check(encodeWifiScan() == "{\"v\":2,\"type\":\"wifiScan\"}", "wifi scan wire form");
 

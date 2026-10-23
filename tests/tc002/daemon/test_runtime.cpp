@@ -71,6 +71,7 @@ class FakeControls : public WifiControl, public TimeControl, public HostnameCont
     return true;
   }
   void eraseCredentials() override { calls.push_back("erase"); }
+  void openSetupAccessPoint() override { calls.push_back("setup access point"); }
   void scan(ScanDone done) override {
     calls.push_back("scan");
     pendingScan = std::move(done);
@@ -526,12 +527,13 @@ void healthyRun() {
            "{\"v\":2,\"type\":\"hostname\",\"name\":\"clock\"}\n"
            "{\"v\":2,\"type\":\"hostname\",\"name\":\"clock2\"}\n"
            "{\"v\":2,\"type\":\"wifiScan\"}\n"
+           "{\"v\":2,\"type\":\"setupAccessPoint\"}\n"
            "{\"v\":2,\"type\":\"factoryReset\"}\n");
-  check(rig.until([&] { return rig.controls.calls.size() >= 6; }, 2000), "runtime commands dispatched");
+  check(rig.until([&] { return rig.controls.calls.size() >= 7; }, 2000), "runtime commands dispatched");
   rig.until([] { return false; }, 100);
   check(rig.controls.calls == std::vector<std::string>({"wifi Home hunter22", "ntp time.example", "hostname clock",
-                                                        "hostname clock2", "scan", "erase"}),
-        "wifi, ntp, hostname, scan and factory reset dispatched in order; repeated values are idempotent");
+                                                        "hostname clock2", "scan", "setup access point", "erase"}),
+        "runtime commands dispatched in order; repeated values are idempotent");
   check(rig.running() && rig.state.power().batteryPercent == 50, "malformed and wrong-direction messages ignored");
   check(static_cast<bool>(rig.controls.pendingScan), "scan handed to the Wi-Fi service");
   if (rig.controls.pendingScan) rig.controls.pendingScan({{"Cafe", -48, true}, {"Open", -70, false}});
@@ -542,7 +544,7 @@ void healthyRun() {
         }, 2000),
         "scan result delivered to the runtime");
   rig.send("{\"v\":2,\"type\":\"wifiScan\"}\n");
-  check(rig.until([&] { return rig.controls.calls.size() == 7 && rig.controls.calls.back() == "scan"; }, 2000),
+  check(rig.until([&] { return rig.controls.calls.size() == 8 && rig.controls.calls.back() == "scan"; }, 2000),
         "second scan requested");
   const auto staleScan = rig.controls.pendingScan;
 

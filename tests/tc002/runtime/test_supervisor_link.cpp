@@ -297,6 +297,13 @@ void runtimeState() {
   supervision.apply(message);
   require(!rt.externalPower && rt.batteryPercent == 64, "supply and battery follow each report");
   require(members() == "{\"usbPower\":false}" && powerEvents == 2, "unplugging is reported and pushed");
+  message.power = {true, 63, 3890, false};
+  supervision.apply(message);
+  require(!rt.externalPower && rt.batteryPercent == 63 && members() == "{\"usbPower\":false}" && powerEvents == 2,
+          "an unknown supply keeps the last report and pushes nothing");
+  message.power = {true, 63, 3890};
+  supervision.apply(message);
+  require(rt.externalPower && members() == "{\"usbPower\":true}" && powerEvents == 3, "a known supply applies again");
 
   auto facts = [&] {
     DeviceFacts out;

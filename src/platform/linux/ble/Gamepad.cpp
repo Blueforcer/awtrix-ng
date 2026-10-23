@@ -17,6 +17,19 @@ bool isFailure(const std::string& reply) { return api::present(api::memberValue(
 
 JsonWriter& peer(JsonWriter& w, const Address& a) { return w.key("addr").value(a.str()).key("random").value(a.random); }
 
+// By its name, or by Microsoft's company ID in the advert when it sends no name.
+bool isXbox(const std::string& name, const std::string& advert) {
+  if (name.find("Xbox") != std::string::npos) return true;
+  JsonReader mfg = api::memberValue(advert, "mfg");
+  if (!api::present(mfg) || !mfg.enterArray()) return false;
+  while (mfg.nextElement()) {
+    long long id = -1;
+    if (api::memberValue(mfg, "id").asLong(id) && id == 0x0006) return true;
+    if (!mfg.skipValue()) return false;
+  }
+  return false;
+}
+
 std::string target(uint32_t conn, const char* chr) {
   std::string out;
   JsonWriter(out).beginObject().key("conn").value(static_cast<long long>(conn)).key("svc").value("1812")
@@ -124,16 +137,16 @@ void Gamepad::watch() {
   if (isFailure(call("scan", args, scanId_))) lost("cannot search");
 }
 
-void Gamepad::link(const Address& address, const std::string& name) {
+void Gamepad::link(const Known& device) {
   stopAll();
-  linking_ = {address, name};
+  linking_ = device;
   phase_ = "connect/security/discovery";
   ignoredReports_ = 0;
   publish(GamepadStatus::Connecting);
   std::string args;
-  const bool xboxProfile = name.empty() || name.find("Xbox") != std::string::npos;
-  peer(JsonWriter(args).beginObject(), address).key("secure").value(true)
-      .key("exchangeMtu").value(!xboxProfile).key("steadyTiming").value(xboxProfile).endObject();
+  const bool xbox = device.xbox;
+  peer(JsonWriter(args).beginObject(), device.address).key("secure").value(xbox)
+      .key("exchangeMtu").value(!xbox).key("steadyTiming").value(xbox).endObject();
   connId_ = next();
   if (isFailure(call("connect", args, connId_))) lost("cannot connect");
 }
@@ -160,7 +173,13 @@ void Gamepad::handle(const BleEvent& e, int64_t nowMs) {
     if (!Address::parse(api::memberText(e.json, "addr"), api::memberFlag(e.json, "random"), a)) return;
     if (pairing_ && rejected_.count(a.b)) return;
     if (pairing_ && acceptPeer && !acceptPeer(a)) return;
-    link(a, pairing_ ? api::memberText(e.json, "name") : known_.name);
+    Known device = known_;
+    device.address = a;
+    if (pairing_) {
+      device.name = api::memberText(e.json, "name");
+      device.xbox = isXbox(device.name, e.json);
+    }
+    link(device);
     return;
   }
   if (e.id == connId_ && connId_) {
@@ -180,12 +199,14 @@ void Gamepad::handle(const BleEvent& e, int64_t nowMs) {
   }
   if (e.id == pairId_ && pairId_) {
     pairId_ = 0;
-    if (!error.empty() || !api::memberFlag(e.json, "paired")) {
+    const bool paired = error.empty() && api::memberFlag(e.json, "paired");
+    // An Xbox stays silent without it; other gamepads may work without encryption, as before.
+    if (!paired && linking_.xbox) {
       lost(error.empty() ? "pairing not confirmed" : error);
       return;
     }
     phase_ = "report map";
-    if (log_) log_("gamepad: encrypted; reading report map");
+    if (log_) log_(paired ? "gamepad: encrypted; reading report map" : "gamepad: not paired; reading report map without encryption");
     readId_ = next();
     if (isFailure(call("read", target(connId_, "2a4b"), readId_))) lost("cannot read the report map");
     return;

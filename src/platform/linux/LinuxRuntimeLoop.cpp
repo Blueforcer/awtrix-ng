@@ -101,7 +101,7 @@ bool LinuxRuntime::pollSupervisor(int64_t now) {
 bool LinuxRuntime::pollInput(int64_t now) {
   if (!o_.physicalInput) return true;
   const bool panelBusy = intro_ || (update_ && update_->ownsPanel());
-  if (knobRouter_->poll(input_, now, panelBusy, scripts_ != nullptr)) return true;
+  if (knobRouter_->poll(input_, now, panelBusy, intro_ != nullptr, scripts_ != nullptr)) return true;
   std::fprintf(stderr, "Input failed: %s\n", input_.error().c_str());
   inputFailed_ = true;
   return false;

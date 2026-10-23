@@ -138,8 +138,8 @@ void conversation() {
   check(isQuery(device.take(), 0x03), "battery is queried after the USB reply");
   device.send(frame(0x03, {0x4c, 0x0c, 0x29}));
   serve(mcu, now);
-  check(state.power().usbPower && state.power().batteryPercent == 76 && state.power().batteryMillivolts == 4120,
-        "power published from the measured sample");
+  check(state.power().usbPower && state.power().batteryPercent == 100 && state.power().batteryMillivolts == 4120,
+        "power published from the measured sample, not the MCU's 76 %");
   const unsigned afterFirst = changes;
   check(device.take().empty(), "no legacy microphone enable command");
 
@@ -160,7 +160,7 @@ void conversation() {
   burst.insert(burst.end(), usbOff.begin(), usbOff.end());
   device.send(burst);
   serve(mcu, now);
-  check(!state.power().usbPower && state.power().batteryPercent == 76, "unsolicited, unknown and corrupt frames tolerated");
+  check(!state.power().usbPower && state.power().batteryPercent == 100, "unsolicited, unknown and corrupt frames tolerated");
   check(changes == afterFirst + 1, "one change notification per changed value");
   mcu.onTime(now);
   check(changes == afterFirst + 1, "unchanged values are not republished");
@@ -184,8 +184,8 @@ void conversation() {
         "silence for 30 s makes power unknown");
   device.send(frame(0x03, {150, 0x0c, 0x29}));
   serve(mcu, now);
-  check(state.power().batteryPercent == -1 && state.power().batteryMillivolts == 4120,
-        "percent outside 0..100 is unknown, voltage still published");
+  check(state.power().batteryPercent == 100 && state.power().batteryMillivolts == 4120,
+        "the MCU's percentage byte is ignored; the estimate returns with the voltage");
 
   unsigned versionQueries = 0;
   std::vector<std::vector<uint8_t>> written;

@@ -21,6 +21,7 @@ class Upgrade {
   int64_t deadline() const;
   const std::string& error() const { return error_; }
   std::size_t progress() const { return offset_; }
+  std::size_t resumedAt() const { return resumedAt_; }
   static constexpr int64_t kLimitMs = 120000;
   static uint32_t crc(const uint8_t* data, std::size_t size, bool file = false);
 
@@ -32,7 +33,7 @@ class Upgrade {
   Phase phase_ = Phase::Idle;
   const std::vector<uint8_t>* image_ = nullptr;
   std::vector<uint8_t> tx_, rx_;
-  std::size_t sent_ = 0, offset_ = 0, block_ = 0, packet_ = 0, blockSent_ = 0, blockBytes_ = 0;
+  std::size_t sent_ = 0, offset_ = 0, resumedAt_ = 0, block_ = 0, packet_ = 0, blockSent_ = 0, blockBytes_ = 0;
   uint8_t txSeq_ = 1, rxSeq_ = 0;
   unsigned attempts_ = 0;
   int64_t expires_ = -1, totalExpires_ = -1;

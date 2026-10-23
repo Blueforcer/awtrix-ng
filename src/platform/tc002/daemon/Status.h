@@ -44,7 +44,7 @@ class StateLog {
  private:
   const DeviceState& state_;
   unsigned lines_ = 0;
-  bool powerKnown_ = false, usb_ = false;
+  bool powerKnown_ = false, usbKnown_ = false, usb_ = false;
   int percent_ = -1;
   bool networkKnown_ = false;
   tc002::NetworkStatus network_;

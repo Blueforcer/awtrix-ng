@@ -97,7 +97,7 @@ void decisions() {
   auto old = a.target; old.version--;
   check(f.needed("V1.0.17",&old,false) && f.recordAttempt(), "older build records durable intent");
   mcu::Firmware boot; a.load(boot);
-  check(boot.pending() && !boot.needed("V1.0.17",&old,false), "restart cannot repeat interrupted update");
+  check(boot.pending() && boot.needed("V1.0.17",&old,false), "unconfirmed attempt is retried while the old build runs");
   check(!boot.needed("V1.0.17",&a.target,false) && !boot.pending(), "running target verifies persisted intent");
   check(tc002d_test::readFile(a.dir/"journal.json").find("verified") != std::string::npos, "verification persisted");
   tc002d_test::writeFile(a.dir/"extension.bin","corrupt");
@@ -106,6 +106,58 @@ void decisions() {
   tc002d_test::writeFile(a.dir/"journal.json","{");
   a.load(f);
   check(!f.needed("V1.0.17",&old,false), "broken journal fails closed");
+}
+
+std::string journal(const mcu::Identity& i, const std::string& digest, int attempts) {
+  std::string text;
+  awtrix::api::JsonWriter j(text);
+  j.beginObject().member("phase","attempt").member("abi",i.abi).member("features",i.features).member("family",i.family)
+    .member("version",i.version).member("build_tag",i.tag).member("sha256",digest);
+  if (attempts) j.member("attempts",attempts);
+  j.endObject();
+  return text;
+}
+
+void retries() {
+  Artifact a;
+  const auto path = a.dir/"journal.json";
+  auto counted = [&](int n) { return tc002d_test::readFile(path).find("\"attempts\":" + std::to_string(n)) != std::string::npos; };
+  for (unsigned attempt = 1; attempt <= mcu::Firmware::kMaxAttempts; ++attempt) {
+    std::vector<std::string> seen;
+    mcu::Firmware f; f.onStatus([&](const std::string& s) { seen.push_back(s); }); a.load(f);
+    check(f.loadPrepared(a.dir/"fixture.pot") && f.needed("V1.0.17",nullptr,false) && f.needed("V1.0.17",nullptr,false) &&
+          f.recordAttempt() && counted(attempt), "each boot repeats an unconfirmed attempt and counts it");
+    check(attempt == 1 ? seen.size() == 2
+                       : seen.size() == 3 && seen[0] == "retry " + std::to_string(attempt) +
+                                                        " of 3 after an unconfirmed attempt: timeout " + std::to_string(attempt - 1),
+          "each status is reported once, a retry with the last failure");
+    f.attemptFailed("timeout " + std::to_string(attempt));
+    check(tc002d_test::readFile(path).find("\"error\":\"timeout " + std::to_string(attempt) + "\"") != std::string::npos,
+          "the failure is kept for the next boot");
+  }
+  std::vector<std::string> seen;
+  mcu::Firmware f; f.onStatus([&](const std::string& s) { seen.push_back(s); }); a.load(f);
+  auto old = a.target; old.version--;
+  check(!f.needed("V1.0.17",nullptr,false) && !f.needed("V1.0.17",&old,false) && seen.size() == 1 &&
+        f.status() == "MCU update unconfirmed after 3 attempts (last: timeout 3); automatic retry blocked",
+        "the attempt limit blocks further attempts and names the last failure");
+  tc002d_test::writeFile(path, journal(a.target,a.digest,0));
+  a.load(f);
+  check(f.loadPrepared(a.dir/"fixture.pot") && f.needed("V1.0.17",nullptr,false) && f.recordAttempt() && counted(2),
+        "a journal without a counter is one attempt");
+  auto other = a.target; other.tag++;
+  tc002d_test::writeFile(path, journal(other,a.digest,3));
+  a.load(f);
+  check(f.loadPrepared(a.dir/"fixture.pot") && f.needed("V1.0.17",nullptr,false) && f.recordAttempt() && counted(1),
+        "another image starts counting again");
+  tc002d_test::writeFile(path, journal(a.target,a.digest,-1));
+  a.load(f);
+  check(!f.needed("V1.0.17",nullptr,false), "an invalid counter fails closed");
+  auto text = journal(a.target,a.digest,1);
+  text.insert(text.size()-1, ",\"error\":5");
+  tc002d_test::writeFile(path, text);
+  a.load(f);
+  check(!f.needed("V1.0.17",nullptr,false), "a failure that is not text fails closed");
 }
 
 struct Transport {
@@ -147,9 +199,17 @@ void protocol() {
     auto retry=t.sent(); check(retry.size()==544 && retry[1]==5,"retry increments TX per actual packet");
     t.reply(wire({0x90,2,0xff})); check(t.update.succeeded(),"retry ACK consumes RX sequence");
   }
-  for (const auto& c : {config(0),config(1,512),config(1,0,0),config(1,0,512,0)}) {
+  for (const auto& c : {config(0),config(1,1024),config(1,100),config(1,0,0),config(1,0,512,0)}) {
     Transport t; t.configure(c);
-    check(!t.update.active() && !t.update.succeeded() && t.sent().empty(),"disabled/resume/invalid geometry sends no data");
+    check(!t.update.active() && !t.update.succeeded() && t.sent().empty(),"disabled/invalid resume/invalid geometry sends no data");
+  }
+  {
+    Transport t; t.configure(config(1,512));
+    auto first=t.sent();
+    check(first.size()==526 && first[0]==0xa0 && first[1]==1 && first[2]==0 && first[3]==2 && first[4]==0 && first[5]==0 &&
+          first[6]==0 && first[7]==2,"resume starts at the offered block");
+    t.reply(wire({0x90,1,0xff}));
+    check(t.update.succeeded() && t.update.progress()==1024 && t.update.resumedAt()==512,"resumed transfer completes");
   }
   for (const Bytes& ack : {wire({0x90,2,0}),wire({0x90,1,0xf7}),wire({0x90,1,0xfa}),Bytes{0x90,1,0,0,0,0,0}}) {
     Transport t; t.configure(); t.sent(); t.reply(ack);
@@ -222,8 +282,9 @@ struct Clock {
   }
 };
 
-void bootFlow(bool stopDuringTransfer) {
+void bootFlow(bool stopDuringTransfer, bool earlierAttempt = false, bool declined = false) {
   Clock clock;
+  if (earlierAttempt) tc002d_test::writeFile(clock.options.firmwareJournal,journal(clock.artifact.target,clock.artifact.digest,1));
   McuService service(clock.state,clock.options);
   bool healthy=false;
   service.allowFirmwareUpdate([&]{ return healthy; });
@@ -233,7 +294,8 @@ void bootFlow(bool stopDuringTransfer) {
   clock.send(service,normal(3,{90,12,20}),0); clock.take();
   healthy=true; service.onTime(1);
   check(clock.take().empty() && service.firmwareBusy(),"healthy boot starts preparation without UART handshake");
-  check(!tc002d_test::exists(clock.options.firmwareJournal),"preparation cannot record a flash attempt");
+  check(earlierAttempt ? tc002d_test::readFile(clock.options.firmwareJournal).find("\"attempts\":1")!=std::string::npos
+                       : !tc002d_test::exists(clock.options.firmwareJournal),"preparation cannot record a flash attempt");
   service.onTime(1001);
   check(clock.take()==normal(2),"USB queries continue during local preparation");
   clock.send(service,normal(2,{1}),1001);
@@ -244,10 +306,26 @@ void bootFlow(bool stopDuringTransfer) {
   check(clock.state.power().usbPower,"preparation preserves the published USB measurement");
   clock.send(service,normal(2,{1}),1002);
   check(clock.take()==hello && service.firmwareBusy(),"verified local image starts update with fresh USB");
-  check(tc002d_test::readFile(clock.options.firmwareJournal).find("attempt")!=std::string::npos,"journal precedes first upgrade byte");
+  check(tc002d_test::readFile(clock.options.firmwareJournal).find(earlierAttempt ? "\"attempts\":2" : "\"attempts\":1")!=std::string::npos,
+        "journal precedes first upgrade byte");
   if (stopDuringTransfer) { service.requestStop(1002); check(!service.stopped(),"stop defers UART close while flashing"); }
   clock.send(service,hello,1002);
   check(clock.take().size()==18,"service routes handshake");
+  if (declined) {
+    clock.send(service,config(0),1002);
+    check(!service.firmwareBusy() && clock.state.power().usbPower,"a stopped transfer keeps the published USB measurement");
+    check(tc002d_test::readFile(clock.options.firmwareJournal).find("\"error\":\"MCU declined update")!=std::string::npos,
+          "the stop reason is kept for the next boot");
+    for (int round = 0; round < 4; ++round) {
+      const int64_t due = service.nextDeadlineMs();
+      if (due < 0) break;
+      service.onTime(due);
+    }
+    check(clock.take().empty(),"the UART stays silent after a stopped transfer");
+    check(!clock.state.power().usbKnown && clock.state.power().batteryPercent < 0,"readings still go stale after a stopped transfer");
+    service.requestStop(40000);
+    return;
+  }
   clock.send(service,config(),1002);
   check(clock.take().size()==526,"service sends image");
   clock.send(service,wire({0x90,1,0xff}),1002);
@@ -258,6 +336,7 @@ void bootFlow(bool stopDuringTransfer) {
     return;
   }
   check(service.firmwareBusy(),"ACK awaits running identity");
+  check(clock.state.power().usbPower,"an acknowledged transfer keeps the published USB measurement");
   service.onTime(2502);
   clock.probe(service,3,2502);
   check(!service.firmwareBusy(),"target identity completes upgrade");
@@ -305,7 +384,7 @@ void preparationFailure(bool shutdown) {
 
 int main() {
   tc002d_test::quietLogs();
-  decisions(); protocol(); bootFlow(false); bootFlow(true); usbGate(); currentNeedsNoPreparation();
+  decisions(); retries(); protocol(); bootFlow(false); bootFlow(true); bootFlow(false,true); bootFlow(false,false,true); usbGate(); currentNeedsNoPreparation();
   preparationFailure(false); preparationFailure(true);
   return tc002d_test::finish("MCU firmware");
 }

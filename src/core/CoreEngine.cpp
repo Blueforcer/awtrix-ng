@@ -42,18 +42,19 @@ void CoreEngine::resetContentCompletion(bool assets) {
     if (!prepared) continue;
     if (assets) prepared->invalidateAssets();
     else prepared->restart();
-    if (entry.name == currentAppId()) {
-      rotationPassesDonePage_.clear();
-      rotationPassesDoneRevision_ = 0;
-      // Keep an unfinished repeating page alive until its next rendered result.
-      rotationHold_ = endsOnScrollPasses(entry.spec, false);
-    }
+    if (entry.name == currentAppId()) holdUnfinishedPage(entry.spec);
   }
   if (notifs_.hasCurrent() && notifs_.current().extras().content) {
     notifPassesDone_ = false;
     notificationHold_ = endsOnScrollPasses(notifs_.current(), true);
   }
   notifs_.invalidateContent(assets);
+}
+
+void CoreEngine::holdUnfinishedPage(const AppSpec& spec) {
+  rotationPassesDonePage_.clear();
+  rotationPassesDoneRevision_ = 0;
+  rotationHold_ = endsOnScrollPasses(spec, false);
 }
 
 void CoreEngine::invalidateContentAssets() { resetContentCompletion(true); }
@@ -378,10 +379,8 @@ DispatchResult CoreEngine::setPushedApp(const std::string& name, const std::stri
     if (it != pushedApps_.end() && it->name == p.key) {
       if (p.spec.extras().content && it->spec.extras().content)
         p.spec.extras().content->inheritState(*it->spec.extras().content);
-      if (p.key == appHost_.currentId() && (p.spec.extras().content || it->spec.extras().content)) {
-        rotationHold_ = false;
-        rotationPassesDonePage_.clear();
-      }
+      if (p.key == appHost_.currentId() && (p.spec.extras().content || it->spec.extras().content))
+        holdUnfinishedPage(p.spec);
       it->spec = std::move(p.spec);
       it->receivedAtMs = now_;
       it->arrayBase = p.arrayBase;

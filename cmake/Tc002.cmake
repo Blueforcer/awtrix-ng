@@ -121,6 +121,7 @@ target_link_libraries(tc002_mcu_firmware PUBLIC awtrix_json awtrix_posix PRIVATE
 
 add_library(tc002d_core STATIC
   "${TC002D_DIR}/Autostart.cpp"
+  "${TC002D_DIR}/BatteryGauge.cpp"
   "${TC002D_DIR}/BtService.cpp"
   "${TC002D_DIR}/ControlSocket.cpp"
   "${TC002D_DIR}/DeviceId.cpp"

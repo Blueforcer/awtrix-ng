@@ -158,12 +158,13 @@ struct SocketController {
     endpoint.peer = -1;
   }
 
-  bool scanRestarted(bool active = true, bool background = true) const {
+  // A background scan runs every 160 ms while a link is open and every 640 ms without one.
+  bool scanRestarted(bool active = true, bool background = true, bool linked = true) const {
     if (commands.size() != 3) return false;
     return commands[0] == Bytes({1, 0x0c, 0x20, 2, 0, 0}) &&
            commands[1] == Bytes({1, 0x0b, 0x20, 7, static_cast<uint8_t>(active),
                                  static_cast<uint8_t>(background ? 0 : 0xa0),
-                                 static_cast<uint8_t>(background ? 4 : 0), 0x30, 0, 0, 0}) &&
+                                 static_cast<uint8_t>(background ? (linked ? 1 : 4) : 0), 0x30, 0, 0, 0}) &&
            commands[2] == Bytes({1, 0x0c, 0x20, 2, 1, 0});
   }
 
@@ -207,9 +208,7 @@ struct Fixture {
     };
     radio->setEvents(std::move(events));
     radio->power(true);
-    if (privacy && privacyStatus != 0)
-      check(!powered, "a rejected pairing configuration does not power on");
-    else check(powered && sockets.scanner >= 0 && sockets.listener >= 0, "radio powers through the socket backend");
+    check(powered && sockets.scanner >= 0 && sockets.listener >= 0, "radio powers through the socket backend");
   }
 
   ~Fixture() {
@@ -396,8 +395,12 @@ void localBleIdentityConfiguration() {
     });
     check(privacy != commands.end() && privacy->size() == 23 && (*privacy)[6] == 1,
           "Set Privacy carries normal privacy mode and a full local IRK");
-    check(status == 0 ? power != commands.end() && privacy < power : power == commands.end(),
-          "local BLE identity is configured before power and rejection does not silently continue");
+    check(power != commands.end() && privacy < power,
+          "local BLE identity is configured before power, and a refusal still powers the radio");
+    if (status != 0)
+      check(std::any_of(fixture.logs.begin(), fixture.logs.end(), [](const std::string& line) {
+              return line.find("LE privacy refused") != std::string::npos;
+            }), "a refused privacy setting is logged");
     if (status == 0) {
       const Bytes original = *privacy;
       const std::string encoded = awtrix::ble::toHex(Bytes(original.begin() + 7, original.end()));
@@ -450,12 +453,12 @@ void incomingRestoresScan() {
   fixture.sockets.closePeer(fd);
   fixture.dispatch(fd, POLLHUP);
   check(fixture.disconnected == fixture.accepted, "incoming disconnect reaches the public event");
-  check(fixture.sockets.scanRestarted(), "incoming disconnect restores the requested scan");
+  check(fixture.sockets.scanRestarted(true, true, false), "incoming disconnect restores the requested scan, sparse again");
 
   fixture.accept();
   fixture.sockets.commands.clear();
   fixture.radio->disconnect(fixture.accepted.back());
-  check(fixture.sockets.scanRestarted(), "locally closing an incoming connection restores the scan");
+  check(fixture.sockets.scanRestarted(true, true, false), "locally closing an incoming connection restores the sparse scan");
 }
 
 void pendingConnectOwnsScan() {

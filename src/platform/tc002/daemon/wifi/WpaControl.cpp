@@ -56,6 +56,24 @@ bool validUtf8WithoutControls(std::string_view text) {
   return true;
 }
 
+std::string_view fieldValue(std::string_view message, std::string_view key) {
+  const std::size_t at = message.rfind(key);
+  if (at == std::string_view::npos) return {};
+  const std::string_view value = message.substr(at + key.size());
+  return value.substr(0, value.find_first_of(" \r\n"));
+}
+
+int numberField(std::string_view message, std::string_view key) {
+  const std::string_view digits = fieldValue(message, key);
+  if (digits.empty() || digits.size() > 5) return -1;
+  int value = 0;
+  for (char c : digits) {
+    if (c < '0' || c > '9') return -1;
+    value = value * 10 + (c - '0');
+  }
+  return value;
+}
+
 }
 
 bool parseStatus(std::string_view reply, WpaStatus& out) {
@@ -113,14 +131,19 @@ WpaEvent parseEvent(std::string_view message) {
     event.type = WpaEventType::Connected;
   } else if (startsWith(message, "CTRL-EVENT-DISCONNECTED")) {
     event.type = WpaEventType::Disconnected;
+    event.code = numberField(message, " reason=");
+    event.locallyGenerated = fieldValue(message, " locally_generated=") == "1";
+  } else if (startsWith(message, "CTRL-EVENT-ASSOC-REJECT")) {
+    event.type = WpaEventType::AssociationRejected;
+    event.code = numberField(message, " status_code=");
   } else if (startsWith(message, "CTRL-EVENT-SSID-TEMP-DISABLED")) {
     event.type = WpaEventType::TemporarilyDisabled;
-    const std::size_t reason = message.rfind(" reason=");
-    if (reason != std::string_view::npos) {
-      std::string_view value = message.substr(reason + 8);
-      value = value.substr(0, value.find_first_of(" \r\n"));
-      event.wrongKey = value == "WRONG_KEY";
-    }
+    const std::string_view value = fieldValue(message, " reason=");
+    event.wrongKey = value == "WRONG_KEY";
+    if (value.size() <= 24 && std::all_of(value.begin(), value.end(), [](char c) {
+          return (c >= 'A' && c <= 'Z') || c == '_';
+        }))
+      event.detail.assign(value.data(), value.size());
   } else if (startsWith(message, "CTRL-EVENT-TERMINATING")) {
     event.type = WpaEventType::Terminating;
   } else if (startsWith(message, "CTRL-EVENT-SCAN-RESULTS")) {
@@ -259,7 +282,7 @@ bool WpaControlSocket::receive(std::string& out) {
   if (fd_ < 0) return false;
   char buffer[8192];
   const ssize_t n = recv(fd_, buffer, sizeof buffer, MSG_DONTWAIT);
-  if (n <= 0) return false;
+  if (n < 0) return false;
   out.assign(buffer, static_cast<std::size_t>(n));
   return true;
 }

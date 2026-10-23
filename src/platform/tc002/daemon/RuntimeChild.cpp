@@ -440,6 +440,10 @@ void RuntimeChild::dispatch(const std::string& datagram, int64_t nowMs) {
       else Log::line("runtime", "no Wi-Fi service; no stored credentials to erase");
       if (links_.address) links_.address->setStaticAddress(tc002::StaticAddress());
       break;
+    case MessageType::SetupAccessPoint:
+      Log::line("runtime", "select held during the intro: setup access point");
+      if (links_.wifi) links_.wifi->openSetupAccessPoint();
+      break;
     case MessageType::WifiScan:
       requestScan();
       break;

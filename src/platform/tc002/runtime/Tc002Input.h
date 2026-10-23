@@ -26,6 +26,21 @@ class Tc002InputDecoder {
   uint64_t presses_ = 0, clockwise_ = 0, counterclockwise_ = 0;
 };
 
+// Select held for kHoldMs during the boot intro asks for the setup access point. A select press
+// that starts during the intro never reaches the buttons, so it cannot open the menu.
+class Tc002SetupHold {
+ public:
+  static constexpr int64_t kHoldMs = 2000;
+  // True when the edge belongs to such a press and is kept from the buttons.
+  bool button(int button, bool pressed, bool intro, int64_t now);
+  // True once, when the hold is complete.
+  bool tick(bool intro, int64_t now);
+
+ private:
+  int64_t since_ = -1;
+  bool fired_ = false;
+};
+
 class Tc002Input {
  public:
   Tc002Input() = default;

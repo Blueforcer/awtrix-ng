@@ -141,7 +141,9 @@ Some releases also update the clock's microphone controller. This happens by its
 3. It installs the update. The clock may restart afterwards.
 
 Keep the clock on USB power while this runs. If the download is not available, the clock works
-normally and tries again later.
+normally and tries again later. If the update stops before it is finished, for example because the
+clock lost power, the clock continues it at its next start. It tries three times. After that it
+stops, and the log line starting with `mcu: update:` names the last error, if there was one.
 
 ### Install an older version {#going-back-to-an-earlier-version}
 

@@ -59,7 +59,7 @@ class DeviceState {
   static void notify(const std::vector<Listener>& listeners) {
     for (const auto& listener : listeners) listener();
   }
-  tc002::PowerStatus power_;
+  tc002::PowerStatus power_{false, -1, -1, false};
   tc002::NetworkStatus network_;
   tc002::TimeStatus time_;
   std::vector<Listener> powerListeners_, networkListeners_, timeListeners_;
@@ -73,6 +73,8 @@ class WifiControl {
   virtual bool setCredentials(const tc002::WifiCredentials& credentials) = 0;
   virtual void eraseCredentials() = 0;
   virtual void scan(ScanDone done) = 0;
+  // The setup access point now, with the saved network kept.
+  virtual void openSetupAccessPoint() = 0;
 };
 
 class TimeControl {

@@ -140,13 +140,18 @@ void SupervisedRuntime::apply(const tc002::SupervisorMessage& message) {
 }
 
 void SupervisedRuntime::applyPower(const tc002::PowerStatus& power) {
-  const bool supplyChanged = !powerKnown_ || power.usbPower != power_.usbPower;
-  if (supplyChanged) logf("power: USB supply %s", power.usbPower ? "connected" : "absent");
-  power_ = power;
-  powerKnown_ = true;
   RuntimeState& rt = engine_.state().runtime();
-  rt.externalPower = power.usbPower;
-  if (supplyChanged) engine_.state().emit(StateEvent::PowerChanged);
+  if (power.usbKnown) {
+    const bool supplyChanged = !powerKnown_ || power.usbPower != power_.usbPower;
+    if (supplyChanged || !usbKnown_) logf("power: USB supply %s", power.usbPower ? "connected" : "absent");
+    power_.usbPower = power.usbPower;
+    powerKnown_ = true;
+    rt.externalPower = power.usbPower;
+    if (supplyChanged) engine_.state().emit(StateEvent::PowerChanged);
+  } else if (usbKnown_) {
+    logf("power: USB supply unknown, keeping the last report");
+  }
+  usbKnown_ = power.usbKnown;
   if (power.batteryPercent < 0) return;
   rt.batteryPercent = static_cast<uint8_t>(power.batteryPercent);
   rt.batteryVoltage = power.batteryMillivolts >= 0 ? static_cast<float>(power.batteryMillivolts) / 1000.0f : 0.0f;

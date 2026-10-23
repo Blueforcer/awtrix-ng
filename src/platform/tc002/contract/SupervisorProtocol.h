@@ -25,6 +25,8 @@ struct PowerStatus {
   bool usbPower = false;
   int batteryPercent = -1;
   int batteryMillivolts = -1;
+  // false while the supervisor has no fresh USB report; usbPower then says nothing.
+  bool usbKnown = true;
 };
 
 enum class WifiLink : uint8_t { Unconfigured, Connecting, Connected, Disconnected, Failed, AccessPoint };
@@ -125,6 +127,7 @@ enum class MessageType : uint8_t {
   Address,
   Reboot,
   FactoryReset,
+  SetupAccessPoint,
   WifiScan,
   WifiScanResult,
   UpdateReady,
@@ -176,6 +179,7 @@ std::string encodeHostname(std::string_view hostname);
 std::string encodeAddress(const StaticAddress& address);
 std::string encodeReboot();
 std::string encodeFactoryReset();
+std::string encodeSetupAccessPoint();
 std::string encodeWifiScan();
 // Keeps the leading valid networks, at most kMaxWifiScanNetworks and as many as fit one datagram.
 std::string encodeWifiScanResult(const std::vector<WifiNetwork>& networks);

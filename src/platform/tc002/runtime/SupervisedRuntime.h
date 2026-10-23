@@ -91,7 +91,7 @@ class SupervisedRuntime : public DeviceFactsSource {
   SupervisedSettings applied_;
   tc002::PowerStatus power_;
   tc002::NetworkStatus network_;
-  bool powerKnown_ = false;
+  bool powerKnown_ = false, usbKnown_ = false;
   bool networkKnown_ = false;
   Scan scan_ = Scan::Idle;
   int64_t scanStartedMs_ = 0;

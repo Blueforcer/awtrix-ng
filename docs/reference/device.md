@@ -378,11 +378,11 @@ once it reports a value.
 <!-- /only -->
 <!-- only tc002 -->
 | `batteryVoltage` | number | 0.0 … , two decimals | V | The **battery** voltage as the clock measures it. `0` while it has not reported one. Useful to watch a battery age, independent of the percentage. |
-| `batteryPercent` | integer | 0 … 100 | percent | Charge level as the clock reports it. |
+| `batteryPercent` | integer | 0 … 100 | percent | Charge level, worked out from `batteryVoltage` and `usbPower`. Only rises while `usbPower` is `true` and only falls on battery. See [Power & battery → How the percentage is derived](../guides/power.md#how-the-percentage-is-derived). |
 <!-- /only -->
 | `lowBattery` | boolean | - | - | `true` when `batteryPercent` is below `lowBatteryThreshold` in [the system configuration](system.md). Always `false` while `lowBatteryThreshold` is `0` (the default). Also shown as a Home Assistant "Low battery" binary sensor. |
 <!-- only tc002 -->
-| `usbPower` | boolean | - | - | `true` while the clock is on USB power and charges its battery. Appears once the clock has reported its power supply. Also shown as a Home Assistant "Charging" binary sensor. |
+| `usbPower` | boolean | - | - | `true` while the clock is on USB power and charges its battery. Appears once the clock has reported its power supply. Keeps the last report while the clock cannot read its supply. Also shown as a Home Assistant "Charging" binary sensor. |
 <!-- /only -->
 
 <!-- only esp32 esp32-s3 -->

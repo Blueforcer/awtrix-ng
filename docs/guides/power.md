@@ -18,6 +18,10 @@ Deep sleep is different: it switches the whole clock off for a set time, and not
 until it wakes. The battery percentage is worked out from the battery voltage alone, so it is an
 estimate ([How the percentage is derived](#how-the-percentage-is-derived)).
 <!-- /only -->
+<!-- only tc002 -->
+The battery percentage is worked out from the battery voltage, so it is an estimate
+([How the percentage is derived](#how-the-percentage-is-derived)).
+<!-- /only -->
 The low-battery warning stays off until you set a threshold.
 
 ## Check the battery
@@ -61,15 +65,15 @@ leaves the rotation.
 <!-- only tc002 -->
 ```json
 {
-  "batteryVoltage": 4.1,
-  "batteryPercent": 88
+  "batteryVoltage": 3.95,
+  "batteryPercent": 60
 }
 ```
 
 - `batteryPercent` is how full the battery is.
 - `batteryVoltage` is the battery voltage.
 
-The values come from the clock's battery controller. The
+The values update every 10 seconds. The
 [Status app](device-controls.md#the-status-app) shows the battery level and whether USB power is
 connected.
 <!-- /only -->
@@ -199,6 +203,44 @@ Home Assistant gets four battery entities automatically:
 <!-- /only -->
 
 See [Home Assistant](home-assistant.md).
+
+<!-- only tc002 -->
+## How the percentage is derived
+
+The clock cannot measure how much charge is left. AWTRIX NG works out the percentage from the
+battery voltage and from whether USB power is connected. The voltages below were measured on a
+TC002 that ran from a full charge until it switched off, about 7 hours with the display at full
+brightness. The percentage is the share of that time left. A second TC002 stayed within 4 % of it:
+
+| Battery voltage | Shown |
+|---|---|
+| 4.09 V or more | 100 % |
+| 4.05 V | 90 % |
+| 3.95 V | 60 % |
+| 3.89 V | 50 % |
+| 3.76 V | 20 % |
+| 3.66 V | 10 % |
+| 3.10 V or less | 0 % |
+
+Between these points the value is interpolated.
+
+What this means for you:
+
+- **With USB power the percentage only rises.** It shows how far the charger has got. An empty
+  battery took about 2.5 hours to reach full voltage with the display at full brightness. The
+  percentage shows 100 % from then on, when the battery is nearly full. The charge light turns
+  green later, when the charger has finished. How long that takes depends on what the clock is
+  doing.
+- **What the display shows moves the percentage.** A dark or switched-off display draws less
+  power, so the voltage and the percentage read higher. A bright, full display lowers both.
+- **On battery the percentage only falls.** It does not come back up when the display draws less
+  power.
+- **Short loads, such as a sound, do not change it.** The percentage follows the battery over the
+  last five minutes.
+- **After you plug in or unplug, and after a restart, the percentage stays for about five
+  minutes.** Then it follows the battery again.
+- **There is no "time left" estimate.** The voltage alone cannot tell you that.
+<!-- /only -->
 
 <!-- only esp32 esp32-s3 -->
 ## How the percentage is derived

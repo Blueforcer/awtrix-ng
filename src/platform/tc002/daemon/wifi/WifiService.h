@@ -56,6 +56,7 @@ class WifiService : public Service, public WifiControl {
   bool setCredentials(const tc002::WifiCredentials& credentials) override;
   void eraseCredentials() override;
   void scan(ScanDone done) override;
+  void openSetupAccessPoint() override;
 
   // Secret-free snapshot for status replies; never contains the passphrase or PSK.
   std::string statusJson() const;
@@ -90,6 +91,8 @@ class WifiService : public Service, public WifiControl {
   void beginSupplicant();
   void beginAccessPoint();
   void linkTimers();
+  bool haveAddress() const;
+  int64_t nextAccessPointRetry() const;
   void fail(Stage retry, const std::string& reason);
   void helperExited(bool ok, int code);
   void supplicantExited(int status);
@@ -163,6 +166,14 @@ class WifiService : public Service, public WifiControl {
   int64_t stationDeadline_ = -1, accessPointRetryAt_ = -1, accessPointClientAt_ = -1, applyProfileAt_ = -1;
   int64_t accessPointEmptyAt_ = -1;
   int64_t addressDeadline_ = -1;
+  // The saved network gave an address since start or since it was saved. A later loss keeps the
+  // station reconnecting; only a first attempt falls back to the setup access point.
+  bool joined_ = false;
+  // The setup access point was asked for: it stays open without router retries until new
+  // credentials arrive or the clock restarts.
+  bool setupRequested_ = false;
+  int64_t lostAt_ = -1;
+  int lastRejectStatus_ = -1;
   bool probeHidden_ = false;
   wifi::WifiScan scan_;
   bool eraseRequested_ = false;

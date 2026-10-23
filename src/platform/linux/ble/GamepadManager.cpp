@@ -14,10 +14,16 @@ bool readKnown(api::JsonReader json, Gamepad::Known& known) {
   bool random = false;
   const auto atRandom = api::memberValue(json, "random");
   const auto atName = api::memberValue(json, "name");
-  return json.isObject() && api::memberValue(json, "addr").appendString(address) &&
-         (!api::present(atRandom) || atRandom.asBool(random)) &&
-         Address::parse(address, random, known.address) &&
-         (!api::present(atName) || atName.appendString(known.name));
+  const auto atXbox = api::memberValue(json, "xbox");
+  if (!json.isObject() || !api::memberValue(json, "addr").appendString(address) ||
+      (api::present(atRandom) && !atRandom.asBool(random)) ||
+      !Address::parse(address, random, known.address) ||
+      (api::present(atName) && !atName.appendString(known.name)) ||
+      (api::present(atXbox) && !atXbox.asBool(known.xbox)))
+    return false;
+  // Stored before the flag existed: an unnamed pad was linked as an Xbox then, so it stays one.
+  if (!api::present(atXbox)) known.xbox = known.name.empty() || known.name.find("Xbox") != std::string::npos;
+  return true;
 }
 
 }
@@ -184,7 +190,8 @@ void GamepadManager::save() {
     if (!sessions_[i]->paired()) continue;
     const auto& known = sessions_[i]->known();
     w.beginObject().key("id").value(i + 1).key("addr").value(known.address.str())
-        .key("random").value(known.address.random).key("name").value(known.name).endObject();
+        .key("random").value(known.address.random).key("name").value(known.name)
+        .key("xbox").value(known.xbox).endObject();
   }
   w.endArray().endObject();
   if (!posix::replaceText(path_, json) && log_) log_("gamepad: cannot store registry in " + path_);

@@ -103,7 +103,7 @@ message to [`<prefix>/cmd/voice/start`](../reference/mqtt.md#voicestart).
 | Not understood | Speak once the house opens its mouth, without long pauses. |
 | Wi-Fi too slow | Move the clock closer to the router. |
 | HA too slow | Use a faster speech-to-text or text-to-speech. |
-| Microphone update pending | Keep the clock on USB power. The update installs by itself. |
+| Microphone update pending | Keep the clock on USB power. The update installs by itself within a few minutes. If the message stays, restart the clock on USB power. If it still stays after three restarts, see [Microphone controller updates](updating.md#mcu-updates). |
 | Microphone error | The microphone stopped while you spoke. Try again. If it happens again, restart the clock. |
 | Playback error | The answer could not be played. The pipeline's text-to-speech has to answer in MP3 or WAV. |
 | Settings unreadable | The saved Voice settings cannot be read. Enter the address and the token again and press **Save and connect**. |

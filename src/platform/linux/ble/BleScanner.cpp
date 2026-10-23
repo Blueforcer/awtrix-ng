@@ -39,6 +39,12 @@ std::string BleScanner::start(const ResourceKey& key, const std::string& args) {
   s.manufacturer = static_cast<int>(number(args, "mfg", -1));
   s.dedupeMs = std::max<long long>(0, number(args, "dedupe", 1000));
   s.background = api::memberFlag(args, "background");
+  s.startedAt = now_;
+  const auto logged = scanLoggedAt_.find(key.script);
+  if (log && (logged == scanLoggedAt_.end() || now_ - logged->second >= kScanLogMs)) {
+    log("ble: " + key.script + " scans" + (s.active ? " actively" : "") + (s.background ? " in the background" : ""));
+    scanLoggedAt_[key.script] = now_;
+  }
   scans_[key] = std::move(s);
   apply();
   return kOk;
@@ -149,7 +155,12 @@ void BleScanner::emit(const ResourceKey& key, const std::string& json) {
 }
 
 bool BleScanner::erase(const ResourceKey& key) {
-  if (!scans_.erase(key)) return false;
+  const auto found = scans_.find(key);
+  if (found == scans_.end()) return false;
+  const int64_t ranMs = now_ - found->second.startedAt;
+  scans_.erase(found);
+  if (log && ranMs >= kLongScanMs)
+    log("ble: " + key.script + " stopped scanning after " + std::to_string(ranMs / 1000) + " s");
   apply();
   return true;
 }

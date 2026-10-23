@@ -36,7 +36,9 @@ int64_t earliest(int64_t a, int64_t b) {
 
 }
 
-McuService::McuService(DeviceState& state, McuOptions options) : state_(state), options_(std::move(options)) {}
+McuService::McuService(DeviceState& state, McuOptions options) : state_(state), options_(std::move(options)) {
+  firmware_.onStatus([](const std::string& status) { Log::line("mcu", "update: %s", status.c_str()); });
+}
 
 int McuService::batteryMillivolts(uint16_t word) {
   const int64_t millivolts = (static_cast<int64_t>(word) * 13235294 + 5000000) / 10000000;
@@ -210,8 +212,9 @@ void McuService::handle(const mcu::Frame& frame, int64_t nowMs) {
         });
         if (stream_.powerValid()) {
           usbRaw_ = stream_.usb(); batteryFirst_ = stream_.batteryFirst(); batteryWord_ = stream_.batteryWord();
-          usbSeen_ = batterySeen_ = true;
-          usbSeenAt_ = batterySeenAt_ = nowMs;
+          usbSeen_ = true;
+          usbSeenAt_ = nowMs;
+          batteryMeasured(nowMs);
         }
         finishStream(nowMs);
         return;
@@ -237,8 +240,7 @@ void McuService::handle(const mcu::Frame& frame, int64_t nowMs) {
       if (frame.length != 3) break;
       batteryFirst_ = frame.payload[0];
       batteryWord_ = static_cast<uint16_t>((frame.payload[1] << 8) | frame.payload[2]);
-      batterySeen_ = true;
-      batterySeenAt_ = nowMs;
+      batteryMeasured(nowMs);
       reply = true;
       break;
     case mcu::kVersion: {
@@ -270,6 +272,12 @@ void McuService::handle(const mcu::Frame& frame, int64_t nowMs) {
   }
 }
 
+void McuService::batteryMeasured(int64_t nowMs) {
+  batterySeen_ = true;
+  batterySeenAt_ = nowMs;
+  if (usbSeen_) gauge_.sample(batteryMillivolts(batteryWord_), usbRaw_ == 1, nowMs);
+}
+
 void McuService::pump(int64_t nowMs) {
   if (stream_.active()) return;
   if (pcm_.active()) { flushPcm(nowMs); return; }
@@ -280,12 +288,7 @@ void McuService::pump(int64_t nowMs) {
   }
   if (!uart_.valid() || stopping_ || upgradeHalted_) return;
   if (verifyStart_ >= 0 && nowMs < verifyStart_) return;
-  if (verifyDeadline_ >= 0 && nowMs >= verifyDeadline_) {
-    firmware_.failed("MCU build not confirmed after transfer; automatic retry blocked");
-    verifyDeadline_ = verifyStart_ = -1;
-    upgradeHalted_ = true;
-    return;
-  }
+  if (verificationExpired(nowMs)) return;
   if (outstanding_ && nowMs >= outstandingDeadline_) {
     ++timeouts_;
     outstanding_ = 0;
@@ -314,7 +317,6 @@ void McuService::pump(int64_t nowMs) {
     if (needed && verifyDeadline_ < 0 && updateAllowed_ && updateAllowed_() &&
         usbSeen_ && !usbRefreshRequired_ && usbRaw_ == 1 && nowMs - usbSeenAt_ < 2000 &&
         prepareFirmware(nowMs) && firmware_.recordAttempt()) {
-      Log::line("mcu", "installing MCU build %u, %zu bytes", firmware_.target().version, firmware_.image().size());
       parser_.clear();
       upgrading_ = true;
       upgrade_.start(firmware_.image(), nowMs);
@@ -484,12 +486,13 @@ bool McuService::onChildExit(pid_t pid,int status,int64_t nowMs) {
 void McuService::firmwareProgress(int64_t nowMs) {
   if (!upgrading_ || upgrade_.active()) return;
   upgrading_ = false;
+  if (upgrade_.resumedAt())
+    Log::line("mcu", "transfer continued an interrupted one from byte %zu of %zu", upgrade_.resumedAt(), firmware_.image().size());
   if (!upgrade_.succeeded()) {
-    firmware_.failed(upgrade_.error());
+    firmware_.attemptFailed(upgrade_.error());
     upgradeHalted_ = true;
-    usbSeen_ = batterySeen_ = false;
-    publish(nowMs);
-    Log::line("mcu", "update stopped: %s", upgrade_.error().c_str());
+    // The last readings stay published until they go stale; only a fresh one may allow a flash.
+    usbRefreshRequired_ = true;
   } else {
     // The tested MCU updater reboots the device. Persisted intent survives that reboot;
     // if Linux stays up, query the running build here as well.
@@ -501,7 +504,7 @@ void McuService::firmwareProgress(int64_t nowMs) {
     resetIdentity(verifyStart_);
     outstanding_ = 0;
     outstandingDeadline_ = -1;
-    usbSeen_ = batterySeen_ = false;
+    usbRefreshRequired_ = true;
     usbAt_ = batteryAt_ = verifyStart_;
     parser_.clear();
     Log::line("mcu", "transfer acknowledged; awaiting running build verification");
@@ -510,6 +513,14 @@ void McuService::firmwareProgress(int64_t nowMs) {
     verifyDeadline_ = verifyStart_ = -1;
     closeUart(nowMs, "update completed during stop");
   }
+}
+
+bool McuService::verificationExpired(int64_t nowMs) {
+  if (verifyDeadline_ < 0 || nowMs < verifyDeadline_) return false;
+  firmware_.attemptFailed("MCU build not confirmed after transfer");
+  verifyDeadline_ = verifyStart_ = -1;
+  upgradeHalted_ = true;
+  return true;
 }
 
 bool McuService::writeFrame(const uint8_t* bytes, std::size_t length, uint8_t command, int64_t nowMs) {
@@ -526,13 +537,15 @@ void McuService::publish(int64_t nowMs) {
   tc002::PowerStatus power;
   const bool usbFresh = usbSeen_ && nowMs - usbSeenAt_ < options_.staleMs;
   const bool batteryFresh = batterySeen_ && nowMs - batterySeenAt_ < options_.staleMs;
+  power.usbKnown = usbFresh;
   power.usbPower = usbFresh && usbRaw_ == 1;
   if (batteryFresh) {
-    power.batteryPercent = batteryFirst_ <= 100 ? batteryFirst_ : -1;
+    power.batteryPercent = gauge_.percent();
     power.batteryMillivolts = batteryMillivolts(batteryWord_);
   }
   const auto& current = state_.power();
-  if (current.usbPower == power.usbPower && current.batteryPercent == power.batteryPercent &&
+  if (current.usbKnown == power.usbKnown && current.usbPower == power.usbPower &&
+      current.batteryPercent == power.batteryPercent &&
       current.batteryMillivolts == power.batteryMillivolts)
     return;
   state_.setPower(power);
@@ -543,15 +556,17 @@ int64_t McuService::nextDeadlineMs() const {
   if (pcm_.active()) return earliest(pcm_.deadline(), pendingStreamAt_);
   if (upgrading_) return upgrade_.deadline();
   if (stopping_) return -1;
-  if (upgradeHalted_) return -1;
-  if (uart_.valid() && verifyStart_ >= 0 && versionTries_ == 0) return verifyStart_;
   int64_t due = -1;
-  if (!uart_.valid()) due = reopenAt_;
-  else if (outstanding_) due = outstandingDeadline_;
-  else due = earliest(earliest(earliest(versionAt_, identityAt_), usbAt_), batteryAt_);
-  due = earliest(due, verifyDeadline_);
-  due = earliest(due, prepareDeadline_);
-  due = earliest(due, pendingStreamAt_);
+  if (!upgradeHalted_) {
+    if (uart_.valid() && verifyStart_ >= 0 && versionTries_ == 0) return verifyStart_;
+    if (!uart_.valid()) due = reopenAt_;
+    else if (outstanding_) due = outstandingDeadline_;
+    else due = earliest(earliest(earliest(versionAt_, identityAt_), usbAt_), batteryAt_);
+    due = earliest(due, verifyDeadline_);
+    due = earliest(due, prepareDeadline_);
+    due = earliest(due, pendingStreamAt_);
+  }
+  // After a failed update the UART stays silent, but the last readings still go stale.
   if (usbSeen_) due = earliest(due, usbSeenAt_ + options_.staleMs);
   if (batterySeen_) due = earliest(due, batterySeenAt_ + options_.staleMs);
   return due;
@@ -570,12 +585,7 @@ void McuService::onTime(int64_t nowMs) {
   }
   if (upgrading_) { upgrade_.tick(nowMs); firmwareProgress(nowMs); return; }
   if (stopping_) return;
-  if (verifyDeadline_ >= 0 && nowMs >= verifyDeadline_) {
-    firmware_.failed("MCU build not confirmed after transfer; automatic retry blocked");
-    verifyDeadline_ = verifyStart_ = -1;
-    upgradeHalted_ = true;
-    return;
-  }
+  if (verificationExpired(nowMs)) return;
   if (!uart_.valid() && reopenAt_ >= 0 && nowMs >= reopenAt_) openUart(nowMs);
   pump(nowMs);
   if (usbSeen_ && nowMs - usbSeenAt_ >= options_.staleMs) {
@@ -621,6 +631,7 @@ void McuService::appendStatus(api::JsonWriter& json, int64_t nowMs) const {
     json.key("firmware").beginObject().member("status", prepareStatus_.empty() ? firmware_.status() : prepareStatus_)
         .member("preparing", preparePid_>0)
         .member("busy", firmwareBusy()).member("target", firmware_.target().version)
+        .member("attempts", firmware_.attempts())
         .member("bytesSent", static_cast<unsigned long long>(upgrade_.progress()))
         .member("awaitingVerification", verifyDeadline_ >= 0);
     if (identitySeen_) json.member("installed", identity_.version).member("buildTag", identity_.tag)

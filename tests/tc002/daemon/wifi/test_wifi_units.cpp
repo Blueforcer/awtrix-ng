@@ -313,6 +313,16 @@ void testControlParsing() {
   const WpaEvent spoof = parseEvent(
       "<3>CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid=\"a reason=WRONG_KEY\" auth_failures=1 duration=10 reason=CONN_FAILED");
   check(spoof.type == WpaEventType::TemporarilyDisabled && !spoof.wrongKey, "ssid text cannot fake a wrong key");
+  check(spoof.detail == "CONN_FAILED", "temporarily disabled reason kept");
+  check(parseEvent("<3>CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid=\"x\" reason=a%sb").detail.empty(),
+        "odd reason text is not kept");
+  const WpaEvent local = parseEvent("<3>CTRL-EVENT-DISCONNECTED bssid=00:11:22:33:44:55 reason=3 locally_generated=1");
+  check(local.code == 3 && local.locallyGenerated, "disconnect reason from the clock");
+  const WpaEvent remote = parseEvent("<3>CTRL-EVENT-DISCONNECTED bssid=00:11:22:33:44:55 reason=15");
+  check(remote.code == 15 && !remote.locallyGenerated, "disconnect reason from the access point");
+  check(parseEvent("<3>CTRL-EVENT-DISCONNECTED bssid=00:11:22:33:44:55").code == -1, "disconnect without reason");
+  const WpaEvent rejected = parseEvent("<3>CTRL-EVENT-ASSOC-REJECT bssid=00:11:22:33:44:55 status_code=17");
+  check(rejected.type == WpaEventType::AssociationRejected && rejected.code == 17, "association rejected");
   check(parseEvent("<3>CTRL-EVENT-TERMINATING").type == WpaEventType::Terminating, "terminating event");
   check(parseEvent("<2>CTRL-EVENT-BSS-ADDED 1 00:11:22:33:44:55").type == WpaEventType::Other, "other event");
 

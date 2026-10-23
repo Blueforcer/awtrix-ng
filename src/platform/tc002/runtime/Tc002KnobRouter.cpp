@@ -14,16 +14,18 @@ namespace awtrix {
 
 bool Tc002KnobRouter::voiceBusy() const { return t_.voice && t_.voice->busy(); }
 
-bool Tc002KnobRouter::poll(Tc002Input& input, int64_t now, bool panelBusy, bool scriptsRunning) {
+bool Tc002KnobRouter::poll(Tc002Input& input, int64_t now, bool panelBusy, bool intro, bool scriptsRunning) {
   const bool local = !panelBusy && !t_.engine.state().settings().blockNavigation;
   // The app on screen may take the knob, except while the clock is busy with it already.
   const bool app = scriptsRunning && !panelBusy && !t_.quickSettings.open(now) && !voiceBusy();
   Tc002InputDecoder::Sink sink{[&](int button, bool pressed) {
+    if (setupHold_.button(button, pressed, intro, now)) return;
     t_.buttons.transition(button, pressed, now, [&](int changed, bool down) {
       t_.webhook.press(t_.cfg.buttonCallback, awtrix::input::kWebhookButtonNames[changed], down);
     });
   }, [&](Tc002InputDecoder::Knob turned) { knob(turned, now, local, app); }};
   if (!input.poll(sink)) return false;
+  if (setupHold_.tick(intro, now) && t_.setupAccessPoint) t_.setupAccessPoint();
   t_.buttons.tickHeld(now);
   if (t_.scripts) t_.scripts->held(t_.engine.currentAppId());
   return true;

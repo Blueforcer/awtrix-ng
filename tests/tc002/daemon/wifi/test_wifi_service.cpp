@@ -115,7 +115,7 @@ class FakeSupplicant {
   std::vector<std::string> commands;
   std::string status = "wpa_state=SCANNING\n";
   std::string scanReply = "OK\n";
-  std::string stationReply = "FAIL\n";
+  std::string stationReply;
   bool clientOnStationQuery = false;
   std::string scanResults =
       "bssid / frequency / signal level / flags / ssid\n"
@@ -753,7 +753,7 @@ void testAccessPointFallbackAndRetry() {
   h.system->supplicant.stationReply = "UNKNOWN COMMAND\n";
   h.run(65000);
   check(h.system->supplicants.size() == 2, "unknown station inventory never removes the AP");
-  h.system->supplicant.stationReply = "FAIL\n";
+  h.system->supplicant.stationReply.clear();
   h.system->supplicant.clientOnStationQuery = true;
   h.run(65000);
   check(h.network().link == WifiLink::AccessPoint && h.system->supplicants.size() == 2,
@@ -792,11 +792,125 @@ void testAccessPointFallbackAndRetry() {
         "successful station cancels fallback");
   h.system->supplicant.status = "wpa_state=SCANNING\n";
   h.system->supplicant.event("<3>CTRL-EVENT-DISCONNECTED reason=3");
-  h.run(14000);
-  check(h.network().link == WifiLink::Disconnected, "router loss gives station time to reconnect");
-  h.run(2000);
-  check(h.network().link == WifiLink::AccessPoint && h.system->supplicants.size() == 6,
-        "router loss restores setup AP after fifteen seconds");
+  h.run(600000);
+  check(h.network().link == WifiLink::Disconnected && h.system->supplicants.size() == 5,
+        "a network that worked keeps the station trying, without the setup AP");
+  h.system->supplicant.status = "wpa_state=COMPLETED\nssid=New\n";
+  h.system->supplicant.event("<3>CTRL-EVENT-CONNECTED - Connection completed");
+  h.run(200);
+  check(h.network().link == WifiLink::Connected && h.system->supplicants.size() == 5, "station rejoins by itself");
+  const pid_t joined = h.system->live;
+  h.system->crash(SIGSEGV);
+  h.run(20000);
+  check(h.system->supplicants.size() == 6 && h.system->live != joined && h.network().link != WifiLink::AccessPoint,
+        "a supplicant restart after joining stays a station");
+  removeTree(root);
+}
+
+void testSetupAccessPointOnRequest() {
+  const std::string root = makeRoot("ap-request");
+  storeProfile(root, "Home");
+  const std::string stored = readText(root + "/state/network/wifi.cred");
+  {
+    Harness h(root);
+    h.system->supplicant.status = "wpa_state=COMPLETED\nssid=Home\n";
+    check(h.service->start(h.now), "start with a working network");
+    h.service->openSetupAccessPoint();
+    h.run(4000);
+    check(h.system->supplicants.size() == 1 && contains(h.system->configs.back(), "\tmode=2\n") &&
+              h.network().link == WifiLink::AccessPoint, "a request before the supplicant opens the setup AP");
+    check(readText(root + "/state/network/wifi.cred") == stored && h.service->configured(),
+          "the request keeps the saved network");
+    h.service->openSetupAccessPoint();
+    h.run(300);
+    check(h.system->supplicants.size() == 1, "a second request changes nothing");
+    h.run(200000);
+    check(h.system->supplicants.size() == 1 && h.network().link == WifiLink::AccessPoint &&
+              h.system->supplicant.count("STA-FIRST") == 0, "a requested setup AP never leaves for router retries");
+    check(h.service->setCredentials({"Home", ""}), "saved network confirmed on the setup AP");
+    h.run(1500);
+    check(h.system->supplicants.size() == 2 && !contains(h.system->configs.back(), "\tmode=2\n"),
+          "saving leaves the requested setup AP");
+  }
+  {
+    Harness h(root, true);
+    h.system->interface = true;
+    h.system->stock = false;
+    h.system->supplicant.status = "wpa_state=COMPLETED\nssid=Home\n";
+    check(h.service->start(h.now), "start and join");
+    h.run(1000);
+    check(h.network().link == WifiLink::Connected, "joined");
+    h.service->openSetupAccessPoint();
+    h.run(300);
+    check(h.system->supplicants.size() == 2 && h.network().link == WifiLink::AccessPoint,
+          "a request while joined opens the setup AP");
+    h.run(200000);
+    check(h.system->supplicants.size() == 2 && h.network().link == WifiLink::AccessPoint,
+          "the requested setup AP stays while the saved network works");
+  }
+  removeTree(root);
+}
+
+void testDisconnectsAreLogged() {
+  const std::string root = makeRoot("drop-log");
+  const std::string logPath = root + "/daemon.log";
+  Log::open(logPath);
+  Log::mirrorToStderr(false);
+  storeProfile(root, "Home");
+  {
+    Harness h(root, true);
+    h.system->interface = true;
+    h.system->stock = false;
+    h.system->supplicant.status = "wpa_state=COMPLETED\nssid=Home\n";
+    check(h.service->start(h.now), "start and join");
+    h.run(1000);
+    h.system->supplicant.status = "wpa_state=SCANNING\n";
+    h.system->supplicant.event("<3>CTRL-EVENT-DISCONNECTED bssid=00:11:22:33:44:55 reason=4");
+    h.run(100);
+    h.system->supplicant.event("<3>CTRL-EVENT-DISCONNECTED bssid=00:11:22:33:44:55 reason=3 locally_generated=1");
+    h.system->supplicant.event("<3>CTRL-EVENT-ASSOC-REJECT bssid=00:11:22:33:44:55 status_code=17");
+    h.system->supplicant.event("<3>CTRL-EVENT-ASSOC-REJECT bssid=00:11:22:33:44:55 status_code=17");
+    h.system->supplicant.event(
+        "<3>CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid=\"Home\" auth_failures=2 duration=20 reason=CONN_FAILED");
+    h.run(41900);
+    h.system->supplicant.status = "wpa_state=COMPLETED\nssid=Home\n";
+    h.system->supplicant.event("<3>CTRL-EVENT-CONNECTED - Connection completed");
+    h.run(100);
+    h.system->supplicant.status = "wpa_state=SCANNING\n";
+    h.system->supplicant.event("<3>CTRL-EVENT-DISCONNECTED bssid=00:11:22:33:44:55 reason=8 locally_generated=1");
+    h.run(5000);
+    h.system->supplicant.status = "wpa_state=COMPLETED\nssid=Home\n";
+    h.system->supplicant.event("<3>CTRL-EVENT-CONNECTED - Connection completed");
+    h.run(100);
+    h.system->crash(SIGSEGV);
+    h.run(3000);
+    check(h.network().link == WifiLink::Connected, "rejoined after a supplicant crash");
+    h.system->supplicant.status = "wpa_state=SCANNING\n";
+    h.system->supplicant.event("<3>CTRL-EVENT-DISCONNECTED bssid=00:11:22:33:44:55 reason=4");
+    h.run(100);
+    check(h.service->setCredentials({"Other", "password2"}), "another network saved during the outage");
+    h.run(1500);
+    h.system->supplicant.status = "wpa_state=COMPLETED\nssid=Other\n";
+    h.system->supplicant.event("<3>CTRL-EVENT-CONNECTED - Connection completed");
+    h.run(100);
+    check(h.network().link == WifiLink::Connected && h.network().ssid == "Other", "joined the other network");
+  }
+  Log::close();
+  Log::mirrorToStderr(true);
+  const std::string log = readText(logPath);
+  check(contains(log, "wifi: connection lost (reason 4)\n"), "a drop without the clock's flag names only its reason");
+  check(!contains(log, "reason 3"), "later disconnects of the same outage are not logged");
+  check(log.find("association rejected (status 17)") == log.rfind("association rejected (status 17)") &&
+            contains(log, "association rejected (status 17)"), "a repeated rejection is logged once");
+  check(contains(log, "wifi: network temporarily disabled: CONN_FAILED"), "temporary disable logged with its reason");
+  check(contains(log, "wifi: connection back after 42 s"), "the rejoin names the outage");
+  check(contains(log, "wifi: connection lost (reason 8, ended by the clock)") &&
+            contains(log, "wifi: connection back after 5 s"), "a drop the clock ended says so");
+  check(contains(log, "wifi: connection back after 1 s"), "a supplicant crash counts as an outage");
+  std::size_t backs = 0;
+  for (auto at = log.find("connection back after"); at != std::string::npos; at = log.find("connection back after", at + 1))
+    ++backs;
+  check(backs == 3, "joining a newly saved network is no rejoin");
   removeTree(root);
 }
 
@@ -854,8 +968,8 @@ void testAccessPointFallbackWithoutAddress() {
   network.ipv4.clear();
   h.state.setNetwork(network);
   h.run(45000);
-  check(h.network().link == WifiLink::AccessPoint && h.system->supplicants.size() == 4,
-        "later DHCP lease loss also restores setup AP");
+  check(h.network().link == WifiLink::Connected && h.system->supplicants.size() == 3,
+        "a later DHCP lease loss keeps the station");
   removeTree(root);
 }
 
@@ -1275,6 +1389,8 @@ int main() {
   testAccessPointNameAndReadiness();
   testAccessPointFallbackWithoutAddress();
   testAccessPointWaitsForLatestCredentials();
+  testSetupAccessPointOnRequest();
+  testDisconnectsAreLogged();
   testEraseCredentials();
   testAdbFailClosed();
   testSupplicantProgram();

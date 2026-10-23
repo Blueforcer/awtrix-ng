@@ -42,7 +42,7 @@ void Upgrade::fail(const std::string& error) {
 
 int64_t Upgrade::deadline() const { return active() ? std::min(expires_, totalExpires_) : -1; }
 void Upgrade::tick(int64_t now) {
-  if (active() && now >= deadline()) fail("MCU transfer timeout; automatic retry blocked");
+  if (active() && now >= deadline()) fail("MCU transfer timeout");
 }
 
 void Upgrade::packet(int64_t now) {
@@ -112,10 +112,14 @@ void Upgrade::reply(const std::vector<uint8_t>& b, int64_t now) {
     block_ = posix::le32(b.data()+8);
     packet_ = b[12] | unsigned(b[13]) << 8;
     if (b[14] != 1) return fail("MCU declined update (enabled != 1)");
-    if (posix::le32(b.data()+4) != 0) return fail("MCU requested resume; automatic resume unsupported");
     if (!block_ || block_ > 65536 || !packet_ || packet_ > 4096) return fail("unsupported MCU transfer geometry");
+    // The OEM updater keeps the position of an interrupted transfer and offers it again only
+    // for the same file CRC. Every later attempt with this image gets the same offer.
+    const std::size_t resume = posix::le32(b.data()+4);
+    if (resume >= image_->size() || resume % block_) return fail("MCU offered invalid resume position " + std::to_string(resume));
     rxSeq_ = static_cast<uint8_t>(b[1] + 1);
-    blockBytes_ = std::min(block_, image_->size());
+    offset_ = resumedAt_ = resume;
+    blockBytes_ = std::min(block_, image_->size() - offset_);
     phase_ = Phase::Data;
     attempts_ = 1;
     packet(now);

@@ -182,6 +182,9 @@ class CoreEngine : public BuiltinAppProfile, public IAppService, public INotifyS
   bool validateSpecNames(const AppSpec& spec, DispatchDetail& detail) const;
   bool prepareSpecContent(AppSpec& spec, DispatchDetail& detail);
   void resetContentCompletion(bool assets);
+  // A repeating page of the current app whose content restarted stays until its next rendered
+  // result, or a turn that is long over ends it in the middle of the text.
+  void holdUnfinishedPage(const AppSpec& spec);
 
   std::vector<radio::Station> stations_;
   std::function<void(const std::string&)> stationSaveFn_;

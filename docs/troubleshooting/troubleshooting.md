@@ -89,10 +89,12 @@ AWTRIX is set up for a network that is gone or has a new password, so it cannot 
 **Fix:**
 
 <!-- only tc002 -->
-1. Wait until the connection attempt fails and the setup hotspot opens.
+1. Switch the clock on. While the AWTRIX start animation runs, hold the **select** (middle) button
+   for 2 seconds. The display shows `AP MODE`. Without the button, the hotspot also opens once the
+   connection attempt fails.
 2. Join the hotspot and enter the new network name and password. You do not need USB.
 
-Nothing is erased.
+Nothing is erased. A normal restart goes back to the stored network.
 <!-- /only -->
 <!-- only esp32 esp32-s3 -->
 1. Hold the **select** (middle) button while you power AWTRIX on, and keep holding for a
