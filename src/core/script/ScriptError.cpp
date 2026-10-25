@@ -6,23 +6,13 @@
 namespace awtrix::script {
 namespace {
 
-constexpr char kChunk[] = "script:";
-constexpr std::size_t kChunkLen = sizeof(kChunk) - 1;
-
 constexpr int kMaxLine = 99999;
 
-}
-
-// Lifts the line number out of a Berry error and strips the "script:NN:" chunk prefix, so the
-// UI can point at a line. Anything not shaped like that prefix is left exactly as it came.
-ScriptError parseScriptError(const std::string& raw, const char* hook) {
-  ScriptError e;
-  e.message = raw;
-  if (hook && *hook) e.hook = hook;
-
-  for (std::size_t at = e.message.find(kChunk); at != std::string::npos;
-       at = e.message.find(kChunk, at + 1)) {
-    const std::size_t first = at + kChunkLen;
+// Finds "<chunk>:NN:" in e.message, strips it and keeps NN as the line.
+bool takeLine(ScriptError& e, const std::string& prefix) {
+  for (std::size_t at = e.message.find(prefix); at != std::string::npos;
+       at = e.message.find(prefix, at + 1)) {
+    const std::size_t first = at + prefix.size();
     std::size_t p = first;
     int line = 0;
     while (p < e.message.size() && std::isdigit(static_cast<unsigned char>(e.message[p]))) {
@@ -36,8 +26,22 @@ ScriptError parseScriptError(const std::string& raw, const char* hook) {
     if (p < e.message.size() && e.message[p] == ' ') ++p;
     e.message.erase(at, p - at);
     e.line = line;
-    break;
+    return true;
   }
+  return false;
+}
+
+}
+
+// Lifts the line number out of a Berry error and strips the "script:NN:" or "module:NN:" chunk
+// prefix, so the UI can point at a line. Anything not shaped like that prefix is left exactly as
+// it came.
+ScriptError parseScriptError(const std::string& raw, const char* hook) {
+  ScriptError e;
+  e.message = raw;
+  if (hook && *hook) e.hook = hook;
+
+  if (!takeLine(e, std::string(kAppChunk) + ':')) takeLine(e, std::string(kModuleChunk) + ':');
   return e;
 }
 

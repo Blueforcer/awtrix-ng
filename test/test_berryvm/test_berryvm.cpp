@@ -187,7 +187,7 @@ static void test_vm_integer_format_modes_fit_the_buffer() {
         TEST_ASSERT_EQUAL_STRING(expected[i], out.c_str());
       } else {
         TEST_ASSERT_FALSE(vm.callString("probe", out));
-        TEST_ASSERT_EQUAL_STRING("value_error: format specifier too long", vm.lastError().c_str());
+        TEST_ASSERT_EQUAL_STRING("script:1: value_error: format specifier too long", vm.lastError().c_str());
       }
     }
   }
@@ -545,7 +545,7 @@ static void expect_completed_callback_releases_capture(const char* body, bool su
   TEST_ASSERT_TRUE_MESSAGE(vm.call("prepare"), vm.lastError().c_str());
   TEST_ASSERT_EQUAL(succeeds, vm.call("abandoned"));
   if (!succeeds)
-    TEST_ASSERT_EQUAL_STRING("value_error: captured payload", vm.lastError().c_str());
+    TEST_ASSERT_EQUAL_STRING("script:6: value_error: captured payload", vm.lastError().c_str());
   TEST_ASSERT_EQUAL_INT(0, be_top(vm.raw()));
   be_pushnil(vm.raw());
   be_setglobal(vm.raw(), "abandoned");
@@ -664,7 +664,7 @@ static void test_vm_stack_reclamation_survives_exceptions_and_hard_abort() {
     vm.gcCollect();
     TEST_ASSERT_LESS_THAN_UINT32(baseline + 4096, vm.heapBytes());
     TEST_ASSERT_FALSE(vm.call("failure"));
-    TEST_ASSERT_EQUAL_STRING("value_error: deep failure", vm.lastError().c_str());
+    TEST_ASSERT_EQUAL_STRING("script:9: value_error: deep failure", vm.lastError().c_str());
     vm.gcCollect();
     TEST_ASSERT_LESS_THAN_UINT32(baseline + 4096, vm.heapBytes());
     TEST_ASSERT_FALSE(vm.call("budget"));

@@ -103,7 +103,7 @@ ask you for the key.
 Usually the fix is one more message in the same chat.
 
 **The display shows `ERR:` in red.** The script has an error. Open the **Scripts** tab in the
-web UI. The message is shown next to your script, and the editor marks the line when it can.
+web UI. The message and its line are shown next to your script, and the editor marks the line.
 **Copy the message into the chat.** The assistant usually fixes the error in one answer.
 
 **The app runs but looks wrong.** Say what you see: *"the text is cut off on the right"*,

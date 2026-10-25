@@ -2,8 +2,8 @@
 
 #include <chrono>
 
+#include "core/Settings.h"
 #include "core/render/Canvas.h"
-#include "core/render/TextRenderer.h"
 #include "core/script/ScriptBindings.h"
 #include "core/script/ScriptExtension.h"
 #include "core/script/ScriptServices.h"
@@ -72,11 +72,26 @@ void ScriptApp::releaseIcons() {
   if (icons_) icons_->release();
 }
 
+// ERR:<name> in red. A name wider than the panel scrolls through once before the rotation
+// moves on, at the device's scroll settings; the error itself is read in the web UI.
+void ScriptApp::renderBroken(Canvas& canvas, const RenderCtx& ctx) {
+  canvas.clear();
+  if (!ctx.font) return;
+  const ScriptServices* svc = services();
+  const Settings* settings = svc && svc->application ? svc->application->settings() : nullptr;
+  ScrollRun run;
+  run.y = 6;
+  run.width = canvas.width();
+  run.color = 0xFF0000u;
+  run.repeat = 1;
+  scroll_.draw(canvas, *ctx.font, "ERR:" + name_, run,
+               settings ? settings->scrollDefaults : ScrollDefaults{}, ctx.nowMs);
+}
+
 void ScriptApp::render(Canvas& canvas, const RenderCtx& ctx) {
   scroll_.beginFrame();
   if (broken_) {
-    canvas.clear();
-    if (ctx.font) text::drawText(canvas, *ctx.font, 0, 6, "ERR:" + name_, 0xFF0000u);
+    renderBroken(canvas, ctx);
     return;
   }
   const ScriptServices* svc = services();

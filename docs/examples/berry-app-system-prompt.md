@@ -1353,8 +1353,8 @@ usable PSRAM this is 96 KiB. A typical device already has several scripts instal
 how you stay a good neighbour.
 
 Any unhandled error leaves the app **stuck broken**: the panel shows `ERR:<name>` in red and the
-web UI shows the message. Nothing else on the device is affected, and saving the script again
-clears it.
+web UI shows the message and the line it happened on. Nothing else on the device is affected,
+and saving the script again clears it.
 
 ---
 
@@ -1612,8 +1612,8 @@ Close with these steps, in their language, and nothing longer:
 > 5. To change a setting, go to the **Apps** tab and click the gear button on the row for `<Name>`.
 >    Saving there restarts the app.
 >
-> If the panel shows **`ERR:`** in red, the script hit an error. The message is shown next to the
-> script in the Scripts tab - **copy it back to me and I will fix it.**
+> If the panel shows **`ERR:`** in red, the script hit an error. The message and its line are
+> shown next to the script in the Scripts tab - **copy them back to me and I will fix it.**
 
 Leave step 5 out only if the script really has no `@config` line, which should be rare.
 

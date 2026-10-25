@@ -719,6 +719,52 @@ static void test_an_extension_adds_a_module_and_hears_about_its_apps() {
   TEST_ASSERT_EQUAL_STRING("S", echo.forgotten[0].c_str());
 }
 
+// A runtime error inside a module function is reported at the app's line that called it: that
+// is the line the author of the app can see and fix. A module that fails while it loads names its
+// own line.
+static void test_a_runtime_error_names_the_line_of_the_failing_script() {
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  TEST_ASSERT_TRUE(host.set("tools", "# @module\n"
+                                     "var m = module(\"tools\")\n"
+                                     "m.pick = def (l, i)\n"
+                                     "  return l[i]\n"
+                                     "end\n"
+                                     "return m\n"));
+  TEST_ASSERT_TRUE(host.errorOf("tools").empty());
+  TEST_ASSERT_TRUE(host.set("A", "import tools\n"
+                                 "\n"
+                                 "class App\n"
+                                 "  def setup()\n"
+                                 "\n"
+                                 "    tools.pick([1], 5)\n"
+                                 "  end\n"
+                                 "  def draw() end\n"
+                                 "end\n"
+                                 "return App()"));
+  const script::ScriptError app = host.errorOf("A");
+  TEST_ASSERT_EQUAL_INT(6, app.line);
+  TEST_ASSERT_EQUAL_STRING("index_error: list index out of range", app.message.c_str());
+
+  host.set("broken", "# @module\nvar l = []\nvar x = l[3]\nreturn 1\n");
+  const script::ScriptError mod = host.errorOf("broken");
+  TEST_ASSERT_EQUAL_INT(3, mod.line);
+  TEST_ASSERT_EQUAL_STRING("index_error: list index out of range", mod.message.c_str());
+
+  // compile() reports its own line, not the loop before it that ended with a caught raise.
+  TEST_ASSERT_TRUE(host.set("C", "class App\n"
+                                 "  def setup()\n"
+                                 "    for x : [1, 2]\n"
+                                 "    end\n"
+                                 "\n"
+                                 "    compile(\"1 +\")\n"
+                                 "  end\n"
+                                 "  def draw() end\n"
+                                 "end\n"
+                                 "return App()"));
+  TEST_ASSERT_EQUAL_INT(6, host.errorOf("C").line);
+}
+
 static void test_extensions_follow_hidden_hold_and_removal_lifecycles() {
   EchoExtension echo;
   echo.callbacks = false;
@@ -3105,6 +3151,7 @@ int main(int, char**) {
   RUN_TEST(test_an_answer_missed_while_inactive_fails_once_the_script_runs_again);
   RUN_TEST(test_a_request_timing_out_while_inactive_fails_once_the_script_runs_again);
   RUN_TEST(test_an_extension_adds_a_module_and_hears_about_its_apps);
+  RUN_TEST(test_a_runtime_error_names_the_line_of_the_failing_script);
   RUN_TEST(test_extensions_follow_hidden_hold_and_removal_lifecycles);
   RUN_TEST(test_extensions_deliver_only_registered_hooks_to_visible_running_apps);
   RUN_TEST(test_extension_hooks_share_the_script_instruction_budget);

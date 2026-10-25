@@ -121,6 +121,7 @@ typedef struct blexer {
     btoken token;
     int linenumber;
     int lastline;
+    int tokenline; /* AWTRIX: line the last scanned token ended on, the next lastline */
     btokentype cacheType;
     struct blexerbuf buf;
     struct blexerreader reader;

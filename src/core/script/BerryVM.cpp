@@ -129,7 +129,7 @@ std::size_t BerryVM::heapBytes() const {
 
 // Turns a be_pcall/parser return code into err_ and leaves the stack empty either way.
 // A failed call left the exception type and message in the top two slots.
-bool BerryVM::captureError(int rc) {
+bool BerryVM::captureError(int rc, const char* chunk) {
   if (rc == BE_OK) {
     err_.clear();
     return true;
@@ -147,6 +147,9 @@ bool BerryVM::captureError(int rc) {
   if (g_stage == kHardAborted) err_ = kLimitMsg;
   if (g_mallocFailed) err_ = "out of memory";
   if (err_.empty()) err_ = "script error";
+  // Compile errors already start with "<chunk>:NN:"; a runtime error gets the same prefix.
+  const int line = rc == BE_EXCEPTION ? be_raiseline(vm_, chunk) : 0;
+  if (line > 0) err_ = std::string(chunk) + ':' + std::to_string(line) + ": " + err_;
   be_pop(vm_, be_top(vm_));
   return false;
 }
@@ -158,7 +161,7 @@ bool BerryVM::load(const std::string& source) {
   }
   const CompletedCall completed{vm_, callsSinceTrim_};
   armBudget(instructionLimit_);
-  int rc = be_loadbuffer(vm_, "script", source.c_str(), source.size());
+  int rc = be_loadbuffer(vm_, kAppChunk, source.c_str(), source.size());
   if (!captureError(rc)) return false;
 
   rc = be_pcall(vm_, 0);
@@ -201,7 +204,7 @@ bool BerryVM::loadApp(const std::string& appKey, const std::string& source,
   SourceBuf buf{source.c_str(), source.size()};
   // islocal = true: top-level `var` in the script becomes a chunk local instead of a VM
   // global. Every app shares one VM, so without it two scripts would collide on names.
-  int rc = be_protectedparser(vm_, "script", readSourceOnce, &buf, true);
+  int rc = be_protectedparser(vm_, kAppChunk, readSourceOnce, &buf, true);
   if (!captureError(rc)) return false;
 
   rc = be_pcall(vm_, 0);
@@ -236,7 +239,7 @@ bool BerryVM::compile(const std::string& source) {
   }
   const CompletedCall completed{vm_, callsSinceTrim_};
   SourceBuf buf{source.c_str(), source.size()};
-  const int rc = be_protectedparser(vm_, "script", readSourceOnce, &buf, true);
+  const int rc = be_protectedparser(vm_, kAppChunk, readSourceOnce, &buf, true);
   if (!captureError(rc)) return false;
   be_pop(vm_, be_top(vm_));
   return true;
@@ -255,11 +258,11 @@ bool BerryVM::loadModule(const std::string& importName, const std::string& sourc
 
   armBudget(instructionLimit_);
   SourceBuf buf{source.c_str(), source.size()};
-  int rc = be_protectedparser(vm_, "script", readSourceOnce, &buf, true);
-  if (!captureError(rc)) return false;
+  int rc = be_protectedparser(vm_, kModuleChunk, readSourceOnce, &buf, true);
+  if (!captureError(rc, kModuleChunk)) return false;
 
   rc = be_pcall(vm_, 0);
-  if (!captureError(rc)) return false;
+  if (!captureError(rc, kModuleChunk)) return false;
 
   if (be_top(vm_) < 1 || be_isnil(vm_, -1)) {
     be_pop(vm_, be_top(vm_));

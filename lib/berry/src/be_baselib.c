@@ -416,6 +416,8 @@ int be_baselib_module(bvm *vm)
 static int raise_compile_error(bvm *vm)
 {
     be_pop(vm, 2); /* pop the exception value and message */
+    /* AWTRIX: a fresh trace, so be_raiseline() reports the compile() call, not an older raise */
+    be_save_stacktrace(vm);
     be_throw(vm, BE_EXCEPTION);
     return 0;
 }

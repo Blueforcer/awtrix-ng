@@ -75,6 +75,7 @@ class ScriptApp : public IApp {
   bool has(Hook h) const { return (hooks_ & (1u << h)) != 0; }
   void enter(const char* what, bool okResult);
   void markBroken();
+  void renderBroken(Canvas& canvas, const RenderCtx& ctx);
   void refreshDuration(const RenderCtx* ctx);
 
   // Shared with every other app on the device; this class owns nothing but its entry in the

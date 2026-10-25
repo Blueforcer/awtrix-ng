@@ -777,12 +777,13 @@ This is how a script error looks: here and in the answer to
 | `line` | integer | **optional**: line in the script source, counting from 1 |
 | `hook` | string | **optional**: which function failed: `setup`, `loop`, `draw`, `on_show`, `on_hide`, `on_button`, `should_show` |
 
-`line` and `hook` are left out when unknown, and often both are: `"no draw() method"` has
-neither. A syntax error usually has a `line`. An error with a `hook` usually has no `line`.
+`line` is the line that does not parse, or the line the script was on when the error happened.
+When a function from a module fails, it is the line in the app that called it. `line` and `hook`
+are left out when unknown: `"no draw() method"` has neither.
 
 ```json
 {"message":"syntax_error: unexpected token ')'","line":12}
-{"message":"runtime_error: operand must be number","hook":"setup"}
+{"message":"index_error: list index out of range","line":7,"hook":"draw"}
 ```
 
 **Errors:**

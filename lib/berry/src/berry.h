@@ -2101,6 +2101,17 @@ BERRY_API void be_dumpvalue(bvm *vm, int index);
 BERRY_API void be_dumpexcept(bvm *vm);
 
 /**
+ * @fn int be_raiseline(bvm*, const char*)
+ * @note exception API (AWTRIX)
+ * @brief Line of the innermost function from chunk `source` where the last raise happened
+ *
+ * @param vm virtual machine instance
+ * @param source chunk name the function was compiled from
+ * @return line number, 0 when unknown
+ */
+BERRY_API int be_raiseline(bvm *vm, const char *source);
+
+/**
  * @fn void be_stop_iteration(bvm*)
  * @note exception API
  * @brief (???)

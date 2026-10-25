@@ -11,15 +11,17 @@ running.
 
 Any error your script does not handle stops it:
 
-- the display shows `ERR:<name>` in red whenever the app's turn comes,
-- the web UI shows the error next to the script and, when the error has a line number, marks and
-  scrolls to that line in the editor,
+- the display shows `ERR:<name>` in red whenever the app's turn comes. A name too long for the
+  display scrolls through once,
+- the web UI shows the error and its line next to the script, and marks and scrolls to that line
+  in the editor,
 - every other script keeps running.
 
-An error found when saving always has a line number. An error while running usually gives the
-message and the hook it happened in (`setup`, `draw`, …), which is normally enough to find it.
-A script with an error still **installs**: the source is stored, the app appears in the rotation,
-and it shows `ERR:` with the error message.
+An error found when saving names the line that does not parse. An error while running names the
+line it happened on and the hook it happened in (`setup`, `draw`, …). When a function from a
+[module](several-apps.md#sharing-code-between-scripts) fails, the line is the one in your app that
+called it. A script with an error still **installs**: the source is stored, the app appears in the
+rotation, and it shows `ERR:<name>`. The message is in the web UI.
 
 **Fix the line and save again.** The script stays stopped until it starts again: when you save a
 new version, save its settings or data, or restart the device. If the cause of the error is still

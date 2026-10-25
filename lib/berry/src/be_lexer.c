@@ -723,6 +723,8 @@ static btokentype scan_string(blexer *lexer)
             be_lexerror(lexer, "unfinished string");
         }
         c = next(lexer); /* skip '"' or '\'' */
+        /* AWTRIX: the lookahead below may cross newlines; the token still ends here */
+        lexer->tokenline = lexer->linenumber;
         /* check if there's an additional string literal right after */
         skip_delimiter(lexer);
         c = lgetc(lexer);
@@ -883,6 +885,7 @@ void be_lexer_init(blexer *lexer, bvm *vm,
     lexer->fname = fname;
     lexer->linenumber = 1;
     lexer->lastline = 1;
+    lexer->tokenline = 1;
     lexer->reader.readf = reader;
     lexer->reader.data = data;
     lexer->reader.len = 0;
@@ -913,9 +916,16 @@ int be_lexer_scan_next(blexer *lexer)
         lexer->token.type = TokenEOS;
         return 0;
     }
-    lexer->lastline = lexer->linenumber;
+    /* AWTRIX: the line the previous token ended on. Using linenumber here tagged code after a
+     * string literal at the end of a line with the next line, because scan_string() looks past
+     * the newline for an adjacent literal. */
+    lexer->lastline = lexer->tokenline;
     lexer->had_whitespace = 0; /* reset whitespace flag before scanning */
+    lexer->tokenline = 0;
     type = lexer_next(lexer);
+    if (!lexer->tokenline) {
+        lexer->tokenline = lexer->linenumber;
+    }
     clear_buf(lexer);
     if (type != TokenNone) {
         lexer->token.type = type;

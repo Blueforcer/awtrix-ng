@@ -176,17 +176,26 @@ void be_dumpclosure(bclosure *cl)
 }
 #endif
 
+#if BE_DEBUG_RUNTIME_INFO
+/* AWTRIX: the line lookup sourceinfo() did inline, shared with be_raiseline(). A pc past the last
+ * entry answers that entry's line instead of reading behind the table. */
+static int lineof(bproto *proto, binstruction *ip)
+{
+    blineinfo *it = proto->lineinfo;
+    blineinfo *last = it + proto->nlineinfo - 1;
+    int pc = cast_int(ip - proto->code - 1); /* now vm->ip has been increased */
+    for (; it < last && pc > it->endpc; ++it);
+    return it->linenumber;
+}
+#endif
+
 static void sourceinfo(bproto *proto, binstruction *ip)
 {
 #if BE_DEBUG_RUNTIME_INFO
     char buf[24];
     be_assert(proto != NULL);
     if (proto->lineinfo && proto->nlineinfo) {
-        blineinfo *it = proto->lineinfo;
-        blineinfo *end = it + proto->nlineinfo;
-        int pc = cast_int(ip - proto->code - 1); /* now vm->ip has been increased */
-        for (; it < end && pc > it->endpc; ++it);
-        snprintf(buf, sizeof(buf), ":%d:", it->linenumber);
+        snprintf(buf, sizeof(buf), ":%d:", lineof(proto, ip));
 #if BE_DEBUG_SOURCE_FILE
         be_writestring(str(proto->source));
 #endif
@@ -252,6 +261,43 @@ void be_tracestack(bvm *vm)
         repair_stack(vm);
         tracestack(vm);
     }
+}
+
+/* AWTRIX: the line where the last raised exception left the innermost function compiled from
+ * the chunk named `source`, read from the stack be_save_stacktrace() kept; 0 when no such
+ * frame carries line info. Without BE_DEBUG_SOURCE_FILE every chunk matches. */
+BERRY_API int be_raiseline(bvm *vm, const char *source)
+{
+#if BE_DEBUG_RUNTIME_INFO
+    bcallsnapshot *cf, *base, *top;
+    if (!be_stack_count(&vm->tracestack)) {
+        return 0;
+    }
+    repair_stack(vm);
+    base = be_stack_base(&vm->tracestack);
+    top = be_stack_top(&vm->tracestack);
+    for (cf = top; cf >= base; --cf) {
+        bproto *proto;
+        if (!var_isclosure(&cf->func)) {
+            continue;
+        }
+        proto = cast(bclosure *, var_toobj(&cf->func))->proto;
+        if (!proto->lineinfo || !proto->nlineinfo) {
+            continue;
+        }
+#if BE_DEBUG_SOURCE_FILE
+        if (!proto->source || strcmp(str(proto->source), source)) {
+            continue;
+        }
+#else
+        (void)source;
+#endif
+        return lineof(proto, cf->ip);
+    }
+#else
+    (void)vm; (void)source;
+#endif
+    return 0;
 }
 
 #if BE_USE_DEBUG_HOOK

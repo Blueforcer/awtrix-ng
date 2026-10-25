@@ -63,6 +63,12 @@ static void test_implausible_line_number_is_rejected() {
   TEST_ASSERT_EQUAL_STRING("script:99999999: nonsense", e.message.c_str());
 }
 
+static void test_module_position_is_a_line_too() {
+  auto e = script::parseScriptError("module:3: index_error: list index out of range");
+  TEST_ASSERT_EQUAL_INT(3, e.line);
+  TEST_ASSERT_EQUAL_STRING("index_error: list index out of range", e.message.c_str());
+}
+
 static void test_zero_line_is_rejected() {
   auto e = script::parseScriptError("script:0: impossible");
   TEST_ASSERT_EQUAL_INT(0, e.line);
@@ -94,6 +100,7 @@ int main(int, char**) {
   RUN_TEST(test_prose_mentioning_script_is_not_a_position);
   RUN_TEST(test_scan_continues_past_a_near_miss);
   RUN_TEST(test_implausible_line_number_is_rejected);
+  RUN_TEST(test_module_position_is_a_line_too);
   RUN_TEST(test_zero_line_is_rejected);
   RUN_TEST(test_empty_inputs);
   RUN_TEST(test_clear_resets_every_field);

@@ -1,7 +1,7 @@
 {
   "components": [
     {
-      "files_sha256": "f9a93a108a03ace1f6f43cd4568b216288ab47b5329c394882c920e00f479777",
+      "files_sha256": "e22fb556b2b938d13dc0d4a8e7425f7d8955ba19b7d0477cab56c5c0df0a52cf",
       "id": "berry",
       "license": {
         "file": "LICENSES/MIT-Berry.txt",
@@ -82,6 +82,16 @@
             "lib/berry/src/be_string.c"
           ],
           "summary": "2026-10-03: backport of upstream 6e6e6213 (berry-lang/berry#546) and 2c0b935c: parser depth limit (BE_MAX_PARSER_DEPTH in berry_conf.h), out-of-range jumps refused, string escapes bounded, string size capped, bytes() offsets checked without integer overflow and setbytes() clamped to the source, bytecode loader and debug.caller() hardened."
+        },
+        {
+          "files": [
+            "lib/berry/src/be_baselib.c",
+            "lib/berry/src/be_debug.c",
+            "lib/berry/src/be_lexer.c",
+            "lib/berry/src/be_lexer.h",
+            "lib/berry/src/berry.h"
+          ],
+          "summary": "2026-10-25: be_raiseline() reads the line where the last raise left the innermost function of a named chunk from the saved trace stack, so script runtime errors carry a line, and a compile() error saves its own trace so the line is not an older raise's; the lexer keeps the line a string literal ended on, so code after a string at the end of a line is no longer tagged with the next line (still wrong upstream)."
         }
       ],
       "paths": [

@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 
+#include "core/script/ScriptError.h"
+
 typedef struct bvm bvm;
 
 namespace awtrix::script {
@@ -67,7 +69,8 @@ class BerryVM {
   bool doMethod(const std::string& appKey, const char* name, int argc,
                 const std::string* a, std::string* out = nullptr,
                 bool* boolOut = nullptr, long* intOut = nullptr, const std::string* b = nullptr);
-  bool captureError(int rc);
+  // A runtime error is located in `chunk`: the line where it left code compiled from it.
+  bool captureError(int rc, const char* chunk = kAppChunk);
 
   bvm* vm_ = nullptr;
   const long instructionLimit_;
