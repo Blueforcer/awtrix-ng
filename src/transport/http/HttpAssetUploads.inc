@@ -111,7 +111,7 @@ void HttpApiServer::handleRestoreUpload() {
       return;
     }
     restoreSink_.reset(
-        new LittleFsRestoreSink(*cfg_, &engine_->state(), onConfigChanged_, releaseFiles_));
+        new LittleFsRestoreSink(*cfg_, &engine_->state(), engine_, onConfigChanged_, releaseFiles_));
     restoreApplier_.reset(new backup::RestoreApplier(*restoreSink_));
     restoreReader_.reset(new backup::ZipReader(*restoreApplier_));
   } else if (upload.status == UPLOAD_FILE_WRITE) {

@@ -72,7 +72,7 @@ const STR={
   bkSectionAp:'Restore',
   bkTitle:'Create backup',bkDownload:'Download backup',bkDownloadH:'Pick what to include, then save a .zip.',
   bkWorking:'Collecting…',bkDone:'Backup downloaded',bkAll:'All',
-  bkWifi:'Wi-Fi',bkSettings:'Settings',bkIcons:'Icons',bkMelodies:'Melodies',bkPalettes:'Palettes',bkMp3:'MP3s',bkScripts:'Scripts',bkApporder:'App order',
+  bkWifi:'Wi-Fi',bkSettings:'Settings',bkIcons:'Icons',bkMelodies:'Melodies',bkPalettes:'Palettes',bkMp3:'MP3s',bkRadio:'Radio stations',bkScripts:'Scripts',bkApporder:'App order',
   bkRestoreT:'Restore backup',bkRestore:'Choose backup…',
   bkRestoreH:'Upload a backup .zip.',
   bkCaptiveHint:'The Wi-Fi sign-in window can\'t upload files. To restore, open this page in a browser:',

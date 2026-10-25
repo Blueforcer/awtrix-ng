@@ -657,12 +657,13 @@ More: [Updating firmware](../guides/updating.md) ·
    Melodies are only offered where the board has a buzzer.
 <!-- /only -->
 <!-- only esp32-s3 -->
-1. Tick what to include: Wi-Fi, Settings, Icons, Melodies, Palettes, MP3s, Scripts, App order.
-   Melodies and MP3s are only offered where the board can play them. Scripts include their sounds.
+1. Tick what to include: Wi-Fi, Settings, Icons, Melodies, Palettes, MP3s, Radio stations,
+   Scripts, App order. Melodies, MP3s and radio stations are only offered where the board can
+   play them. Scripts include their sounds.
 <!-- /only -->
 <!-- only tc002 -->
-1. Tick what to include: Wi-Fi, Settings, Icons, Melodies, Palettes, MP3s, Scripts, App order.
-   Scripts include their sounds.
+1. Tick what to include: Wi-Fi, Settings, Icons, Melodies, Palettes, MP3s, Radio stations,
+   Scripts, App order. Scripts include their sounds.
 <!-- /only -->
 2. Press **Download backup**. Your browser saves a `.zip` file.
 

@@ -1,10 +1,10 @@
 #include "persistence/FsRestoreSink.h"
 
+#include "core/Services.h"
 #include "core/Settings.h"
 #include "core/StateStore.h"
 #include "core/api/JsonReader.h"
 #include "persistence/AppOrderStore.h"
-#include "persistence/RadioStore.h"
 #include "persistence/IconOriginsStore.h"
 #include "persistence/NvsSettings.h"
 #include "persistence/SystemConfigApply.h"
@@ -12,9 +12,13 @@
 namespace awtrix {
 namespace backup {
 
-FsRestoreSink::FsRestoreSink(DeviceConfig& live, StateStore* state,
+FsRestoreSink::FsRestoreSink(DeviceConfig& live, StateStore* state, IRadioStations* stations,
                              std::function<void()> onConfigChanged)
-    : live_(live), working_(live), state_(state), onConfigChanged_(std::move(onConfigChanged)) {}
+    : live_(live),
+      working_(live),
+      state_(state),
+      stations_(stations),
+      onConfigChanged_(std::move(onConfigChanged)) {}
 
 bool FsRestoreSink::applyWifi(const std::string& ssid, const std::string& pass, std::string&) {
   working_.wifiSsid = ssid;
@@ -66,9 +70,16 @@ bool FsRestoreSink::applyAppLoop(const std::string& json, std::string&) {
   return true;
 }
 
-bool FsRestoreSink::applyRadioStations(const std::string& json, std::string&) {
-  radiostore::save(json);
-  return true;
+// Checked and taken over at once like PUT /api/v1/audio/stations, which also stores the list.
+bool FsRestoreSink::applyRadioStations(const std::string& json, std::string& err) {
+  if (!stations_) {
+    err = "no station list on this device";
+    return false;
+  }
+  DispatchDetail detail;
+  if (stations_->setStations(json, detail) == DispatchResult::Ok) return true;
+  err = detail.field.empty() ? detail.message : detail.field + ": " + detail.message;
+  return false;
 }
 
 bool FsRestoreSink::applyIconOrigins(const std::string& json, std::string& err) {

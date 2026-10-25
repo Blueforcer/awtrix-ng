@@ -173,7 +173,7 @@ function maintenanceSection(page){
   ]);
 }
 const BK_CATS=[['wifi','bkWifi'],['settings','bkSettings'],['icons','bkIcons'],
-  ['melodies','bkMelodies'],['palettes','bkPalettes'],['mp3','bkMp3'],
+  ['melodies','bkMelodies'],['palettes','bkPalettes'],['mp3','bkMp3'],['radio','bkRadio'],
   ['scripts','bkScripts'],['apporder','bkApporder']];
 function backupSection(page){
   page.section('backup',t('bkSection'),t('bkSectionH'),[...backupRows(),...restoreRows(t('bkRestoreH'))]);
@@ -181,7 +181,7 @@ function backupSection(page){
 function backupRows(){
   const checks={};
   const avail=BK_CATS.filter(([id])=>
-    (id!=='melodies'||hasSink('rtttl'))&&(id!=='mp3'||hasSink('mp3')));
+    (id!=='melodies'||hasSink('rtttl'))&&(id!=='mp3'||hasSink('mp3'))&&(id!=='radio'||hasSink('radio')));
   const all=el('input',{type:'checkbox',checked:true});
   const dl=el('button',{class:'pri'},t('bkDownload'));
   const syncAll=()=>{const n=avail.filter(([id])=>checks[id].checked).length;

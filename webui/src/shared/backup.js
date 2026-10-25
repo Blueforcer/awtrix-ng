@@ -55,6 +55,8 @@ async function collectBackup(cats){
     entries.push({name:'MELODIES/'+m.name+'.txt',data:m.rtttl});included.push('melodies');}
   if(cats.palettes){await grab('/PALETTES');included.push('palettes');}
   if(cats.mp3){await grab('/MP3');included.push('mp3');}
+  if(cats.radio){entries.push({name:'radio.json',
+    data:JSON.stringify({stations:(await api('/api/v1/audio/stations')).data.stations||[]})});included.push('radio');}
   if(cats.scripts){await grab('/SCRIPTS');
     for(const s of(await api('/api/v1/audio/mp3')).data.scripts||[])for(const f of s.files){const p='SCRIPTS/'+s.name+'/'+f.name;
       entries.push({name:p,data:await bytes('/'+p)});}

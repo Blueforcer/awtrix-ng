@@ -1059,6 +1059,26 @@ return Probe()
         self.assertEqual(["boost.mp3"],
                          [f["name"] for f in app.json("GET", "/api/v1/apps/script/racer/sounds")["files"]])
 
+    def test_restore_brings_radio_stations_back_at_once(self):
+        app = self.app
+        stations = {"stations": [{"name": "Restored", "url": "https://example.invalid/restored"}]}
+        status, result = self.multipart_upload(app, "/api/v1/restore", "backup.zip",
+                                               self.backup_bytes([("radio.json", json.dumps(stations))]))
+        self.assertEqual(200, status, result)
+        self.assertEqual((1, 0), (result["applied"]["radioStations"], result["applied"]["skipped"]))
+        self.assertEqual(stations, app.json("GET", "/api/v1/audio/stations"))
+
+        bad = {"stations": [{"name": "No URL", "url": "ftp://example.invalid/x"}]}
+        status, result = self.multipart_upload(app, "/api/v1/restore", "backup.zip",
+                                               self.backup_bytes([("radio.json", json.dumps(bad))]))
+        self.assertEqual(200, status, result)
+        self.assertEqual((0, 1), (result["applied"]["radioStations"], result["applied"]["skipped"]))
+        self.assertIn("radio stations not applied", result["warnings"][0])
+        self.assertEqual(stations, app.json("GET", "/api/v1/audio/stations"))
+        app.stop()
+        app.start()
+        self.assertEqual(stations, app.json("GET", "/api/v1/audio/stations"))
+
     def test_body_over_the_ceiling_gets_the_documented_error(self):
         app = self.app
         status, error = self.multipart_upload(app, "/api/v1/audio/mp3", "large.mp3",

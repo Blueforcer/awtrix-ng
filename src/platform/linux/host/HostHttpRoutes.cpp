@@ -198,9 +198,10 @@ class HostReply final : public api::Reply {
 // directories that the device's flat filesystem never needs.
 class HostRestoreSink : public backup::FsRestoreSink {
  public:
-  HostRestoreSink(DeviceConfig& live, StateStore* state, std::function<void()> onConfigChanged,
+  HostRestoreSink(DeviceConfig& live, StateStore* state, IRadioStations* stations,
+                  std::function<void()> onConfigChanged,
                   std::function<void(DeviceConfig&)> configAccepted)
-      : backup::FsRestoreSink(live, state, std::move(onConfigChanged)),
+      : backup::FsRestoreSink(live, state, stations, std::move(onConfigChanged)),
         configAccepted_(std::move(configAccepted)) {}
   void commit() override {
     if (configTouched_ && configAccepted_) configAccepted_(working_);
@@ -275,7 +276,7 @@ void HostHttpServer::Impl::handleRestore(const httplib::Request& req, const std:
     sendError(res, 400, "badRequest", "no file received");
     return;
   }
-  HostRestoreSink sink(*cfg, &engine->state(), onConfigChanged, options.configAccepted);
+  HostRestoreSink sink(*cfg, &engine->state(), engine, onConfigChanged, options.configAccepted);
   backup::RestoreApplier applier(sink);
   backup::ZipReader reader(applier);
   reader.feed(reinterpret_cast<const uint8_t*>(data->data()), data->size());

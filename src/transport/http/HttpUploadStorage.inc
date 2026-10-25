@@ -65,9 +65,10 @@ const char* chipIdName(uint16_t id) {
 
 class LittleFsRestoreSink : public backup::FsRestoreSink {
  public:
-  LittleFsRestoreSink(DeviceConfig& live, StateStore* state, std::function<void()> onConfigChanged,
+  LittleFsRestoreSink(DeviceConfig& live, StateStore* state, IRadioStations* stations,
+                      std::function<void()> onConfigChanged,
                       std::function<void(const std::string&)> release)
-      : backup::FsRestoreSink(live, state, std::move(onConfigChanged)),
+      : backup::FsRestoreSink(live, state, stations, std::move(onConfigChanged)),
         release_(std::move(release)) {}
   bool beginFile(const std::string& path, std::string& err) override {
     abortFile();

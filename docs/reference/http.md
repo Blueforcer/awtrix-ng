@@ -3607,6 +3607,9 @@ Restores a backup made in the web UI.
 | `config/settings.json` | display and behavior settings, checked like [`PATCH /api/v1/settings`](#patch-apiv1settings): applied at once |
 | `config/icon-origins.json` | the [icon Hub links](#icon-origins). Links to icons that are not there are dropped |
 | `apploop.json` | app order and switched-off apps, same format as [`PUT /api/v1/apps/order`](#put-apiv1appsorder) |
+<!-- only esp32-s3 tc002 -->
+| `radio.json` | the radio stations, checked like [`PUT /api/v1/audio/stations`](#put-apiv1audiostations) and in use at once |
+<!-- /only -->
 | `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `MP3/*`, `SCRIPTS/*` | written into the matching folder |
 | `SCRIPTS/<name>/<sound>.mp3` | a script's [sound](#script-sounds), checked like any MP3. No other file under `SCRIPTS/` may be in a folder |
 

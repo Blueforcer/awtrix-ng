@@ -263,10 +263,36 @@ async function testRoundTripAgainstLiveBackend() {
   assert(bad.body.ok === false, 'garbage upload reports not-ok');
 }
 
+// Radio stations are a category of their own, offered where the clock plays radio (#112).
+async function testRadioStationsCategory() {
+  const audio = radio => ({ transitions: [], audio: { mp3: true, rtttl: true, song: false, speech: false,
+    track: false, radio, url: false, effect: false, clip: false } });
+  const offered = async radio => {
+    const { window } = await boot({ caps: audio(radio) });
+    await goto(window, '#/system');
+    const found = [...window.document.querySelectorAll('#sec-backup label')]
+      .some(label => label.textContent.trim() === 'Radio stations');
+    window.close();
+    return found;
+  };
+  assert(await offered(true), 'a clock that plays radio offers its stations in the backup');
+  assert(!(await offered(false)), 'a clock without radio offers no station category');
+
+  const { window, store } = await boot();
+  store.radio.stations = [{ name: 'SWR3', url: 'https://liveradio.swr.de/sw282p3/swr3/' }];
+  const entries = await window.collectBackup({ radio: true });
+  const radio = entries.find(e => e.name === 'radio.json');
+  assert(!!radio && JSON.parse(radio.data).stations[0].name === 'SWR3',
+    'the backup carries the station list as radio.json');
+  assert(JSON.parse(entries[0].data).categories.includes('radio'), 'the manifest lists the radio category');
+  window.close();
+}
+
 async function main() {
   await testZipStructure();
   await testSelectAllCategories();
   await testSetupOffersWifiAndRestore();
+  await testRadioStationsCategory();
   if(!LIVE){
     const{window,store}=await boot();
     store.files['/ICONS'].set('mail.gif',12);

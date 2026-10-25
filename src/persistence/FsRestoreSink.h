@@ -7,6 +7,7 @@
 #include "persistence/DeviceConfig.h"
 
 namespace awtrix {
+class IRadioStations;
 class StateStore;
 namespace backup {
 
@@ -14,7 +15,8 @@ namespace backup {
 // commit(), so a backup that fails validation halfway leaves the running config untouched.
 class FsRestoreSink : public RestoreSink {
  public:
-  FsRestoreSink(DeviceConfig& live, StateStore* state, std::function<void()> onConfigChanged = {});
+  FsRestoreSink(DeviceConfig& live, StateStore* state, IRadioStations* stations,
+                std::function<void()> onConfigChanged = {});
 
   bool applyWifi(const std::string& ssid, const std::string& pass, std::string& err) override;
   bool applySystem(const std::string& json, std::string& err) override;
@@ -29,6 +31,7 @@ class FsRestoreSink : public RestoreSink {
   DeviceConfig& live_;
   DeviceConfig working_;
   StateStore* state_;
+  IRadioStations* stations_;
   std::function<void()> onConfigChanged_;
   bool configTouched_ = false;
 };
