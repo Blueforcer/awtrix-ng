@@ -183,8 +183,9 @@ int main() {
   full = encodeWifiScanResult(escaped);
   check(!full.empty() && full.size() <= kMaxSupervisorMessage && decodeSupervisorMessage(full, message) &&
         !message.networks.empty() && message.networks.size() < 32, "escaped SSIDs are trimmed to one datagram");
-  check(decodeSupervisorMessage(encodeWifiScanResult({{std::string(33, 'x'), -40, true}, {"ok", -250, true},
-                                                      {"Valid", -40, false}}), message) &&
+  // Named rather than a braced temporary: GCC 15 flags the temporary with -Wdangling-pointer.
+  const std::vector<WifiNetwork> mixed{{std::string(33, 'x'), -40, true}, {"ok", -250, true}, {"Valid", -40, false}};
+  check(decodeSupervisorMessage(encodeWifiScanResult(mixed), message) &&
         message.networks.size() == 1 && message.networks[0].ssid == "Valid", "encoder drops invalid networks");
 
   const auto scan = [](const std::string& networksJson) {

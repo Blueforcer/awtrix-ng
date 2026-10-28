@@ -3,6 +3,7 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <climits>
