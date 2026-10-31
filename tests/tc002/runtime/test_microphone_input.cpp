@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <vector>
 
+#include "platform/tc002/contract/MicrophoneStream.h"
 #include "platform/tc002/runtime/MicrophoneInput.h"
 #include "core/Settings.h"
 
@@ -115,13 +116,18 @@ int main() {
     pitched.setStreaming(true);
     const auto before = sent.size();
     check(pitched.pitch(1620, true) == 0.f && pitched.pitch(1700, true) == 0.f && sent.size() == before,
-          "while the voice assistant streams, pitch answers 0 and requests nothing");
+          "while the hub streams, pitch requests nothing");
     answer(1710);
     pitched.setStreaming(false);
     check(pitched.pitch(1720, true) == 0.f && sent.size() == before + 1,
-          "a window from the stream is never used; the next call requests a new one");
+          "a snapshot answered during the stream is dropped; the next call requests a new one");
     answer(1780);
     check(pitched.pitch(1790, true) == hz, "pitch resumes after the stream");
+    pitched.setStreaming(true);
+    pitched.streamed(tone.samples.data(), tone.samples.size(), 0, 1800);
+    check(std::fabs(1200 * std::log2(pitched.pitch(1810, true) / 440.0)) < 5,
+          "stream blocks gathered into a window answer pitch");
+    pitched.setStreaming(false);
     const auto count = sent.size();
     pitched.pitch(1900, true);
     pitched.pitch(1910, true);
@@ -140,6 +146,37 @@ int main() {
     tone.samples = sine;
     idle.receive(tone, 1050);
     check(idle.pitch(1060, true) == 0.f, "a window nobody asked pitch of is not kept for it");
+  }
+  {
+    std::vector<std::string> sent;
+    tc002::MicrophoneInput streaming([&](std::string data) { sent.push_back(std::move(data)); return true; });
+    streaming.setStreaming(true);
+    check(!streaming.analysis(1000, stats) && sent.empty(), "while the hub streams, analysis asks for no snapshot");
+    std::vector<int16_t> block(tc002::kStreamBlockSamples);
+    for (uint32_t first = 0; first < 3 * tc002::kStreamBlockSamples; first += tc002::kStreamBlockSamples) {
+      for (unsigned i = 0; i < block.size(); ++i)
+        block[i] = static_cast<int16_t>(14000 * std::sin((first + i) * 2 * 3.141592653589793 * 1000 / 16000));
+      streaming.streamed(block.data(), block.size(), first, 1030);
+    }
+    check(streaming.analysis(1040, stats) && stats.bands[reference.bandForHz(1000)] > 200 && sent.empty(),
+          "stream blocks gathered into a window feed analysis");
+    streaming.setStreaming(false);
+    streaming.analysis(1100, stats);
+    check(sent.size() == 1, "once the stream ends, analysis asks for snapshots again");
+  }
+  {
+    tc002::MicrophoneInput hidden([](std::string) { return true; });
+    hidden.setStreaming(true);
+    hidden.analysis(1000, stats);
+    hidden.pitch(1000, true);
+    std::vector<int16_t> block(tc002::kStreamBlockSamples);
+    for (uint32_t first = 0; first < 3 * tc002::kStreamBlockSamples; first += tc002::kStreamBlockSamples) {
+      for (unsigned i = 0; i < block.size(); ++i)
+        block[i] = static_cast<int16_t>(14000 * std::sin((first + i) * 2 * 3.141592653589793 * 1000 / 16000));
+      hidden.streamed(block.data(), block.size(), first, 1400);
+    }
+    check(!hidden.heard(1410, stats) && hidden.pitch(1410, false) == 0.f,
+          "once no reading may listen, the stream reaches no app");
   }
   {
     std::vector<std::string> sent;

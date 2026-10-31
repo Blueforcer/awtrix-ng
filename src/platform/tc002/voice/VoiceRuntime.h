@@ -1,7 +1,6 @@
 #pragma once
 #include "core/render/Font.h"
 #include "platform/tc002/runtime/Tc002Speaker.h"
-#include "platform/tc002/runtime/MicrophoneInput.h"
 #include "platform/tc002/voice/AssistSession.h"
 #include "platform/linux/net/FileDownload.h"
 #include "platform/tc002/voice/VoiceOverlay.h"
@@ -12,9 +11,9 @@ struct Response;
 namespace awtrix::tc002::voice {
 class VoiceRuntime {
  public:
-  using Send = std::function<bool(std::string)>;
-  VoiceRuntime(std::string directory, Tc002Speaker& speaker,
-               MicrophoneInput& microphone, Send send);
+  // wakeWordAvailable: the runtime has a wake word to start Voice with.
+  VoiceRuntime(std::string directory, Tc002Speaker& speaker, MicrophonePort microphone,
+               bool wakeWordAvailable);
   ~VoiceRuntime();
   void tick(int64_t now, bool allowed);
   bool begin(int64_t now);
@@ -29,8 +28,13 @@ class VoiceRuntime {
   bool ready() const {
     return config_.get().enabled && !pendingStart_ && !errorFeedback_ && session_.ready();
   }
+  bool wakeWord() const { return config_.get().wakeWord; }
   bool busy() const {
     return pendingStart_ || errorFeedback_ || session_.busy();
+  }
+  // From begin() until the capture runs or the request has ended.
+  bool starting() const {
+    return pendingStart_ || session_.state() == AssistSession::State::Starting;
   }
   bool draw(Canvas& canvas, const GfxFont& font, int64_t now);
   bool handle(const httplib::Request& request, httplib::Response& response);
@@ -39,7 +43,6 @@ class VoiceRuntime {
   void stopSpeaker();
   ConfigStore config_;
   Tc002Speaker& speaker_;
-  MicrophoneInput& microphone_;
   WebSocket socket_;
   net::FileDownload download_;
   AssistSession session_;
@@ -50,6 +53,7 @@ class VoiceRuntime {
   int64_t feedbackUntil_ = 0;
   bool errorFeedback_ = false;
   bool loaded_ = false, playing_ = false, owned_ = false, pendingStart_ = false;
+  const bool wakeWordAvailable_;
   std::string playbackPath_;
 };
 }  // namespace awtrix::tc002::voice

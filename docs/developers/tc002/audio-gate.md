@@ -41,14 +41,16 @@ the control opportunity, never audio.
 0 to 5 within one physical half, and consecutive halves alternate between the two DMA buffers.
 Window tokens advance by one, and every closure must match the open window. Each checkpoint ties
 the sample count to MCU time: at most 3 ms deviation between consecutive checkpoints, and 3 ms plus
-0.5 % over the whole stream. Any violation, a non-zero MCU status or an unknown payload ends the
+0.5 % over the whole stream. The daemon sums the whole stream in 64 bits, so a stream may outlast the
+MCU's 32-bit tick and sample count. Any violation, a non-zero MCU status or an unknown payload ends the
 stream with an error; nothing is repaired or retried silently.
 
 **Leases and deadlines.** Three safeguards act independently:
 
 - The MCU stops acquisition by itself when no valid keepalive arrives for 1 s. Invalid or stale
   input cannot renew that lease.
-- The daemon ends a stream whose consumer did not renew within 500 ms, and every stream after 60 s.
+- The daemon ends a stream whose consumer did not renew within 500 ms. A stream has no length
+  limit of its own; each consumer bounds its own capture.
 - A stop must complete within 1.5 s, otherwise the daemon aborts the stream.
 
 A pending stop survives missed windows and is sent in the next one. After an error the daemon sends
@@ -57,7 +59,9 @@ ended.
 
 **Ownership.** `McuService` remains the only UART owner. Streams, snapshots and firmware transfer
 never overlap, and power readings arrive inside the `A4`/`N4` closures while a stream runs. Queues
-towards the runtime are bounded ([Home Assistant Voice](ha-voice.md)).
+towards the runtime are bounded ([Home Assistant Voice](ha-voice.md)). In the runtime, the
+[microphone hub](microphone.md#microphone-hub) is the stream's one consumer and shares it between
+Voice and the wake word.
 
 ## Why time division
 

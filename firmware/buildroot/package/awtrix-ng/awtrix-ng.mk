@@ -11,12 +11,13 @@ AWTRIX_NG_REVISION ?= unconfigured
 AWTRIX_NG_VERSION = $(AWTRIX_NG_REVISION)
 AWTRIX_NG_SITE = $(AWTRIX_NG_SNAPSHOT)
 AWTRIX_NG_SITE_METHOD = local
-AWTRIX_NG_LICENSE = PolyForm-Noncommercial-1.0.0, OFL-1.1 (font data), MIT (bundled components), Apache-2.0 (font notices), TJpgDec
+AWTRIX_NG_LICENSE = PolyForm-Noncommercial-1.0.0, OFL-1.1 (font data), MIT (bundled components), Apache-2.0 (font notices, TensorFlow Lite port), BSD-3-Clause (KISS FFT port), TJpgDec
 AWTRIX_NG_LICENSE_FILES = LICENSE.md THIRD-PARTY-NOTICES.md \
 	LICENSES/MIT-Berry.txt LICENSES/MIT-cpp-httplib.txt \
 	LICENSES/MIT-Matrix-Fonts.txt LICENSES/TJpg_Decoder.txt \
 	LICENSES/MIT-PubSubClient.txt LICENSES/MIT-densaugeo-base64.txt \
-	LICENSES/CMUdict-SCOWL.txt
+	LICENSES/CMUdict-SCOWL.txt LICENSES/Apache-2.0.txt \
+	LICENSES/BSD-3-Clause-KISS-FFT.txt
 AWTRIX_NG_DEPENDENCIES = libopenssl jpeg awtrix-base64
 AWTRIX_NG_SUPPORTS_IN_SOURCE_BUILD = NO
 AWTRIX_NG_CONF_OPTS = \

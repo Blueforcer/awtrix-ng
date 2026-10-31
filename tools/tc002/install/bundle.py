@@ -55,6 +55,10 @@ HOST_ONLY = ("lib/libawtrix-loader.so", "lib/modules/loop.ko")
 MCU_PATCH = frozenset(("share/mcu/manifest.json", "share/mcu/extension.bin", "share/mcu/LICENSE.txt"))
 # The voice that reads speech aloud; a release without it has no speech.
 SPEECH_VOICE = "share/speech/voice.atts"
+# The wake word model and its settings; a release without them has no wake word.
+WAKE_WORD = frozenset(("share/wake/hey_awtrix.tflite", "share/wake/hey_awtrix.json"))
+# The voice activity model, its manifest and its NOTICE; a release without them records nothing.
+VAD = frozenset(("share/vad/vad.tflite", "share/vad/vad.json", "share/vad/NOTICE"))
 EXECUTABLE_DIRS = ("bin",)
 # A path component and a release directory name: src/platform/tc002/contract/ReleaseName.h.
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,63}")
@@ -101,6 +105,14 @@ def public_files(paths):
         if not MCU_PATCH <= paths:
             raise BundleError('incomplete MCU patch')
         expected |= MCU_PATCH
+    if paths & WAKE_WORD:
+        if not WAKE_WORD <= paths:
+            raise BundleError('incomplete wake word')
+        expected |= WAKE_WORD
+    if paths & VAD:
+        if not VAD <= paths:
+            raise BundleError('incomplete voice activity model')
+        expected |= VAD
     if paths != expected:
         raise BundleError('bundle differs from public file allowlist')
     return expected

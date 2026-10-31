@@ -11,5 +11,6 @@
 *.woff binary
 *.woff2 binary
 *.atts binary
+*.tflite binary
 *.expect binary
 installer/tc002/* binary

@@ -199,10 +199,18 @@ class BoardSelectionContract(unittest.TestCase):
                 self.assertIn(message, result.stdout)
                 self.assertFalse((self.root / "data").exists())
 
-    def test_speech_voice_comes_with_the_speaker(self):
+    def test_speech_voice_wake_word_and_vad_come_with_the_speaker(self):
         for arguments, message in ((("--board", "tc002", "--speech-voice", "/tmp/voice.atts"),
                                     "--speech-voice requires --tc002-audio-fd"),
                                    (("--speech-voice", "a.atts", "--speech-voice", "b.atts"),
+                                    "awtrix-linux --data DIRECTORY"),
+                                   (("--board", "tc002", "--wake-word", "/tmp/hey_awtrix.tflite"),
+                                    "--wake-word requires --tc002-audio-fd"),
+                                   (("--wake-word", "a.tflite", "--wake-word", "b.tflite"),
+                                    "awtrix-linux --data DIRECTORY"),
+                                   (("--board", "tc002", "--vad", "/tmp/vad.tflite"),
+                                    "--vad requires --tc002-audio-fd"),
+                                   (("--vad", "a.tflite", "--vad", "b.tflite"),
                                     "awtrix-linux --data DIRECTORY")):
             with self.subTest(arguments=arguments):
                 result = self.run_board(*arguments)

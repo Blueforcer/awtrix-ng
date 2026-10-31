@@ -7,8 +7,12 @@
 namespace awtrix::tc002::voice {
 struct Config {
   bool enabled = false;
+  // Saying the wake word starts a session like the knob's long press.
+  bool wakeWord = false;
   std::string url, token, pipeline, device;
 };
+// The same connection settings: everything but the wake word, which a session never reads.
+bool sameConnection(const Config& a, const Config& b);
 // An origin only: credentials, paths, queries and fragments are rejected.
 bool parseOrigin(std::string_view url, WebSocket::Endpoint& endpoint);
 // Resolve a TTS URL without allowing another origin or a protocol-relative URL.

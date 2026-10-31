@@ -201,6 +201,7 @@ nav:
           - Microphone: developers/tc002/microphone.md
           - Continuous microphone audio: developers/tc002/audio-gate.md
           - Voice internals: developers/tc002/ha-voice.md
+          - Wake word: developers/tc002/wake-word.md
           - Speech: developers/tc002/speech.md
           - Tools overview: developers/tc002/tools.md
           - Install tools: developers/tc002/install-tools.md

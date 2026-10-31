@@ -12,6 +12,8 @@ const HELPER = 'bin/awtrix-tc002-flash';
 const HOST_FILES = ['lib/libawtrix-loader.so', 'lib/modules/loop.ko'];
 const MCU_PATCH = ['share/mcu/LICENSE.txt', 'share/mcu/extension.bin', 'share/mcu/manifest.json'];
 const SPEECH_VOICE = 'share/speech/voice.atts';
+const WAKE_WORD = ['share/wake/hey_awtrix.json', 'share/wake/hey_awtrix.tflite'];
+const VAD = ['share/vad/NOTICE', 'share/vad/vad.json', 'share/vad/vad.tflite'];
 const NOTICES = ['notices/LICENSE.md', 'notices/SOURCE-NOTICE.txt', 'notices/THIRD-PARTY-NOTICES.md'];
 const MANIFEST = 'bundle/manifest.json';
 const IMAGE = 'bundle/release.img';
@@ -171,6 +173,14 @@ function publicFiles(paths) {
     expected.push(...MCU_PATCH);
   }
   if (paths.includes(SPEECH_VOICE)) expected.push(SPEECH_VOICE);
+  if (WAKE_WORD.some(path => paths.includes(path))) {
+    check(WAKE_WORD.every(path => paths.includes(path)), 'incomplete wake word');
+    expected.push(...WAKE_WORD);
+  }
+  if (VAD.some(path => paths.includes(path))) {
+    check(VAD.every(path => paths.includes(path)), 'incomplete voice activity model');
+    expected.push(...VAD);
+  }
   return expected.sort();
 }
 

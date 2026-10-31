@@ -2560,13 +2560,14 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [config, state, error, pipelines]
+                required: [config, state, error, wakeWordAvailable, pipelines]
                 properties:
                   config:
                     type: object
-                    required: [enabled, url, pipeline, device, tokenSet]
+                    required: [enabled, wakeWord, url, pipeline, device, tokenSet]
                     properties:
                       enabled: { type: boolean }
+                      wakeWord: { type: boolean, description: 'Saying "Hey AWTRIX" starts a request.' }
                       url: { type: string, description: "Home Assistant address. \"\" when none is set." }
                       pipeline: { type: string, description: "Assist pipeline ID. \"\" for the default." }
                       device: { type: string, description: "Home Assistant device ID whose area is the room for requests. \"\" when none is set." }
@@ -2576,6 +2577,7 @@ paths:
                     type: string
                     description: |
                       Why the last attempt failed. "" when all is well. One of connectionLost, tokenRejected, haError, pipelineIncomplete, nothingUnderstood, audioTooSlow, timeout, microphoneFailed, playbackFailed, microphoneUpdate, configUnavailable. Later versions may add codes.
+                  wakeWordAvailable: { type: boolean, description: 'The clock can hear "Hey AWTRIX". When false, config.wakeWord does nothing.' }
                   pipelines: { type: array, items: { type: object }, description: "Home Assistant's Assist pipelines once connected." }
     post:
       tags: [system]
@@ -2592,6 +2594,7 @@ paths:
               type: object
               properties:
                 enabled: { type: boolean }
+                wakeWord: { type: boolean, description: 'true: saying "Hey AWTRIX" starts a request while Voice is connected.' }
                 url: { type: string, maxLength: 512, description: "Origin only, for example http://homeassistant.local:8123." }
                 pipeline: { type: string, maxLength: 128 }
                 device: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9]*$", description: "Home Assistant device ID. \"\" for none." }

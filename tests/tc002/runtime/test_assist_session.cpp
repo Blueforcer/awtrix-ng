@@ -31,7 +31,7 @@ struct Rig {
                          },
                          [] {}}};
   explicit Rig(std::string device = "") {
-    session.connecting({true, "http://ha:8123", "secret", "", device}, 0);
+    session.connecting({true, false, "http://ha:8123", "secret", "", device}, 0);
     session.receive({1, StreamEvent::Kind::Support, 0, 0, 0, true, {}, {}}, 0);
     session.text(R"({"type":"auth_required"})", 1);
     check(sent.back().first.find("secret") != std::string::npos,
@@ -117,6 +117,23 @@ int main() {
     check(!store.update(R"({"device":"../x"})", error) &&
               error.field == "device",
           "device is a plain identifier");
+    check(!store.get().wakeWord && store.update(R"({"wakeWord":true})", error) && store.get().wakeWord &&
+              store.publicJson().find("\"wakeWord\":true") != std::string::npos,
+          "the wake word is off until switched on");
+    check(!store.update(R"({"wakeWord":"yes"})", error) && error.field == "wakeWord",
+          "the wake word is true or false");
+    Config other = store.get();
+    other.wakeWord = !other.wakeWord;
+    check(sameConnection(store.get(), other), "the wake word is no connection setting");
+    for (auto change : {+[](Config& c) { c.enabled = !c.enabled; }, +[](Config& c) { c.url += "x"; },
+                        +[](Config& c) { c.token += "x"; }, +[](Config& c) { c.pipeline += "x"; },
+                        +[](Config& c) { c.device += "x"; }}) {
+      Config changed = other;
+      change(changed);
+      check(!sameConnection(store.get(), changed), "every other setting is one");
+    }
+    ConfigStore stored(directory);
+    check(stored.load() && stored.get().wakeWord, "the wake word setting survives a restart");
     check(store.erase(), "factory reset removes secret");
     ConfigStore reloaded(directory);
     check(reloaded.load() && !reloaded.get().enabled &&
@@ -276,7 +293,7 @@ int main() {
                           "http://ha?x", "http://ha\r\nX:bad", "file://ha", "http://ha:65536",
                           "http://ha:8123@evil", "http://@ha", "http://[1::2::3]", "http://ha#"})
     check(!parseOrigin(bad, e), "reject malformed origin");
-  Config c{true, "http://ha:8123", "secret", "", ""};
+  Config c{true, false, "http://ha:8123", "secret", "", ""};
   check(ttsTarget(c, "http://ha:8123/api/tts_proxy/a.wav", path),
         "same origin TTS");
   for (const auto* bad : {"//other/a", "http://evil/api/tts_proxy/a",

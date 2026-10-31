@@ -10,26 +10,23 @@
 #include "platform/tc002/voice/StreamClock.h"
 
 namespace awtrix::tc002::voice {
-VoiceRuntime::VoiceRuntime(std::string directory, Tc002Speaker& speaker,
-                           MicrophoneInput& microphone,
-                           Send send)
+VoiceRuntime::VoiceRuntime(std::string directory, Tc002Speaker& speaker, MicrophonePort microphone,
+                           bool wakeWordAvailable)
     : config_(std::move(directory)),
       speaker_(speaker),
-      microphone_(microphone),
       download_("/tmp", "awtrix-voice", {2 * 1024 * 1024, 15000, false, nullptr}),
       session_({[this](std::string bytes, bool binary) {
                   return socket_.send(std::move(bytes), binary);
                 },
                 [this] { socket_.cancel(); },
-                [send](StreamControl control) {
-                  return send(encodeStreamControl(control));
-                },
+                std::move(microphone),
                 [this](const std::string& target) {
                   downloadGeneration_ =
                       download_.start(config_.get().url, target);
                   return true;
                 },
-                [this] { stopSpeaker(); }}) {
+                [this] { stopSpeaker(); }}),
+      wakeWordAvailable_(wakeWordAvailable) {
   loaded_ = config_.load();
 }
 VoiceRuntime::~VoiceRuntime() { cancel(); }
@@ -58,14 +55,12 @@ void VoiceRuntime::cancel() {
   errorFeedback_ = false;
   pendingStart_ = false;
   session_.cancel();
-  microphone_.setStreaming(false);
   speaker_.setVoiceOwned(false);
   owned_ = false;
 }
 bool VoiceRuntime::begin(int64_t now) {
   if (!session_.ready() || !speaker_.available()) return false;
   speaker_.setVoiceOwned(true);
-  microphone_.setStreaming(true);
   owned_ = true;
   pendingStart_ = true;
   startAt_ = now;
@@ -75,7 +70,6 @@ bool VoiceRuntime::begin(int64_t now) {
 void VoiceRuntime::endInput(int64_t now) {
   if (pendingStart_) {
     pendingStart_ = false;
-    microphone_.setStreaming(false);
     speaker_.setVoiceOwned(false);
     owned_ = false;
   } else
@@ -141,7 +135,6 @@ void VoiceRuntime::tick(int64_t now, bool allowed) {
       errorFeedback_ = true;
       feedbackUntil_ = now + 1500;
     }
-    microphone_.setStreaming(false);
     speaker_.setVoiceOwned(false);
     owned_ = false;
   }
@@ -183,6 +176,7 @@ bool VoiceRuntime::handle(const httplib::Request& req, httplib::Response& res) {
                         !session_.microphoneAvailable()
                     ? errors::microphoneUpdate
                     : session_.error())
+        .member("wakeWordAvailable", wakeWordAvailable_)
         .key("pipelines")
         .raw(session_.pipelines())
         .endObject();
@@ -195,6 +189,7 @@ bool VoiceRuntime::handle(const httplib::Request& req, httplib::Response& res) {
                 "only from this device's web page");
       return true;
     }
+    const Config before = config_.get();
     ConfigStore::Rejection rejection;
     if (!config_.update(req.body, rejection)) {
       if (rejection.stored)
@@ -202,9 +197,14 @@ bool VoiceRuntime::handle(const httplib::Request& req, httplib::Response& res) {
       else
         sendError(res, 500, "internalError", rejection.message);
     } else {
-      cancel();
+      // A change of the wake word alone leaves the connection and a running request as they are;
+      // anything else, also saving unchanged settings, connects anew.
+      const Config& after = config_.get();
+      if (!loaded_ || before.wakeWord == after.wakeWord || !sameConnection(before, after)) {
+        cancel();
+        reconnectAt_ = 0;
+      }
       loaded_ = true;
-      reconnectAt_ = 0;
       res.set_content("{\"ok\":true}", "application/json");
     }
   } else {

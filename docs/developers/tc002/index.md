@@ -231,7 +231,9 @@ awtrix-linux --board tc002 --tc002-input-fds 100,101 --supervisor-fd 103
   --data /data/awtrix-ng/app --webui <root>/share/index.html.gz --lan --port 80
   --start-reason poweron|software|panic|watchdog [--uid <12 hex digits>]
   [--activation-id <64 hex digits>]
-  [--tc002-audio-fd 104 [--speech-voice <root>/share/speech/voice.atts]]
+  [--tc002-audio-fd 104 [--speech-voice <root>/share/speech/voice.atts]
+   [--wake-word <root>/share/wake/hey_awtrix.tflite]
+   [--vad <root>/share/vad/vad.tflite]]
   [--boot-intro [--boot-sound <root>/share/boot.mp3]]
   [--ca-file <root>/share/ca-certificates.crt]
   [--update-state /data/awtrix-ng/state/update-state.json
@@ -265,8 +267,10 @@ The TC002 code of the runtime is in `src/platform/tc002/runtime/` unless noted:
 | `Tc002Activation`, `Tc002ActivationApi`, `Tc002ActivationHttp` | the capability `activation` tells the web UI to ask **Help AWTRIX**; `GET`/`PUT /api/v1/activation` read and keep the answer (`consent` is `null` until answered, then `true` or `false`) in `app/activation-consent`. Only after a yes, the runtime reports `--activation-id` once as `POST https://awtrix.de/api/v1/activations` with `{"id":"…"}` and nothing else, once the network is up and the time synchronized. A 2xx answer ends it and writes the id to `app/activation`, so later starts send nothing; no answer, 408, 429 or 5xx retry after 1, 5 and 30 minutes, then 2 and 6 hours; any other answer stops until the next start |
 | `Tc002ClockApp`, `Tc002StatusApp` | the TC002's clock (registered as `Time`, five faces by `clockFace`) and status page |
 | `Tc002Speaker`, `src/platform/tc002/audio/` | the speaker behind the engine's tone and PCM sinks: melodies, MP3 and radio over descriptor 104 |
-| `MicrophoneInput` | microphone snapshots for the audio visualisation ([Microphone](microphone.md)) |
+| `MicrophoneInput` | the audio visualisation's microphone input: snapshots, or the hub's stream while it runs ([Microphone](microphone.md)) |
+| `MicrophoneHub` | shares the continuous microphone stream between Voice and the wake word ([Microphone hub](microphone.md#microphone-hub)) |
 | `src/platform/tc002/voice/` | Home Assistant Voice ([Home Assistant Voice](ha-voice.md)) |
+| `src/platform/tc002/wake/` | the wake word that starts Voice, and the speech end detection ([Wake word](wake-word.md)) |
 | `Tc002BootIntro`, `BootIntroWide`, `BootInfoWide`, `TerminalFont` | the power-on intro timed by the boot sound, then the info screen with the version and the address, both in the 3x5 terminal font |
 | `tls/` (`src/platform/linux/tls/`) | the one TLS layer: the policy the `--hardened` listener and the MQTT client use, the public CA store every HTTPS client verifies against ([CA certificates](ca-certificates.md)), broker trust with pinned fingerprints and `/api/v1/mqtt/tls`, and the `--hardened` server identity |
 | `LinuxLanLogin`, `LinuxScriptHttp`, `LinuxMqttTls` (`src/platform/linux/`) | the web login as on the ESP32, the scripts' HTTP worker, the MQTT TLS transport |
@@ -396,7 +400,8 @@ bash tools/tc002/install/build_bundle.sh OUT
 The script builds one commit (`--commit`, default `HEAD`), exported with `git archive`, so nothing
 outside the commit enters the release: the version is `<version>-g<commit>` and the manifest
 counter the commit time. It builds the two presets in fresh build directories, installs their
-`tc002` component (with the voice when `assets/speech/voice.atts` exists, [Speech](speech.md#a-voice-for-the-release)),
+`tc002` component (with the voice when `assets/speech/voice.atts` exists, [Speech](speech.md#a-voice-for-the-release),
+the [wake word](wake-word.md#the-model) and the [voice activity model](wake-word.md#speech-end-detection)),
 and adds `udhcpc`, `wpa_supplicant`, the CA bundle, the licence texts, the three kernel modules of
 the release, `loop.ko` and the pinned MCU patch ([MCU updates](mcu-update.md)).
 It checks that every program is a static hard-float binary, writes `manifest.json` and ends with

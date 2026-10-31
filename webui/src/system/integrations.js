@@ -62,6 +62,8 @@ function voiceSection(page){
   const pipe=el('select',{'aria-label':t('vcPipe')});
   const dev=el('input',{type:'text',autocomplete:'off',spellcheck:'false',placeholder:t('vcDevP'),'aria-label':t('vcDev')});
   const on=mkSwitch(false,()=>store({enabled:on.input.checked},t('saved')));
+  const wake=mkSwitch(false,()=>store({wakeWord:wake.input.checked},t('saved')));
+  const wakeRow=actionRow(t('vcWake'),t('vcWakeH'),[wake.node]);
   const save=el('button',{class:'pri'},t('vcSave'));
   let cur=null,pipes='';
   const clear=armable(el('button',null,t('vcTokenClear')),()=>store({clearToken:true,enabled:false},t('saved')));
@@ -71,6 +73,8 @@ function voiceSection(page){
     const c=d.config||{};
     if(first){url.value=c.url||'';dev.value=c.device||'';}
     on.input.checked=!!c.enabled;
+    wake.input.checked=!!c.wakeWord;
+    wakeRow.style.display=d.wakeWordAvailable?'':'none';
     tokenState.className='badge'+(c.tokenSet?' good':'');
     tokenState.replaceChildren(t(c.tokenSet?'vcTokenSet':'vcTokenNone'));
     token.placeholder=c.tokenSet?t('vcTokenKeep'):'';
@@ -111,6 +115,7 @@ function voiceSection(page){
   page.section('voice',t('vcSection'),t('vcSectionH'),[
     actionRow(t('mqStatus'),null,[state]),
     actionRow(t('vcOn'),t('vcOnH'),[on.node]),
+    wakeRow,
     actionRow(t('vcUrl'),null,[url]),
     actionRow(t('vcToken'),t('vcTokenH'),[tokenState,token,clear]),
     actionRow(t('vcPipe'),t('vcPipeH'),[pipe]),

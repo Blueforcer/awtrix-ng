@@ -90,7 +90,7 @@ bool LinuxRuntime::pollSupervisor(int64_t now) {
     if (update_ && message.type == tc002::MessageType::Hello) update_->applyHello(message);
     supervision_->apply(message);
     if (message.type == tc002::MessageType::MicrophonePcm) microphone_->receive(message.microphonePcm, now);
-    if (voice_ && message.type == tc002::MessageType::MicrophoneStreamEvent) voice_->receive(message.streamEvent, now);
+    if (message.type == tc002::MessageType::MicrophoneStreamEvent) microphoneHub_->receive(message.streamEvent, now);
   });
   if (open) return true;
   std::fputs("Supervisor channel closed; stopping\n", stderr);
@@ -108,13 +108,23 @@ bool LinuxRuntime::pollInput(int64_t now) {
 }
 
 void LinuxRuntime::tickVoice(int64_t now) {
+  microphoneHub_->tick(now);
   const bool voiceAllowed = voiceAllowedNow();
   const bool knobVoice = voiceAllowed && !engine().state().settings().blockNavigation;
   if (!knobVoice) knobGesture_.cancel();
-  if (!voice_) return;
-  voice_->tick(now, voiceAllowed);
-  if (knobGesture_.tick(now, knobVoice && voice_->ready()) == tc002::voice::KnobGesture::Action::Start)
-    startVoice(now);
+  if (voice_) {
+    voice_->tick(now, voiceAllowed);
+    if (knobGesture_.tick(now, knobVoice && voice_->ready()) == tc002::voice::KnobGesture::Action::Start)
+      startVoice(now);
+    // Voice starts its capture only once Home Assistant is ready for the audio. Until then the hub
+    // keeps open the stream the wake word lets go of, and Voice joins it. Set before the wake word's
+    // tick, which stops that stream once Voice has begun.
+    microphoneHub_->hold(voice_->starting());
+    if (wake_ && wake_->tick(now, voiceAllowed && voice_->wakeWord() && voice_->ready())) startVoice(now);
+  }
+  // After the consumers, so a stream started in this frame already holds back the snapshots. A probe
+  // alone leaves them running.
+  microphone_->setStreaming(microphoneHub_->active());
 }
 
 void LinuxRuntime::tickNetwork(int64_t now) {
@@ -174,6 +184,8 @@ bool LinuxRuntime::persist() {
 int LinuxRuntime::stop() {
   performance_->stop();
   if (voice_) voice_->cancel();
+  if (wake_) wake_->cancel();
+  if (microphoneHub_) microphoneHub_->close();
   const bool resetAll = system_.resetAll;
   if (!resetAll) persist();
   http_.stop();

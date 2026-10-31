@@ -114,15 +114,28 @@ struct Microphone {
     return true;
   }};
 
+  // One snapshot's worth of a sine of hz.
+  static std::vector<int16_t> sine(double hz) {
+    std::vector<int16_t> samples;
+    for (unsigned i = 0; i < tc002::kMicrophonePcmSamples; ++i)
+      samples.push_back(static_cast<int16_t>(8000 * std::sin(i * 2 * 3.141592653589793 * hz / 16000)));
+    return samples;
+  }
+
   // Answers the request in flight with a sine of hz.
   void answer(double hz, int64_t at) {
     tc002::SupervisorMessage request;
     check(!sent.empty() && tc002::decodeSupervisorMessage(sent.back(), request), "microphone request decodes");
     tc002::MicrophonePcm pcm;
     pcm.id = request.microphonePcm.id;
-    for (unsigned i = 0; i < tc002::kMicrophonePcmSamples; ++i)
-      pcm.samples.push_back(static_cast<int16_t>(8000 * std::sin(i * 2 * 3.141592653589793 * hz / 16000)));
+    pcm.samples = sine(hz);
     input.receive(pcm, at);
+  }
+
+  // Hands a sine of hz to the input as the microphone hub's stream does.
+  void stream(double hz, int64_t at) {
+    const auto samples = sine(hz);
+    input.streamed(samples.data(), samples.size(), 0, at);
   }
 };
 
@@ -174,8 +187,10 @@ void test_music_pitch_follows_the_source() {
     mic.answer(440, 1060);
     check(near(tc002::musicPitch(AnalysisSource::Automatic, 1070, nullptr, &mic.input, true), 440), "and answers it");
     mic.input.setStreaming(true);
-    check(tc002::musicPitch(AnalysisSource::Automatic, 1080, nullptr, &mic.input, true) == 0.f,
-          "while the voice assistant owns the microphone, pitch answers 0");
+    mic.stream(262, 1200);
+    check(near(tc002::musicPitch(AnalysisSource::Automatic, 1210, nullptr, &mic.input, true), 262) &&
+              mic.sent.size() == 1,
+          "while the microphone hub streams, pitch comes from the stream and no snapshot is asked for");
   }
   {
     Microphone mic;

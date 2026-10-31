@@ -54,8 +54,8 @@ void writeAll(const std::string& path, const std::string& text, bool append) {
 }
 
 std::string contract(int argc, char** argv, const std::string& data, bool& audio, std::string& voice,
-                     std::string& intro, std::string& update, std::string& start, std::string& uid,
-                     std::string& activation) {
+                     std::string& wake, std::string& vad, std::string& intro, std::string& update,
+                     std::string& start, std::string& uid, std::string& activation) {
   const char* expected[] = {nullptr, "--board", "tc002", "--tc002-input-fds", "100,101", "--supervisor-fd", "103",
                             "--data", nullptr, "--webui", nullptr, "--lan", "--port", nullptr,
                             "--start-reason", nullptr};
@@ -64,6 +64,8 @@ std::string contract(int argc, char** argv, const std::string& data, bool& audio
   uid = "none";
   activation = "none";
   voice = "none";
+  wake = "none";
+  vad = "none";
   if (argc < kBase) return "argument count " + std::to_string(argc);
   for (int i = 1; i < kBase; ++i)
     if (expected[i] && std::strcmp(argv[i], expected[i]) != 0) return std::string("argument ") + argv[i];
@@ -88,6 +90,14 @@ std::string contract(int argc, char** argv, const std::string& data, bool& audio
     next += 2;
     if (next + 1 < argc && std::strcmp(argv[next], "--speech-voice") == 0) {
       voice = argv[next + 1];
+      next += 2;
+    }
+    if (next + 1 < argc && std::strcmp(argv[next], "--wake-word") == 0) {
+      wake = argv[next + 1];
+      next += 2;
+    }
+    if (next + 1 < argc && std::strcmp(argv[next], "--vad") == 0) {
+      vad = argv[next + 1];
       next += 2;
     }
   }
@@ -160,17 +170,22 @@ int main(int argc, char** argv) {
   const std::string data = argc > 8 ? argv[8] : "";
   bool audio = false;
   std::string voice;
+  std::string wake;
+  std::string vad;
   std::string intro;
   std::string update;
   std::string start;
   std::string uid;
   std::string activation;
-  const std::string problem = contract(argc, argv, data, audio, voice, intro, update, start, uid, activation);
+  const std::string problem =
+      contract(argc, argv, data, audio, voice, wake, vad, intro, update, start, uid, activation);
   writeAll(data + "/starts", start + "\n", true);
   writeAll(data + "/uids", uid + "\n", true);
   writeAll(data + "/activations", activation + "\n", true);
   writeAll(data + "/intro-" + std::to_string(::getpid()), intro + "\n", false);
   writeAll(data + "/voice-" + std::to_string(::getpid()), voice + "\n", false);
+  writeAll(data + "/wake-" + std::to_string(::getpid()), wake + "\n", false);
+  writeAll(data + "/vad-" + std::to_string(::getpid()), vad + "\n", false);
   writeAll(data + "/update-args-" + std::to_string(::getpid()), update + "\n", false);
   if (audio) {
     std::string heard = "no helper message";

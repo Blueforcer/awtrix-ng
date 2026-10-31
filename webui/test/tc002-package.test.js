@@ -221,6 +221,22 @@ test('identity, manifests, file modes and roles must agree', async () => {
   }
 });
 
+test('the wake word comes with its settings or not at all', async () => {
+  const entries = files();
+  metadata(entries, 'bundle/manifest.json', value => {
+    value.files = value.files.filter(file => file.path !== 'share/wake/hey_awtrix.json');
+  });
+  await reject(pack(entries), /incomplete wake word/);
+});
+
+test('the voice activity model comes with its manifest and NOTICE or not at all', async () => {
+  const entries = files();
+  metadata(entries, 'bundle/manifest.json', value => {
+    value.files = value.files.filter(file => file.path !== 'share/vad/NOTICE');
+  });
+  await reject(pack(entries), /incomplete voice activity model/);
+});
+
 test('the release image must match both manifests and be a squashfs release image', async () => {
   const inconsistent = files();
   change(inconsistent, imageName, data => Buffer.concat([data, Buffer.alloc(1)]));

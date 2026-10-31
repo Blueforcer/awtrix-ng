@@ -507,14 +507,16 @@ class CommandLine(ManifestFixture):
     def test_committed_manifest_matches_checkout(self):
         manifest = components.load_manifest(components.MANIFEST)
         validated = components.check(build.REPO, manifest, build.REPO / components.PACKAGE)
-        self.assertEqual(["base64", "berry", "cmudict-scowl", "cpp-httplib", "matrix-fonts", "matrix-fonts-originals",
-                          "pubsubclient", "tjpg-decoder", "tjpgdec", "tlsdyn"], sorted(validated))
+        self.assertEqual(["base64", "berry", "cmudict-scowl", "cpp-httplib", "kissfft-port", "matrix-fonts",
+                          "matrix-fonts-originals", "microwakeword-vad", "pubsubclient", "tflite-micro-port",
+                          "tjpg-decoder", "tjpgdec", "tlsdyn"], sorted(validated))
         linux = {ident for ident, c in validated.items() if "linux" in c["targets"]}
-        self.assertEqual({"base64", "berry", "cmudict-scowl", "cpp-httplib", "matrix-fonts", "matrix-fonts-originals",
-                          "pubsubclient", "tjpgdec"}, linux)
+        self.assertEqual({"base64", "berry", "cmudict-scowl", "cpp-httplib", "kissfft-port", "matrix-fonts",
+                          "matrix-fonts-originals", "microwakeword-vad", "pubsubclient", "tflite-micro-port",
+                          "tjpgdec"}, linux)
         with mock.patch("sys.stdout", new_callable=io.StringIO) as out:
             self.assertEqual(0, components.main([]))
-        self.assertEqual("10 application components verified\n", out.getvalue())
+        self.assertEqual("13 application components verified\n", out.getvalue())
 
 
 if __name__ == "__main__":

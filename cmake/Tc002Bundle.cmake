@@ -16,6 +16,10 @@ install(TARGETS awtrix-linux awtrix-tc002d awtrix-tc002-dhcp-callback awtrix-tc0
   RUNTIME DESTINATION bin COMPONENT tc002 EXCLUDE_FROM_ALL)
 install(FILES "${TC002_WEBUI}" "${PROJECT_SOURCE_DIR}/assets/tc002/boot.mp3" DESTINATION share
   COMPONENT tc002 EXCLUDE_FROM_ALL)
+install(FILES "${PROJECT_SOURCE_DIR}/assets/tc002/wake/hey_awtrix.tflite"
+  "${PROJECT_SOURCE_DIR}/assets/tc002/wake/hey_awtrix.json" DESTINATION share/wake COMPONENT tc002 EXCLUDE_FROM_ALL)
+install(FILES "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.tflite" "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.json"
+  "${PROJECT_SOURCE_DIR}/assets/tc002/vad/NOTICE" DESTINATION share/vad COMPONENT tc002 EXCLUDE_FROM_ALL)
 set(TC002_SPEECH_VOICE "${PROJECT_SOURCE_DIR}/assets/speech/voice.atts")
 if(EXISTS "${TC002_SPEECH_VOICE}")
   install(FILES "${TC002_SPEECH_VOICE}" DESTINATION share/speech COMPONENT tc002 EXCLUDE_FROM_ALL)

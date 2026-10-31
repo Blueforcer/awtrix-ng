@@ -4,14 +4,15 @@ only: [tc002]
 
 # Home Assistant Voice
 
-This page lets you talk to Home Assistant through the clock: hold the knob for a moment, let go
-and speak. Home Assistant's Assist understands the request, carries it out and answers through the
-clock's speaker.
+This page lets you talk to Home Assistant through the clock: hold the knob for a moment or say
+"Hey AWTRIX", then speak. Home Assistant's Assist understands the request, carries it out and
+answers through the clock's speaker.
 
 ## How it behaves
 
 While Voice is on, the clock keeps a connection to your Home Assistant. Holding the knob starts a
-request: the clock records what you say and sends it to your Assist pipeline. Home Assistant
+request, and so does the wake word "Hey AWTRIX" once you switch it on: the clock records what you
+say and sends it to your Assist pipeline. Home Assistant
 carries out the request and sends back a spoken answer, which the clock plays through its speaker.
 After a failure, the clock connects again by itself, at most every ten seconds.
 
@@ -43,8 +44,8 @@ change something else. When you change the Home Assistant address, enter the tok
 
 ## Switch it off
 
-The **Voice** switch takes effect at once. Off, the clock closes its connection to Home Assistant
-and holding the knob does nothing. Address, token and pipeline stay saved, so switching it on again
+The **Voice** switch takes effect at once. Off, the clock closes its connection to Home Assistant,
+and neither holding the knob nor the wake word starts a request. Address, token and pipeline stay saved, so switching it on again
 is enough. **Save and connect** also switches Voice on.
 
 ## Talk to it
@@ -63,6 +64,19 @@ short press before the house opens its mouth cancels the request.
 Turning the knob still opens the bars for brightness and volume, and a short press switches
 between them while the bars are shown, as described in
 [Buttons, knob & clock](device-controls.md#the-knob).
+
+## Start it with "Hey AWTRIX"
+
+Instead of holding the knob, you can say "Hey AWTRIX".
+
+1. In the web UI, go to **System → Home Assistant Voice** and switch on **Wake word**. It takes
+   effect at once.
+2. Say "Hey AWTRIX". The Home Assistant house appears on the display.
+3. Speak once the house opens its mouth wide, as after holding the knob.
+
+The wake word works while **Connection** shows *Ready*. The clock does not react to it while it
+answers or handles another request. If the house does not appear, say "Hey AWTRIX" again, a
+little closer to the clock.
 
 ## Commands for the clock's room
 
@@ -115,6 +129,10 @@ The clock records only from the start of a request until Home Assistant hears yo
 the knob, or a minute has passed. The recording goes straight to your Home Assistant and its
 pipeline, and is not stored on the clock. With Voice switched off, the microphone is not
 used for Voice at all.
+
+With **Wake word** on, the microphone listens all the time while Voice is ready. The clock itself
+listens for "Hey AWTRIX" and keeps nothing of what it hears. Only the request after the wake word
+goes to Home Assistant.
 
 ## Related
 

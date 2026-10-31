@@ -68,7 +68,7 @@ add_executable(awtrix-linux "${LINUX_DIR}/main_linux.cpp" "${LINUX_DIR}/LinuxOpt
   "${PROJECT_SOURCE_DIR}/src/transport/net/MirrorLink.cpp"
   ${TC002_RUNTIME_SOURCES} ${TC002_BOOT_SCREEN_SOURCES})
 add_dependencies(awtrix-linux awtrix-webui)
-target_link_libraries(awtrix-linux PRIVATE tc002_audio_script awtrix_layout awtrix_host awtrix_images awtrix_script_ext awtrix_oauth awtrix_ble awtrix_ble_script awtrix_iphone tc002_contract tc002_update_verify awtrix_update_state tc002_voice tc002_audio tc002_speech_voice awtrix_warnings)
+target_link_libraries(awtrix-linux PRIVATE tc002_audio_script awtrix_layout awtrix_host awtrix_images awtrix_script_ext awtrix_oauth awtrix_ble awtrix_ble_script awtrix_iphone tc002_contract tc002_update_verify awtrix_update_state tc002_voice tc002_wake_listener tc002_microphone_hub tc002_audio tc002_speech_voice awtrix_warnings)
 if(TARGET tc002_mcu_prepare)
   target_link_libraries(awtrix-linux PRIVATE tc002_mcu_prepare)
   target_compile_definitions(awtrix-linux PRIVATE AWTRIX_MCU_PREPARE)

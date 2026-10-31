@@ -19,6 +19,8 @@ struct LinuxOptions {
   bool bootIntro = false;
   std::string bootSound;
   std::string speechVoice;
+  std::string wakeWord;
+  std::string vad;
   std::string caFile;
   std::string startReason;
   std::string uid;

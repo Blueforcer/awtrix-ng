@@ -129,5 +129,30 @@ int main() {
   stream.receive(meta(2, 20, 1030), 4031, writer);
   check(!stream.active() && !events.back().error.empty(),
         "backpressure fails capture instead of dropping and continuing");
+  const auto renewedUntil = [&](int64_t start, int64_t end) {
+    for (int64_t t = start; t <= end && stream.active(); t += 250) {
+      stream.renew(42, t);
+      stream.tick(t);
+    }
+  };
+  events.clear();
+  stream.start(42, 10000, [&](const auto& e) {
+    events.push_back(e);
+    return true;
+  });
+  stream.receive(meta(1, 0, 1000), 10000, writer);
+  const int64_t renewedTo = 10000 + 10 * 60000;
+  renewedUntil(10000, renewedTo);
+  check(stream.active() && stream.error().empty() && stream.deadline() <= renewedTo + 500,
+        "a stream runs as long as its consumer renews");
+  stream.tick(renewedTo + 500);
+  check(stream.active() && stream.error() == "microphone consumer expired" &&
+            stream.deadline() > renewedTo + 500,
+        "a long stream still drains once its consumer stops renewing");
+  // Past 2^32 ms, which a 32-bit tick difference since the start cannot hold.
+  const uint64_t fiftyDays = uint64_t{50} * 24 * 3600 * 1000, halves = fiftyDays / 3 * 2;
+  check(mcu::Stream::steady(fiftyDays, halves) && mcu::Stream::steady(fiftyDays + 3, halves),
+        "fifty days of stream keep their timing check");
+  check(!mcu::Stream::steady(fiftyDays, halves / 100 * 101), "a sample clock 1 % off still fails it");
   return tc002d_test::finish("tc002d continuous stream");
 }

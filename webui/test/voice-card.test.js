@@ -1,5 +1,5 @@
 /* Home Assistant Voice card on the System page: capability gating, state rendering,
-   failure reasons, the on/off switch, saving, removing the token with
+   failure reasons, the on/off and wake word switches, saving, removing the token with
    confirm, and a text for every reason the firmware can report.
    Run: node voice-card.test.js */
 const { boot, goto, flush } = require('./harness');
@@ -26,15 +26,15 @@ function voiceMock(window, vc) {
     if (body.token) next.tokenSet = true;
     const field = vc.reject || (next.enabled && (!next.url || !next.tokenSet) ? 'enabled' : null);
     if (field) return new Response(JSON.stringify({ error: { code: 'validationFailed', field, message: 'invalid value' } }), { status: 422 });
-    for (const k of ['enabled', 'url', 'pipeline', 'tokenSet']) vc.config[k] = next[k];
+    for (const k of ['enabled', 'wakeWord', 'url', 'pipeline', 'tokenSet']) vc.config[k] = next[k];
     return new Response('{"ok":true}');
   };
   return log;
 }
 
 function state(overrides = {}) {
-  return { state: 'offline', error: '', pipelines: PIPES, ...overrides,
-    config: { enabled: false, url: '', pipeline: '', tokenSet: false, ...overrides.config } };
+  return { state: 'offline', error: '', pipelines: PIPES, wakeWordAvailable: true, ...overrides,
+    config: { enabled: false, wakeWord: false, url: '', pipeline: '', tokenSet: false, ...overrides.config } };
 }
 
 async function open(voice, vc) {
@@ -52,7 +52,8 @@ async function open(voice, vc) {
     badges: sec ? [...sec.querySelectorAll('.badge')] : [],
     url: inputs.find(i => i.type === 'text'), token: inputs.find(i => i.type === 'password'),
     dev: inputs.filter(i => i.type === 'text')[1],
-    toggle: inputs.find(i => i.type === 'checkbox'), pipe: sec && sec.querySelector('select'),
+    toggle: inputs.find(i => i.type === 'checkbox'), wake: inputs.filter(i => i.type === 'checkbox')[1],
+    pipe: sec && sec.querySelector('select'),
     save: buttons.find(b => b.textContent === tr('vcSave')),
     clear: buttons.find(b => b.textContent === tr('vcTokenClear')) };
 }
@@ -136,6 +137,25 @@ async function onOff() {
     await flush(80);
     assert.equal(c.toast(), c.tr('vcfenabled'));
     assert.equal(c.toggle.checked, false, 'a refused switch falls back to what the device has');
+  } finally { c.window.close(); }
+
+  c = await open(true, state({ state: 'ready', config: { enabled: true, url: 'http://ha.local:8123', tokenSet: true } }));
+  try {
+    assert.equal(c.wake.checked, false, 'the wake word starts off');
+    c.wake.checked = true;
+    c.wake.dispatchEvent(new c.window.Event('change'));
+    await flush(80);
+    assert.deepEqual(c.posts().map(p => p.body), [{ wakeWord: true }], 'the wake word switch saves at once and only itself');
+    assert.equal(c.vc.config.wakeWord, true);
+    assert.equal(c.wake.checked, true, 'the switch shows what the device has');
+    assert.equal(c.toggle.checked, true, 'Voice stays on');
+    assert.notEqual(c.wake.closest('.frow').style.display, 'none', 'the switch shows while the clock has a wake word');
+  } finally { c.window.close(); }
+
+  c = await open(true, state({ state: 'ready', wakeWordAvailable: false,
+    config: { enabled: true, url: 'http://ha.local:8123', tokenSet: true } }));
+  try {
+    assert.equal(c.wake.closest('.frow').style.display, 'none', 'without a wake word on the clock the switch is hidden');
   } finally { c.window.close(); }
 }
 

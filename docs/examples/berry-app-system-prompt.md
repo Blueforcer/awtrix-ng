@@ -1188,8 +1188,8 @@ line, `max` 8 matching the fixed 0-8 range of `bar_chart()` with autoscale off:
 `music.pitch()` (TC002) follows Music source like the other readings: Automatic hears the speaker
 while something plays, otherwise the microphone, so a singing game plays nothing while it listens;
 `# @needs microphone` only for a script that needs the microphone. Range 70-1600 Hz; `0.0` outside
-it, for chords, while the voice assistant listens, and on the ESP32 and ESP32-S3. It updates
-about 10 times a second and a reading older than 300 ms answers `0.0`, so call it in `draw()`.
+it, for chords, and on the ESP32 and ESP32-S3. It updates about 10 times a second and a reading
+older than 300 ms answers `0.0`, so call it in `draw()`.
 Note number: `69 + 12 * math.log(hz / 440) / math.log(2)` (`import math`).
 
 ### 5.19 Running without ever being shown

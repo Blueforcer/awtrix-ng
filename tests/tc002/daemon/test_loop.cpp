@@ -196,6 +196,8 @@ void options() {
             options.bootSoundPath() == "/r/share/boot.mp3",
         "a boot shows the intro with the release's sound on the first runtime start");
   check(options.speechVoicePath() == "/r/share/speech/voice.atts", "the release's voice");
+  check(options.wakeWordPath() == "/r/share/wake/hey_awtrix.tflite", "the release's wake word");
+  check(options.vadPath() == "/r/share/vad/vad.tflite", "the release's voice activity model");
   const char* never[] = {"x", "--root", "/r", "--data", "/d", "--boot", "--boot-intro", "never"};
   check(parseDaemonOptions(8, never, options, error) && options.introStarts() == IntroStarts::None &&
             std::string(bootIntroName(options.bootIntro)) == "never",

@@ -110,6 +110,14 @@ std::vector<std::string> RuntimeChild::arguments(bool audio) const {
       args.push_back("--speech-voice");
       args.push_back(options_.speechVoice);
     }
+    if (!options_.wakeWord.empty()) {
+      args.push_back("--wake-word");
+      args.push_back(options_.wakeWord);
+    }
+    if (!options_.vad.empty()) {
+      args.push_back("--vad");
+      args.push_back(options_.vad);
+    }
   }
   if (options_.bluetooth) args.push_back(tc002::kBluetoothFlag);
   if (introOnNextStart()) {

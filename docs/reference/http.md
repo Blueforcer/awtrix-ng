@@ -3215,12 +3215,14 @@ This route and `POST` below exist only while [capabilities](#get-apiv1capabiliti
 | Key | Type | Meaning |
 |---|---|---|
 | `config.enabled` | boolean | Voice is switched on |
+| `config.wakeWord` | boolean | saying "Hey AWTRIX" starts a request |
 | `config.url` | string | the Home Assistant address, `""` when none is set |
 | `config.pipeline` | string | the chosen Assist pipeline ID, `""` for Home Assistant's default |
 | `config.device` | string | the Home Assistant device ID whose area is the clock's room, `""` when none is set |
 | `config.tokenSet` | boolean | an access token is saved. The token itself is never returned |
 | `state` | string | `offline`, `connecting`, `ready`, `starting`, `listening`, `processing`, `speaking` or `error` |
 | `error` | string | why the last attempt failed, as a code such as `tokenRejected`. `""` when all is well. The web UI shows each code as a sentence |
+| `wakeWordAvailable` | boolean | the clock can hear "Hey AWTRIX". When `false`, `config.wakeWord` does nothing |
 | `pipelines` | array | Home Assistant's Assist pipelines once connected. `[]` before |
 
 ```bash
@@ -3231,15 +3233,17 @@ curl http://<awtrix-ip>/api/v1/voice
 
 Changes the Home Assistant Voice settings.
 
-**Request:** any of `enabled`, `url`, `pipeline`, `device`, `token`, or `"clearToken": true` to
-delete the token. Fields you leave out keep their value.
+**Request:** any of `enabled`, `wakeWord`, `url`, `pipeline`, `device`, `token`, or
+`"clearToken": true` to delete the token. Fields you leave out keep their value.
 
 * `device` is a Home Assistant device ID (letters and digits, up to 64), `""` for none.
+* `wakeWord` is `true` or `false`. With `true`, saying "Hey AWTRIX" starts a request while Voice is
+  connected.
 
 * `enabled: true` needs an address and a token.
 * After you change the address, send the token again.
-* With `"enabled": false` the clock closes its connection to Home Assistant, and a long press on
-  the knob does nothing.
+* With `"enabled": false` the clock closes its connection to Home Assistant, and neither a long
+  press on the knob nor the wake word starts a request.
 
 This route accepts requests only from the device's own web UI: it needs the header
 `X-Awtrix-Voice: 1` and an `Origin` header naming the device, as a browser sends it. This keeps
@@ -3252,7 +3256,7 @@ other web pages and scripts from sending your voice to another server.
 | Status | Condition |
 |---|---|
 | 403 | `forbiddenOrigin`: not sent from the device's own web UI |
-| 422 | `validationFailed`: `field` names the wrong value: `url`, `token`, `pipeline`, `device` or `enabled` |
+| 422 | `validationFailed`: `field` names the wrong value: `url`, `token`, `pipeline`, `device`, `enabled` or `wakeWord` |
 | 500 | `internalError`: the settings could not be saved |
 
 ```bash

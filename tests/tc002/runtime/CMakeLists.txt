@@ -13,6 +13,17 @@ add_awtrix_test(NAME tc002-speech-voice SOURCES test_speech_voice.cpp ${TC002_SP
   "${TC002_SPEECH_DIR}/SpeechFrontend.cpp" LIBRARIES awtrix_core awtrix_posix SANITIZE COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/speech"
   TIMEOUT 120)
 target_compile_options(tc002-speech-voice-test PRIVATE ${TC002_SPEECH_VOICE_OPTIONS})
+add_awtrix_test(NAME tc002-wake SOURCES test_wake.cpp ${TC002_WAKE_SOURCES} INCLUDES "${PROJECT_SOURCE_DIR}/src"
+  SANITIZE COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/wake" vad "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.tflite"
+  "${CMAKE_CURRENT_SOURCE_DIR}/wake" TIMEOUT 120)
+target_compile_options(tc002-wake-test PRIVATE ${TC002_SPEECH_VOICE_OPTIONS})
+add_awtrix_test(NAME tc002-wake-listener SOURCES test_wake_listener.cpp LIBRARIES tc002_wake_listener SANITIZE
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/wake" TIMEOUT 30)
+add_awtrix_test(NAME tc002-endpointer SOURCES test_endpointer.cpp
+  LIBRARIES tc002_wake tc002_wake_files tc002_speech_voice SANITIZE
+  COMMAND "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.tflite" "${PROJECT_SOURCE_DIR}/assets/speech/voice.atts"
+  TIMEOUT 120)
+add_awtrix_test(NAME tc002-microphone-hub SOURCES test_microphone_hub.cpp LIBRARIES tc002_microphone_hub SANITIZE)
 add_awtrix_test(NAME tc002-voice-overlay SOURCES test_voice_overlay.cpp
   "${TC002_DIR}/voice/VoiceOverlay.cpp" LIBRARIES awtrix_core)
 add_executable(tc002-voice-websocket-probe test_voice_websocket.cpp)
@@ -20,6 +31,8 @@ target_link_libraries(tc002-voice-websocket-probe PRIVATE tc002_voice_net awtrix
 add_awtrix_test(NAME tc002-voice-websocket COMMAND "${Python3_EXECUTABLE}"
   "${CMAKE_CURRENT_SOURCE_DIR}/test_voice_websocket.py" "$<TARGET_FILE:tc002-voice-websocket-probe>" TIMEOUT 60)
 add_awtrix_test(NAME tc002-assist-session SOURCES test_assist_session.cpp LIBRARIES tc002_voice_session)
+add_awtrix_test(NAME tc002-voice-on-hub SOURCES test_voice_on_hub.cpp
+  LIBRARIES tc002_voice_session tc002_microphone_hub SANITIZE)
 add_awtrix_test(NAME tc002-url-sounds SOURCES test_url_sounds.cpp "${TC002_DIR}/audio/UrlSounds.cpp"
   LIBRARIES awtrix_host awtrix_posix TIMEOUT 30)
 add_awtrix_test(NAME tc002-voice-gesture SOURCES test_voice_gesture.cpp

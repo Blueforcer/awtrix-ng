@@ -25,6 +25,20 @@ set(TC002_SPEECH_VOICE_OPTIONS -O2 -ffp-contract=off)
 add_library(tc002_speech_voice STATIC ${TC002_SPEECH_VOICE_SOURCES})
 target_compile_options(tc002_speech_voice PRIVATE ${TC002_SPEECH_VOICE_OPTIONS})
 target_link_libraries(tc002_speech_voice PUBLIC tc002_speech awtrix_posix PRIVATE awtrix_warnings)
+# The wake-word engine: microfrontend features, the int8 streaming model, the detection window and the
+# endpointer, -O2 without fused multiply-adds so its few float steps round as in the trainer's references.
+set(TC002_WAKE_DIR "${TC002_DIR}/wake")
+set(TC002_WAKE_SOURCES "${TC002_WAKE_DIR}/WakeFft.cpp" "${TC002_WAKE_DIR}/WakeFrontend.cpp"
+  "${TC002_WAKE_DIR}/WakeModel.cpp" "${TC002_WAKE_DIR}/ModelStream.cpp" "${TC002_WAKE_DIR}/WakeDetector.cpp"
+  "${TC002_WAKE_DIR}/Endpointer.cpp")
+add_library(tc002_wake STATIC ${TC002_WAKE_SOURCES})
+target_compile_options(tc002_wake PRIVATE ${TC002_SPEECH_VOICE_OPTIONS})
+target_include_directories(tc002_wake PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_link_libraries(tc002_wake PRIVATE awtrix_warnings)
+# A wake-engine model and its settings from disk, for the wake word and the endpointer.
+add_library(tc002_wake_files STATIC "${TC002_WAKE_DIR}/ModelFiles.cpp")
+target_include_directories(tc002_wake_files PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_link_libraries(tc002_wake_files PUBLIC awtrix_json awtrix_posix PRIVATE awtrix_warnings)
 
 add_library(tc002_contract STATIC "${TC002_DIR}/contract/SupervisorProtocol.cpp"
   "${TC002_DIR}/contract/Pcm16.cpp" "${TC002_DIR}/contract/MicrophoneStream.cpp" "${TC002_DIR}/contract/InputIdentity.cpp")

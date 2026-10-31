@@ -47,6 +47,30 @@ class BrowserPackageTests(unittest.TestCase):
         self.manifest = write_bundle(self.bundle)
         self.assertEqual(self.create()["release"], self.manifest["release"])
 
+    def test_release_without_wake_word_remains_supported(self):
+        for name in bundle.WAKE_WORD:
+            (self.bundle / name).unlink()
+        self.manifest = write_bundle(self.bundle)
+        self.assertEqual(self.create()["release"], self.manifest["release"])
+
+    def test_incomplete_wake_word_is_refused(self):
+        (self.bundle / "share/wake/hey_awtrix.json").unlink()
+        self.manifest = write_bundle(self.bundle)
+        with self.assertRaisesRegex(browser.PackageError, "incomplete wake word"):
+            self.create()
+
+    def test_release_without_vad_remains_supported(self):
+        for name in bundle.VAD:
+            (self.bundle / name).unlink()
+        self.manifest = write_bundle(self.bundle)
+        self.assertEqual(self.create()["release"], self.manifest["release"])
+
+    def test_incomplete_vad_is_refused(self):
+        (self.bundle / "share/vad/NOTICE").unlink()
+        self.manifest = write_bundle(self.bundle)
+        with self.assertRaisesRegex(browser.PackageError, "incomplete voice activity model"):
+            self.create()
+
     def test_the_voice_is_the_only_file_in_its_directory(self):
         (self.bundle / "share/speech/other.atts").write_bytes(b"another voice")
         with self.assertRaisesRegex(browser.PackageError, "not a public bundle file"):

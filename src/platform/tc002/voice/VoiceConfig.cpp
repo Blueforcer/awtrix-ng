@@ -37,6 +37,7 @@ std::string serialize(const Config& c, bool secret) {
   api::JsonWriter w(out);
   w.beginObject()
       .member("enabled", c.enabled)
+      .member("wakeWord", c.wakeWord)
       .member("url", c.url)
       .member("pipeline", c.pipeline)
       .member("device", c.device)
@@ -51,6 +52,7 @@ const char* applyConfig(std::string_view json, Config& c) {
   api::JsonReader r(json);
   if (!r.isObject()) return "";
   if (!boolField(r, "enabled", c.enabled)) return "enabled";
+  if (!boolField(r, "wakeWord", c.wakeWord)) return "wakeWord";
   if (!stringField(r, "url", c.url, 512)) return "url";
   if (!stringField(r, "token", c.token, 4096)) return "token";
   if (!stringField(r, "pipeline", c.pipeline, 128)) return "pipeline";
@@ -105,6 +107,12 @@ bool ttsTarget(const Config& config, std::string_view url,
   if (url.substr(0, 15) != "/api/tts_proxy/") return false;
   target.assign(url);
   return true;
+}
+// Everything the settings file stores, so a field added to Config counts as soon as it is saved.
+bool sameConnection(const Config& a, const Config& b) {
+  Config other = b;
+  other.wakeWord = a.wakeWord;
+  return serialize(a, true) == serialize(other, true);
 }
 ConfigStore::ConfigStore(std::string directory)
     : directory_(std::move(directory)) {}

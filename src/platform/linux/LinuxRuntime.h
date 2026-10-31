@@ -59,6 +59,7 @@
 #include "platform/linux/tls/BrokerTrust.h"
 #include "platform/linux/tls/BrokerTrustApi.h"
 #include "platform/tc002/audio/AudioScripting.h"
+#include "platform/tc002/runtime/MicrophoneHub.h"
 #include "platform/tc002/runtime/MicrophoneInput.h"
 #include "platform/tc002/runtime/SupervisedRuntime.h"
 #include "platform/tc002/runtime/Tc002Activation.h"
@@ -77,6 +78,7 @@
 #include "platform/tc002/speech/VoicePacks.h"
 #include "platform/tc002/voice/KnobGesture.h"
 #include "platform/tc002/voice/VoiceRuntime.h"
+#include "platform/tc002/wake/WakeListener.h"
 #include "system/MonotonicClock.h"
 #include "transport/mqtt/MqttService.h"
 #include "transport/net/DiscoveryService.h"
@@ -219,8 +221,12 @@ class LinuxRuntime {
   ScriptMqttBridge scriptMqtt_;
   script::ScriptServices scriptServices_;
   std::optional<tc002::MicrophoneInput> microphone_;
+  // Declared before its consumers (Voice, the wake word): their destructors still call its control().
+  std::optional<tc002::MicrophoneHub> microphoneHub_;
   tc002::voice::KnobGesture knobGesture_;
   std::unique_ptr<tc002::voice::VoiceRuntime> voice_;
+  std::unique_ptr<tc002::wake::WakeListener> wake_;
+  int wakeConsumer_ = 0;
   oauth::HttplibTransport oauthTransport_;
   std::optional<oauth::Vault> oauthVault_;
   std::optional<oauth::Service> oauthService_;

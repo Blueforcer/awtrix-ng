@@ -335,10 +335,29 @@ void LinuxRuntime::composeScriptServices() {
   scriptIcon_.setRemoteImages(&*remoteImages_);
   scriptServices_.instructionLimit = target_->scriptInstructionLimit;
   microphone_.emplace([this, supervised](std::string request) { return supervised && link_.send(std::move(request)); });
+  microphoneHub_.emplace([this](std::string control) { return link_.send(std::move(control)); },
+                         [this](const tc002::StreamEvent& block, int64_t now) {
+                           microphone_->streamed(block.samples.data(), block.samples.size(), block.firstSample, now);
+                         });
   if (supervised && speaker_) {
+    if (!o_.wakeWord.empty()) {
+      std::string error;
+      wakeConsumer_ = microphoneHub_->attach([this](const tc002::StreamEvent& e, int64_t now) {
+        if (wake_) wake_->receive(e, now);
+      });
+      wake_ = tc002::wake::WakeListener::open(o_.wakeWord, microphoneHub_->port(wakeConsumer_), error);
+      if (!wake_) {
+        microphoneHub_->detach(wakeConsumer_);
+        wakeConsumer_ = 0;
+        logf("wake word: %s", error.c_str());
+      }
+    }
     const auto privateDirectory = std::filesystem::u8path(host::dataDir()).parent_path() / "voice-private";
-    voice_ = std::make_unique<tc002::voice::VoiceRuntime>(privateDirectory.string(), *speaker_, *microphone_,
-      [this](std::string request) { return link_.send(std::move(request)); });
+    const int consumer = microphoneHub_->attach([this](const tc002::StreamEvent& e, int64_t now) {
+      if (voice_) voice_->receive(e, now);
+    });
+    voice_ = std::make_unique<tc002::voice::VoiceRuntime>(privateDirectory.string(), *speaker_,
+      microphoneHub_->port(consumer), wake_ != nullptr);
   }
   oauthVault_.emplace((std::filesystem::u8path(host::dataDir()).parent_path() / "script-private").string());
   oauthService_.emplace(

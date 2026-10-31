@@ -58,6 +58,10 @@ struct DaemonOptions {
   std::string bootSoundPath() const { return root + "/share/boot.mp3"; }
   // The voice that reads speech aloud; a release may come without one.
   std::string speechVoicePath() const { return root + "/share/speech/voice.atts"; }
+  // The wake word model, with hey_awtrix.json beside it; a release may come without one.
+  std::string wakeWordPath() const { return root + "/share/wake/hey_awtrix.tflite"; }
+  // The voice activity model, with vad.json and its NOTICE beside it; a release may come without one.
+  std::string vadPath() const { return root + "/share/vad/vad.tflite"; }
   // share/index.html.gz, or share/index.html in a release without the compressed copy.
   std::string webIndexPath() const;
   std::string caFilePath() const { return root + "/share/ca-certificates.crt"; }

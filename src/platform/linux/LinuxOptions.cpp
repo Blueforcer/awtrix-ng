@@ -23,6 +23,10 @@ void usage() {
               "  [%s %d] (TC002 only: socket to the awtrix-tc002-audio-pcm speaker helper)\n"
               "  [--speech-voice FILE] (with the speaker: the ATTS voice that reads speech aloud; a file\n"
               "   that cannot be read leaves the clock without speech)\n"
+              "  [--wake-word FILE] (with the speaker: the wake word model that can start Voice; its\n"
+              "   settings are the .json file of the same name beside it)\n"
+              "  [--vad FILE] (with the speaker: the voice activity model that ends script recordings;\n"
+              "   its settings are the .json file of the same name beside it)\n"
               "  [%s poweron|software|panic|watchdog] (supervised only: why this start happens)\n"
               "  [%s 12-HEX-DIGITS] (supervised only: the device id; else a random one, kept in DATA/identity\n"
               "   when unsupervised)\n"
@@ -85,6 +89,8 @@ bool readValue(const std::string& arg, const char* value, LinuxOptions& o) {
   else if (arg == "--mqtt-ca-file") o.administration.mqttCaFile = value;
   else if (arg == "--ca-file") return setOnce(o.caFile, value);
   else if (arg == "--speech-voice") return setOnce(o.speechVoice, value);
+  else if (arg == "--wake-word") return setOnce(o.wakeWord, value);
+  else if (arg == "--vad") return setOnce(o.vad, value);
   else if (arg == "--update-state") return setOnce(o.updateOptions.statePath, value);
   else if (arg == "--release-root") return setOnce(o.updateOptions.releaseRoot, value);
   else if (arg == tc002::kUpdateDirFlag) return setOnce(o.updateOptions.workDirectory, value);
@@ -137,6 +143,12 @@ int parseLinuxOptions(int argc, char** argv, LinuxOptions& o) {
   }
   if (!o.speechVoice.empty() && !o.speakerRequested) {
     std::fprintf(stderr, "--speech-voice requires %s\n", tc002::kAudioFdFlag); return 2;
+  }
+  if (!o.wakeWord.empty() && !o.speakerRequested) {
+    std::fprintf(stderr, "--wake-word requires %s\n", tc002::kAudioFdFlag); return 2;
+  }
+  if (!o.vad.empty() && !o.speakerRequested) {
+    std::fprintf(stderr, "--vad requires %s\n", tc002::kAudioFdFlag); return 2;
   }
   return -1;
 }

@@ -23,7 +23,7 @@ class AssistSession {
   struct Ports {
     std::function<bool(std::string, bool)> send;
     std::function<void()> disconnect;
-    std::function<bool(StreamControl)> microphone;
+    MicrophonePort microphone;
     std::function<bool(const std::string&)> speak;
     std::function<void()> stopSpeaker;
   };

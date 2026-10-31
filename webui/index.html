@@ -1125,12 +1125,13 @@ const STR={
   //linux:begin
   gpNone:'No gamepad paired',gpPair:'Add gamepad',gpPairH:'Put the gamepad in pairing mode, then press Pair.',gpPairBtn:'Pair',gpForget:'Forget',gpPhone:'Phone',
   gpDevice:'Controller',gpPlayer:'Player',gpFull:'Forget a controller to add another.',
-  vcSection:'Home Assistant Voice',vcSectionH:'Hold the knob, speak, let go.',
+  vcSection:'Home Assistant Voice',vcSectionH:'Hold the knob for a moment, then speak.',
   svSection:'Speech voice',svSectionH:'The voice that reads speech aloud, in its own language.',
   svActive:'Voice',svNone:'No voice',svBuiltinTag:'built in',svBuiltin:'Use built-in',
   svPack:'Voice pack',svPackH:'An .atts file. Replaces the built-in voice until you remove it.',
   svUpload:'Upload',svLine:'Test',svLineP:'Hello, this is my voice.',svSay:'Speak',
-  vcOn:'Voice',vcOnH:'Off: the knob does nothing.',vcUrl:'Address',
+  vcOn:'Voice',vcOnH:'Off: nothing starts Voice.',vcUrl:'Address',
+  vcWake:'Wake word',vcWakeH:'"Hey AWTRIX" starts Voice. The microphone listens all the time.',
   vcToken:'Token',vcTokenH:'Long-lived token from your HA profile.',
   vcTokenSet:'Saved',vcTokenNone:'None',vcTokenKeep:'Empty keeps it',vcTokenClear:'Remove',
   vcPipe:'Pipeline',vcPipeH:'Needs STT and TTS.',vcPipeDef:'Default',vcSave:'Save and connect',
@@ -4260,6 +4261,8 @@ function voiceSection(page){
   const pipe=el('select',{'aria-label':t('vcPipe')});
   const dev=el('input',{type:'text',autocomplete:'off',spellcheck:'false',placeholder:t('vcDevP'),'aria-label':t('vcDev')});
   const on=mkSwitch(false,()=>store({enabled:on.input.checked},t('saved')));
+  const wake=mkSwitch(false,()=>store({wakeWord:wake.input.checked},t('saved')));
+  const wakeRow=actionRow(t('vcWake'),t('vcWakeH'),[wake.node]);
   const save=el('button',{class:'pri'},t('vcSave'));
   let cur=null,pipes='';
   const clear=armable(el('button',null,t('vcTokenClear')),()=>store({clearToken:true,enabled:false},t('saved')));
@@ -4269,6 +4272,8 @@ function voiceSection(page){
     const c=d.config||{};
     if(first){url.value=c.url||'';dev.value=c.device||'';}
     on.input.checked=!!c.enabled;
+    wake.input.checked=!!c.wakeWord;
+    wakeRow.style.display=d.wakeWordAvailable?'':'none';
     tokenState.className='badge'+(c.tokenSet?' good':'');
     tokenState.replaceChildren(t(c.tokenSet?'vcTokenSet':'vcTokenNone'));
     token.placeholder=c.tokenSet?t('vcTokenKeep'):'';
@@ -4309,6 +4314,7 @@ function voiceSection(page){
   page.section('voice',t('vcSection'),t('vcSectionH'),[
     actionRow(t('mqStatus'),null,[state]),
     actionRow(t('vcOn'),t('vcOnH'),[on.node]),
+    wakeRow,
     actionRow(t('vcUrl'),null,[url]),
     actionRow(t('vcToken'),t('vcTokenH'),[tokenState,token,clear]),
     actionRow(t('vcPipe'),t('vcPipeH'),[pipe]),

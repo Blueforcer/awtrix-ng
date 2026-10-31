@@ -356,7 +356,7 @@ void AssistSession::tick(int64_t now) {
     fail(errors::timeout, now);
     return;
   }
-  if (capture_ && !stopping_ && now - keepalive_ >= 150) {
+  if (capture_ && !stopping_ && now - keepalive_ >= kStreamKeepaliveMs) {
     keepalive_ = now;
     if (!ports_.microphone({epoch_, StreamControl::Keepalive}))
       fail(errors::microphoneFailed, now);

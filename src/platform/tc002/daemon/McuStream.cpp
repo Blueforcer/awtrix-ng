@@ -32,13 +32,12 @@ bool Stream::start(int epoch, int64_t now, Consumer consumer) {
   active_ = true;
   epoch_ = epoch;
   consumer_ = std::move(consumer);
-  leaseAt_ = now + 500;
-  maximumAt_ = now + 60000;
+  leaseAt_ = now + tc002::kStreamLeaseMs;
   return true;
 }
 void Stream::renew(int epoch, int64_t now) {
   if (active_ && !stopping_ && epoch == epoch_ && now < leaseAt_)
-    leaseAt_ = now + 500;
+    leaseAt_ = now + tc002::kStreamLeaseMs;
 }
 void Stream::stop(int64_t now) {
   if (!active_ || stopping_) return;
@@ -58,8 +57,12 @@ void Stream::abort(const char* reason, int64_t now) {
     finish(lastTick_, now);
   }
 }
+bool Stream::steady(uint64_t elapsedMs, uint64_t halves) {
+  const double expected = double(halves) * 1.5;
+  return std::abs(double(elapsedMs) - expected) <= 3 + expected * .005;
+}
 int64_t Stream::deadline() const {
-  return !active_ ? -1 : stopping_ ? stopAt_ : std::min(leaseAt_, maximumAt_);
+  return !active_ ? -1 : stopping_ ? stopAt_ : leaseAt_;
 }
 void Stream::tick(int64_t now) {
   if (!active_) return;
@@ -67,8 +70,6 @@ void Stream::tick(int64_t now) {
     if (now >= stopAt_) abort("microphone stop timed out", now);
   } else if (now >= leaseAt_) {
     fail("microphone consumer expired", now);
-  } else if (now >= maximumAt_) {
-    fail("microphone duration limit", now);
   }
 }
 void Stream::emit(tc002::StreamEvent::Kind kind, uint32_t tick, int64_t now) {
@@ -133,23 +134,24 @@ void Stream::receive(const Frame& frame, int64_t now, const Write& write) {
         return;
       }
       started_ = true;
-      startTick_ = lastTick_ = tick;
+      lastTick_ = tick;
       if (error_.empty()) emit(tc002::StreamEvent::Kind::Started, tick, now);
       return;
     }
     if (!started_ || part_ || count != halves_)
       fail("incomplete microphone samples", now);
-    const uint32_t elapsed = tick - lastTick_, total = tick - startTick_;
-    if (count < anchor_ || elapsed >= 0x80000000u ||
-        std::abs(double(elapsed) - double(count - anchor_) * 1.5) > 3 ||
-        std::abs(double(total) - double(count) * 1.5) >
-            3 + double(count) * 1.5 * .005)
+    const uint32_t elapsed = tick - lastTick_, advanced = count - anchor_;
+    if (advanced >= 0x80000000u || elapsed >= 0x80000000u ||
+        std::abs(double(elapsed) - double(advanced) * 1.5) > 3 ||
+        !steady(checkedMs_ + elapsed, checkedHalves_ + advanced))
       fail("microphone sample/time discontinuity", now);
     if (p[3]) fail("MCU microphone acquisition error", now);
-    if (p[2] == 3 && count <= anchor_)
+    if (p[2] == 3 && !advanced)
       fail("microphone checkpoint did not advance", now);
     lastTick_ = tick;
     anchor_ = count;
+    checkedMs_ += elapsed;
+    checkedHalves_ += advanced;
     if (p[2] == 2) {
       finish(tick, now);
       return;

@@ -206,6 +206,10 @@ RuntimeOptions makeRuntimeOptions(const DaemonOptions& options, const std::strin
     runtimeOptions.bootSound = options.bootSoundPath();
   if (regularFile(options.speechVoicePath())) runtimeOptions.speechVoice = options.speechVoicePath();
   else Log::line("daemon", "no voice at %s; the runtime starts without speech", options.speechVoicePath().c_str());
+  if (regularFile(options.wakeWordPath())) runtimeOptions.wakeWord = options.wakeWordPath();
+  else Log::line("daemon", "no wake word at %s", options.wakeWordPath().c_str());
+  if (regularFile(options.vadPath())) runtimeOptions.vad = options.vadPath();
+  else Log::line("daemon", "no voice activity model at %s", options.vadPath().c_str());
   Log::line("daemon", "boot intro %s: %s%s", bootIntroName(options.bootIntro),
             introStarts == IntroStarts::First   ? "first runtime start"
             : introStarts == IntroStarts::Every ? "every runtime start"

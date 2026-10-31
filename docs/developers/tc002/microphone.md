@@ -5,12 +5,15 @@ only: [tc002]
 # TC002 microphone
 
 The TC002's microphone is wired to the MCU (microcontroller), not to the SoC. AWTRIX NG reads it
-over the MCU's UART in two ways: bounded *snapshots* feed the audio visualisation (`music.bands()`,
-`music.level()`), and a *continuous stream* feeds [Home Assistant Voice](ha-voice.md). Both need
-the AWTRIX MCU extension ([MCU updates](mcu-update.md)). The analysis layer is shared with playback
-and lives in [`src/core/audio/`](https://github.com/Blueforcer/awtrix-ng/tree/main/src/core/audio);
-the TC002 side is `MicrophoneInput` in `src/platform/tc002/runtime/`, `McuService`, `McuPcm` and
-`McuStream` in `src/platform/tc002/daemon/`, and the messages in `src/platform/tc002/contract/`.
+over the MCU's UART in two ways: bounded *snapshots* and a *continuous stream*. The
+[microphone hub](#microphone-hub) shares the stream between [Home Assistant Voice](ha-voice.md) and
+the [wake word](wake-word.md). The audio visualisation (`music.bands()`, `music.level()`) reads
+that stream while it runs, and snapshots otherwise. Both ways need the AWTRIX MCU extension
+([MCU updates](mcu-update.md)). The analysis layer is shared with playback and lives in
+[`src/core/audio/`](https://github.com/Blueforcer/awtrix-ng/tree/main/src/core/audio). The TC002
+side is `MicrophoneInput` and `MicrophoneHub` in `src/platform/tc002/runtime/`, `McuService`,
+`McuPcm` and `McuStream` in `src/platform/tc002/daemon/`, and the messages in
+`src/platform/tc002/contract/`.
 
 ## Choosing the source
 
@@ -34,7 +37,8 @@ window older than 300 ms answers `0.0`.
 
 - **Microphone.** The first call from `draw()` starts the snapshot requests on its own; calls
   from anywhere else answer from the newest window and request none. The newest window is analysed
-  at most once and only while a script asks. Any time while Voice streams it answers `0.0`.
+  at most once and only while a script asks. While the microphone hub has a stream, the windows
+  come from that stream and no snapshot is requested.
 - **Playback.** `PlaybackPitch` (`src/platform/tc002/audio/`) sits on the speaker's analysis tap.
   While a script asked within the last second, the audio thread folds each decoded block to mono
   at no more than 16 kHz (44.1 kHz becomes 14.7 kHz), detects one 1,024-sample window at a time and
@@ -73,7 +77,8 @@ playback-only visibility guard.
   analysis call expresses demand; `heard()` answers from the cache without it. It keeps one request
   in flight, at least 100 ms apart, and drops stale or superseded replies. A failed request keeps the last valid window until its normal
   expiry, so a brief conflict with a power query neither blanks the visualisation nor resets the
-  gain. While Voice streams, it sends no snapshot requests.
+  gain. While the microphone hub has a stream, it sends no snapshot requests. It gathers the
+  stream's blocks into windows of 1,056 samples instead, and a gap in the stream starts a new window.
 - **Supervisor** (`RuntimeChild`). Checks and rate-limits the runtime's requests. A generation
   check keeps replies from reaching a restarted runtime. Each request has an id; the reply carries
   either a complete PCM window or an error. One reply is kept across channel backpressure,
@@ -86,11 +91,13 @@ playback-only visibility guard.
   tty (`VMIN=0`) count as idle; poll errors and real hangups still close the UART. A Linux update
   drains a running capture during shutdown; an MCU firmware operation blocks the update hand-off.
 
-Microphone capture happens only while an app on the panel asks for analysis. The bindings tell the
+Snapshot capture happens only while an app on the panel asks for analysis. The bindings tell the
 platform whether a reading comes from `draw()` (`onScreen` in `ScriptServices::audioStats`, the
 canvas in `ScriptExtensionHost` for `music.pitch()`), and `AnalysisRouter` lets the microphone listen
 only then. `loop()`, timers and handlers read what an app on the panel made it hear, so an app that
-is hidden or headless never starts a capture. `playback` never falls back to the microphone. Switching away drops cached and pending audio; an MCU capture already under way
+is hidden or headless never starts a capture. The hub's stream follows the same rule: its windows
+reach apps only up to 200 ms after a reading from `draw()`, even though the wake word keeps the
+stream running. `playback` never falls back to the microphone. Switching away drops cached and pending audio; an MCU capture already under way
 finishes without being published.
 
 ## Snapshot capture
@@ -114,16 +121,59 @@ of four DMA halves while the UART alternates between audio data and short contro
 blocks of at most 480 samples (30 ms) as `microphoneStreamEvent`, each with its epoch, sample
 position and host timestamp. The runtime controls it with `microphoneStreamControl` (probe, start,
 stop, keepalive). The protocol and the hardware measurements that qualify it are in
-[Audio gate](audio-gate.md); its only consumer is [Home Assistant Voice](ha-voice.md).
+[Audio gate](audio-gate.md). In the runtime, the microphone hub is the stream's only user.
+
+## Microphone hub
+
+`MicrophoneHub` (`runtime/MicrophoneHub.h`) shares the daemon's one stream among the runtime's
+consumers: the [wake word](wake-word.md) listener and [Home Assistant Voice](ha-voice.md). Each
+consumer speaks the protocol of `contract/MicrophoneStream.h` as it would to the daemon, under its
+own epochs. Its sample positions are its own and start at 0 with its stream. Like the daemon, the
+hub never answers inside a control call. The answer arrives on its next `receive()` or `tick()`.
+
+- **Upstream.** The hub probes and starts the daemon's stream once, under its own epoch, and renews
+  the daemon's lease with a keepalive every 150 ms. The daemon must answer a probe or a start within
+  2 s. While the hub has a stream, it answers a consumer's probe itself.
+- **Consumer lease.** Each consumer must renew its stream within 500 ms. A consumer that does not
+  gets an end with the error `consumer lease expired`, and the others stream on.
+- **Linger.** Once the upstream stream runs, it runs on for 1 s after the last consumer stops. A
+  consumer that starts within that second joins it. If the last consumer stops while the stream is
+  still starting, the hub stops it at once. A start while the upstream stream stops starts a new one
+  once the old one has ended, without probing again.
+- **Hold.** While Voice starts, the runtime holds the hub (`hold()`). A starting or running stream
+  then stays open without a consumer until Voice's capture joins it, and lingers from the release. A
+  hold opens no stream.
+- **Lead-in.** While a stream runs, the hub holds its last second (16 000 samples). `mark()` names
+  the sample after the latest block, `markOf()` turns a consumer's own position into a mark, and
+  `startFrom()` makes a consumer's next start begin at a mark, or at the oldest held sample when the
+  mark lies further back. A mark of another stream starts the consumer now. A gap in the stream
+  drops what is held. The held blocks arrive at once after Started, with `hostAtMs` 0; Voice uses
+  no marks and keeps its check of 250 ms.
+- **Gaps and failures.** A jump in the upstream sample position reaches each consumer as a jump in
+  its own position. An upstream error, an MCU without the stream or a missing answer ends every
+  consumer that wants a stream with that error. So does a supervisor link that refuses the hub's
+  probe or start. The hub does not retry. Each consumer decides when to try again.
+
+`LinuxRuntime::composeScriptServices` builds the hub and attaches its consumers. `pollSupervisor`
+passes every `microphoneStreamEvent` to the hub. `tickVoice` ticks the hub every frame, also while
+idle, before Voice and the wake word. `LinuxRuntime::stop` closes it (`close()`), which stops the
+upstream stream at once, without lingering. From a consumer's start until the upstream stream has ended,
+the hub is active (`active()`) and `MicrophoneInput` requests no snapshots. A probe alone leaves
+the snapshots running. Every upstream audio block also goes to `MicrophoneInput`, which gathers the
+windows for `music.level()`, `music.bands()` and `music.pitch()` from it.
+`tests/tc002/runtime/test_microphone_hub.cpp` covers the hub, and `test_voice_on_hub.cpp` a Voice
+session on it.
 
 ## Adding an input or a consumer
 
 A new visualisation input implements `IAnalysisSource`, optionally with `PcmAnalysis`; scripts and
 `SpectrumAnalyzer` need no change. A new PCM consumer belongs before the analysis and consumes
-validated blocks from the input adapter, never samples reconstructed from spectrum bands.
+validated blocks from the input adapter, never samples reconstructed from spectrum bands. A new
+consumer of the continuous stream attaches to the [microphone hub](#microphone-hub).
 
 ## Related
 
 - [TC002 developer guide](index.md)
-- [MCU updates](mcu-update.md), [Audio gate](audio-gate.md), [Home Assistant Voice](ha-voice.md)
+- [MCU updates](mcu-update.md), [Audio gate](audio-gate.md), [Home Assistant Voice](ha-voice.md),
+  [Wake word](wake-word.md)
 - User docs: [Scripting](../../guides/scripting/index.md), [Settings](../../reference/settings.md)

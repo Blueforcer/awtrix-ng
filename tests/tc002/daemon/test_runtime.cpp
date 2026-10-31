@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <atomic>
@@ -33,6 +34,9 @@ namespace {
 
 std::string fakeBinary;
 std::string fakeAudio;
+
+// pid() is -1 while no runtime runs, and kill(-1, ...) reaches every process of the user.
+bool signalChild(pid_t pid, int signal) { return pid > 0 && ::kill(pid, signal) == 0; }
 
 class FakeHardware : public ChildHardware {
  public:
@@ -184,6 +188,8 @@ struct Rig {
   std::string audio(pid_t pid) { return readFile(data + "/audio-" + std::to_string(pid)); }
   std::string intro(pid_t pid) { return readFile(data + "/intro-" + std::to_string(pid)); }
   std::string voice(pid_t pid) { return readFile(data + "/voice-" + std::to_string(pid)); }
+  std::string wake(pid_t pid) { return readFile(data + "/wake-" + std::to_string(pid)); }
+  std::string vad(pid_t pid) { return readFile(data + "/vad-" + std::to_string(pid)); }
   // The start reason and the --uid of every runtime so far, oldest first.
   std::vector<std::string> starts() { return lines("starts"); }
   std::vector<std::string> uids() { return lines("uids"); }
@@ -263,7 +269,7 @@ bool finishesWithin(Tracer& tracer, int rescueMs, const std::function<void()>& b
     while (!done && posix::monotonicMs() < deadline) ::usleep(10000);
     if (!done) {
       rescued = true;
-      ::kill(tracer.pid(), SIGKILL);
+      signalChild(tracer.pid(), SIGKILL);
     }
   });
   body();
@@ -468,19 +474,38 @@ void bootIntro() {
 }
 
 void speechVoice() {
-  const auto withVoice = [](RuntimeOptions& options) { options.speechVoice = "/release/share/speech/voice.atts"; };
+  const auto withVoice = [](RuntimeOptions& options) {
+    options.speechVoice = "/release/share/speech/voice.atts";
+    options.wakeWord = "/release/share/wake/hey_awtrix.tflite";
+    options.vad = "/release/share/vad/vad.tflite";
+  };
   {
     Rig rig("ok", withVoice, true, "ok");
     check(rig.until([&] { return rig.running(); }, 3000), "runtime with speaker and voice ready");
     const pid_t pid = rig.rt().pid();
-    check(rig.report(pid) == "valid\n" && rig.voice(pid) == "/release/share/speech/voice.atts\n",
-          "the voice comes with the speaker: " + rig.report(pid) + rig.voice(pid));
+    check(rig.report(pid) == "valid\n" && rig.voice(pid) == "/release/share/speech/voice.atts\n" &&
+              rig.wake(pid) == "/release/share/wake/hey_awtrix.tflite\n" &&
+              rig.vad(pid) == "/release/share/vad/vad.tflite\n",
+          "the voice, the wake word and the voice activity model come with the speaker: " + rig.report(pid) +
+              rig.voice(pid) + rig.wake(pid) + rig.vad(pid));
+  }
+  {
+    Rig rig("ok", [](RuntimeOptions& options) { options.wakeWord = "/release/share/wake/hey_awtrix.tflite"; },
+            true, "ok");
+    check(rig.until([&] { return rig.running(); }, 3000), "runtime with speaker but no voice ready");
+    const pid_t pid = rig.rt().pid();
+    check(rig.voice(pid) == "none\n" && rig.wake(pid) == "/release/share/wake/hey_awtrix.tflite\n" &&
+              rig.vad(pid) == "none\n",
+          "a release without a voice still has its wake word: " + rig.voice(pid) + rig.wake(pid) + rig.vad(pid));
   }
   {
     Rig rig("ok", withVoice, true, "missing");
     check(rig.until([&] { return rig.running(); }, 3000), "runtime without speaker ready");
     const pid_t pid = rig.rt().pid();
-    check(rig.report(pid) == "valid\n" && rig.voice(pid) == "none\n", "no speaker, no voice: " + rig.voice(pid));
+    check(rig.report(pid) == "valid\n" && rig.voice(pid) == "none\n" && rig.wake(pid) == "none\n" &&
+              rig.vad(pid) == "none\n",
+          "no speaker, no voice, no wake word, no voice activity model: " + rig.voice(pid) + rig.wake(pid) +
+              rig.vad(pid));
   }
 }
 
@@ -774,7 +799,7 @@ void exitLinesReachTheNextRuntime() {
                                has("pid " + std::to_string(first) + " ended"); }, 2000),
         "the next runtime hears why and how the one before ended");
   const pid_t second = rig.rt().pid();
-  ::kill(second, SIGKILL);
+  signalChild(second, SIGKILL);
   check(rig.until([&] { return rig.rt().spawns() == 3 && rig.running(); }, 3000), "started again after a crash");
   check(rig.until([&] { return has("pid " + std::to_string(second) + " ended"); }, 2000),
         "the next runtime hears about the crash");
@@ -818,13 +843,13 @@ void bluetoothLifecycle() {
     check(rig.until([&] { return rig.running() && rig.received().find(first) != std::string::npos; }, 3000),
           "Bluetooth state published before hello reaches the runtime");
     const pid_t pid = rig.rt().pid();
-    check(::kill(pid, SIGSTOP) == 0, "pause runtime consumption");
+    check(signalChild(pid, SIGSTOP), "pause runtime consumption");
     int status = 0;
     check(::waitpid(pid, &status, WUNTRACED) == pid && WIFSTOPPED(status), "runtime stopped reading");
     for (int i = 0; i < 2000; ++i) rig.state.setPower({});
     rig.rt().bluetoothStatus({false, "superseded"});
     rig.rt().bluetoothStatus({true, ""});
-    check(::kill(pid, SIGCONT) == 0, "resume runtime consumption");
+    check(signalChild(pid, SIGCONT), "resume runtime consumption");
     const std::string latest = awtrix::tc002::encodeBluetooth({true, ""});
     check(rig.until([&] { return rig.received().find(latest) != std::string::npos; }, 3000),
           "resync delivers the latest Bluetooth state after backpressure");
@@ -840,7 +865,7 @@ void microphoneLifecycle() {
     rig.send(encodeMicrophonePcmRequest(7) + "\n");
     check(rig.until([&] { return !!rig.pendingPcm; }, 3000), "PCM: capture requested");
     const pid_t pid = rig.rt().pid();
-    check(::kill(pid, SIGSTOP) == 0, "PCM: pause runtime consumption");
+    check(signalChild(pid, SIGSTOP), "PCM: pause runtime consumption");
     int status = 0;
     check(::waitpid(pid, &status, WUNTRACED) == pid && WIFSTOPPED(status), "PCM: runtime stopped reading");
     for (int i = 0; i < 2000; ++i) rig.state.setPower({});
@@ -848,7 +873,7 @@ void microphoneLifecycle() {
     const auto expected = encodeMicrophonePcm(pcm);
     auto complete = std::move(rig.pendingPcm);
     complete(pcm);
-    check(::kill(pid, SIGCONT) == 0, "PCM: resume runtime consumption");
+    check(signalChild(pid, SIGCONT), "PCM: resume runtime consumption");
     check(rig.until([&] { return rig.received().find(expected) != std::string::npos; }, 3000),
           "PCM: nonreplaceable completion survives supervisor backpressure");
     rig.until([] { return false; }, 120);
@@ -861,14 +886,14 @@ void microphoneLifecycle() {
     rig.send(encodeMicrophonePcmRequest(8) + "\n");
     check(rig.until([&] { return !!rig.pendingPcm; }, 3000), "PCM generation: capture requested");
     const pid_t pid = rig.rt().pid();
-    check(::kill(pid, SIGSTOP) == 0, "PCM generation: pause child");
+    check(signalChild(pid, SIGSTOP), "PCM generation: pause child");
     int status = 0;
     check(::waitpid(pid, &status, WUNTRACED) == pid && WIFSTOPPED(status), "PCM generation: child paused");
     for (int i = 0; i < 2000; ++i) rig.state.setPower({});
     auto complete = std::move(rig.pendingPcm);
     MicrophonePcm old{8, {}, "old capture"};
     if (completedBeforeExit) complete(old);
-    check(::kill(pid, SIGKILL) == 0, "PCM generation: kill stalled child");
+    check(signalChild(pid, SIGKILL), "PCM generation: kill stalled child");
     check(rig.until([&] { return rig.running() && rig.rt().pid() != pid; }, 3000),
           "PCM generation: replacement child running");
     if (!completedBeforeExit) complete(old);
@@ -893,7 +918,7 @@ void microphoneStreamLifecycle() {
     check(rig.until([&] { return !!rig.streamReply; }, 3000), "stream: capture requested");
     auto reply = rig.streamReply;
     const pid_t pid = rig.rt().pid();
-    check(::kill(pid, SIGSTOP) == 0, "stream: pause consumer");
+    check(signalChild(pid, SIGSTOP), "stream: pause consumer");
     int status = 0;
     check(::waitpid(pid, &status, WUNTRACED) == pid && WIFSTOPPED(status), "stream: consumer paused");
     for (int i = 0; i < 2000; ++i) rig.state.setPower({});
@@ -909,7 +934,7 @@ void microphoneStreamLifecycle() {
     StreamEvent ended{7, StreamEvent::Kind::Ended, 3840, 0, 100, false, {}, "consumer stalled"};
     check(reply(ended), "stream: terminal reserved even at audio queue limit");
     expected.push_back(encodeStreamEvent(ended));
-    check(::kill(pid, SIGCONT) == 0, "stream: resume consumer");
+    check(signalChild(pid, SIGCONT), "stream: resume consumer");
     check(rig.until([&] { return rig.received().find(expected.back()) != std::string::npos; }, 3000),
           "stream: terminal delivered");
     const auto received = rig.received();
@@ -928,7 +953,7 @@ void microphoneStreamLifecycle() {
     check(rig.until([&] { return !!rig.streamReply; }, 3000), "stream generation: started");
     auto old = std::move(rig.streamReply);
     const pid_t pid = rig.rt().pid();
-    check(::kill(pid, SIGKILL) == 0, "stream generation: runtime exits");
+    check(signalChild(pid, SIGKILL), "stream generation: runtime exits");
     check(rig.until([&] { return rig.running() && rig.rt().pid() != pid; }, 3000), "stream generation: restarted");
     check(std::find(rig.streamControls.begin(), rig.streamControls.end(), std::make_pair(8, true)) != rig.streamControls.end(),
           "stream generation: exit revokes microphone lease");
@@ -972,6 +997,10 @@ int main(int argc, char** argv) {
   char resolved[PATH_MAX];
   fakeBinary = ::realpath(argv[1], resolved) ? resolved : argv[1];
   fakeAudio = ::realpath(argv[2], resolved) ? resolved : argv[2];
+  if (::access(fakeBinary.c_str(), X_OK) != 0 || ::access(fakeAudio.c_str(), X_OK) != 0) {
+    std::fprintf(stderr, "%s: build the fake runtime and audio helper first\n", argv[0]);
+    return 2;
+  }
   healthyRun();
   startReasons();
   deviceId();

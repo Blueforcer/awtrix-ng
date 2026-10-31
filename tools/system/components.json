@@ -476,6 +476,102 @@
       ],
       "vendored": true,
       "version": null
+    },
+    {
+      "files_sha256": "1878632c6c182221b1c2bd0ae1ef2aed8e02cefc24ed79d987dc39a8c56bdf71",
+      "id": "tflite-micro-port",
+      "license": {
+        "file": "LICENSES/Apache-2.0.txt",
+        "name": "Apache-2.0",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "spdx": "Apache-2.0"
+      },
+      "name": "TensorFlow Lite Micro microfrontend and TensorFlow Lite reference kernels",
+      "notice": "TensorFlow Lite Micro",
+      "origin": {
+        "note": "the microfrontend (tensorflow/lite/experimental/microfrontend/lib) in the configuration pymicro_features 2.0.2 sets, and the int8 reference kernels (tensorflow/lite/kernels) as LiteRT 2.3 runs them with OpResolverType.BUILTIN_REF, ported to C++ for the TC002 wake word",
+        "reference": "LiteRT 2.3",
+        "url": "https://github.com/tensorflow/tflite-micro"
+      },
+      "patches": [],
+      "paths": [
+        "src/platform/tc002/wake/WakeFrontend.cpp",
+        "src/platform/tc002/wake/WakeFrontendTables.h",
+        "src/platform/tc002/wake/WakeModel.cpp"
+      ],
+      "review": {
+        "date": "2026-10-31",
+        "decision": "accepted",
+        "rationale": "Apache-2.0 requires the license text and the copyright notice: text in LICENSES/Apache-2.0.txt, row in THIRD-PARTY-NOTICES.md, both in the TC002 bundle's licenses.txt.gz; the files name their origin in their first lines"
+      },
+      "targets": [
+        "linux"
+      ],
+      "vendored": true,
+      "version": "LiteRT 2.3"
+    },
+    {
+      "files_sha256": "9459abd7a32b291bd0cb8d0a973c3eb8b2367c8de60838bb7d3f54dacb3ea7cf",
+      "id": "kissfft-port",
+      "license": {
+        "file": "LICENSES/BSD-3-Clause-KISS-FFT.txt",
+        "name": "BSD-3-Clause",
+        "sha256": "ddd1400f963747b305bfa39e21206e58805a1c650451e2ee5ce81ed86bc0b1ab",
+        "spdx": "BSD-3-Clause"
+      },
+      "name": "KISS FFT",
+      "notice": "KISS FFT",
+      "origin": {
+        "note": "kiss_fftr, kf_work and kf_bfly4 with FIXED_POINT 16, as TensorFlow Lite Micro's microfrontend builds them, ported to C++ for the TC002 wake word",
+        "reference": "v130",
+        "url": "https://github.com/mborgerding/kissfft"
+      },
+      "patches": [],
+      "paths": [
+        "src/platform/tc002/wake/WakeFft.cpp",
+        "src/platform/tc002/wake/WakeFft.h"
+      ],
+      "review": {
+        "date": "2026-10-31",
+        "decision": "accepted",
+        "rationale": "BSD-3-Clause requires the copyright notice, the conditions and the disclaimer with source and binary copies: text in LICENSES/BSD-3-Clause-KISS-FFT.txt, row in THIRD-PARTY-NOTICES.md, both in the TC002 bundle's licenses.txt.gz; the file names its origin in its first lines"
+      },
+      "targets": [
+        "linux"
+      ],
+      "vendored": true,
+      "version": "1.3.0"
+    },
+    {
+      "files_sha256": "395aa1f72bd90d4d196835b0379e1ce34e3d14c76da00d58915270ca909bfb2b",
+      "id": "microwakeword-vad",
+      "license": {
+        "file": "LICENSES/Apache-2.0.txt",
+        "name": "Apache-2.0",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "spdx": "Apache-2.0"
+      },
+      "name": "microWakeWord voice activity model",
+      "notice": "microWakeWord voice activity model",
+      "origin": {
+        "note": "models/v2/vad.tflite and vad.json, unchanged, with the repository's NOTICE; the model files date from the v2 commit, main was at 40ff33f57f8fc6ad71a75ef085abbf742495b225 when they were taken on 2026-10-31",
+        "reference": "9a72109cc935f77e34cf8ffe7b868155c37ec201",
+        "url": "https://github.com/esphome/micro-wake-word-models"
+      },
+      "patches": [],
+      "paths": [
+        "assets/tc002/vad"
+      ],
+      "review": {
+        "date": "2026-10-31",
+        "decision": "accepted",
+        "rationale": "Apache-2.0 requires the license text and the NOTICE with every copy: text in LICENSES/Apache-2.0.txt, NOTICE beside the model, row in THIRD-PARTY-NOTICES.md; the TC002 release carries the model as share/vad/ with its NOTICE, and the license text in licenses.txt.gz"
+      },
+      "targets": [
+        "linux"
+      ],
+      "vendored": true,
+      "version": "v2"
     }
   ],
   "notice_exclusions": [

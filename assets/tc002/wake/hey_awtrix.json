@@ -1,0 +1,10 @@
+{
+  "ID": "hey_awtrix",
+  "DisplayName": "Hey Awtrix",
+  "WakePhrase": "hey awtrix",
+  "Language": "en",
+  "SHA256": "d5bfde5473fcd27e9fe366dcd39f439d7d0c2b197fc17dec556d20b16cb833ef",
+  "SizeBytes": 47336,
+  "probability_cutoff": 0.86,
+  "sliding_window_size": 3
+}

@@ -10,6 +10,8 @@
 #   share/index.html.gz (the minified web UI with its Linux-only parts, WEBUI_FULL_GZ in WebUiAsset.h)
 #   share/boot.mp3  share/ca-certificates.crt
 #   share/speech/voice.atts (the voice, when the commit holds assets/speech/voice.atts)
+#   share/wake/hey_awtrix.tflite  share/wake/hey_awtrix.json (the wake word model and its settings)
+#   share/vad/vad.tflite  share/vad/vad.json  share/vad/NOTICE (the voice activity model, Apache-2.0)
 #   share/licenses.txt.gz (every licence text the release ships)
 #   lib/modules/{aic8800_bsp,aic8800_fdrv}.ko, the Wi-Fi driver rebuilt without key logging
 #   (tools/tc002/kernel/build_aic8800.sh; needs the tree tools/tc002/kernel/prepare-tree.sh prepares)
@@ -185,11 +187,13 @@ rm -rf "$LICENSES"
 mkdir -p "$LICENSES"
 MUSL_TARBALL=$(tc002_fetch "musl-$MUSL_VERSION.tar.gz" "$MUSL_URL" "$MUSL_SHA256")
 tar -xzOf "$MUSL_TARBALL" "musl-$MUSL_VERSION/COPYRIGHT" > "$LICENSES/musl.COPYRIGHT"
-OWN_FILES="the AWTRIX NG programs in bin/, share/index.html.gz, share/boot.mp3"
+OWN_FILES="the AWTRIX NG programs in bin/, share/index.html.gz, share/boot.mp3, share/wake/"
 if [ -f "$SRC/assets/speech/voice.atts" ]; then OWN_FILES+=", share/speech/voice.atts"; fi
 TEXTS=(
   --text "AWTRIX NG - PolyForm Noncommercial License 1.0.0 - $OWN_FILES" "$SRC/LICENSE.md"
   --text "cpp-httplib - MIT - in bin/awtrix-linux" "$SRC/LICENSES/MIT-cpp-httplib.txt"
+  --text "TensorFlow Lite Micro microfrontend and TensorFlow Lite reference kernels (ported) - Apache-2.0 - in bin/awtrix-linux" "$SRC/LICENSES/Apache-2.0.txt"
+  --text "KISS FFT 1.3.0 (ported) - BSD-3-Clause - in bin/awtrix-linux" "$SRC/LICENSES/BSD-3-Clause-KISS-FFT.txt"
   --text "CMUdict and SCOWL - English pronunciation data in bin/awtrix-linux" "$SRC/LICENSES/CMUdict-SCOWL.txt"
   --text "Berry - MIT - in bin/awtrix-linux" "$SRC/LICENSES/MIT-Berry.txt"
   --text "PubSubClient - MIT - in bin/awtrix-linux" "$SRC/LICENSES/MIT-PubSubClient.txt"
@@ -201,6 +205,8 @@ TEXTS=(
   --text "libjpeg-turbo $(recipe_value "$JPEG_RECIPE" VERSION) - IJG, BSD-3-Clause and zlib - in bin/awtrix-linux" "$JPEG_OUT/LICENSE.txt"
   --text "bluetrum-tools - MIT - format reference for the MCU patcher" "$SRC/LICENSES/MIT-bluetrum-tools.txt"
   --text "musl $MUSL_VERSION - MIT - in every program in bin/" "$LICENSES/musl.COPYRIGHT"
+  --text "microWakeWord voice activity model - Apache-2.0 - share/vad/"
+  "$SRC/assets/tc002/vad/NOTICE" "$SRC/LICENSES/Apache-2.0.txt"
   --text "AIC Bluetooth AON parameter format and defaults - Apache-2.0 - in bin/awtrix-tc002d"
   "$SRC/tools/tc002/bluetooth/NOTICE" "$SRC/LICENSES/Apache-2.0.txt"
 )

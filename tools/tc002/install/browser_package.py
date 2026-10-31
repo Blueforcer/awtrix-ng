@@ -15,7 +15,7 @@ import bundle
 
 from constants import MAX_FILE_BYTES, MAX_ARCHIVE_BYTES, MAX_FILES, PRODUCTION_TARGET
 PUBLIC_FILES = frozenset((*bundle.REQUIRED, "share/boot.mp3", *bundle.HOST_ONLY, *bundle.MCU_PATCH,
-                          bundle.SPEECH_VOICE, bundle.IMAGE))
+                          bundle.SPEECH_VOICE, *bundle.WAKE_WORD, *bundle.VAD, bundle.IMAGE))
 HELPER = "bin/awtrix-tc002-flash"
 MANIFEST = "browser-manifest.json"
 TARGET = PRODUCTION_TARGET
@@ -84,7 +84,7 @@ def package_entries(directory, license_path, notices_path, sources, allow_dirty)
     directory = Path(directory)
     if not stat.S_ISDIR(directory.lstat().st_mode):
         raise PackageError("bundle must be a directory, not a symlink")
-    directories = {"bin", "share", "lib", "lib/modules", "share/mcu", "share/speech"}
+    directories = {"bin", "share", "lib", "lib/modules", "share/mcu", "share/speech", "share/wake", "share/vad"}
     for path in directory.rglob("*"):
         relative = path.relative_to(directory).as_posix()
         info = path.lstat()

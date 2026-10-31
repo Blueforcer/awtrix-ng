@@ -636,10 +636,7 @@ It listens to the same **Music source** as the other readings. With Automatic, a
 script plays is heard instead of the singer, so a singing game stays quiet while someone sings.
 Declare `# @needs microphone` for a script that cannot work without the microphone.
 
-It answers `0.0`:
-
-- for silence, noise, several notes at once, or a note outside 70 to 1600 Hz;
-- while the voice assistant is listening.
+It answers `0.0` for silence, noise, several notes at once, or a note outside 70 to 1600 Hz.
 
 Call it in `draw()`, not in `loop()`. The first reading comes a fraction of a second after the
 first call.
