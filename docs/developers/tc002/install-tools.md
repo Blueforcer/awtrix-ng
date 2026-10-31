@@ -430,8 +430,8 @@ python3 tools/tc002/install/browser_package.py OUT/bundle OUT/usb-awtrix-ng-tc00
 ```
 
 `usb-awtrix-ng-tc002.zip` and that exact source archive belong on the same release, with the
-actual release tag and archive digest. `tc002-update.yml` builds both on every `v*` tag and the
-release job attaches them. The ZIP holds no manufacturer partition or device data:
+actual release tag and archive digest. `tc002-update.yml` builds both on every push to `main`,
+and the release job of the tag attaches them. The ZIP holds no manufacturer partition or device data:
 the bundle's manifest, the release image, the flash helper, the loader and `loop.ko`, notices and
 integrity metadata. `--allow-dirty` is only for local tests; the browser installer rejects dirty
 packages.

@@ -39,7 +39,8 @@ do the same again. A gamepad that is paired already is not taken twice.
 
 ## Which gamepads work
 
-The gamepad must use **Bluetooth LE**, as the 8BitDo Ultimate 2 does in Bluetooth mode. Gamepads
+The gamepad must use **Bluetooth LE**, as the 8BitDo Ultimate 2 does in Bluetooth mode and the
+Xbox Wireless Controller (model 1914) does. Gamepads
 that only use classic Bluetooth, such as many Switch and PlayStation controllers, cannot connect.
 The clock supports Bluetooth LE only.
 

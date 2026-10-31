@@ -13,7 +13,7 @@ it.
 <!-- only tc002 -->
 | Request body (HTTP) | 2 MiB for any request body, JSON or upload | `413 payloadTooLarge`, nothing is applied |
 <!-- /only -->
-| MQTT command payload | 8192 bytes for the whole message, topic included | the message is dropped unread: no error, no `/result` reply |
+| MQTT command payload | 8192 bytes for the whole message, topic included | the message is dropped unread: no error, no `/result` reply, a line in the log. Over 64 KiB the clock also connects to the broker again |
 | App and script names | 1–32 characters of `A–Z`, `a–z`, `0–9`, `_`, `-` | `400 invalidName` |
 | JSON nesting | 16 levels of objects and arrays | `400 invalidJson` |
 <!-- only tc002 -->

@@ -8,9 +8,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A v* tag runs only the release job: it publishes what the successful run on main built and
+# tested for the same commit, so push main, wait for it, then tag.
 jobs:
   native-tests:
     name: Core host unit tests (native)
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -31,6 +34,7 @@ jobs:
 
   linux-tests:
     name: Linux application and shared host contracts
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,6 +65,7 @@ jobs:
 
   webui-tests:
     name: Web UI tests (jsdom)
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -82,28 +87,29 @@ jobs:
         run: node --test "tools/flowconv/*.test.mjs"
 
   tc002-image-tools:
+    if: github.ref_type != 'tag'
     uses: ./.github/workflows/tc002-image-tools.yml
 
-  # On main as well, so a broken TC002 build shows before a tag, and a tag finds the toolchain
-  # cache main saved.
+  # The TC002 packages are built on every push to main; the release job of a tag takes them
+  # from that run.
   tc002-update:
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/tc002-update.yml
-
-  tc002-installer:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: tc002-image-tools
-    uses: ./.github/workflows/tc002-installer.yml
-    with:
-      image-tools-ready: true
 
   device-build:
     name: Firmware build (${{ matrix.env }})
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        env: [awtrix, awtrix_s3_octal, awtrix_s3_quad]
+        include:
+          - env: awtrix
+            ota: firmware-awtrix-ng.bin
+          - env: awtrix_s3_octal
+            ota: firmware-awtrix-ng-s3-octal.bin
+          - env: awtrix_s3_quad
+            ota: firmware-awtrix-ng-s3-quad.bin
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -133,17 +139,26 @@ jobs:
         # so a table change that breaks it should fail the PR that made it, not
         # the release three commits later.
         run: python scripts/factory_image.py --env ${{ matrix.env }} --all -o dist
+      - name: Stage the OTA image
+        # The file a user uploads to /update. One per SoC, and one more for the
+        # S3's quad-PSRAM boards, whose PSRAM mode is compiled into the framework
+        # libraries rather than detected. These are app images only: OTA writes
+        # the app slot and never the partition table, so one file serves every
+        # flash size of its chip.
+        run: cp .pio/build/${{ matrix.env }}/firmware.bin dist/${{ matrix.ota }}
       - uses: actions/upload-artifact@v4
         with:
-          # The prefix is usb-, not factory-, and comes from factory_image.asset_name.
-          # Keep the two in step: if-no-files-found is error, so a stale pattern here
-          # fails the tag build after every test has already passed.
-          name: usb-${{ matrix.env }}
-          path: dist/usb-*.bin
+          # The release job of a tag publishes these. The USB images' usb- prefix
+          # comes from factory_image.asset_name.
+          name: firmware-${{ matrix.env }}
+          path: |
+            dist/usb-*.bin
+            dist/${{ matrix.ota }}
           if-no-files-found: error
 
   docs:
     name: API docs match the firmware
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -156,8 +171,8 @@ jobs:
         # The Docs workflow already runs `mkdocs build --strict`, but that only
         # validates markdown and links. This catches the other half: fields,
         # error codes and removed keys drifting out of sync with the source.
-        # It lives here rather than in docs.yml because this workflow also runs
-        # on tags, so a release cannot publish with the docs out of sync.
+        # It lives here rather than in docs.yml because a release publishes only
+        # what a green run of this workflow built.
         run: python tools/check_docs_sync.py
       - name: Check documented error messages and the drift detector
         run: |
@@ -203,77 +218,52 @@ jobs:
         # overlap or a misaligned app offset only shows up once someone flashes
         # it. Cheap to check here, expensive to discover in the field.
         run: python tools/check_partitions.py
+
+  release:
+    name: Publish firmware release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # To read the main run's artifacts, and to dispatch the Docs workflow once
+      # the assets exist -- see the last step.
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
       - name: Check the tag against the version and its release notes
         # The release body only links the release notes page of the docs, so a
         # tag without that page would publish a dead link.
-        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           version=$(tr -d '[:space:]' < version)
           [ "$GITHUB_REF_NAME" = "v$version" ] || { echo "::error::tag $GITHUB_REF_NAME does not match version $version"; exit 1; }
           [ -f "docs/releases/$version.md" ] || { echo "::error::docs/releases/$version.md is missing"; exit 1; }
           grep -q "releases/$version.md" mkdocs.yml || { echo "::error::docs/releases/$version.md is not in the mkdocs.yml nav"; exit 1; }
-
-  release:
-    name: Publish firmware release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [native-tests, webui-tests, tc002-image-tools, tc002-update, tc002-installer, device-build, docs]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      # To dispatch the Docs workflow once the assets exist -- see the last step.
-      actions: write
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Install PlatformIO
-        run: pip install -U platformio esptool
-      - name: Build every firmware image
-        run: pio run -e awtrix -e awtrix_s3_octal -e awtrix_s3_quad
-      - name: Stage OTA assets
-        # The file a user uploads to /update. One per SoC, and one more for the
-        # S3's quad-PSRAM boards, whose PSRAM mode is compiled into the framework
-        # libraries rather than detected. These are app images only: OTA writes
-        # the app slot and never the partition table, so one file serves every
-        # flash size of its chip.
+      - name: Fetch what the main run built for this commit
+        # The tag publishes the exact files a green run on main built and tested
+        # for the same commit: firmware, USB images and the TC002 packages. The
+        # firmware version comes from the version file, not the ref, so nothing
+        # differs from a rebuild here.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cp .pio/build/awtrix/firmware.bin firmware-awtrix-ng.bin
-          cp .pio/build/awtrix_s3_octal/firmware.bin firmware-awtrix-ng-s3-octal.bin
-          cp .pio/build/awtrix_s3_quad/firmware.bin firmware-awtrix-ng-s3-quad.bin
-      - name: Stage the USB install images
-        # What a user flashes over USB: bootloader, partition table, app. The
-        # table is the only part that varies with flash size, which is why one
-        # build yields several of these. Which sizes ship is stated once, in
-        # gen_partitions.FACTORY_FLASH_SIZES. They carry a usb- prefix because
-        # readers took factory-awtrix-ng-4mb.bin for the update file of a 4 MB
-        # board, which is the one asset name that names a flash size.
+          run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --event push \
+                --commit "$GITHUB_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          [ -n "$run" ] || { echo "::error::no successful CI run on main for $GITHUB_SHA -- push main, wait for it, then tag"; exit 1; }
+          echo "Publishing the artifacts of run $run"
+          gh run download "$run" --repo "$GITHUB_REPOSITORY" --dir from-main
+      - name: Stage the firmware and the TC002 packages
+        # The USB images go into one zip: seven usb-*.bin would drown the three
+        # update files on the release page, and the browser flasher picks from
+        # inside it (the Docs workflow unpacks it). The update images stay
+        # separate assets: the device names the exact file to upload. The TC002
+        # desktop installers are not part of a release; they live in
+        # installer/tc002.
         run: |
-          python scripts/factory_image.py --env awtrix                --all
-          python scripts/factory_image.py --env awtrix_s3_octal       --all
-          python scripts/factory_image.py --env awtrix_s3_quad        --all
-      - name: Bundle the USB install images
-        # Seven usb-*.bin would drown the three update files on the release
-        # page, and most readers never need them by hand -- the browser flasher
-        # picks from inside this zip (the Docs workflow unpacks it). The update
-        # images stay separate assets on purpose: the device names the exact
-        # file to upload, and that name should be a direct click.
-        run: zip usb-awtrix-ng.zip usb-awtrix-ng-*.bin
-      - name: Fetch the TC002 update package, USB installation package and sources
-        uses: actions/download-artifact@v8.0.1
-        with:
-          name: tc002-update
-      - name: Fetch the TC002 installers
-        uses: actions/download-artifact@v8.0.1
-        with:
-          pattern: tc002-installer-*
-          path: tc002-installer-run
-      - name: Stage the TC002 installers
-        # Version-free names, so the TC002 guide links releases/latest/download/<name>.
-        run: node tools/tc002/desktop/publish.mjs --from tc002-installer-run --out tc002-installer
+          cp from-main/firmware-*/firmware-awtrix-ng*.bin .
+          zip -j usb-awtrix-ng.zip from-main/firmware-*/usb-awtrix-ng-*.bin
+          cp from-main/tc002-update/* .
+          ls -l firmware-awtrix-ng.bin firmware-awtrix-ng-s3-octal.bin firmware-awtrix-ng-s3-quad.bin \
+                awtrix-ng-tc002.awup usb-awtrix-ng-tc002.zip tc002-sources.tar.gz usb-awtrix-ng.zip
       - name: Stage license notices
         # LGPL-2.1 section 6 and the Apache, MIT and BSD terms all require their
         # text to accompany a binary distribution. A release of bare .bin files
@@ -309,7 +299,6 @@ jobs:
             usb-awtrix-ng.zip
             usb-awtrix-ng-tc002.zip
             tc002-sources.tar.gz
-            tc002-installer/*
             licenses-awtrix-ng.zip
       - name: Flip the release live, now that every asset is attached
         env:

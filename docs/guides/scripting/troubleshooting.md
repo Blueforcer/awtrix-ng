@@ -13,8 +13,8 @@ Any error your script does not handle stops it:
 
 - the display shows `ERR:<name>` in red whenever the app's turn comes. A name too long for the
   display scrolls through once,
-- the web UI shows the error and its line next to the script, and marks and scrolls to that line
-  in the editor,
+- the web UI shows the error next to the script. When the error has a line, the editor marks it
+  and scrolls to it,
 - every other script keeps running.
 
 An error found when saving names the line that does not parse. An error while running names the
@@ -35,6 +35,7 @@ The messages you meet most:
 | `syntax_error: 'clesr' undeclared …` | a misspelled call | correct the name |
 | `type_error: 'string' value is not callable` | a variable named like a built-in call, for example a variable called `text` before `text()` | give the variable another name, such as `label` |
 | `key_error: …` | `m["key"]` on a map without that key | read it with `m.find("key")`, which answers `nil` |
+| `type_error: unsupported operand type(s) for ..: 'nil' and 'int'` in `draw` | a member that `draw()` reads has no value yet. `draw()` can run [before the first `loop()`](index.md#the-lifecycle) | give the member a starting value in `init()` |
 | `no draw() method` | the class has no `draw()` | add `draw()`, or mark a [background script](several-apps.md#running-without-ever-being-shown) `@headless true` |
 | `runtime_error: instruction limit exceeded` | a call that runs too long | see [below](#the-instruction-limit) |
 

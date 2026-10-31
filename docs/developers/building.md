@@ -12,6 +12,8 @@ entry points are
 You need PlatformIO, Python 3 and Node.js. The host tests also need CMake 3.20 or newer, Ninja and
 GCC. Node.js is used only by the step that embeds the [web UI](#the-embedded-web-ui), but a
 firmware build stops without it.
+PlatformIO's command line, `pio`, comes with
+[PlatformIO Core](https://docs.platformio.org/en/latest/core/installation/index.html).
 
 ```bash
 pio run  -e awtrix            # ESP32 firmware (the default environment)
@@ -174,6 +176,15 @@ Then open **http://127.0.0.1:8080**. It listens on loopback only. The flags and 
 described in [AWTRIX on Linux](site:tc002/developers/linux/). The TC002 release, built for ARM with the `tc002`
 and `tc002-loader` presets, is described in the [TC002 developer guide](site:tc002/developers/tc002/).
 
+| Preset | Toolchain | Builds |
+|---|---|---|
+| `host` | the machine's compiler | `awtrix-linux` and every regression test |
+| `tc002` | `cmake/toolchains/tc002-musl.cmake` | the static ARM programs of a TC002 release |
+| `tc002-loader` | `cmake/toolchains/tc002-glibc.cmake` | `libawtrix-loader.so` |
+
+A compiler warning in AWTRIX code stops the build. With a newer compiler that warns about more,
+configure with `-DAWTRIX_WERROR=OFF`.
+
 #### macOS
 
 `CMakeLists.txt` refuses to configure on macOS (`if(NOT UNIX OR APPLE) ... FATAL_ERROR`), so
@@ -237,15 +248,6 @@ docker run -d --name awtrix-linux-dev-b -p 8081:8081 \
 
 Each is then reachable on its own port (`http://127.0.0.1:8080`, `http://127.0.0.1:8081`, …)
 with its own live preview, API and persistent state.
-
-| Preset | Toolchain | Builds |
-|---|---|---|
-| `host` | the machine's compiler | `awtrix-linux` and every regression test |
-| `tc002` | `cmake/toolchains/tc002-musl.cmake` | the static ARM programs of a TC002 release |
-| `tc002-loader` | `cmake/toolchains/tc002-glibc.cmake` | `libawtrix-loader.so` |
-
-A compiler warning in AWTRIX code stops the build. With a newer compiler that warns about more,
-configure with `-DAWTRIX_WERROR=OFF`.
 
 ## The embedded web UI
 
@@ -358,20 +360,22 @@ PlatformIO installed through `pip`, plus Node.js for the firmware builds and the
 | Firmware build | `pio run -e <env>`, then `scripts/factory_image.py --all` | `awtrix`, `awtrix_s3_octal`, `awtrix_s3_quad`, and a USB install image per flash size |
 | API docs match the firmware | `tools/check_docs_sync.py`, `check_flow_converter.py`, `gen_agent_skill.py --check`, `check_berry_api.py`, `check_prelude_solidified.py`, `check_font_sync.py`, `check_partitions.py` | Documented fields and error codes, the flow converter's maps, the downloadable agent skill, the editor's Berry table, the solidified prelude, the generated panel fonts, every partition table |
 
-On a `v*` tag a release job also publishes every ESP32 update image, the USB install images for
-each supported flash size, the TC002 update package, the TC002 USB installation package with its
-corresponding sources, the TC002 desktop installers and the license notices. The tag must match
-`version`, and `docs/releases/<version>.md` must exist: the release body only links that page in
-each clock's documentation. The job depends on the native, web UI, TC002 image tools, TC002 update
-package, TC002 installer, firmware and documentation checks.
+A push to `main` also builds the TC002 update package and the TC002 USB installation package with
+its corresponding sources. A `v*` tag runs only the release job: it takes every file from the
+successful run on `main` for the same commit and publishes every ESP32 update image, the USB
+install images for each supported flash size, the TC002 packages and the license notices. So push
+`main`, wait until its run is green, then tag. The TC002 desktop installers are not part of a
+release: they live in `installer/tc002/`.
+The tag must match `version`, and `docs/releases/<version>.md` must exist: the release body only
+links that page in each clock's documentation.
 
 Other workflows:
 
 | Workflow | Runs on | Does |
 |---|---|---|
 | `docs.yml` | pushes and pull requests to `main`, and after a release | Builds this site with `tools/docs/build_site.py`: one documentation per clock (fails on broken links and anchors, and on text that names another clock), including the browser flasher and the TC002 browser installer, and publishes it to GitHub Pages |
-| `tc002-update.yml` | pushes to `main` and `v*` tags (called by `ci.yml`), and on dispatch | Builds `awtrix-ng-tc002.awup` from scratch: the musl toolchain (cached until the Buildroot version, configuration or patches change), the glibc toolchain, the kernel tree, `build_bundle.sh` and `tc002_install.py package`; then `tc002-sources.tar.gz` (`source_package.py`) and `usb-awtrix-ng-tc002.zip` (`browser_package.py`) |
-| `tc002-installer.yml` | `v*` tags (called by `ci.yml`), and pushes that change `tools/tc002/desktop/`, `tools/tc002/browser-image/`, `docs/assets/tc002/` | Builds and tests the TC002 desktop installer for Windows, macOS and Linux |
+| `tc002-update.yml` | pushes to `main` (called by `ci.yml`), and on dispatch | Builds `awtrix-ng-tc002.awup` from scratch: the musl toolchain (cached until the Buildroot version, configuration or patches change), the glibc toolchain, the kernel tree, `build_bundle.sh` and `tc002_install.py package`; then `tc002-sources.tar.gz` (`source_package.py`) and `usb-awtrix-ng-tc002.zip` (`browser_package.py`) |
+| `tc002-installer.yml` | pushes and pull requests that change `tools/tc002/desktop/`, `tools/tc002/browser-image/`, `docs/assets/tc002/`, and on dispatch | Builds and tests the TC002 desktop installer for Windows, macOS and Linux; a new build is copied into `installer/tc002/` by hand |
 | `system-build.yml` | pull requests that change `firmware/buildroot/`, `tools/system/` | Cross-builds the experimental ARM userspace |
 | `discord-release.yml` | a published release, or dispatch by the release job | Announces a release |
 

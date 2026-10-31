@@ -186,7 +186,11 @@ does the work**: it runs about once a second *even while the app is hidden*, whi
 poll, count down and refresh there, so the data is waiting when the rotation comes back.
 **`init()` sets members to a starting value**: the store, and so every `@config` setting, is
 already restored when it runs. `setup()` runs just after, once the app is wired in; put the first
-fetch and any logging there.
+fetch and any logging there. **`draw()` can run before the first `loop()`**: `loop()` keeps its own
+once-a-second pace, so after a save or a restart the app can be shown before `loop()` has run
+once. Every member `draw()` reads needs a starting value in `init()`, or
+`setup()` ends with `self.loop()`; otherwise `draw()` meets `nil` and the app stops with a
+`type_error`.
 
 `on_button(btn)` receives exactly one of `"left"`, `"select"`, `"right"`. **Return `true` to
 consume the press**: left and right then no longer rotate to the neighbouring app, and select no
@@ -990,7 +994,7 @@ wins.
 | `'file'` | a name (`'doorbell'`), a script's sound (`'Racer/boost'`) or an `http(s)://` address | a stored MP3, your app's own first (below), else a melody file; an address is downloaded first (TC002, `sound.can('url')`, up to 4 MB) |
 | `'rtttl'` | RTTTL text, up to 512 characters | an inline melody |
 | `'song'` | song text (below) | the synthesizer (TC002, ESP32-S3 with MP3 output) |
-| `'speech'` | English text, 1-512 bytes | read aloud (TC002 with a voice) |
+| `'speech'` | text in the voice's language (English unless a voice pack is uploaded), 1-512 bytes | read aloud (TC002 with a voice) |
 | `'track'` | an integer 1-2999 | a DFPlayer track |
 | `'station'` | a station name, list position or stream address | starts the internet radio; not allowed in a list, and `sound.stop()` does not stop it |
 
@@ -1352,7 +1356,7 @@ execute faster. Every script also shares the reported `scriptHeapBudgetBytes`; o
 usable PSRAM this is 96 KiB. A typical device already has several scripts installed. Section 9 is
 how you stay a good neighbour.
 
-Any unhandled error leaves the app **stuck broken**: the panel shows `ERR:<name>` in red and the
+Any unhandled error leaves the app **stuck broken**: the display shows `ERR:<name>` in red and the
 web UI shows the message and the line it happened on. Nothing else on the device is affected,
 and saving the script again clears it.
 
@@ -1612,7 +1616,7 @@ Close with these steps, in their language, and nothing longer:
 > 5. To change a setting, go to the **Apps** tab and click the gear button on the row for `<Name>`.
 >    Saving there restarts the app.
 >
-> If the panel shows **`ERR:`** in red, the script hit an error. The message and its line are
+> If the display shows **`ERR:`** in red, the script hit an error. The message and its line are
 > shown next to the script in the Scripts tab - **copy them back to me and I will fix it.**
 
 Leave step 5 out only if the script really has no `@config` line, which should be rare.

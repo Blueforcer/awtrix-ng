@@ -204,8 +204,8 @@ the categories.
   at the top of the settings names it.
 - **Removing a setting removes its value.** Values your code wrote with `store.set()` are never
   touched.
-- The group name is shown exactly as written, up to 48 bytes, without translation. A
-  `hint=` is shown the same way, up to 48 bytes.
+- The group name is shown exactly as written, up to 48 characters, without translation. A
+  `hint=` is shown the same way, up to 48 characters.
 - A `hint=` is never a value: it is not saved, and **Reset to defaults** leaves the box
   empty.
 - Categories appear in the order they first occur. Settings within each category keep their

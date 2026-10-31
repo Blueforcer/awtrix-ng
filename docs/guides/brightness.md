@@ -36,7 +36,7 @@ curl -X PATCH http://<awtrix-ip>/api/v1/settings \
   -d '{"autoBrightness": false, "brightness": 120}'
 ```
 
-The change applies at once.
+The display moves to the new level within about a third of a second.
 <!-- /only -->
 <!-- only tc002 -->
 This page shows how to set the brightness of the display.
@@ -52,7 +52,7 @@ curl -X PATCH http://<awtrix-ip>/api/v1/settings \
   -d '{"brightness": 120}'
 ```
 
-The change applies at once.
+The display moves to the new level within about a third of a second.
 
 ## Good to know
 

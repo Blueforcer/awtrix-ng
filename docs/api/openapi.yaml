@@ -219,6 +219,7 @@ paths:
         | `ICONS/*`, `MELODIES/*`, `PALETTES/*`, `MP3/*`, `SCRIPTS/*` | stored on the device |
         | `SCRIPTS/<name>/<sound>.mp3` | a script's own sound, checked like any MP3. Nothing else under `SCRIPTS/` may sit in a folder |
         | `apploop.json` | app rotation order |
+        | `radio.json` | internet radio stations, in use at once |
 
         Content is checked per folder exactly like `POST /api/v1/files`. A
         traversal path, a foreign app or a bad-CRC entry is skipped with a
@@ -1728,6 +1729,112 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "507": { $ref: "#/components/responses/InsufficientStorage" }
 
+  /api/v1/speech/voice:
+    x-only: [tc002]
+    get:
+      tags: [sounds]
+      summary: Read which voice speaks
+      description: |
+        A voice comes as a voice pack: one `.atts` file with the voice and the
+        rules of its language. The clock has a built-in English voice; one
+        uploaded pack takes its place. Exists only on clocks with a speaker.
+      responses:
+        '200':
+          description: The voice that speaks
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SpeechVoice'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotOnThisDevice'}
+    post:
+      tags: [sounds]
+      summary: Upload a voice pack
+      description: |
+        Replaces the voice uploaded before and speaks from the next speech on.
+        The clock keeps it across restarts and updates. Send the pack as the
+        file of a multipart/form-data form, or as the raw body.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                voice: {type: string, format: binary}
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200':
+          description: The voice that speaks now
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SpeechVoice'}
+        '400':
+          description: "`validationFailed`: not a voice pack the clock can use. `message` says why."
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotOnThisDevice'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '507': {$ref: '#/components/responses/InsufficientStorage'}
+    delete:
+      tags: [sounds]
+      summary: Remove the uploaded voice pack
+      description: The built-in voice speaks again.
+      responses:
+        '200':
+          description: The voice that speaks now
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SpeechVoice'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotOnThisDevice'}
+  /api/v1/activation:
+    x-only: [tc002]
+    get:
+      tags: [system]
+      summary: Read the answer to Help AWTRIX
+      description: |
+        Whether this clock may be counted, to see how many clocks run AWTRIX NG
+        and for a planned cooperation with Ulanzi. Exists only while
+        capabilities say `"activation": true`.
+      responses:
+        '200':
+          description: The answer
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Activation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotOnThisDevice'}
+    put:
+      tags: [system]
+      summary: Answer Help AWTRIX
+      description: |
+        With `true` the clock reports to the AWTRIX Hub once, as soon as it is
+        online. With `false` it does not report, and a report not sent yet is
+        stopped. A report already sent stays sent. A factory reset deletes the
+        answer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [consent]
+              properties:
+                consent: {type: boolean}
+      responses:
+        '200':
+          description: The answer
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Activation'}
+        '400': {$ref: '#/components/responses/BadJson'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotOnThisDevice'}
+        '422': {$ref: '#/components/responses/Invalid'}
+        '507': {$ref: '#/components/responses/InsufficientStorage'}
   /api/v1/oauth:
     x-only: [tc002]
     get:
@@ -2088,6 +2195,7 @@ paths:
                   bootSound: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where the clock plays a sound at power-on. The bootSound setting switches it."}
                   enlargeApps: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where pushed apps and notifications can be shown at double size. The enlargeApps setting switches it."}
                   oauth: {x-only: [tc002], type: boolean, enum: [true], description: "Present only while scripts can import oauth, which needs scripting on. /api/v1/oauth exists."}
+                  activation: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where the clock asks Help AWTRIX. /api/v1/activation exists."}
                   crypto: {x-only: [tc002], type: boolean, enum: [true], description: Present only while scripts can import crypto, which needs scripting on.}
                   tcp: {x-only: [tc002], type: boolean, enum: [true], description: Present only while scripts can import tcp, which needs scripting on.}
                   display:
@@ -2988,6 +3096,23 @@ components:
           description: >
             The pin map a factory-fresh device of this chip starts with, and the one it falls
             back to when the stored map fails validation.
+    SpeechVoice:
+      x-only: [tc002]
+      type: object
+      required: [name, language, version, bytes, uploaded, maxBytes]
+      properties:
+        name: {type: [string, "null"], description: "The voice's name, null when the clock has no voice"}
+        language: {type: string, description: "Its language, for example en or de"}
+        version: {type: string, description: "The pack's version, empty when it has none"}
+        bytes: {type: integer, description: "The pack's size"}
+        uploaded: {type: boolean, description: "true: your uploaded pack speaks. false: the built-in voice"}
+        maxBytes: {type: integer, description: "The largest pack the clock takes"}
+    Activation:
+      x-only: [tc002]
+      type: object
+      required: [consent]
+      properties:
+        consent: {type: [boolean, "null"], description: "true: the clock may be counted. false: it may not. null while the question is unanswered"}
     OAuthStatus:
       x-only: [tc002]
       type: object
@@ -3253,11 +3378,11 @@ components:
         group:
           type: string
           description: |
-            Optional category heading from `group=` in the declaration, clipped to 48 bytes. Shown as written without translation. Fields with the same nonempty group share a collapsible section. Omitted or empty groups leave the field outside sections. Presentation only: stored values and PATCH keys are unchanged.
+            Optional category heading from `group=` in the declaration, clipped to 48 characters. Shown as written without translation. Fields with the same nonempty group share a collapsible section. Omitted or empty groups leave the field outside sections. Presentation only: stored values and PATCH keys are unchanged.
         hint:
           type: string
           description: |
-            Optional hint text from `hint=` in the declaration, clipped to 48 bytes. Shown as written without translation, grayed out inside an empty `text` or `number` box, the way a browser shows an HTML `placeholder`. Never a value: it is not stored, it is not the `default`, and a `PATCH` never carries it.
+            Optional hint text from `hint=` in the declaration, clipped to 48 characters. Shown as written without translation, grayed out inside an empty `text` or `number` box, the way a browser shows an HTML `placeholder`. Never a value: it is not stored, it is not the `default`, and a `PATCH` never carries it.
         min: { type: number }
         max: { type: number }
         step: { type: number }

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { digest } from '../build.mjs';
-import { manifestName, platforms, publish, stableName } from '../publish.mjs';
+import { platforms, publish, stableName } from '../publish.mjs';
 
 const outputs = {
   'x86_64-pc-windows-msvc': ['AWTRIX-NG-TC002-Installer-0.1.0-x86_64-pc-windows-msvc.exe', 'AWTRIX-NG-TC002-CLI-0.1.0-x86_64-pc-windows-msvc.zip'],
@@ -38,14 +38,13 @@ async function runArtifacts(root, { dirty = false, commit = 'a'.repeat(40), skip
 
 test('installer artifacts get version-free names per platform', () => {
   assert.equal(stableName('AWTRIX-NG-TC002-Installer-0.1.0-x86_64-pc-windows-msvc.exe', 'x86_64-pc-windows-msvc'), 'AWTRIX-NG-TC002-Installer-windows-x64.exe');
-  assert.equal(stableName('AWTRIX-NG-TC002-Installer-0.1.0-x86_64-pc-windows-msvc-sources.tar.gz', 'x86_64-pc-windows-msvc'), 'AWTRIX-NG-TC002-Installer-windows-x64-sources.tar.gz');
   assert.equal(stableName('AWTRIX-NG-TC002-CLI-0.1.0-aarch64-apple-darwin.tar.gz', 'aarch64-apple-darwin'), 'AWTRIX-NG-TC002-CLI-macos-arm64.tar.gz');
   assert.equal(stableName('AWTRIX NG TC002 Installer-0.1.0-1.aarch64.rpm', 'aarch64-unknown-linux-gnu'), 'AWTRIX-NG-TC002-Installer-linux-arm64.rpm');
   assert.throws(() => stableName('notes.txt', 'x86_64-apple-darwin'), /Unexpected installer artifact/);
   assert.throws(() => stableName('a.exe', 'i686-pc-windows-msvc'), /Unknown target/);
 });
 
-test('publishing replaces the folder with every platform and a manifest', async t => {
+test('publishing replaces the folder with every platform and leaves the source archives out', async t => {
   const root = await temporary(t);
   const source = path.join(root, 'run');
   const output = path.join(root, 'installer');
@@ -55,10 +54,11 @@ test('publishing replaces the folder with every platform and a manifest', async 
   await writeFile(path.join(output, 'AWTRIX-NG-TC002-Installer-old.exe'), 'old');
   const manifest = await publish(source, output);
   assert.equal(manifest.version, '0.1.0');
-  assert.equal(manifest.files.length, 17);
+  assert.equal(manifest.files.length, 12);
   assert.deepEqual(new Set(manifest.files.map(file => file.target)), new Set(Object.keys(platforms)));
   const names = await readdir(output);
-  assert.deepEqual(names.sort(), [...manifest.files.map(file => file.name), manifestName].sort());
+  assert.deepEqual(names.sort(), manifest.files.map(file => file.name).sort());
+  assert(!names.some(name => name.endsWith('-sources.tar.gz')));
   for (const file of manifest.files) assert.equal(digest(await readFile(path.join(output, file.name))), file.sha256);
 });
 
@@ -93,10 +93,10 @@ test('a failed publish keeps the previous folder untouched', async t => {
   await mkdir(source);
   await runArtifacts(source);
   await mkdir(output);
-  await writeFile(path.join(output, manifestName), 'previous');
+  await writeFile(path.join(output, 'AWTRIX-NG-TC002-Installer-windows-x64.exe'), 'previous');
   await writeFile(path.join(source, 'tc002-installer-x86_64-unknown-linux-gnu', 'AWTRIX NG TC002 Installer_0.1.0_amd64.deb'), 'changed');
   await assert.rejects(publish(source, output), /SHA-256 mismatch/);
-  assert.deepEqual(await readdir(output), [manifestName]);
-  assert.equal(await readFile(path.join(output, manifestName), 'utf8'), 'previous');
+  assert.deepEqual(await readdir(output), ['AWTRIX-NG-TC002-Installer-windows-x64.exe']);
+  assert.equal(await readFile(path.join(output, 'AWTRIX-NG-TC002-Installer-windows-x64.exe'), 'utf8'), 'previous');
   assert.deepEqual((await readdir(root)).sort(), ['installer', 'run']);
 });

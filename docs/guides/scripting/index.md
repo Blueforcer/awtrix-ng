@@ -408,6 +408,11 @@ them.
 
 - **`init()` or `setup()`?** Give members their starting values in `init()`. Do first fetches
   and logging in `setup()`. Your [store](storage.md#storage) is ready in both.
+- **`draw()` can run before the first `loop()`.** `init()` and `setup()` always run before the
+  first frame. `loop()` keeps its own once-a-second pace, so after you save or after a restart
+  your app can be shown before its first `loop()` has run. Give every member that
+  `draw()` reads a starting value in `init()`. If that value needs the work of `loop()`, call
+  `self.loop()` once at the end of `setup()`.
 <!-- only esp32 esp32-s3 -->
 - After a reboot, the apps start their first `loop()` a couple of seconds apart, so they do not
   all fetch in the same second.

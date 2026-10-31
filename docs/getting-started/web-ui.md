@@ -479,8 +479,8 @@ Device settings in these sections: **Wi-Fi**, **Web server**, **MQTT**, **Time**
 <!-- only tc002 -->
 Device settings in these sections: **Wi-Fi**, **Web server**, **MQTT**, **Time**, **Panel**,
 **Brightness & sensors**, **Buttons**, **Audio**, **Scripting**, **Mirroring**, **Misc**, then
-**AWTRIX Hub**, **Gamepad**, **Home Assistant Voice**, **iPhone**, **Maintenance** and
-**Backup & restore**.
+**AWTRIX Hub**, **Gamepad**, **Home Assistant Voice**, **Speech voice**, **iPhone**,
+**Help AWTRIX**, **Maintenance** and **Backup & restore**.
 <!-- /only -->
 
 All fields are in [System configuration](../reference/system.md):

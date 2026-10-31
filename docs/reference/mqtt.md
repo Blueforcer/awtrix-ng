@@ -563,7 +563,8 @@ not sent again.
 | every HA discovery config, entity state and availability publish | **yes** |
 
 A command you publish may be at most **8192 bytes**, topic included. A larger one is dropped without an error and
-without `/result` – a very long notification is the usual way to hit this. Messages AWTRIX
+without `/result`, and the clock's log names it – a very long notification is the usual way to hit this. A message
+over 64 KiB also makes the clock connect to the broker again. Messages AWTRIX
 publishes *to you* have no such limit: `state/device` and `state/screen` are sent at full size. All
 other limits are in [Limits](limits.md).
 

@@ -217,7 +217,7 @@ curl -X PUT http://<awtrix-ip>/api/v1/system \
 Other Wi-Fi details cannot be changed: power saving is always off, channels 12 and 13 work, and
 <!-- only esp32 esp32-s3 -->AWTRIX checks the connection every 5 s and reconnects if it dropped.<!-- /only --><!-- only tc002 -->AWTRIX
 reconnects by itself if the connection drops, however long that takes. The setup hotspot opens
-when the clock cannot join at startup or right after you save new Wi-Fi details. The log names
+when the clock cannot join at startup, or cannot join with new Wi-Fi details you saved. The log names
 the reason for each drop.<!-- /only -->
 
 ## MQTT and Home Assistant

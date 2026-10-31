@@ -1227,7 +1227,7 @@ their current values.
 A `color` is a **number** from `0` to `16777215`. Every other type has the JSON type its name
 suggests.
 
-`hint` is gray text for an empty box, at most 48 bytes. Show it the way a browser shows an
+`hint` is gray text for an empty box, at most 48 characters. Show it the way a browser shows an
 HTML `placeholder`: grayed out, and gone as soon as there is a value. It is never sent back in a
 `PATCH`.
 

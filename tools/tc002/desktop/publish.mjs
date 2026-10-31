@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
-import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { verifyDigest } from './build.mjs';
-
-export const manifestName = 'AWTRIX-NG-TC002-Installer-manifest.json';
 
 export const platforms = {
   'x86_64-pc-windows-msvc': 'windows-x64',
@@ -17,7 +15,6 @@ export const platforms = {
 export function stableName(name, target) {
   const platform = platforms[target];
   assert(platform, `Unknown target: ${target}`);
-  if (/^AWTRIX-NG-TC002-Installer-.+-sources\.tar\.gz$/.test(name)) return `AWTRIX-NG-TC002-Installer-${platform}-sources.tar.gz`;
   const cli = /^AWTRIX-NG-TC002-CLI-.+\.(zip|tar\.gz)$/.exec(name);
   if (cli) return `AWTRIX-NG-TC002-CLI-${platform}.${cli[1]}`;
   const gui = /\.(exe|dmg|deb|rpm)$/.exec(name);
@@ -41,6 +38,7 @@ export async function collect(source) {
       `${artifacts.target}: built from another version or commit`);
     for (const { path: name, size, sha256 } of artifacts.artifacts) {
       assert(typeof name === 'string' && !/[\/]/.test(name) && name !== '.' && name !== '..', `Invalid artifact path: ${name}`);
+      if (/^AWTRIX-NG-TC002-Installer-.+-sources\.tar\.gz$/.test(name)) continue;
       files.push({ name: stableName(name, artifacts.target), target: artifacts.target, from: path.join(directory, name), size, sha256 });
     }
   }
@@ -64,15 +62,9 @@ export async function publish(source, output) {
       verifyDigest(bytes, file.sha256, path.basename(file.from));
       assert.equal(bytes.length, file.size, `${path.basename(file.from)}: size mismatch`);
     }
-    const manifest = {
-      version: release.version,
-      commit: release.commit,
-      files: release.files.map(({ name, target, size, sha256 }) => ({ name, target, size, sha256 })),
-    };
-    await writeFile(path.join(staging, manifestName), `${JSON.stringify(manifest, null, 2)}\n`);
     await rm(output, { recursive: true, force: true });
     await rename(staging, output);
-    return manifest;
+    return release;
   } catch (error) {
     await rm(staging, { recursive: true, force: true });
     throw error;
@@ -87,9 +79,9 @@ function parse(args) {
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   Promise.resolve().then(() => {
     const options = parse(process.argv.slice(2));
-    return publish(options.from, options.out).then(manifest => [manifest, options.out]);
-  }).then(([manifest, out]) => {
-    console.log(`Installer ${manifest.version} (${manifest.commit}): ${manifest.files.length} files in ${out}`);
+    return publish(options.from, options.out).then(release => [release, options.out]);
+  }).then(([release, out]) => {
+    console.log(`Installer ${release.version} (${release.commit}): ${release.files.length} files in ${out}`);
   }).catch(error => {
     console.error(error.message);
     process.exitCode = 1;

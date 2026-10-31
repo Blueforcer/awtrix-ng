@@ -36,9 +36,10 @@ file.
 
 ## Downloads
 
-Every [release](https://github.com/Blueforcer/awtrix-ng/releases/latest) carries the installers
-with version-free file names, the source archive for each platform and
-`AWTRIX-NG-TC002-Installer-manifest.json` (version, commit, sizes and SHA-256).
+The current builds are in
+[`installer/tc002/`](https://github.com/Blueforcer/awtrix-ng/tree/main/installer/tc002), with
+version-free file names. They change far less often than the firmware, so firmware releases do not
+carry them.
 
 | System | Graphical installer | Terminal version |
 | --- | --- | --- |
@@ -197,22 +198,25 @@ GPL/LGPL notices and corresponding sources. The application is under the reposit
 
 The [installer workflow](https://github.com/Blueforcer/awtrix-ng/blob/main/.github/workflows/tc002-installer.yml)
 builds the WASM once, runs the shared tests, then builds Windows x64, macOS Intel/ARM64 and Linux
-x64/ARM64 packages on native runners. It uses no signing keys. On a `v*` tag the CI workflow runs
-it and attaches the installers to the release.
+x64/ARM64 packages on native runners. It uses no signing keys and publishes nothing. It runs when
+the installer code changes and on dispatch.
 
 ### Publishing
 
-The release job stages the five platform artifacts with:
+To ship a new installer, take a successful run of the installer workflow and replace the folder
+from the repository root:
 
 ```sh
-node tools/tc002/desktop/publish.mjs --from ARTIFACTS --out DIRECTORY
+gh run download RUN_ID --repo Blueforcer/awtrix-ng --pattern 'tc002-installer-*' --dir ARTIFACTS
+node tools/tc002/desktop/publish.mjs --from ARTIFACTS --out installer/tc002
 ```
 
-It checks every file against its `artifact-manifest.json`, requires all five to come from the
-same clean commit and version, and writes the version-free files and
-`AWTRIX-NG-TC002-Installer-manifest.json` into `DIRECTORY`. The
+`publish.mjs` checks every file against its `artifact-manifest.json`, requires all five platforms
+to come from the same clean commit and version, and replaces `installer/tc002/` with the installers
+and terminal archives under version-free names. The source archives stay in the workflow artifacts.
+Commit the folder; the
 [TC002 guide](https://blueforcer.github.io/awtrix-ng/tc002/getting-started/tc002/#get-the-installer)
-links to these file names on the latest release.
+links to these file names.
 
 ## Testing
 

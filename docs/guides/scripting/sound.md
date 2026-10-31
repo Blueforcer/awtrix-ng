@@ -325,7 +325,8 @@ along.
 
 ## Speech
 
-A clock with a voice reads English text aloud:
+A clock with a voice reads text aloud, in English or in the language of an
+[uploaded voice pack](../sounds.md#another-voice-or-language):
 
 ```berry
 # @needs audio.speech

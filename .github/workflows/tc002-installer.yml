@@ -1,13 +1,9 @@
 name: TC002 installers
 
+# Builds and tests the installers when their code changes, and on dispatch. Nothing is published:
+# the files users download are copied into installer/tc002 by hand (tools/tc002/desktop/README.md).
 on:
   workflow_dispatch:
-  # ci.yml calls it on v* tags, after its own image-tools job has uploaded the WASM tools.
-  workflow_call:
-    inputs:
-      image-tools-ready:
-        type: boolean
-        default: false
   push:
     branches: ["**"]
     paths:
@@ -37,13 +33,11 @@ concurrency:
 
 jobs:
   image-tools:
-    if: ${{ !inputs.image-tools-ready }}
     uses: ./.github/workflows/tc002-image-tools.yml
 
   packages:
     name: Installer (${{ matrix.target }})
     needs: image-tools
-    if: ${{ !cancelled() && !failure() }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
