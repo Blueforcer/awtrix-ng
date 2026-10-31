@@ -55,13 +55,20 @@ language, so a new language needs no firmware build. `prepare()` runs these step
 
 1. **Folding.** ASCII letters become lower case, control characters separate words. Other
    characters go through `[fold]`, longest match first; a code point listed in `[letters]` stays a
-   letter, anything else separates words, broken UTF-8 included.
-2. **Words and numbers.** A run of letters is a word; an apostrophe inside it stays. Numbers up to
-   six digits are read by `[numbers]`, longer ones digit by digit. A decimal sign between digits
-   reads its word and the digits after it one by one. A group sign before exactly three digits
-   joins them (`1.000` in German). A time `h:mm` up to 23:59 reads one of three templates; a
-   `time word` written after it (`14:30 Uhr`) is not read twice. `-` before a number that starts a
-   word is `minus`, and a character in `[symbols]` is its words.
+   letter, anything else separates words, broken UTF-8 included. When the pack has `[spell]`, a
+   word of two to five ASCII capitals in a text that also has lower case is marked as an acronym if
+   it has at most three letters or no vowel (`DHL`, `SNCF`, not `NASA`, not a text in capitals).
+2. **Words and numbers.** An entry of `[abbreviations]` at the start of a word (`km/h`) reads its
+   words. A run of letters is a word; an apostrophe inside it stays. Words joined by hyphens are
+   one word when the lexicon knows them joined (`e-mail`, `t-shirt`), the longest known start of
+   the chain first; otherwise the hyphen separates them. An acronym reads its lexicon entry written
+   in capitals (`UPS`), else it is spelled with the letter names of `[spell]`, so English `US` is
+   not the word `us`. Numbers up to six digits are read by `[numbers]`,
+   longer ones digit by digit. A decimal sign between digits reads its word and the digits after it
+   one by one. A group sign before exactly three digits joins them (`1.000` in German). A time
+   `h:mm` up to 23:59 reads one of three templates; a `time word` written after it (`14:30 Uhr`) is
+   not read twice. `-` before a number that starts a word is `minus`, and a character in
+   `[symbols]` is its words.
 3. **Pauses.** `.`, `,`, `?`, `!`, `;`, `:` and a new line end a phrase. Repeated punctuation adds
    no second pause.
 4. **Pronunciation.** The lexicon's reading of a word, else the rules'. The lexicon knows whether
@@ -78,6 +85,23 @@ frontend never changes, so any number of threads read it at the same time.
 A pack carries its language as two tables: `fe.text` with the phones, letters, numbers, times and
 pronunciation rules, and `fe.lexicon`, a word list with pronunciations. `Frontend::parse()` checks
 both when the pack loads; a table it cannot use refuses the pack.
+
+These parts of `fe.text` are optional:
+
+| Line | Meaning | Example |
+|---|---|---|
+| `[abbreviations]` `km/h` → words | a written abbreviation, folded (lower case, no space), matched at a word's start, longest first | German `kilometer pro stunde` |
+| `[spell]` `b` → words | the name of a letter a–z, for acronyms | German `be` |
+| `hundred N exact` | N·100 with nothing after it | Spanish `cien` (`hundred 1` is `ciento`) |
+| `thousand few` | the thousand word after a count ending in 2–4 but not 12–14 | Polish `tysiące` |
+| `ten thousand` | numbers from 10 000 group by four digits | Mandarin 万 |
+| `zero` | said once where a number skips a place | Mandarin 零: 105, 1005, 100 500 |
+| `ten prefix` | said before 10–19 after a higher place | Mandarin 一: 110 is 一百一十 |
+| `two count` | 2 counting thousands and ten thousands | Mandarin 两 |
+| `percent first` | `n%` reads this before the number, the sign not again | Mandarin 百分之 |
+| `year word` | a four-digit number before this folded word reads digit by digit | Mandarin 年 |
+| `hour N` | hour N (0–23) of a time; `hour one` is `hour 1` | Polish `siódma` |
+| `one before word` ending → ending | a number before a word or a `[symbols]` sign ends this way, longest ending first | Spanish `uno` → `un`, `veintiuno` → `veintiún` |
 
 ### The plan
 

@@ -13,9 +13,14 @@ constexpr std::size_t kMaxPhonesInInventory = 64;
 constexpr std::size_t kMaxRules = 4096;
 constexpr std::size_t kMaxContext = 8;
 constexpr std::size_t kMaxWordBytes = 64;
+constexpr std::size_t kMaxSpelled = 5;
+// Folding puts this before an acronym to spell (control characters never survive folding).
+constexpr char kSpellMark = '\x01';
 
 bool digit(char c) { return c >= '0' && c <= '9'; }
 bool asciiAlpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+// A byte that can be part of a word: ASCII letter or digit, apostrophe, any byte of a UTF-8 sequence.
+bool wordByte(char c) { return asciiAlpha(c) || digit(c) || c == '\'' || static_cast<unsigned char>(c) >= 0x80; }
 
 std::vector<std::string_view> fields(std::string_view line) {
   std::vector<std::string_view> out;
@@ -73,9 +78,20 @@ bool Frontend::letter(uint32_t c) const {
 std::string Frontend::fold(std::string_view text) const {
   std::string out;
   out.reserve(text.size());
+  // Acronyms are only told apart from shouting in a text that also has lower case.
+  const bool spelling = std::any_of(spell_.begin(), spell_.end(), [](const std::string& s) { return !s.empty(); }) &&
+                        std::any_of(text.begin(), text.end(), [](char ch) { return ch >= 'a' && ch <= 'z'; });
   for (std::size_t at = 0; at < text.size();) {
     const auto c = static_cast<unsigned char>(text[at]);
     if (c < 0x80) {
+      if (spelling && c >= 'A' && c <= 'Z' && (out.empty() || !wordByte(out.back()))) {
+        std::size_t end = at;
+        while (end < text.size() && text[end] >= 'A' && text[end] <= 'Z') ++end;
+        const std::string_view run = text.substr(at, end - at);
+        if (run.size() >= 2 && run.size() <= kMaxSpelled && (end == text.size() || !wordByte(text[end])) &&
+            (run.size() <= 3 || run.find_first_of("AEIOUY") == std::string_view::npos))
+          out += kSpellMark;
+      }
       if (c >= 'A' && c <= 'Z') out += static_cast<char>(c - 'A' + 'a');
       else if (c == '\n' || (c > ' ' && c < 0x7F)) out += static_cast<char>(c);
       else out += ' ';
@@ -101,17 +117,44 @@ std::string Frontend::fold(std::string_view text) const {
   return out;
 }
 
-std::string Frontend::number(uint32_t n) const {
+std::string Frontend::number(uint32_t n, bool afterPlace) const {
+  // The rest after a place, with `zero` before it when it skips the next lower place.
+  const auto rest = [&](std::string head, uint32_t r, uint32_t lower) {
+    if (!r) return head;
+    head += restJoin_;
+    if (r < lower && !zero_.empty()) head += zero_ + restJoin_;
+    return head + number(r, true);
+  };
+  if (n >= 10000 && !tenThousand_.empty()) {
+    const uint32_t m = n / 10000;
+    return rest((m == 2 && !twoCount_.empty() ? twoCount_ : number(m)) + thousandJoin_ + tenThousand_, n % 10000, 1000);
+  }
   if (n >= 1000) {
-    const uint32_t t = n / 1000, rest = n % 1000;
-    std::string head = t == 1 && !oneThousand_.empty() ? oneThousand_ : number(t) + thousandJoin_ + thousand_;
-    return rest ? head + restJoin_ + number(rest) : head;
+    const uint32_t t = n / 1000;
+    const bool few = !thousandFew_.empty() && t % 10 >= 2 && t % 10 <= 4 && (t % 100 < 12 || t % 100 > 14);
+    const std::string count = t == 2 && !twoCount_.empty() ? twoCount_ : number(t);
+    return rest(t == 1 && !oneThousand_.empty() ? oneThousand_ : count + thousandJoin_ + (few ? thousandFew_ : thousand_),
+                n % 1000, 100);
   }
   if (n >= 100) {
-    const uint32_t rest = n % 100;
-    return rest ? hundreds_[n / 100] + restJoin_ + number(rest) : hundreds_[n / 100];
+    const uint32_t h = n / 100;
+    if (n % 100 == 0 && !hundredsExact_[h].empty()) return hundredsExact_[h];
+    return rest(hundreds_[h], n % 100, 10);
   }
+  if (afterPlace && n >= 10 && n < 20 && !tenPrefix_.empty()) return tenPrefix_ + restJoin_ + units_[n];
   return units_[n];
+}
+
+const std::pair<std::string, std::string>* Frontend::abbreviation(std::string_view folded, std::size_t at) const {
+  for (const auto& a : abbreviations_) {
+    if (folded.compare(at, a.first.size(), a.first) != 0) continue;
+    const std::size_t next = at + a.first.size();
+    if (next == folded.size()) return &a;
+    std::size_t after = next;
+    const uint32_t c = awtrix::text::nextCodepoint(folded, after);
+    if (!digit(folded[next]) && (c == awtrix::text::kInvalidCodepoint || !letter(c))) return &a;
+  }
+  return nullptr;
 }
 
 bool Frontend::lookup(std::string_view word, bool opensSentence, Word& out) const {
@@ -338,16 +381,62 @@ bool Frontend::prepare(std::string_view text, Plan& out) const {
     if (length) *length = at - i;
     return c != awtrix::text::kInvalidCodepoint && letter(c);
   };
+  // Past a run of letters with apostrophes inside, starting on a letter.
+  const auto wordEnd = [&](std::size_t i) {
+    std::size_t length = 0;
+    while (i < size && (folded[i] == '\'' || letterAt(i, &length))) i += folded[i] == '\'' ? 1 : length;
+    return i;
+  };
+  // After a run of spaces from `at`.
+  const auto skipSpaces = [&](std::size_t at) {
+    while (at < size && folded[at] == ' ') ++at;
+    return at;
+  };
+  bool spellNext = false;
   for (std::size_t i = 0; i < size && !builder.full();) {
     const char c = folded[i];
     std::size_t length = 0;
+    if (c == kSpellMark) {
+      spellNext = true;
+      ++i;
+      continue;
+    }
+    const char before = i ? folded[i - 1] : ' ';
+    if (!asciiAlpha(before) && before != '\'' && static_cast<unsigned char>(before) < 0x80) {
+      if (const auto* written = abbreviation(folded, i)) {
+        builder.say(written->second);
+        i += written->first.size();
+        spellNext = false;
+        continue;
+      }
+    }
     if (letterAt(i, &length)) {
       const auto begin = i;
-      i += length;
-      while (i < size && (folded[i] == '\'' || letterAt(i, &length))) i += folded[i] == '\'' ? 1 : length;
+      i = wordEnd(i);
+      // Words joined by hyphens are one word when the lexicon knows them joined (e-mail, t-shirt),
+      // the longest known start of the chain; otherwise the hyphen separates them below.
+      const auto hyphen = [&](std::size_t at) { return at + 1 < size && folded[at] == '-' && letterAt(at + 1, &length); };
+      Word known;
+      for (std::size_t at = i; at - begin < kMaxWordBytes && hyphen(at);) {
+        at = wordEnd(at + 1);
+        if (lookup(std::string_view(folded).substr(begin, at - begin), false, known)) i = at;
+      }
       auto end = i;
       while (end > begin && folded[end - 1] == '\'') --end;
-      builder.word(std::string_view(folded).substr(begin, end - begin));
+      const auto word = std::string_view(folded).substr(begin, end - begin);
+      // An acronym reads its lexicon entry in capitals (folded text never matches one), else it is
+      // spelled when every letter has a name: US is not the word us.
+      const auto named = [&](char l) { return l >= 'a' && l <= 'z' && !spell_[l - 'a'].empty(); };
+      std::string acronym;
+      if (spellNext) {
+        acronym = word;
+        for (char& l : acronym) if (l >= 'a' && l <= 'z') l = static_cast<char>(l - 'a' + 'A');
+      }
+      spellNext = false;
+      if (!acronym.empty() && lookup(acronym, false, known)) builder.word(acronym);
+      else if (!acronym.empty() && std::all_of(word.begin(), word.end(), named))
+        for (const char l : word) builder.say(spell_[l - 'a']);
+      else builder.word(word);
     } else if (digit(c)) {
       const auto begin = i;
       uint32_t value = 0;
@@ -369,7 +458,7 @@ bool Frontend::prepare(std::string_view text, Plan& out) const {
           digit(folded[i + 1]) && digit(folded[i + 2]) && (i + 3 == size || !digit(folded[i + 3]))) {
         const uint32_t minutes = (folded[i + 1] - '0') * 10u + (folded[i + 2] - '0');
         if (minutes < 60) {
-          const std::string hour = value == 1 && !hourOne_.empty() ? hourOne_ : number(value);
+          const std::string hour = !hours_[value].empty() ? hours_[value] : number(value);
           const std::string& pattern = !minutes ? timeExact_ : minutes < 10 ? timeEarly_ : timeOther_;
           builder.say(timeWords(pattern, hour, minutes ? number(minutes) : std::string()));
           i += 3;
@@ -383,13 +472,33 @@ bool Frontend::prepare(std::string_view text, Plan& out) const {
           continue;
         }
       }
-      if (digits <= 6) builder.say(number(value));
-      else for (auto j = begin; j < i; ++j) if (digit(folded[j])) builder.say(units_[folded[j] - '0']);
+      std::string spoken;
+      const auto digitByDigit = [&]() {
+        for (auto j = begin; j < i; ++j) if (digit(folded[j])) spoken += units_[folded[j] - '0'] + ' ';
+      };
+      const std::size_t next = skipSpaces(i);
+      if (digits == 4 && !yearWord_.empty() && folded.compare(next, yearWord_.size(), yearWord_) == 0) digitByDigit();
+      else if (digits <= 6) spoken = number(value);
+      else digitByDigit();
       if (decimal_ && i + 1 < size && folded[i] == decimal_ && digit(folded[i + 1])) {
-        builder.say(decimalWord_);
+        spoken += ' ' + decimalWord_;
         ++i;
-        while (i < size && digit(folded[i])) builder.say(units_[folded[i++] - '0']);
+        while (i < size && digit(folded[i])) spoken += ' ' + units_[folded[i++] - '0'];
+      } else if (next < size && (letterAt(next, &length) || symbols_.count(folded[next]))) {
+        // A count before a word or a unit sign: Spanish un grado, veintiún grados, German ein Grad.
+        const std::pair<std::string, std::string>* best = nullptr;
+        for (const auto& ending : oneBeforeWord_)
+          if (spoken.size() >= ending.first.size() && spoken.compare(spoken.size() - ending.first.size(),
+                                                                       ending.first.size(), ending.first) == 0 &&
+              (!best || ending.first.size() > best->first.size()))
+            best = &ending;
+        if (best) spoken.replace(spoken.size() - best->first.size(), best->first.size(), best->second);
       }
+      if (!percentFirst_.empty() && i < size && folded[i] == '%') {
+        builder.say(percentFirst_);
+        ++i;
+      }
+      builder.say(spoken);
     } else {
       bool wordStart = i == 0;
       if (!wordStart) {
@@ -488,9 +597,36 @@ bool Frontend::parseLine(const std::string& section, std::string_view line, std:
     else if (f.size() == 2 && f[0] == "time exact") timeExact_ = std::string(f[1]);
     else if (f.size() == 2 && f[0] == "time early") timeEarly_ = std::string(f[1]);
     else if (f.size() == 2 && f[0] == "time other") timeOther_ = std::string(f[1]);
-    else if (f.size() == 2 && f[0] == "hour one") hourOne_ = std::string(f[1]);
+    else if (f.size() == 2 && f[0] == "hour one") hours_[1] = std::string(f[1]);
+    else if (f.size() == 2 && f[0].substr(0, 5) == "hour " && parseNumber(f[0].substr(5), 0, 23, n))
+      hours_[n] = std::string(f[1]);
     else if (f.size() == 2 && f[0] == "time word") timeWord_ = std::string(f[1]);
+    else if (f.size() == 2 && f[0].size() == 15 && f[0].substr(0, 8) == "hundred " && f[0].substr(9) == " exact" &&
+             parseNumber(f[0].substr(8, 1), 1, 9, n))
+      hundredsExact_[n] = std::string(f[1]);
+    else if (f.size() == 2 && f[0] == "thousand few") thousandFew_ = std::string(f[1]);
+    else if (f.size() == 2 && f[0] == "ten thousand") tenThousand_ = std::string(f[1]);
+    else if (f.size() == 2 && f[0] == "zero") zero_ = std::string(f[1]);
+    else if (f.size() == 2 && f[0] == "ten prefix") tenPrefix_ = std::string(f[1]);
+    else if (f.size() == 2 && f[0] == "two count") twoCount_ = std::string(f[1]);
+    else if (f.size() == 2 && f[0] == "percent first") percentFirst_ = std::string(f[1]);
+    else if (f.size() == 2 && f[0] == "year word") yearWord_ = std::string(f[1]);
+    else if (f.size() == 3 && f[0] == "one before word" && !f[1].empty())
+      oneBeforeWord_.emplace_back(std::string(f[1]), std::string(f[2]));
     else return fail("bad line");
+    return true;
+  }
+  if (section == "spell") {
+    if (f.size() != 2 || f[0].size() != 1 || f[0][0] < 'a' || f[0][0] > 'z' || f[1].empty()) return fail("bad line");
+    spell_[f[0][0] - 'a'] = std::string(f[1]);
+    return true;
+  }
+  if (section == "abbreviations") {
+    // Written as folded text: lower case, no space.
+    if (f.size() != 2 || f[0].empty() || f[0].size() >= kMaxWordBytes || f[1].empty() ||
+        std::any_of(f[0].begin(), f[0].end(), [](char ch) { return ch <= ' ' || (ch >= 'A' && ch <= 'Z'); }))
+      return fail("bad line");
+    abbreviations_.emplace_back(std::string(f[0]), std::string(f[1]));
     return true;
   }
   if (section == "stress") {
@@ -598,6 +734,8 @@ std::unique_ptr<const Frontend> Frontend::parse(std::string_view text, std::stri
   }
   std::stable_sort(frontend->folds_.begin(), frontend->folds_.end(),
                    [](const Fold& a, const Fold& b) { return a.from.size() > b.from.size(); });
+  std::stable_sort(frontend->abbreviations_.begin(), frontend->abbreviations_.end(),
+                   [](const auto& a, const auto& b) { return a.first.size() > b.first.size(); });
   if (!lexicon.empty()) {
     const auto* p = reinterpret_cast<const uint8_t*>(lexicon.data());
     if (lexicon.size() < 16 || std::memcmp(p, "LXR1", 4) != 0) {
