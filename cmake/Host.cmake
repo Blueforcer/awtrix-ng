@@ -23,6 +23,8 @@ target_sources(awtrix_host PRIVATE
   "${PROJECT_SOURCE_DIR}/src/platform/linux/net/FileDownload.cpp"
   "${PROJECT_SOURCE_DIR}/src/platform/linux/net/HttpClient.cpp"
   "${PROJECT_SOURCE_DIR}/src/platform/linux/net/HttpGet.cpp"
+  "${PROJECT_SOURCE_DIR}/src/platform/linux/net/Multipart.cpp"
+  "${PROJECT_SOURCE_DIR}/src/platform/linux/net/TransferQueue.cpp"
   "${PROJECT_SOURCE_DIR}/src/platform/linux/LinuxMemory.cpp"
   "${PROJECT_SOURCE_DIR}/src/media/AssetFileDevice.cpp"
   "${PROJECT_SOURCE_DIR}/src/media/IconRenderer.cpp"

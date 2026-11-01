@@ -11,12 +11,12 @@ namespace awtrix {
 
 class LinuxCapabilities {
  public:
-  LinuxCapabilities(bool bluetooth, bool scripting, const layout::Limits* layouts = nullptr)
+  LinuxCapabilities(bool bluetooth, bool scripting, bool voice, const layout::Limits* layouts = nullptr)
       : modules_{{{"ble", bluetooth}, {"gamepad", scripting}, {"oauth", scripting},
-                   {"crypto", scripting}, {"tcp", scripting}, {"layout", layouts && scripting}, {}}},
+                   {"crypto", scripting}, {"tcp", scripting}, {"layout", layouts && scripting},
+                   {"voice", voice}, {}}},
         layouts_(layouts), gamepadRemote_(scripting) {}
 
-  bool voice = false;
   bool clockFaces = false;
   bool mqttTls = false;
   bool bootSound = false;
@@ -37,7 +37,6 @@ class LinuxCapabilities {
           .member("scriptHandlesPerScript", script::ScriptLayouts::kMaxPerScript).endObject().endObject();
     }
     if (gamepadRemote_) writer.member("gamepadRemote", true);
-    if (voice) writer.member("voice", true);
     if (clockFaces) {
       writer.key("clockFaces").beginArray();
       for (const char* name : kClockFaceNames) writer.value(name);
@@ -50,7 +49,7 @@ class LinuxCapabilities {
   }
 
  private:
-  std::array<DeviceCapabilities::Extra, 7> modules_;
+  std::array<DeviceCapabilities::Extra, 8> modules_;
   const layout::Limits* layouts_;
   bool gamepadRemote_;
 };

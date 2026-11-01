@@ -488,7 +488,7 @@ See [Sound](../guides/sounds.md#volume).
 
 | Key | Type | Range | Default | Units | Meaning |
 |---|---|---|---|---|---|
-| `blockNavigation` | boolean | - | `false` | - | With `true`, the left and right buttons do not change apps, a double press on select does not switch the display, and holding select does not open the [menu](../guides/device-controls.md#the-menu).<!-- only tc002 --> The [knob](../guides/device-controls.md#the-knob) sets neither brightness nor volume and does not start Home Assistant Voice.<!-- /only --> Presses still reach scripts, `buttonCallback` and MQTT<!-- only tc002 -->, and knob turns still reach `buttonCallback` and MQTT<!-- /only -->. |
+| `blockNavigation` | boolean | - | `false` | - | With `true`, the left and right buttons do not change apps, a double press on select does not switch the display, and holding select does not open the [menu](../guides/device-controls.md#the-menu).<!-- only tc002 --> The [knob](../guides/device-controls.md#the-knob) sets neither brightness nor volume and does not start the voice assistant.<!-- /only --> Presses still reach scripts, `buttonCallback` and MQTT<!-- only tc002 -->, and knob turns still reach `buttonCallback` and MQTT<!-- /only -->. |
 
 ---
 

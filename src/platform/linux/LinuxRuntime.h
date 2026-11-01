@@ -76,8 +76,11 @@
 #include "platform/tc002/runtime/Tc002Target.h"
 #include "platform/tc002/runtime/Tc002Update.h"
 #include "platform/tc002/speech/VoicePacks.h"
+#include "platform/tc002/voice/AssistantRouter.h"
 #include "platform/tc002/voice/KnobGesture.h"
+#include "platform/tc002/voice/Tc002VoiceSpeaker.h"
 #include "platform/tc002/voice/VoiceRuntime.h"
+#include "platform/tc002/voice/VoiceScripting.h"
 #include "platform/tc002/wake/WakeListener.h"
 #include "system/MonotonicClock.h"
 #include "transport/mqtt/MqttService.h"
@@ -122,6 +125,7 @@ class LinuxRuntime {
     std::unique_ptr<ble::GamepadApi> gamepadApi;
     linux_script::CryptoScripting crypto{[] { return monotonicMs(); }};
     linux_script::TcpScripting tcp;
+    std::unique_ptr<tc002::voice::VoiceScripting> voice;
     std::unique_ptr<layout::LayoutScripting> layout;
     std::unique_ptr<tc002::AudioScripting> audio;
     std::unique_ptr<script::KnobScripting> knob;
@@ -139,6 +143,7 @@ class LinuxRuntime {
   void composeScriptServices();
   void composeBluetooth();
   void composeExtensions();
+  void composeAssistant();
   void composePlatformRoutes();
   void startScripts();
   int startServices();
@@ -157,7 +162,6 @@ class LinuxRuntime {
 
   void applyConfig();
   bool voiceAllowedNow() const;
-  bool startVoice(int64_t now);
   float audioPitch(int64_t now, bool onScreen);
   CoreEngine& engine() { return app_->engine(); }
   LinuxBoard& board() { return *selectedBoard_; }
@@ -181,6 +185,7 @@ class LinuxRuntime {
   std::unique_ptr<tls::BrokerTrust> brokerTrust_;
   std::unique_ptr<tls::BrokerTrustApi> brokerTrustApi_;
   std::unique_ptr<LinuxBoard> selectedBoard_;
+  inline static LinuxBoard* boardKeptForUpdate_ = nullptr;
   Tc002Board* tc002_ = nullptr;
   Tc002Input input_;
   ScreenDisplay display_;
@@ -200,6 +205,7 @@ class LinuxRuntime {
   layout::Resources layoutResources_;
   std::optional<layout::LayoutPayload> layoutPayload_;
   std::unique_ptr<Tc002Speaker> speaker_;
+  std::optional<tc002::voice::Tc002VoiceSpeaker> voiceSpeaker_;
   std::optional<speech::VoicePacks> voicePacks_;
   std::optional<SupervisedRuntime> supervision_;
   std::optional<Tc002QuickSettings> quickSettings_;
@@ -221,12 +227,11 @@ class LinuxRuntime {
   ScriptMqttBridge scriptMqtt_;
   script::ScriptServices scriptServices_;
   std::optional<tc002::MicrophoneInput> microphone_;
-  // Declared before its consumers (Voice, the wake word): their destructors still call its control().
   std::optional<tc002::MicrophoneHub> microphoneHub_;
+  tc002::MicrophoneHub::Consumer wakeMicrophone_, voiceMicrophone_, scriptMicrophone_;
   tc002::voice::KnobGesture knobGesture_;
   std::unique_ptr<tc002::voice::VoiceRuntime> voice_;
   std::unique_ptr<tc002::wake::WakeListener> wake_;
-  int wakeConsumer_ = 0;
   oauth::HttplibTransport oauthTransport_;
   std::optional<oauth::Vault> oauthVault_;
   std::optional<oauth::Service> oauthService_;
@@ -234,6 +239,7 @@ class LinuxRuntime {
   std::optional<oauth::Api> oauthApi_;
   std::optional<audio::AnalysisRouter> analysis_;
   Extensions extensions_;
+  std::optional<tc002::voice::AssistantRouter> assistantRouter_;
   script::ScriptSlots scriptSlots_;
   script::ScriptHost* scripts_ = nullptr;
   std::unique_ptr<script::ExtensionHost> scriptExtensions_;

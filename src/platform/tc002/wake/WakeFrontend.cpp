@@ -1,14 +1,11 @@
 // A port of TensorFlow Lite Micro's microfrontend (tensorflow/lite/experimental/microfrontend/lib,
-// Copyright The TensorFlow Authors, Apache-2.0) for the one configuration pymicro_features 2.0.2 sets;
-// its FFT is WakeFft. Every integer step and every int16 wrap follows the original. The tables the
-// original derives with cosf, log1pf and powf at start-up are data from the glibc the trainer ran on
-// (WakeFrontendTables.h): one of them hangs on the last bit of log1pf.
+// Copyright The TensorFlow Authors, Apache-2.0) for the one configuration pymicro_features 2.0.2 sets.
 #include "platform/tc002/wake/WakeFrontend.h"
-
-#include "platform/tc002/wake/WakeFrontendTables.h"
 
 #include <algorithm>
 #include <cstring>
+
+#include "platform/tc002/wake/WakeFrontendTables.h"
 
 namespace awtrix::tc002::wake {
 namespace {
@@ -23,8 +20,10 @@ constexpr int kPcanGainBits = 21;
 constexpr int kPcanSnrBits = 12;
 constexpr int kPcanOutputBits = 6;
 constexpr int kLogScaleShift = 6;
-// MostSignificantBit32(512) - 1 - kFilterbankBits / 2, with 12 filterbank bits.
-constexpr int kCorrectionBits = 3;
+constexpr int kFilterbankBits = 12;
+constexpr int mostSignificantBit32(uint32_t value) { return value ? 1 + mostSignificantBit32(value >> 1) : 0; }
+constexpr int kCorrectionBits =
+    mostSignificantBit32(static_cast<uint32_t>(WakeFft::kSize)) - 1 - kFilterbankBits / 2;
 constexpr int kSnrShift = kPcanGainBits - kCorrectionBits - kPcanSnrBits;
 constexpr int kChannelCount = static_cast<int>(WakeFrontend::kChannels) + 1;
 
@@ -99,7 +98,6 @@ uint16_t sqrt32(uint32_t num) {
   return static_cast<uint16_t>(res);
 }
 
-// The original's shortcut is kept: below 2^32 it takes the 32-bit root, which rounds into 16 bits.
 uint32_t sqrt64(uint64_t num) {
   if ((num >> 32) == 0) return sqrt32(static_cast<uint32_t>(num));
   uint64_t res = 0;
@@ -197,7 +195,6 @@ void WakeFrontend::compute(Frame& frame) {
     const int16_t* weights = tables::kWeights + tables::kWeightStarts[chan];
     const int16_t* unweights = tables::kUnweights + tables::kWeightStarts[chan];
     for (int j = 0; j < tables::kWidths[chan]; ++j) {
-      // The original keeps energies in int32: a square sum of 2^31 widens with its sign.
       const uint64_t magnitude = static_cast<uint64_t>(int64_t{static_cast<int32_t>(magnitudes[j])});
       weightSum += static_cast<uint64_t>(weights[j]) * magnitude;
       unweightSum += static_cast<uint64_t>(unweights[j]) * magnitude;

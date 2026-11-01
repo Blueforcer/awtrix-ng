@@ -57,6 +57,33 @@ struct Rig {
           now + 2);
   }
 };
+void assistantSetting() {
+  char folder[] = "/tmp/voice-config-XXXXXX";
+  check(::mkdtemp(folder) != nullptr, "a private folder");
+  {
+    ConfigStore store(folder);
+    check(store.load() && store.get().assistant == "ha" && store.assistantApp().empty(),
+          "Home Assistant answers by default");
+    ConfigStore::Rejection rejection;
+    check(store.update(R"({"assistant":"app:Chat"})", rejection) && store.get().assistant == "app:Chat" &&
+              store.assistantApp() == "Chat",
+          "an app can answer");
+    check(store.publicJson().find("\"assistant\":\"app:Chat\"") != std::string::npos, "the setting is public");
+    for (const char* bad : {R"({"assistant":"app:"})", R"({"assistant":"app:a/b"})", R"({"assistant":"hass"})",
+                            R"({"assistant":"app:next"})", R"({"assistant":1})"}) {
+      rejection = {};
+      check(!store.update(bad, rejection) && rejection.field == "assistant", std::string("refused: ") + bad);
+    }
+    Config ha;
+    check(!sameConnection(ha, store.get()), "a change of the assistant is a change of the connection");
+  }
+  ConfigStore again(folder);
+  check(again.load() && again.get().assistant == "app:Chat" && again.assistantApp() == "Chat",
+        "the setting survives a restart");
+  check(again.erase() && again.assistantApp().empty(), "erasing the settings brings Home Assistant back");
+  ::unlink((std::string(folder) + "/voice.json").c_str());
+  ::rmdir(folder);
+}
 int main() {
   {
     int64_t local = 0;
@@ -141,6 +168,7 @@ int main() {
           "reset stays disabled after restart");
     ::rmdir(directory);
   }
+  assistantSetting();
   {
     Rig r;
     r.begin();

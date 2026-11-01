@@ -114,7 +114,6 @@ struct Microphone {
     return true;
   }};
 
-  // One snapshot's worth of a sine of hz.
   static std::vector<int16_t> sine(double hz) {
     std::vector<int16_t> samples;
     for (unsigned i = 0; i < tc002::kMicrophonePcmSamples; ++i)
@@ -132,7 +131,6 @@ struct Microphone {
     input.receive(pcm, at);
   }
 
-  // Hands a sine of hz to the input as the microphone hub's stream does.
   void stream(double hz, int64_t at) {
     const auto samples = sine(hz);
     input.streamed(samples.data(), samples.size(), 0, at);

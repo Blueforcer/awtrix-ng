@@ -13,7 +13,6 @@ bool ModelStream::load(std::string_view bytes, std::string& error) {
     error = "the model needs one uint8 output";
     return false;
   }
-  // Feature value k as train.py quantised it: round(k / scale) + zero point, in float32.
   for (std::size_t k = 0; k < quantized_.size(); ++k) {
     const float q = std::nearbyint(static_cast<float>(k) / model->inputScale()) +
                     static_cast<float>(model->inputZeroPoint());

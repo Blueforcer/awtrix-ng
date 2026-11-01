@@ -4,15 +4,8 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(AWTRIX_WEBUI "${PROJECT_SOURCE_DIR}/webui/index.html")
 
-# add_awtrix_test(NAME name
-#                 [SOURCES file...] [LIBRARIES library...] [INCLUDES directory...] [DEFINITIONS definition...]
-#                 [SANITIZE] [COMMAND argument...] [TIMEOUT seconds] [LABELS label...] [PROPERTIES name value...])
-#
-# With SOURCES the test builds the executable name-test under the warning policy (and ASan and
-# UBSan with SANITIZE while AWTRIX_SANITIZE is on) and runs it with the COMMAND arguments; without
-# SOURCES, COMMAND is the whole command line. TIMEOUT defaults to 30 seconds.
 function(add_awtrix_test)
-  cmake_parse_arguments(PARSE_ARGV 0 TEST "SANITIZE" "NAME;TIMEOUT"
+  cmake_parse_arguments(PARSE_ARGV 0 TEST "" "NAME;TIMEOUT"
                         "SOURCES;LIBRARIES;INCLUDES;DEFINITIONS;COMMAND;LABELS;PROPERTIES")
   if(NOT TEST_NAME)
     message(FATAL_ERROR "add_awtrix_test needs a NAME")
@@ -26,9 +19,6 @@ function(add_awtrix_test)
     endif()
     if(TEST_DEFINITIONS)
       target_compile_definitions(${target} PRIVATE ${TEST_DEFINITIONS})
-    endif()
-    if(TEST_SANITIZE)
-      awtrix_sanitize(${target})
     endif()
     add_test(NAME ${TEST_NAME} COMMAND ${target} ${TEST_COMMAND})
   else()
@@ -60,16 +50,4 @@ function(add_awtrix_runtime_test)
     COMMAND "${Python3_EXECUTABLE}" "${script}" --binary "$<TARGET_FILE:awtrix-linux>"
             --webui "${AWTRIX_WEBUI}" ${TEST_ARGUMENTS}
     ${forwarded})
-endfunction()
-
-function(awtrix_sanitize target)
-  if(AWTRIX_SANITIZE AND UNIX AND NOT CMAKE_CROSSCOMPILING AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(${target} PRIVATE -fsanitize=address,undefined)
-    # GCC 15 reports -Wmaybe-uninitialized inside libstdc++'s <regex> (pulled in by httplib.h)
-    # once the sanitizers are on; the same sources build clean without them.
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-      target_compile_options(${target} PRIVATE -Wno-maybe-uninitialized)
-    endif()
-  endif()
 endfunction()

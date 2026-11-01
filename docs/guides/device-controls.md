@@ -108,13 +108,13 @@ knob for itself instead, for example to set the volume of what it plays. See
 | Top, amber | [`brightness`](../reference/settings.md#brightness), from 5 % to 100 %. While a mood light is on, it sets the mood light's brightness instead. The icon is a moon up to 25 % and a sun that grows above that. |
 | Bottom, cyan | The master volume, [`volume`](sounds.md#volume), from 0 to 100 %. It sets how loud every sound plays: alerts, apps and the radio. An X next to the speaker means silent, at 0. |
 
-**Hold** the knob for half a second to talk to Home Assistant, when
-[Home Assistant Voice](voice.md) is set up. Otherwise holding does nothing.
+**Hold** the knob for half a second to start the [voice assistant](voice.md): Home Assistant, when
+it is set up, or the app you chose. Otherwise holding does nothing.
 
 The values are saved like any other setting, so the web UI and Home Assistant show them at once.
 The three buttons on top keep their usual jobs.
 
-While **Block buttons** is on, the knob opens no bars and does not start Home Assistant Voice. It
+While **Block buttons** is on, the knob opens no bars and does not start the voice assistant. It
 only reports to `buttonCallback` and MQTT, so you can use it for your own automation.
 
 ## The Status app

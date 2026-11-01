@@ -114,16 +114,9 @@ void LinuxRuntime::tickVoice(int64_t now) {
   if (!knobVoice) knobGesture_.cancel();
   if (voice_) {
     voice_->tick(now, voiceAllowed);
-    if (knobGesture_.tick(now, knobVoice && voice_->ready()) == tc002::voice::KnobGesture::Action::Start)
-      startVoice(now);
-    // Voice starts its capture only once Home Assistant is ready for the audio. Until then the hub
-    // keeps open the stream the wake word lets go of, and Voice joins it. Set before the wake word's
-    // tick, which stops that stream once Voice has begun.
-    microphoneHub_->hold(voice_->starting());
-    if (wake_ && wake_->tick(now, voiceAllowed && voice_->wakeWord() && voice_->ready())) startVoice(now);
+    if (extensions_.voice) extensions_.voice->update(now);
+    assistantRouter_->tick(now, knobVoice);
   }
-  // After the consumers, so a stream started in this frame already holds back the snapshots. A probe
-  // alone leaves them running.
   microphone_->setStreaming(microphoneHub_->active());
 }
 
@@ -214,7 +207,7 @@ int LinuxRuntime::stop() {
       std::fputs("Supervisor channel refused the reboot request\n", stderr);
     if (!link_.flush(1000)) std::fputs("Supervisor channel did not take all pending messages\n", stderr);
   }
-  if (update_ && update_->ownsPanel()) static_cast<void>(selectedBoard_.release());
+  if (update_ && update_->ownsPanel()) boardKeptForUpdate_ = selectedBoard_.release();
   ::close(lock_);
   const bool clean = !error && saved && !displayFailed_ && !inputFailed_ && !readinessFailed_;
   const bool reported = performance_->finish(clean);

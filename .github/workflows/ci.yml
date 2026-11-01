@@ -63,6 +63,35 @@ jobs:
       - name: Verify actual systemd service isolation and restart persistence
         run: sudo python3 tests/linux/test_service.py --unit .pio/linux/awtrix-ng.service --binary .pio/linux/awtrix-linux --webui webui/index.html
 
+  linux-sanitizers:
+    name: Linux contracts under ASan and UBSan
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install Linux build and integration dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libssl-dev liblzma-dev libjpeg-turbo8-dev openssl mosquitto
+          pip install -U platformio
+      - name: Resolve shared host libraries
+        run: pio pkg install -e native
+      - name: Configure every host target with the sanitizers
+        run: cmake -S . -B .pio/linux-sanitize -DCMAKE_BUILD_TYPE=Release -DAWTRIX_SANITIZE=ON -DAWTRIX_REQUIRE_INTEGRATION_SERVICES=ON
+      - name: Build the sanitized targets
+        run: cmake --build .pio/linux-sanitize --parallel 2
+      - name: Run Linux contracts under the sanitizers
+        run: ctest --test-dir .pio/linux-sanitize --output-on-failure
+
   webui-tests:
     name: Web UI tests (jsdom)
     if: github.ref_type != 'tag'

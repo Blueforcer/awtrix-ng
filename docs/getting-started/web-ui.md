@@ -479,7 +479,7 @@ Device settings in these sections: **Wi-Fi**, **Web server**, **MQTT**, **Time**
 <!-- only tc002 -->
 Device settings in these sections: **Wi-Fi**, **Web server**, **MQTT**, **Time**, **Panel**,
 **Brightness & sensors**, **Buttons**, **Audio**, **Scripting**, **Mirroring**, **Misc**, then
-**AWTRIX Hub**, **Gamepad**, **Home Assistant Voice**, **Speech voice**, **iPhone**,
+**AWTRIX Hub**, **Gamepad**, **Voice assistant**, **Speech voice**, **iPhone**,
 **Help AWTRIX**, **Maintenance** and **Backup & restore**.
 <!-- /only -->
 
@@ -608,9 +608,11 @@ Shows the two gamepads, whether they are connected, and their player numbers.
 first input and can differ from the row number. While a phone is a gamepad, a **Phone** row shows
 which player it plays. See [Gamepad](../guides/gamepad.md).
 
-### Home Assistant Voice
+### Voice assistant
 
-Enter the Home Assistant address, an access token and the Assist pipeline, then press
+**Assistant** chooses who answers the knob, the wake word and the **Assist** button: Home Assistant
+or an installed app that can answer. **Wake word** switches "Hey AWTRIX" on and off. For Home
+Assistant, enter the address, an access token and the Assist pipeline, then press
 **Save and connect**. The **Voice** switch turns it on and off at once. A badge shows the connection
 or, in plain words, why it fails. See [Home Assistant Voice](../guides/voice.md).
 

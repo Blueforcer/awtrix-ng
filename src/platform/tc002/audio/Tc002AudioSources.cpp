@@ -51,7 +51,7 @@ bool readWavHeader(Read read, Skip skip, WavFormat& out) {
 }
 
 // The format and where its samples start; false unless every sample is inside the bytes.
-bool wavInMemory(const std::string& bytes, WavFormat& format, std::size_t& at) {
+bool wavInMemory(std::string_view bytes, WavFormat& format, std::size_t& at) {
   at = 0;
   const auto read = [&](unsigned char* out, std::size_t n) {
     if (n > bytes.size() - at) return false;
@@ -75,7 +75,7 @@ void toSamples(const unsigned char* bytes, std::size_t size, int16_t* out) {
 }
 
 // ID3v2 tags ahead of the audio, each with its optional footer.
-std::size_t skipId3(const std::string& bytes) {
+std::size_t skipId3(std::string_view bytes) {
   std::size_t at = 0;
   while (bytes.size() - at >= 10 && !bytes.compare(at, 3, "ID3")) {
     const auto* p = reinterpret_cast<const unsigned char*>(bytes.data() + at);
@@ -93,7 +93,7 @@ std::size_t skipId3(const std::string& bytes) {
 constexpr std::size_t kMp3SyncWindow = 64 * 1024;
 
 // The first frame whose successor starts where its length says, or that ends the bytes.
-bool findMp3(const std::string& bytes, std::size_t& at) {
+bool findMp3(std::string_view bytes, std::size_t& at) {
   const auto* data = reinterpret_cast<const uint8_t*>(bytes.data());
   const std::size_t start = skipId3(bytes);
   const std::size_t stop = std::min(bytes.size(), start + kMp3SyncWindow);
@@ -161,18 +161,18 @@ PcmSource::Read WavMemorySource::next(const int16_t*& samples, std::size_t& fram
   return Read::Data;
 }
 
-bool checkClip(const std::string& bytes, std::string& error) {
+std::optional<ClipKind> checkClip(std::string_view bytes, std::string& error) {
   if (!bytes.compare(0, 4, "RIFF")) {
     WavFormat format;
     std::size_t at = 0;
-    if (wavInMemory(bytes, format, at)) return true;
+    if (wavInMemory(bytes, format, at)) return ClipKind::Wav;
     error = "unsupported WAV";
-    return false;
+    return std::nullopt;
   }
   std::size_t at = 0;
-  if (findMp3(bytes, at)) return true;
+  if (findMp3(bytes, at)) return ClipKind::Mp3;
   error = "not WAV or MP3";
-  return false;
+  return std::nullopt;
 }
 
 std::unique_ptr<PcmSource> openClip(std::shared_ptr<const std::string> bytes) {

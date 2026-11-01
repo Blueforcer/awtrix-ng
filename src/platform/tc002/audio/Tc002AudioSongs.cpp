@@ -30,7 +30,7 @@ bool Tc002AudioSink::playSong(const std::string& text, bool nextBar) {
 }
 
 bool Tc002AudioSink::playFx(const std::string& text) {
-  if (!available() || voiceOwned_.load()) return false;
+  if (!available() || voiceChannelClaimed_.load()) return false;
   const synth::ParseResult parsed = songs_.get(text);
   if (!parsed.ok()) return false;
   {
@@ -44,7 +44,7 @@ bool Tc002AudioSink::playFx(const std::string& text) {
 }
 
 bool Tc002AudioSink::playSongOnce(const std::string& text, sound::Group group) {
-  if (!available() || voiceOwned_.load()) return false;
+  if (!available() || voiceChannelClaimed_.load()) return false;
   const synth::ParseResult parsed = songs_.get(text);
   if (!parsed.ok()) return false;
   urls_.stop(false);

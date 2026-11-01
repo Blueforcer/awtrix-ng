@@ -15,8 +15,6 @@ class Stream {
   using Write = std::function<bool(const uint8_t*, std::size_t)>;
   bool start(int epoch, int64_t now, Consumer consumer);
   static std::array<uint8_t, 13> startFrame(int epoch);
-  // The MCU's clock and its sample count agree since the start: 1.5 ms per half of 24 samples, within
-  // 3 ms and 0.5 %. In 64 bits, as a stream may outlast the MCU's 32-bit tick and count.
   static bool steady(uint64_t elapsedMs, uint64_t halves);
   void receive(const Frame& frame, int64_t now, const Write& write);
   void renew(int epoch, int64_t now);
@@ -45,7 +43,6 @@ class Stream {
   int epoch_ = 0;
   int64_t leaseAt_ = 0, stopAt_ = -1;
   uint32_t halves_ = 0, anchor_ = 0, lastTick_ = 0;
-  // Time and halves from the start up to the last checkpoint.
   uint64_t checkedMs_ = 0, checkedHalves_ = 0;
   unsigned part_ = 0, physical_ = 2, previous_ = 2;
   uint16_t token_ = 0;

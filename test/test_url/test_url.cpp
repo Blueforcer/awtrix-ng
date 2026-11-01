@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "core/net/MediaType.h"
 #include "core/net/Url.h"
 
 using namespace awtrix;
@@ -69,6 +70,14 @@ void test_malformed_authorities_are_refused() {
 
 }
 
+void test_media_type_drops_parameters_space_and_case() {
+  TEST_ASSERT_EQUAL_STRING("audio/wav", net::mediaType("Audio/WAV; charset=binary").c_str());
+  TEST_ASSERT_EQUAL_STRING("audio/mpeg", net::mediaType("  audio/mpeg ;x=1").c_str());
+  TEST_ASSERT_EQUAL_STRING("application/json", net::mediaType("application/json").c_str());
+  TEST_ASSERT_EQUAL_STRING("", net::mediaType("").c_str());
+  TEST_ASSERT_EQUAL_STRING("", net::mediaType("  ; charset=utf-8").c_str());
+}
+
 void setUp() {}
 void tearDown() {}
 
@@ -79,5 +88,6 @@ int main(int, char**) {
   RUN_TEST(test_ipv6_and_ports);
   RUN_TEST(test_empty_path_query_and_fragment);
   RUN_TEST(test_malformed_authorities_are_refused);
+  RUN_TEST(test_media_type_drops_parameters_space_and_case);
   return UNITY_END();
 }

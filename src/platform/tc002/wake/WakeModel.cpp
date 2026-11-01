@@ -21,9 +21,9 @@ constexpr std::size_t kMaxNodes = 1024;
 constexpr int64_t kMaxDim = int64_t{1} << 20;
 constexpr std::size_t kMaxElements = std::size_t{1} << 22;
 constexpr std::size_t kMaxArena = std::size_t{64} << 20;
-// Products summed into one int32 accumulator; 2^16 of them cannot overflow it.
-constexpr int64_t kMaxAccumulation = int64_t{1} << 16;
+constexpr int64_t kMaxProductsPerAccumulator = int64_t{1} << 16;
 constexpr std::size_t kAlign = 16;
+constexpr int kNoProducer = -2, kGraphInputProducer = -1;
 
 enum TensorType : int { kFloat32 = 0, kInt32 = 2, kUInt8 = 3, kInt8 = 9, kResource = 13 };
 
@@ -49,7 +49,6 @@ enum Code : int {
   kAssignVariable = 144,
 };
 
-// Builtin operator names 0 to 161 in schema order, "-" for unused codes.
 constexpr std::string_view kOpNames =
   "ADD AVERAGE_POOL_2D CONCATENATION CONV_2D DEPTHWISE_CONV_2D DEPTH_TO_SPACE DEQUANTIZE EMBEDDING_LOOKUP "
   "FLOOR FULLY_CONNECTED HASHTABLE_LOOKUP L2_NORMALIZATION L2_POOL_2D LOCAL_RESPONSE_NORMALIZATION LOGISTIC "
@@ -80,8 +79,6 @@ std::string opName(int code) {
   return "builtin operator " + std::to_string(code);
 }
 
-// A bounds-checked reader of the flatbuffer: every failed check clears ok() and later reads return
-// defaults, so the parser checks ok() once per structure instead of after every field.
 class Flat {
  public:
   struct Table {
@@ -188,7 +185,6 @@ class Flat {
   bool ok_ = true;
 };
 
-// gemmlowp's fixed-point helpers and TensorFlow Lite's double-rounding MultiplyByQuantizedMultiplier.
 int32_t doublingHighMul(int32_t a, int32_t b) {
   const bool overflow = a == b && a == std::numeric_limits<int32_t>::min();
   const int64_t product = int64_t{a} * b;
@@ -220,7 +216,6 @@ int32_t wrapAdd(int32_t a, int32_t b) {
   return static_cast<int32_t>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b));
 }
 
-// QuantizeMultiplier, refusing what MultiplyByQuantizedMultiplier cannot take.
 bool quantizeMultiplier(double value, Scale& out) {
   out = {};
   if (value == 0.0) return true;
@@ -247,7 +242,7 @@ struct Tensor {
   std::vector<int64_t> zeroPoints;
   int quantDim = 0;
   const uint8_t* constant = nullptr;
-  int producer = -2;  // -2 nobody, -1 a graph input, else the node
+  int producer = kNoProducer;
   int lastUse = -1;
   bool needsMemory = false;
   std::size_t offset = 0;
@@ -327,7 +322,6 @@ struct Variable {
   std::size_t offset = 0;
 };
 
-// One load: parses the file into graphs, checks and prepares every node, plans the arena.
 class Loader {
  public:
   Loader(const std::vector<uint8_t>& file, std::vector<WakeModel::Graph>& graphs, std::string& error)
@@ -595,20 +589,20 @@ bool Loader::prepare() {
     WakeModel::Graph& g = graphs_[s];
     for (int index : g.inputs) {
       Tensor& t = g.tensors[index];
-      if (t.constant || t.type == kResource || t.type < 0 || t.producer != -2) return fail("bad graph input");
-      t.producer = -1;
+      if (t.constant || t.type == kResource || t.type < 0 || t.producer != kNoProducer) return fail("bad graph input");
+      t.producer = kGraphInputProducer;
     }
     for (std::size_t n = 0; n < g.nodes.size(); ++n) {
       Node& node = g.nodes[n];
       for (int index : node.in) {
         if (index < 0) continue;
         Tensor& t = g.tensors[index];
-        if (!t.constant && t.producer == -2) return failNode(node, "reads a tensor nothing writes");
+        if (!t.constant && t.producer == kNoProducer) return failNode(node, "reads a tensor nothing writes");
         t.lastUse = static_cast<int>(n);
       }
       for (int index : node.out) {
         Tensor& t = g.tensors[index];
-        if (t.constant || t.producer != -2) return failNode(node, "writes a constant or a written tensor");
+        if (t.constant || t.producer != kNoProducer) return failNode(node, "writes a constant or a written tensor");
         if (t.type < 0) return failNode(node, "unsupported tensor type");
         t.producer = static_cast<int>(n);
       }
@@ -616,7 +610,7 @@ bool Loader::prepare() {
     }
     for (int index : g.outputs) {
       Tensor& t = g.tensors[index];
-      if (t.producer == -2 || t.constant || t.type == kResource) return fail("bad graph output");
+      if (t.producer == kNoProducer || t.constant || t.type == kResource) return fail("bad graph output");
       t.lastUse = static_cast<int>(g.nodes.size());
     }
   }
@@ -692,7 +686,7 @@ bool Loader::conv(WakeModel::Graph& g, Node& node) {
   padding(same, node.strideW, node.dilationW, in.dim(2), filter.dim(2), outW, node.padW);
   if (out.dim(0) != in.dim(0) || out.dim(1) != outH || out.dim(2) != outW || out.dim(3) != outC)
     return failNode(node, "output shape does not match");
-  if (int64_t{filter.dim(1)} * filter.dim(2) * kC > kMaxAccumulation)
+  if (int64_t{filter.dim(1)} * filter.dim(2) * kC > kMaxProductsPerAccumulator)
     return failNode(node, "filter too large");
   if (filter.scales.size() != 1 && filter.scales.size() != static_cast<std::size_t>(outC))
     return failNode(node, "bad filter quantization");
@@ -746,7 +740,7 @@ bool Loader::depthwise(WakeModel::Graph& g, Node& node) {
   padding(same, node.strideW, node.dilationW, in.dim(2), filter.dim(2), outW, node.padW);
   if (out.dim(0) != in.dim(0) || out.dim(1) != outH || out.dim(2) != outW || out.dim(3) != outC)
     return failNode(node, "output shape does not match");
-  if (int64_t{filter.dim(1)} * filter.dim(2) > kMaxAccumulation) return failNode(node, "filter too large");
+  if (int64_t{filter.dim(1)} * filter.dim(2) > kMaxProductsPerAccumulator) return failNode(node, "filter too large");
   if (filter.scales.size() != 1 && filter.scales.size() != static_cast<std::size_t>(outC))
     return failNode(node, "bad filter quantization");
   if (filter.scales.size() > 1 && filter.quantDim != 3) return failNode(node, "bad filter quantization");
@@ -799,7 +793,7 @@ bool Loader::fullyConnected(WakeModel::Graph& g, Node& node) {
     shapeOk = out.rank == 2 && static_cast<std::size_t>(out.dim(0)) == node.outer && out.dim(1) == node.units;
   }
   if (!shapeOk) return failNode(node, "output shape does not match");
-  if (static_cast<int64_t>(depth) > kMaxAccumulation) return failNode(node, "weights too large");
+  if (static_cast<int64_t>(depth) > kMaxProductsPerAccumulator) return failNode(node, "weights too large");
   const bool perChannel = filter.scales.size() > 1;
   if (filter.scales.empty() || (perChannel && (filter.scales.size() != static_cast<std::size_t>(node.units) ||
                                                filter.quantDim != 0)))
@@ -852,7 +846,7 @@ bool Loader::pool(WakeModel::Graph& g, Node& node) {
   const int function = flat_.field<int8_t>(node.options, 5, 0);
   if (same != 0 && same != 1) return failNode(node, "bad padding");
   if (node.strideW < 1 || node.strideH < 1 || node.filterW < 1 || node.filterH < 1 || node.strideW > 1024 ||
-      node.strideH > 1024 || int64_t{node.filterW} * node.filterH > kMaxAccumulation)
+      node.strideH > 1024 || int64_t{node.filterW} * node.filterH > kMaxProductsPerAccumulator)
     return failNode(node, "bad stride or filter");
   int outH = 0, outW = 0;
   padding(same, node.strideH, 1, in.dim(1), node.filterH, outH, node.padH);
@@ -1217,7 +1211,6 @@ bool Loader::checkVariables() {
   return true;
 }
 
-// Walks the first invoke in execution order: every variable is written before it is read.
 bool Loader::simulate(std::size_t graph, bool nested) {
   for (const Node& node : graphs_[graph].nodes) {
     if (node.code == kCallOnce) {
@@ -1233,7 +1226,6 @@ bool Loader::simulate(std::size_t graph, bool nested) {
   return true;
 }
 
-// Greedy by size: each tensor takes the lowest aligned offset clear of every tensor alive with it.
 bool Loader::plan(std::vector<uint8_t>& arena) {
   std::size_t total = 0;
   std::vector<std::size_t> regions;
@@ -1241,7 +1233,7 @@ bool Loader::plan(std::vector<uint8_t>& arena) {
     std::vector<int> order;
     for (std::size_t i = 0; i < g.tensors.size(); ++i) {
       Tensor& t = g.tensors[i];
-      t.needsMemory = !t.constant && t.type != kResource && t.producer != -2 && t.bytes > 0;
+      t.needsMemory = !t.constant && t.type != kResource && t.producer != kNoProducer && t.bytes > 0;
       if (t.needsMemory) {
         if (t.lastUse < t.producer) t.lastUse = t.producer;
         order.push_back(static_cast<int>(i));

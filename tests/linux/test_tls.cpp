@@ -1,4 +1,5 @@
 #include "../support.h"
+#include "../LogLines.h"
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -6,7 +7,6 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <functional>
@@ -17,7 +17,6 @@
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
 
-#include "core/api/JsonStream.h"
 #include "persistence/DeviceConfig.h"
 #include "persistence/SystemConfigApply.h"
 #include "platform/linux/host/HostStore.h"
@@ -28,7 +27,6 @@
 #include "platform/linux/tls/ServerIdentity.h"
 #include "platform/linux/tls/TlsPolicy.h"
 #include "platform/linux/tls/TlsTrust.h"
-#include "system/Log.h"
 
 using namespace awtrix;
 using namespace awtrix::tls;
@@ -38,6 +36,8 @@ namespace {
 int& failures = awtrix::test::failures();
 
 using awtrix::test::check;
+using awtrix::test::logAfter;
+using awtrix::test::logMark;
 
 bool has(const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; }
 
@@ -160,20 +160,6 @@ struct RawBroker {
     if (listener >= 0) ::close(listener);
   }
 };
-
-// The log as GET /api/v1/logs?after= answers: {"next":N,"lines":[...]}.
-std::string logAfter(uint32_t after) {
-  std::string text;
-  api::JsonStream out([](void* context, const char* data, size_t size) {
-    static_cast<std::string*>(context)->append(data, size);
-  }, &text);
-  logbuf::streamJsonAfter(after, out);
-  return text;
-}
-
-uint32_t logMark() {
-  return static_cast<uint32_t>(std::strtoul(logAfter(~0u).c_str() + std::strlen("{\"next\":"), nullptr, 10));
-}
 
 // The log lines written since mark, which moves on past them.
 std::string logSince(uint32_t& mark) {

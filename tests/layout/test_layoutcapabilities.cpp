@@ -11,7 +11,7 @@ static void test_advertised_layout_limits_come_from_the_runtime_budget() {
   layout::Limits limits;
   limits.regions = 5;
   limits.preparedBytes = 256 * 1024;
-  const LinuxCapabilities caps(false, true, &limits);
+  const LinuxCapabilities caps(false, true, false, &limits);
   const std::string encoded = api::capabilitiesJson({}, {}, {}, {}, nullptr, nullptr,
       [&](api::JsonWriter& writer) { caps.write(writer); });
   TEST_ASSERT_TRUE(api::isWellFormed(encoded));

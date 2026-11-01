@@ -6,8 +6,8 @@ only: [tc002]
 
 The TC002's microphone is wired to the MCU (microcontroller), not to the SoC. AWTRIX NG reads it
 over the MCU's UART in two ways: bounded *snapshots* and a *continuous stream*. The
-[microphone hub](#microphone-hub) shares the stream between [Home Assistant Voice](ha-voice.md) and
-the [wake word](wake-word.md). The audio visualisation (`music.bands()`, `music.level()`) reads
+[microphone hub](#microphone-hub) shares the stream between [Home Assistant Voice](ha-voice.md),
+the [wake word](wake-word.md) and the scripts' [voice module](voice-module.md). The audio visualisation (`music.bands()`, `music.level()`) reads
 that stream while it runs, and snapshots otherwise. Both ways need the AWTRIX MCU extension
 ([MCU updates](mcu-update.md)). The analysis layer is shared with playback and lives in
 [`src/core/audio/`](https://github.com/Blueforcer/awtrix-ng/tree/main/src/core/audio). The TC002
@@ -126,10 +126,20 @@ stop, keepalive). The protocol and the hardware measurements that qualify it are
 ## Microphone hub
 
 `MicrophoneHub` (`runtime/MicrophoneHub.h`) shares the daemon's one stream among the runtime's
-consumers: the [wake word](wake-word.md) listener and [Home Assistant Voice](ha-voice.md). Each
+consumers: the [wake word](wake-word.md) listener, [Home Assistant Voice](ha-voice.md) and
+`VoiceCapture`, the recorder of `import voice` ([Voice module](voice-module.md)). Each
 consumer speaks the protocol of `contract/MicrophoneStream.h` as it would to the daemon, under its
 own epochs. Its sample positions are its own and start at 0 with its stream. Like the daemon, the
 hub never answers inside a control call. The answer arrives on its next `receive()` or `tick()`.
+
+The wake word listener and `VoiceCapture` speak it through `MicrophoneClient`
+(`contract/MicrophoneClient.h`). The client counts the epochs, probes and then starts, sends a
+keepalive every 150 ms, and checks that the positions follow on. Each probe, start and stop gets 2 s
+(`kStreamAnswerMs`) for its answer. An unanswered probe or start is stopped and reported as ended
+with `microphone did not answer`, an unanswered stop counts as done. It reports unavailable,
+started, audio, a gap, an end nobody asked for and a stop it asked for. Home Assistant Voice keeps
+its own handling of the protocol, because it probes only to learn whether the stream exists and
+fails its pipeline on any irregularity.
 
 - **Upstream.** The hub probes and starts the daemon's stream once, under its own epoch, and renews
   the daemon's lease with a keepalive every 150 ms. The daemon must answer a probe or a start within
@@ -140,29 +150,38 @@ hub never answers inside a control call. The answer arrives on its next `receive
   consumer that starts within that second joins it. If the last consumer stops while the stream is
   still starting, the hub stops it at once. A start while the upstream stream stops starts a new one
   once the old one has ended, without probing again.
-- **Hold.** While Voice starts, the runtime holds the hub (`hold()`). A starting or running stream
-  then stays open without a consumer until Voice's capture joins it, and lingers from the release. A
-  hold opens no stream.
-- **Lead-in.** While a stream runs, the hub holds its last second (16 000 samples). `mark()` names
-  the sample after the latest block, `markOf()` turns a consumer's own position into a mark, and
-  `startFrom()` makes a consumer's next start begin at a mark, or at the oldest held sample when the
-  mark lies further back. A mark of another stream starts the consumer now. A gap in the stream
-  drops what is held. The held blocks arrive at once after Started, with `hostAtMs` 0; Voice uses
-  no marks and keeps its check of 250 ms.
+- **Hold.** The assistant router ([Voice module](voice-module.md#parts)) holds the hub (`hold()`)
+  while Voice starts, while a trigger waits for its assistant app, and while a recording of the
+  voice module starts. A starting or running stream then
+  stays open without a consumer until the capture joins it, and lingers from the release. A hold
+  opens no stream.
+- **Lead-in.** While a stream runs, the hub holds its last second in memory: 16 008 samples, 667 DMA
+  halves of 24, because every block and position of the stream is a whole number of halves. It
+  overwrites them continuously, drops them when the stream ends and writes none to a file.
+  `mark()` names the sample after the latest block, `markOf()` turns a consumer's own position into
+  a mark, and `startFrom()` makes a consumer's next start begin at a mark, or at the oldest held
+  sample when the mark lies further back. A mark between two halves, such as the position of a wake
+  word detection, starts at the half it falls in. A mark of another stream starts the consumer now. A gap
+  in the stream drops what is held. The held blocks arrive at once after Started, with `hostAtMs`
+  0. A recording of the voice module from a trigger starts at the trigger's mark. Voice uses no
+  marks and keeps its check of 250 ms.
 - **Gaps and failures.** A jump in the upstream sample position reaches each consumer as a jump in
   its own position. An upstream error, an MCU without the stream or a missing answer ends every
   consumer that wants a stream with that error. So does a supervisor link that refuses the hub's
   probe or start. The hub does not retry. Each consumer decides when to try again.
 
-`LinuxRuntime::composeScriptServices` builds the hub and attaches its consumers. `pollSupervisor`
-passes every `microphoneStreamEvent` to the hub. `tickVoice` ticks the hub every frame, also while
-idle, before Voice and the wake word. `LinuxRuntime::stop` closes it (`close()`), which stops the
+A consumer attaches with `attach()` and gets a `MicrophoneHub::Consumer` handle. The handle gives
+its `port()`, `startFrom()` and `markOf()`, and detaches the consumer when it is destroyed.
+`LinuxRuntime::composeScriptServices` builds the hub and attaches the wake word and Voice;
+`composeExtensions` attaches the voice module. The runtime keeps their handles. `pollSupervisor`
+passes every `microphoneStreamEvent` to the hub. `tickVoice` ticks the hub every frame, also while idle, before
+Voice, the voice module and the wake word. `LinuxRuntime::stop` closes it (`close()`), which stops the
 upstream stream at once, without lingering. From a consumer's start until the upstream stream has ended,
 the hub is active (`active()`) and `MicrophoneInput` requests no snapshots. A probe alone leaves
 the snapshots running. Every upstream audio block also goes to `MicrophoneInput`, which gathers the
 windows for `music.level()`, `music.bands()` and `music.pitch()` from it.
-`tests/tc002/runtime/test_microphone_hub.cpp` covers the hub, and `test_voice_on_hub.cpp` a Voice
-session on it.
+`tests/tc002/runtime/test_microphone_hub.cpp` covers the hub, `test_voice_on_hub.cpp` a Voice
+session on it, and `test_voice_capture.cpp` a recording of the voice module.
 
 ## Adding an input or a consumer
 
@@ -175,5 +194,5 @@ consumer of the continuous stream attaches to the [microphone hub](#microphone-h
 
 - [TC002 developer guide](index.md)
 - [MCU updates](mcu-update.md), [Audio gate](audio-gate.md), [Home Assistant Voice](ha-voice.md),
-  [Wake word](wake-word.md)
+  [Wake word](wake-word.md), [Voice module](voice-module.md)
 - User docs: [Scripting](../../guides/scripting/index.md), [Settings](../../reference/settings.md)

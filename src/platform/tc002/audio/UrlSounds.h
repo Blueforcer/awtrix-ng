@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 
+#include "platform/linux/LinuxMemory.h"
 #include "platform/linux/net/FileDownload.h"
 
 namespace awtrix {
@@ -15,7 +16,6 @@ namespace tc002 {
 class UrlSounds {
  public:
   static constexpr std::size_t kMaxBytes = 4u << 20;
-  static constexpr uint64_t kKeepFreeBytes = 4u << 20;
   static constexpr int64_t kTimeoutMs = 60000;
   static constexpr int64_t kKeepMs = 2000;
 
@@ -34,7 +34,6 @@ class UrlSounds {
 
   // available reports MemAvailable; false leaves it unknown and refuses the download.
   UrlSounds(std::string directory, Speaker speaker, std::function<bool(uint64_t&)> available);
-  ~UrlSounds();
 
   bool play(const std::string& url, bool loop);
   // Drops the layer's download, and the one-shot's file; the sound itself is stopped by the
@@ -59,10 +58,9 @@ class UrlSounds {
   Layer& layer(bool loop) { return loop ? loop_ : oneShot_; }
   void forget(Layer& l, const Layer& other);
   void arrived(bool loop, net::FileDownload::Result& result);
-  bool room(std::size_t bytes) const;
 
   Speaker speaker_;
-  std::function<bool(uint64_t&)> available_;
+  MemoryRoom room_;
   Layer oneShot_, loop_;
 };
 

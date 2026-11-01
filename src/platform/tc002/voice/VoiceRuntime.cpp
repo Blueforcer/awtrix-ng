@@ -10,8 +10,8 @@
 #include "platform/tc002/voice/StreamClock.h"
 
 namespace awtrix::tc002::voice {
-VoiceRuntime::VoiceRuntime(std::string directory, Tc002Speaker& speaker, MicrophonePort microphone,
-                           bool wakeWordAvailable)
+VoiceRuntime::VoiceRuntime(std::string directory, VoiceSpeaker& speaker, MicrophonePort microphone,
+                           bool wakeWordAvailable, Hooks hooks)
     : config_(std::move(directory)),
       speaker_(speaker),
       download_("/tmp", "awtrix-voice", {2 * 1024 * 1024, 15000, false, nullptr}),
@@ -26,7 +26,8 @@ VoiceRuntime::VoiceRuntime(std::string directory, Tc002Speaker& speaker, Microph
                   return true;
                 },
                 [this] { stopSpeaker(); }}),
-      wakeWordAvailable_(wakeWordAvailable) {
+      wakeWordAvailable_(wakeWordAvailable),
+      hooks_(std::move(hooks)) {
   loaded_ = config_.load();
 }
 VoiceRuntime::~VoiceRuntime() { cancel(); }
@@ -46,7 +47,7 @@ void VoiceRuntime::receive(const StreamEvent& event, int64_t now) {
 }
 void VoiceRuntime::stopSpeaker() {
   download_.cancel();
-  speaker_.stopVoice();
+  if (playing_) speaker_.stop();
   playing_ = false;
   if (!playbackPath_.empty()) ::unlink(playbackPath_.c_str());
   playbackPath_.clear();
@@ -55,13 +56,12 @@ void VoiceRuntime::cancel() {
   errorFeedback_ = false;
   pendingStart_ = false;
   session_.cancel();
-  speaker_.setVoiceOwned(false);
-  owned_ = false;
+  voiceChannel_.reset();
 }
 bool VoiceRuntime::begin(int64_t now) {
   if (!session_.ready() || !speaker_.available()) return false;
-  speaker_.setVoiceOwned(true);
-  owned_ = true;
+  if (!voiceChannel_) voiceChannel_ = speaker_.claimVoiceChannel();
+  if (!voiceChannel_) return false;
   pendingStart_ = true;
   startAt_ = now;
   overlay_.reset(now);
@@ -70,15 +70,14 @@ bool VoiceRuntime::begin(int64_t now) {
 void VoiceRuntime::endInput(int64_t now) {
   if (pendingStart_) {
     pendingStart_ = false;
-    speaker_.setVoiceOwned(false);
-    owned_ = false;
+    voiceChannel_.reset();
   } else
     session_.endInput(now);
 }
 void VoiceRuntime::tick(int64_t now, bool allowed) {
   if (now >= feedbackUntil_) errorFeedback_ = false;
   const auto& c = config_.get();
-  if (!loaded_ || !allowed || !c.enabled) {
+  if (!loaded_ || !allowed || !c.enabled || !homeAssistant()) {
     if (pendingStart_ || session_.state() != AssistSession::State::Offline)
       cancel();
     reconnectAt_ = now + 500;
@@ -105,7 +104,7 @@ void VoiceRuntime::tick(int64_t now, bool allowed) {
   if (pendingStart_) {
     if (!session_.ready() || !speaker_.available() || now - startAt_ >= 1000)
       endInput(now);
-    else if (speaker_.voiceQuiet()) {
+    else if (speaker_.quiet()) {
       pendingStart_ = false;
       session_.begin(now);
     }
@@ -115,28 +114,23 @@ void VoiceRuntime::tick(int64_t now, bool allowed) {
     if (result.generation == downloadGeneration_ &&
         session_.state() == AssistSession::State::Speaking) {
       playbackPath_ = std::move(result.path);
-      playing_ = result.success() && speaker_.playVoice(playbackPath_);
+      playing_ = result.success() && speaker_.play(playbackPath_);
       if (!playing_) session_.playbackDone(false, now);
     } else if (!result.path.empty())
       ::unlink(result.path.c_str());
   }
-  if (playing_ && (!speaker_.available() || speaker_.voiceFinished())) {
-    int64_t audible = -1;
-    const bool success =
-        speaker_.available() && speaker_.bootSoundStart(audible) ==
-                                    Tc002AudioSink::SystemStart::Audible;
+  if (playing_ && speaker_.finished()) {
     playing_ = false;
-    session_.playbackDone(success, now);
+    session_.playbackDone(speaker_.heard(), now);
     if (!playbackPath_.empty()) ::unlink(playbackPath_.c_str());
     playbackPath_.clear();
   }
-  if (owned_ && !pendingStart_ && !session_.busy()) {
+  if (voiceChannel_ && !pendingStart_ && !session_.busy()) {
     if (session_.state() == AssistSession::State::Error) {
       errorFeedback_ = true;
       feedbackUntil_ = now + 1500;
     }
-    speaker_.setVoiceOwned(false);
-    owned_ = false;
+    voiceChannel_.reset();
   }
 }
 bool VoiceRuntime::draw(Canvas& canvas, const GfxFont&, int64_t now) {
@@ -159,14 +153,31 @@ void sendError(httplib::Response& res, int status, const char* code,
   res.status = status;
   res.set_content(api::errorJson(code, message, field), "application/json");
 }
+bool trusted(const httplib::Request& req) {
+  return req.get_header_value("X-Awtrix-Voice") == "1" &&
+         api::sameOrigin(req.get_header_value("Origin"), req.get_header_value("Host"),
+                         req.get_header_value_count("Origin"), req.get_header_value_count("Host"), true);
+}
 }  // namespace
 bool VoiceRuntime::handle(const httplib::Request& req, httplib::Response& res) {
+  if (req.path == "/api/v1/voice/start") {
+    res.set_header("Cache-Control", "no-store");
+    if (req.method != "POST")
+      sendError(res, 405, "methodNotAllowed", "allowed: POST");
+    else if (!trusted(req))
+      sendError(res, 403, "forbiddenOrigin", "only from this device's web page");
+    else if (!hooks_.startAssistant || !hooks_.startAssistant())
+      sendError(res, 409, "voiceUnavailable", "assistant not ready");
+    else
+      res.set_content("{\"ok\":true}", "application/json");
+    return true;
+  }
   if (req.path != "/api/v1/voice") return false;
   res.set_header("Cache-Control", "no-store");
   if (req.method == "GET") {
     std::string json;
-    api::JsonWriter(json)
-        .beginObject()
+    api::JsonWriter writer(json);
+    writer.beginObject()
         .key("config")
         .raw(config_.publicJson())
         .member("state", AssistSession::name(session_.state()))
@@ -177,14 +188,17 @@ bool VoiceRuntime::handle(const httplib::Request& req, httplib::Response& res) {
                     ? errors::microphoneUpdate
                     : session_.error())
         .member("wakeWordAvailable", wakeWordAvailable_)
+        .key("assistantApps")
+        .beginArray();
+    if (hooks_.assistantApps)
+      for (const std::string& name : hooks_.assistantApps()) writer.value(name);
+    writer.endArray()
         .key("pipelines")
         .raw(session_.pipelines())
         .endObject();
     res.set_content(json, "application/json");
   } else if (req.method == "POST") {
-    if (req.get_header_value("X-Awtrix-Voice") != "1" ||
-        !api::sameOrigin(req.get_header_value("Origin"), req.get_header_value("Host"),
-                          req.get_header_value_count("Origin"), req.get_header_value_count("Host"), true)) {
+    if (!trusted(req)) {
       sendError(res, 403, "forbiddenOrigin",
                 "only from this device's web page");
       return true;
@@ -197,10 +211,10 @@ bool VoiceRuntime::handle(const httplib::Request& req, httplib::Response& res) {
       else
         sendError(res, 500, "internalError", rejection.message);
     } else {
-      // A change of the wake word alone leaves the connection and a running request as they are;
-      // anything else, also saving unchanged settings, connects anew.
       const Config& after = config_.get();
-      if (!loaded_ || before.wakeWord == after.wakeWord || !sameConnection(before, after)) {
+      const bool onlyWakeWordChanged =
+          loaded_ && before.wakeWord != after.wakeWord && sameConnection(before, after);
+      if (!onlyWakeWordChanged) {
         cancel();
         reconnectAt_ = 0;
       }

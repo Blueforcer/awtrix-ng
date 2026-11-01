@@ -19,6 +19,7 @@ namespace posix {
 bool readAll(int fd, void* data, std::size_t size);
 bool preadAll(int fd, uint64_t offset, void* data, std::size_t size);
 bool writeAll(int fd, const void* data, std::size_t size);
+bool pwriteAll(int fd, uint64_t offset, const void* data, std::size_t size);
 
 bool readText(const std::string& path, std::string& out, std::size_t maximum = 4096);
 // No symlinks or special files; exactly the bounded fstat size must be readable.
@@ -42,6 +43,36 @@ UniqueFd openPrivateDirectory(const std::string& path, bool create);
 bool makeDirectories(const std::string& path, unsigned mode);
 bool fsyncDirectory(const std::string& path);
 std::string parentDirectory(const std::string& path);
+
+class MappedFile {
+ public:
+  MappedFile(const std::string& path, std::size_t maximum);
+  ~MappedFile();
+  MappedFile(const MappedFile&) = delete;
+  MappedFile& operator=(const MappedFile&) = delete;
+
+  bool valid() const { return valid_; }
+  std::string_view bytes() const { return {static_cast<const char*>(data_), size_}; }
+
+ private:
+  void* data_ = nullptr;
+  std::size_t size_ = 0;
+  bool valid_ = false;
+};
+
+class PrivateTemporaryDirectory {
+ public:
+  PrivateTemporaryDirectory(const std::string& parent, std::string_view prefix);
+  ~PrivateTemporaryDirectory();
+  PrivateTemporaryDirectory(const PrivateTemporaryDirectory&) = delete;
+  PrivateTemporaryDirectory& operator=(const PrivateTemporaryDirectory&) = delete;
+
+  bool valid() const { return !path_.empty(); }
+  const std::string& path() const { return path_; }
+
+ private:
+  std::string path_;
+};
 
 }
 }

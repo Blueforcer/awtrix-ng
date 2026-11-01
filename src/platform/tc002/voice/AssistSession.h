@@ -39,6 +39,7 @@ class AssistSession {
   void playbackDone(bool success, int64_t now);
   State state() const { return state_; }
   bool busy() const;
+  bool starting() const { return state_ == State::Starting; }
   bool ready() const { return state_ == State::Ready && supported_; }
   bool microphoneAvailable() const { return supported_; }
   int captureEpoch() const { return epoch_; }

@@ -1,8 +1,3 @@
-# The contracts that must also hold on the device's CPU, built by the tc002 preset and run under the
-# toolchain's emulator (qemu-arm): the speaker helper's protocol and owner scan, the refusals of the
-# helper as it ships, the flash helper's write and verify logic, the voice with its NEON dot
-# product against the model's reference runtime, the wake-word engine against its references, and the
-# endpointer on speech of the voice pack.
 if(NOT CMAKE_CROSSCOMPILING_EMULATOR)
   message(STATUS "No qemu-arm: the ARM contracts are not registered")
   return()
@@ -24,12 +19,17 @@ add_awtrix_test(NAME tc002-arm-flasher SOURCES "${PROJECT_SOURCE_DIR}/tests/tc00
 set(runtime "${PROJECT_SOURCE_DIR}/tests/tc002/runtime")
 add_awtrix_test(NAME tc002-arm-speech-voice SOURCES "${runtime}/test_speech_voice.cpp" ${TC002_SPEECH_VOICE_SOURCES}
   LIBRARIES awtrix_posix COMMAND "${runtime}/speech" TIMEOUT 300)
-target_compile_options(tc002-arm-speech-voice-test PRIVATE ${TC002_SPEECH_VOICE_OPTIONS})
+target_compile_options(tc002-arm-speech-voice-test PRIVATE ${TC002_EXACT_FLOAT_OPTIONS})
 add_awtrix_test(NAME tc002-arm-wake SOURCES "${runtime}/test_wake.cpp" ${TC002_WAKE_SOURCES}
   INCLUDES "${PROJECT_SOURCE_DIR}/src" COMMAND "${runtime}/wake" vad "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.tflite"
-  "${runtime}/wake" TIMEOUT 600)
-target_compile_options(tc002-arm-wake-test PRIVATE ${TC002_SPEECH_VOICE_OPTIONS})
+  "${runtime}/wake" hey_awtrix "${PROJECT_SOURCE_DIR}/assets/tc002/wake/hey_awtrix.tflite" "${runtime}/wake"
+  TIMEOUT 600)
+target_compile_options(tc002-arm-wake-test PRIVATE ${TC002_EXACT_FLOAT_OPTIONS})
 add_awtrix_test(NAME tc002-arm-endpointer SOURCES "${runtime}/test_endpointer.cpp"
   LIBRARIES tc002_wake tc002_wake_files tc002_speech_voice
+  COMMAND "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.tflite" "${PROJECT_SOURCE_DIR}/assets/speech/voice.atts"
+  TIMEOUT 600)
+add_awtrix_test(NAME tc002-arm-voice-capture SOURCES "${runtime}/test_voice_capture.cpp"
+  LIBRARIES tc002_voice_capture tc002_microphone_hub tc002_speech_voice
   COMMAND "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.tflite" "${PROJECT_SOURCE_DIR}/assets/speech/voice.atts"
   TIMEOUT 600)

@@ -35,7 +35,6 @@ namespace {
 std::string fakeBinary;
 std::string fakeAudio;
 
-// pid() is -1 while no runtime runs, and kill(-1, ...) reaches every process of the user.
 bool signalChild(pid_t pid, int signal) { return pid > 0 && ::kill(pid, signal) == 0; }
 
 class FakeHardware : public ChildHardware {

@@ -27,6 +27,11 @@ SYSROOT = None
 TARGET = "experimental:test-fixture"
 
 
+def failing_fsync_at(call):
+    asan = filter(None, [os.environ.get("ASAN_OPTIONS"), "verify_asan_link_order=0"])
+    return dict(os.environ, LD_PRELOAD=str(FAULTS), AWTRIX_TEST_FAIL_FSYNC_AT=str(call), ASAN_OPTIONS=":".join(asan))
+
+
 class UpdateContracts(unittest.TestCase):
     def test_shared_target_vectors(self):
         vectors = json.loads(Path(__file__).with_name("target_vectors.json").read_text())
@@ -257,8 +262,7 @@ class UpdateContracts(unittest.TestCase):
             with self.subTest(fsync_call=call):
                 stage = self.directory / str(call)
                 stage.mkdir(mode=0o700)
-                env = dict(os.environ, LD_PRELOAD=str(FAULTS), AWTRIX_TEST_FAIL_FSYNC_AT=str(call))
-                response = self.reject(stage=stage, env=env)
+                response = self.reject(stage=stage, env=failing_fsync_at(call))
                 final = list(stage.glob("*.awup"))
                 self.assertEqual(len(final), 0 if call == 1 else 1)
                 self.assertFalse(list(stage.glob(".pending-*")))

@@ -5,6 +5,7 @@
 
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
+#include "platform/posix/Sequence.h"
 
 namespace awtrix::tc002::voice {
 namespace {
@@ -50,7 +51,7 @@ void AssistSession::connecting(const Config& config, int64_t now) {
   deadline_ = now + 10000;
   supported_ = false;
   probeAt_ = now;
-  epoch_ = epoch_ == INT_MAX ? 1 : epoch_ + 1;
+  epoch_ = posix::nextInSequence(epoch_);
   ports_.microphone({epoch_, StreamControl::Probe});
 }
 void AssistSession::cancel() {
@@ -80,7 +81,7 @@ bool AssistSession::begin(int64_t now) {
   samples_ = 0;
   started_ = stopping_ = stt_ = recognitionEnded_ = ended_ = eof_ = runEnded_ =
       playbackEnded_ = false;
-  epoch_ = epoch_ == INT_MAX ? 1 : epoch_ + 1;
+  epoch_ = posix::nextInSequence(epoch_);
   run_ = ++request_;
   std::string json;
   api::JsonWriter w(json);
@@ -345,7 +346,7 @@ void AssistSession::playbackDone(bool success, int64_t now) {
   }
 }
 void AssistSession::tick(int64_t now) {
-  if (state_ == State::Ready && !supported_ && now - probeAt_ >= 2000) {
+  if (state_ == State::Ready && !supported_ && now - probeAt_ >= kStreamAnswerMs) {
     probeAt_ = now;
     ports_.microphone({epoch_, StreamControl::Probe});
   }

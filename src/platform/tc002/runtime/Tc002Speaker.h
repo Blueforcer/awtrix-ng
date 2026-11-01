@@ -51,7 +51,8 @@ class Tc002Speaker : public audio::IAnalysisSource {
     return sink_.systemStart(audibleAtMs);
   }
   void stopBootSound() { sink_.stopSystemSound(); }
-  void setVoiceOwned(bool owned) { sink_.setVoiceOwned(owned); }
+  posix::Hold claimVoiceChannel() { return sink_.claimVoiceChannel(); }
+  posix::Hold holdMusic() { return sink_.holdMusic(); }
   // The speech voice; a new one speaks from the next speech on.
   std::shared_ptr<speech::SpeechVoice> speechVoice() const { return sink_.voice(); }
   void setSpeechVoice(std::shared_ptr<speech::SpeechVoice> voice) { sink_.setVoice(std::move(voice)); }
@@ -59,6 +60,10 @@ class Tc002Speaker : public audio::IAnalysisSource {
   void stopVoice() { sink_.stopSystemSound(); }
   bool voiceFinished() const { return sink_.systemFinished(); }
   bool voiceQuiet() const { return sink_.voiceQuiet(); }
+  bool voiceHeard() const {
+    int64_t audibleAtMs = -1;
+    return available() && sink_.systemStart(audibleAtMs) == tc002::Tc002AudioSink::SystemStart::Audible;
+  }
 
  private:
   CoreEngine& engine_;

@@ -2191,7 +2191,7 @@ paths:
                   gamepad: {x-only: [tc002], type: boolean, enum: [true], description: "Present only while scripts can import gamepad, which needs scripting on. /api/v1/gamepad exists. A Bluetooth gamepad can be paired where ble is true as well."}
                   gamepadRemote: {x-only: [tc002], type: boolean, enum: [true], description: "Present only while a phone can be a gamepad, which needs scripting on. POST /api/v1/gamepad/remote exists."}
                   mqttTls: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where MQTT can connect over TLS. /api/v1/mqtt/tls exists."}
-                  voice: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where Home Assistant Voice can be set up. /api/v1/voice exists."}
+                  voice: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where Home Assistant Voice can be set up. /api/v1/voice exists. Also the @needs name of import voice."}
                   bootSound: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where the clock plays a sound at power-on. The bootSound setting switches it."}
                   enlargeApps: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where pushed apps and notifications can be shown at double size. The enlargeApps setting switches it."}
                   oauth: {x-only: [tc002], type: boolean, enum: [true], description: "Present only while scripts can import oauth, which needs scripting on. /api/v1/oauth exists."}
@@ -2550,24 +2550,25 @@ paths:
     description: "Only where capabilities.voice is true. Elsewhere 404."
     get:
       tags: [system]
-      summary: Home Assistant Voice settings and connection
+      summary: Voice assistant settings and Home Assistant connection
       responses:
         "404": { $ref: "#/components/responses/NotOnThisDevice" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200":
-          description: The Home Assistant Voice settings.
+          description: The voice assistant settings.
           content:
             application/json:
               schema:
                 type: object
-                required: [config, state, error, wakeWordAvailable, pipelines]
+                required: [config, state, error, wakeWordAvailable, assistantApps, pipelines]
                 properties:
                   config:
                     type: object
-                    required: [enabled, wakeWord, url, pipeline, device, tokenSet]
+                    required: [enabled, wakeWord, assistant, url, pipeline, device, tokenSet]
                     properties:
-                      enabled: { type: boolean }
-                      wakeWord: { type: boolean, description: 'Saying "Hey AWTRIX" starts a request.' }
+                      enabled: { type: boolean, description: "Home Assistant Voice is switched on. Counts only while assistant is ha." }
+                      wakeWord: { type: boolean, description: 'Saying "Hey AWTRIX" starts the assistant.' }
+                      assistant: { type: string, pattern: "^(ha|app:[A-Za-z0-9_-]{1,32})$", description: "Who answers the knob, the wake word, MQTT and the API: ha for Home Assistant, app:<name> for an app." }
                       url: { type: string, description: "Home Assistant address. \"\" when none is set." }
                       pipeline: { type: string, description: "Assist pipeline ID. \"\" for the default." }
                       device: { type: string, description: "Home Assistant device ID whose area is the room for requests. \"\" when none is set." }
@@ -2578,12 +2579,13 @@ paths:
                     description: |
                       Why the last attempt failed. "" when all is well. One of connectionLost, tokenRejected, haError, pipelineIncomplete, nothingUnderstood, audioTooSlow, timeout, microphoneFailed, playbackFailed, microphoneUpdate, configUnavailable. Later versions may add codes.
                   wakeWordAvailable: { type: boolean, description: 'The clock can hear "Hey AWTRIX". When false, config.wakeWord does nothing.' }
+                  assistantApps: { type: array, items: { type: string }, description: "The installed apps that can be the assistant: scripts whose @needs names voice, neither modules nor headless. Disabled apps are listed too." }
                   pipelines: { type: array, items: { type: object }, description: "Home Assistant's Assist pipelines once connected." }
     post:
       tags: [system]
-      summary: Change the Home Assistant Voice settings
+      summary: Change the voice assistant settings
       description: |
-        Only from the device's own web page: needs X-Awtrix-Voice: 1 and an Origin matching the device. Left-out fields keep their value. enabled needs an address and a token. A new address needs the token again.
+        Only from the device's own web page: needs X-Awtrix-Voice: 1 and an Origin matching the device. Left-out fields keep their value. enabled needs an address and a token. A new address needs the token again. With an app as the assistant, the clock keeps no connection to Home Assistant, whatever enabled says.
       parameters:
         - { name: X-Awtrix-Voice, in: header, required: true, schema: { type: string, enum: ["1"] } }
       requestBody:
@@ -2594,7 +2596,8 @@ paths:
               type: object
               properties:
                 enabled: { type: boolean }
-                wakeWord: { type: boolean, description: 'true: saying "Hey AWTRIX" starts a request while Voice is connected.' }
+                wakeWord: { type: boolean, description: 'true: saying "Hey AWTRIX" starts the assistant while it is ready.' }
+                assistant: { type: string, pattern: "^(ha|app:[A-Za-z0-9_-]{1,32})$", description: "ha (default) or app:<name>. The name is an app name: not active, next, previous or order. With an app, every trigger opens the app." }
                 url: { type: string, maxLength: 512, description: "Origin only, for example http://homeassistant.local:8123." }
                 pipeline: { type: string, maxLength: 128 }
                 device: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9]*$", description: "Home Assistant device ID. \"\" for none." }
@@ -2610,6 +2613,44 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/voice/start:
+    x-only: [tc002]
+    description: "Only where capabilities.voice is true. Elsewhere 404."
+    post:
+      tags: [system]
+      summary: Start the voice assistant
+      description: |
+        Starts the assistant the settings name, as holding the knob does: Home Assistant Voice, or the app in config.assistant, which gets on_voice('api'). No body. Only from the device's own web page: needs X-Awtrix-Voice: 1 and an Origin matching the device.
+      parameters:
+        - { name: X-Awtrix-Voice, in: header, required: true, schema: { type: string, enum: ["1"] } }
+      responses:
+        "404": { $ref: "#/components/responses/NotOnThisDevice" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "200":
+          description: Voice started a request, or the app opened.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean } }
+        "403":
+          description: "forbiddenOrigin: not sent from the device's own web page."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "405":
+          description: "methodNotAllowed, \"allowed: POST\"."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: "voiceUnavailable, \"assistant not ready\": nothing started. Home Assistant Voice is off, not connected or busy, a script records or plays, the app cannot start, or the boot intro, an update or setup mode runs."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /api/v1/icons/origins:
     description: |
@@ -3449,6 +3490,7 @@ components:
                 - scanUnavailable       # 503, Wi-Fi scan in setup mode
                 - notNewer              # 409, POST /update - not newer than the installed release
                 - updateBusy            # 409, POST /update - another update is running or being confirmed
+                - voiceUnavailable      # 409, POST /api/v1/voice/start - the assistant cannot start now
                 - nameTaken             # 409, an MP3 and a melody would share a name, or an icon rename would overwrite another icon
                 - insufficientMemory    # 413, POST /update - not enough free memory to take the package
                 - internalError         # 500

@@ -6,7 +6,7 @@ set(fast_usb AWTRIX_LOADER_USB_CHECK_MS=100 AWTRIX_LOADER_USB_RETRY_TICKS=4
   AWTRIX_LOADER_DEPLOY_CHECK_MS=25 AWTRIX_LOADER_DEPLOY_STALE_SECONDS=0.3 AWTRIX_LOADER_SETTLE_MS=25)
 
 add_awtrix_test(NAME tc002-loader-policy SOURCES test_loader_policy.c "${loader}/loader_policy.c"
-  "${loader}/loader_state.c" INCLUDES "${PROJECT_SOURCE_DIR}/src" DEFINITIONS _GNU_SOURCE SANITIZE TIMEOUT 20)
+  "${loader}/loader_state.c" INCLUDES "${PROJECT_SOURCE_DIR}/src" DEFINITIONS _GNU_SOURCE TIMEOUT 20)
 
 add_library(tc002-loader-under-test MODULE "${loader}/loader.c" "${loader}/loader_policy.c"
   "${loader}/loader_state.c" "${loader}/rescue_panel.c" ${TC002_FLASH_C_SOURCES})

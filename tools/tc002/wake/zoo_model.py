@@ -1,16 +1,12 @@
-"""A small int8 model that runs every op WakeModel supports beyond the trained models, in shapes and
-options they do not use: SAME padding with strides and dilation, a depth multiplier, max and average
-pooling with partial windows, MEAN with and without keep_dims, broadcast MUL and ADD, per-channel
-FULLY_CONNECTED, a reversing STRIDED_SLICE with shrink, SPLIT_V and int8 to uint8 QUANTIZE.
-Input [1, 4, 40] int8, output [1, 41] uint8. Written with the flatbuffers package from schema.fbs.
-"""
-
 import flatbuffers
 import numpy as np
 
 INT32, UINT8, INT8 = 2, 3, 9
 ADD, AVERAGE_POOL, CONCATENATION, CONV, DEPTHWISE, FULLY_CONNECTED = 0, 1, 2, 3, 4, 9
 LOGISTIC, MAX_POOL, MUL, RESHAPE, MEAN, STRIDED_SLICE, SPLIT_V, QUANTIZE = 14, 17, 18, 22, 40, 45, 102, 114
+CONV_OPTIONS, DEPTHWISE_OPTIONS, POOL_OPTIONS, FULLY_CONNECTED_OPTIONS = 1, 2, 5, 8
+CONCATENATION_OPTIONS, ADD_OPTIONS, RESHAPE_OPTIONS, MUL_OPTIONS = 10, 11, 17, 21
+REDUCER_OPTIONS, STRIDED_SLICE_OPTIONS, SPLIT_V_OPTIONS = 27, 32, 79
 SAME, VALID, RELU, RELU6 = 0, 1, 1, 3
 
 
@@ -59,7 +55,6 @@ def build(graph, inputs, outputs):
               "u32": b.PrependUint32Slot, "bool": b.PrependBoolSlot}
 
     def table(fields):
-        """fields: (slot, kind, value), kind one of i8 u8 i32 u32 bool, or off for a built offset."""
         b.StartObject(1 + max([slot for slot, _, _ in fields], default=0))
         for slot, kind, value in fields:
             if kind == "off":
@@ -128,58 +123,60 @@ def zoo_model(seed=5):
 
     x = g.tensor([1, 4, 40], scale=0.10196079, zero=-128)
     a = g.tensor([1, 4, 10, 4], scale=0.10196079, zero=-128)
-    g.op(RESHAPE, [x, g.const_i32([1, 4, 10, 4])], [a], 17, [(0, "vec", [1, 4, 10, 4])])
+    g.op(RESHAPE, [x, g.const_i32([1, 4, 10, 4])], [a], RESHAPE_OPTIONS, [(0, "vec", [1, 4, 10, 4])])
 
     conv_scales = rng.uniform(0.002, 0.006, 6).astype(np.float32)
     b_ = g.tensor([1, 4, 5, 6], scale=0.4, zero=-128)
     g.op(CONV, [a, g.tensor([6, 3, 3, 4], scale=conv_scales, zero=0, data=weights([6, 3, 3, 4])),
                 g.tensor([6], INT32, scale=conv_scales * np.float32(0.10196079), zero=0, data=bias(6))], [b_],
-         1, [(0, "i8", SAME), (1, "i32", 2), (2, "i32", 1), (3, "i8", RELU6), (4, "i32", 1), (5, "i32", 2)])
+         CONV_OPTIONS, [(0, "i8", SAME), (1, "i32", 2), (2, "i32", 1), (3, "i8", RELU6), (4, "i32", 1), (5, "i32", 2)])
 
     dw_scales = rng.uniform(0.004, 0.01, 12).astype(np.float32)
     c = g.tensor([1, 2, 3, 12], scale=0.3, zero=-100)
     g.op(DEPTHWISE, [b_, g.tensor([1, 3, 2, 12], scale=dw_scales, zero=0, data=weights([1, 3, 2, 12]), dim=3),
                      g.tensor([12], INT32, scale=dw_scales * np.float32(0.4), zero=0, data=bias(12, -500, 500))], [c],
-         2, [(0, "i8", VALID), (1, "i32", 1), (2, "i32", 1), (3, "i32", 2), (4, "i8", RELU), (5, "i32", 2),
-             (6, "i32", 1)])
+         DEPTHWISE_OPTIONS, [(0, "i8", VALID), (1, "i32", 1), (2, "i32", 1), (3, "i32", 2), (4, "i8", RELU),
+                             (5, "i32", 2), (6, "i32", 1)])
 
     d = g.tensor([1, 2, 3, 12], scale=0.3, zero=-100)
-    g.op(MAX_POOL, [c], [d], 5, [(0, "i8", SAME), (1, "i32", 1), (2, "i32", 1), (3, "i32", 2), (4, "i32", 2)])
+    g.op(MAX_POOL, [c], [d], POOL_OPTIONS,
+         [(0, "i8", SAME), (1, "i32", 1), (2, "i32", 1), (3, "i32", 2), (4, "i32", 2)])
     e = g.tensor([1, 1, 2, 12], scale=0.3, zero=-100)
-    g.op(AVERAGE_POOL, [c], [e], 5, [(0, "i8", SAME), (1, "i32", 2), (2, "i32", 2), (3, "i32", 3), (4, "i32", 2)])
+    g.op(AVERAGE_POOL, [c], [e], POOL_OPTIONS,
+         [(0, "i8", SAME), (1, "i32", 2), (2, "i32", 2), (3, "i32", 3), (4, "i32", 2)])
 
     f = g.tensor([1, 1, 3, 12], scale=0.2, zero=-90)
-    g.op(MEAN, [d, g.const_i32([1])], [f], 27, [(0, "bool", True)])
+    g.op(MEAN, [d, g.const_i32([1])], [f], REDUCER_OPTIONS, [(0, "bool", True)])
     h = g.tensor([1, 1, 3, 12], scale=0.25, zero=3)
-    g.op(MUL, [f, g.tensor([12], scale=0.02, zero=5, data=weights([12]))], [h], 21, [])
+    g.op(MUL, [f, g.tensor([12], scale=0.02, zero=5, data=weights([12]))], [h], MUL_OPTIONS, [])
     e2 = g.tensor([1, 1, 1, 12], scale=0.17, zero=-60)
-    g.op(MEAN, [e, g.const_i32([-2])], [e2], 27, [(0, "bool", True)])
+    g.op(MEAN, [e, g.const_i32([-2])], [e2], REDUCER_OPTIONS, [(0, "bool", True)])
     i = g.tensor([1, 1, 3, 12], scale=0.35, zero=-20)
-    g.op(ADD, [h, e2], [i], 11, [(0, "i8", 0)])
+    g.op(ADD, [h, e2], [i], ADD_OPTIONS, [(0, "i8", 0)])
     j = g.tensor([1, 12], scale=0.3, zero=-10)
-    g.op(MEAN, [i, g.const_i32([2, 1])], [j], 27, [(0, "bool", False)])
+    g.op(MEAN, [i, g.const_i32([2, 1])], [j], REDUCER_OPTIONS, [(0, "bool", False)])
 
     fc_scales = rng.uniform(0.002, 0.005, 5).astype(np.float32)
     k = g.tensor([1, 5], scale=0.3, zero=-100)
     g.op(FULLY_CONNECTED, [j, g.tensor([5, 12], scale=fc_scales, zero=0, data=weights([5, 12])),
                            g.tensor([5], INT32, scale=fc_scales * np.float32(0.3), zero=0, data=bias(5))], [k],
-         8, [(0, "i8", 0)])
+         FULLY_CONNECTED_OPTIONS, [(0, "i8", 0)])
 
     s = g.tensor([2, 3, 6], scale=0.3, zero=-100)
     g.op(STRIDED_SLICE, [c, g.const_i32([0, 1, 2, 11]), g.const_i32([1, 0, 0, 0]), g.const_i32([1, -1, -1, -2])],
-         [s], 32, [(0, "i32", 0), (1, "i32", 0b1110), (4, "i32", 0b0001)])
+         [s], STRIDED_SLICE_OPTIONS, [(0, "i32", 0), (1, "i32", 0b1110), (4, "i32", 0b0001)])
     r = g.tensor([1, 36], scale=0.3, zero=-100)
-    g.op(RESHAPE, [s, g.const_i32([1, 36])], [r], 17, [(0, "vec", [1, 36])])
+    g.op(RESHAPE, [s, g.const_i32([1, 36])], [r], RESHAPE_OPTIONS, [(0, "vec", [1, 36])])
     m = g.tensor([1, 41], scale=0.3, zero=-100)
-    g.op(CONCATENATION, [k, r], [m], 10, [(0, "i32", -1)])
+    g.op(CONCATENATION, [k, r], [m], CONCATENATION_OPTIONS, [(0, "i32", -1)])
 
     lo = g.tensor([1, 41], scale=1 / 256, zero=-128)
     g.op(LOGISTIC, [m], [lo])
     p1, p2 = g.tensor([1, 21], scale=1 / 256, zero=-128), g.tensor([1, 20], scale=1 / 256, zero=-128)
     g.op(SPLIT_V, [lo, g.const_i32([-1, 20]), g.tensor([], INT32, data=np.asarray([1], np.int32))], [p1, p2],
-         79, [(0, "i32", 2)])
+         SPLIT_V_OPTIONS, [(0, "i32", 2)])
     q = g.tensor([1, 41], scale=1 / 256, zero=-128)
-    g.op(CONCATENATION, [p2, p1], [q], 10, [(0, "i32", 1)])
+    g.op(CONCATENATION, [p2, p1], [q], CONCATENATION_OPTIONS, [(0, "i32", 1)])
     out = g.tensor([1, 41], UINT8, scale=1 / 200, zero=0)
     g.op(QUANTIZE, [q], [out])
     return build(g, [x], [out])

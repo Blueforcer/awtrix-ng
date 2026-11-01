@@ -1,4 +1,5 @@
 #include "../../support.h"
+#include "FakeMicrophoneDaemon.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -6,7 +7,6 @@
 #include <utility>
 #include <vector>
 
-#include "platform/tc002/contract/SupervisorProtocol.h"
 #include "platform/tc002/runtime/MicrophoneHub.h"
 
 using namespace awtrix;
@@ -17,72 +17,71 @@ using tc002::StreamEvent;
 
 namespace {
 
+std::string describe(const StreamEvent& e) {
+  switch (e.kind) {
+    case StreamEvent::Kind::Support:
+      return "Support/" + std::to_string(e.epoch) + (e.available ? "" : " unavailable");
+    case StreamEvent::Kind::Started:
+      return "Started/" + std::to_string(e.epoch);
+    case StreamEvent::Kind::Audio:
+      return "Audio/" + std::to_string(e.epoch) + "@" + std::to_string(e.firstSample) + "+" +
+             std::to_string(e.samples.size());
+    case StreamEvent::Kind::Ended:
+      return "Ended/" + std::to_string(e.epoch) + "@" + std::to_string(e.firstSample) +
+             (e.error.empty() ? "" : " (" + e.error + ")");
+  }
+  return "?";
+}
+
 struct Rig {
-  std::vector<StreamControl> up;
+  test::FakeMicrophoneDaemon daemon;
   std::vector<StreamEvent> tapped;
-  bool linkUp = true;
   int64_t now = 1000;
-  MicrophoneHub hub{[this](std::string wire) {
-                      tc002::SupervisorMessage message;
-                      if (tc002::decodeSupervisorMessage(wire, message) &&
-                          message.type == tc002::MessageType::MicrophoneStreamControl)
-                        up.push_back(message.streamControl);
-                      return linkUp;
-                    },
-                    [this](const StreamEvent& e, int64_t) { tapped.push_back(e); }};
-  uint32_t upstreamSample = 0;
+  MicrophoneHub hub{daemon.link(), [this](const StreamEvent& e, int64_t) { tapped.push_back(e); }};
 
   struct Consumer {
-    int id = 0;
+    MicrophoneHub::Consumer handle;
     std::vector<StreamEvent> events;
+
+    std::string last(std::size_t count = 1) const {
+      std::string out;
+      for (std::size_t i = events.size() - std::min(count, events.size()); i < events.size(); ++i)
+        out += (out.empty() ? "" : ", ") + describe(events[i]);
+      return out;
+    }
+    std::string all() const { return last(events.size()); }
+    bool control(const StreamControl& c) const { return handle.port()(c); }
   };
 
   void attach(Consumer& c) {
-    c.id = hub.attach([&c](const StreamEvent& e, int64_t) { c.events.push_back(e); });
+    c.handle = hub.attach([&c](const StreamEvent& e, int64_t) { c.events.push_back(e); });
   }
-  // Like the daemon's, each upstream stream counts its samples from 0.
   void upstream(StreamEvent::Kind kind, bool available = true, std::string error = {}) {
-    if (kind == StreamEvent::Kind::Started) upstreamSample = 0;
-    StreamEvent e;
-    e.epoch = up.back().epoch;
-    e.kind = kind;
-    e.available = available;
-    e.error = std::move(error);
-    hub.receive(e, now);
+    hub.receive(daemon.event(kind, available, std::move(error)), now);
   }
-  // One 480-sample block captured now, every sample holding its upstream index modulo 32768.
   void block(uint32_t jump = 0) {
-    upstreamSample += jump;
-    StreamEvent e;
-    e.epoch = up.back().epoch;
-    e.kind = StreamEvent::Kind::Audio;
-    e.firstSample = upstreamSample;
-    for (uint32_t i = 0; i < 480; ++i) e.samples.push_back(static_cast<int16_t>((upstreamSample + i) % 32768));
-    upstreamSample += 480;
+    daemon.sample += jump;
     now += 30;
-    e.hostAtMs = now;
-    hub.receive(e, now);
+    hub.receive(daemon.ramp(now), now);
   }
   void stream() {
     upstream(StreamEvent::Kind::Support);
     upstream(StreamEvent::Kind::Started);
   }
-  // Frames of 150 ms for ms milliseconds; the owner ticks the hub first, then the consumer renews its lease.
   void wait(int64_t ms, const Consumer& keep, int epoch) {
     for (const int64_t end = now + ms; now < end;) {
       now = std::min(now + 150, end);
       hub.tick(now);
-      hub.control(keep.id, {epoch, StreamControl::Keepalive});
+      keep.control({epoch, StreamControl::Keepalive});
     }
   }
-  unsigned count(StreamControl::Operation operation) const {
-    unsigned n = 0;
-    for (const auto& c : up) n += c.operation == operation;
-    return n;
+  std::string sent() const {
+    std::string out;
+    for (const StreamControl& c : daemon.controls)
+      out += (out.empty() ? "" : " ") + std::to_string(static_cast<int>(c.operation)) + "/" + std::to_string(c.epoch);
+    return out;
   }
 };
-
-bool is(const StreamEvent& e, StreamEvent::Kind kind, int epoch) { return e.kind == kind && e.epoch == epoch; }
 
 uint64_t heard(const Rig::Consumer& c) {
   uint64_t samples = 0;
@@ -91,7 +90,6 @@ uint64_t heard(const Rig::Consumer& c) {
   return samples;
 }
 
-// The consumer's audio is one run: numbered from 0 without a gap, each sample one above the one before.
 bool gapless(const Rig::Consumer& c) {
   uint32_t next = 0;
   int expected = -1;
@@ -107,16 +105,26 @@ bool gapless(const Rig::Consumer& c) {
   return true;
 }
 
+std::vector<int16_t> heardSamples(const Rig::Consumer& c) {
+  std::vector<int16_t> out;
+  for (const auto& e : c.events)
+    if (e.kind == StreamEvent::Kind::Audio) out.insert(out.end(), e.samples.begin(), e.samples.end());
+  return out;
+}
+
+std::string startOf(const std::vector<int16_t>& samples) {
+  return std::to_string(samples.size()) + " samples from " + (samples.empty() ? "-" : std::to_string(samples[0]));
+}
+
 void probeAlone() {
   Rig rig;
   Rig::Consumer a;
   rig.attach(a);
-  rig.hub.control(a.id, {7, StreamControl::Probe});
-  check(rig.up.size() == 1 && rig.up[0].operation == StreamControl::Probe, "a probe while idle probes upstream");
+  a.control({7, StreamControl::Probe});
+  check(rig.sent() == "0/1", "a probe while idle probes upstream: " + rig.sent());
   rig.upstream(StreamEvent::Kind::Support);
-  check(a.events.size() == 1 && is(a.events[0], StreamEvent::Kind::Support, 7) && a.events[0].available,
-        "the answer reaches the consumer under its own epoch");
-  check(rig.up.size() == 1 && !rig.hub.active(), "a probe alone starts no stream");
+  check(a.all() == "Support/7", "the answer reaches the consumer under its own epoch: " + a.all());
+  check(rig.daemon.controls.size() == 1 && !rig.hub.active(), "a probe alone starts no stream: " + rig.sent());
 }
 
 void bareProbeIsNotActive() {
@@ -124,9 +132,9 @@ void bareProbeIsNotActive() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Probe});
-  check(rig.count(StreamControl::Probe) == 1 && !rig.hub.active(), "a probe alone leaves the hub inactive");
-  rig.hub.control(b.id, {2, StreamControl::Start});
+  a.control({1, StreamControl::Probe});
+  check(rig.daemon.count(StreamControl::Probe) == 1 && !rig.hub.active(), "a probe alone leaves the hub inactive");
+  b.control({2, StreamControl::Start});
   check(rig.hub.active(), "a consumer that wants a stream makes it active while the hub still probes");
 }
 
@@ -134,16 +142,14 @@ void startAndAudio() {
   Rig rig;
   Rig::Consumer a;
   rig.attach(a);
-  rig.hub.control(a.id, {3, StreamControl::Start});
-  check(rig.count(StreamControl::Probe) == 1, "a start while idle probes first");
+  a.control({3, StreamControl::Start});
+  check(rig.sent() == "0/1", "a start while idle probes first: " + rig.sent());
   rig.upstream(StreamEvent::Kind::Support);
-  check(rig.count(StreamControl::Start) == 1, "an available microphone is started");
+  check(rig.sent() == "0/1 1/1", "an available microphone is started: " + rig.sent());
   rig.upstream(StreamEvent::Kind::Started);
-  check(!a.events.empty() && is(a.events.back(), StreamEvent::Kind::Started, 3), "the consumer hears Started");
+  check(a.last() == "Started/3", "the consumer hears Started: " + a.last());
   rig.block();
-  check(is(a.events.back(), StreamEvent::Kind::Audio, 3) && a.events.back().firstSample == 0 &&
-            a.events.back().samples.size() == 480,
-        "audio arrives under the consumer's epoch from sample 0");
+  check(a.last() == "Audio/3@0+480", "audio arrives under the consumer's epoch from sample 0: " + a.last());
   check(rig.tapped.size() == 1, "the tap sees the block");
 }
 
@@ -151,13 +157,13 @@ void noAnswerInsideControl() {
   Rig rig;
   Rig::Consumer a;
   bool inside = false, early = false;
-  a.id = rig.hub.attach([&](const StreamEvent& e, int64_t) {
+  a.handle = rig.hub.attach([&](const StreamEvent& e, int64_t) {
     early = early || inside;
     a.events.push_back(e);
   });
   const auto control = [&](StreamControl c) {
     inside = true;
-    rig.hub.control(a.id, c);
+    a.control(c);
     inside = false;
   };
   control({1, StreamControl::Start});
@@ -167,28 +173,26 @@ void noAnswerInsideControl() {
   control({2, StreamControl::Probe});
   control({1, StreamControl::Stop});
   control({3, StreamControl::Start});
-  check(a.events.size() == before, "control() only queues its answers");
+  check(a.events.size() == before, "control() only queues its answers: " + a.last(3));
   rig.hub.tick(rig.now);
-  check(!early && a.events.size() == before + 3 && is(a.events[before], StreamEvent::Kind::Support, 2) &&
-            is(a.events[before + 1], StreamEvent::Kind::Ended, 1) &&
-            is(a.events[before + 2], StreamEvent::Kind::Started, 3),
-        "the next tick delivers them in order");
+  check(!early && a.events.size() == before + 3 && a.last(3) == "Support/2, Ended/1@480, Started/3",
+        "the next tick delivers them in order: " + a.last(3));
 }
 
 void answerToCallbackWaits() {
   Rig rig;
   Rig::Consumer a;
   int epoch = 1;
-  a.id = rig.hub.attach([&](const StreamEvent& e, int64_t) {
+  a.handle = rig.hub.attach([&](const StreamEvent& e, int64_t) {
     a.events.push_back(e);
-    if (e.kind == StreamEvent::Kind::Ended) rig.hub.control(a.id, {++epoch, StreamControl::Start});
+    if (e.kind == StreamEvent::Kind::Ended) a.control({++epoch, StreamControl::Start});
   });
-  rig.linkUp = false;
-  rig.hub.control(a.id, {epoch, StreamControl::Start});
+  rig.daemon.linkUp = false;
+  a.control({epoch, StreamControl::Start});
   rig.hub.tick(rig.now);
   rig.hub.tick(rig.now);
-  check(a.events.size() == 2 && is(a.events[1], StreamEvent::Kind::Ended, 2),
-        "a consumer restarting inside each end hears one answer per tick, not an endless chain");
+  check(a.all() == "Ended/1@0 (supervisor link refused), Ended/2@0 (supervisor link refused)",
+        "a consumer restarting inside each end hears one answer per tick, not an endless chain: " + a.all());
 }
 
 void twoConsumersShareOneStream() {
@@ -196,16 +200,16 @@ void twoConsumersShareOneStream() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
   rig.block();
-  rig.hub.control(b.id, {9, StreamControl::Start});
+  b.control({9, StreamControl::Start});
   rig.hub.tick(rig.now);
-  check(rig.count(StreamControl::Start) == 1, "the second consumer starts no second upstream stream");
-  check(is(b.events.back(), StreamEvent::Kind::Started, 9), "a consumer joining a running stream starts at once");
+  check(rig.daemon.count(StreamControl::Start) == 1, "the second consumer starts no second upstream stream");
+  check(b.last() == "Started/9", "a consumer joining a running stream starts at once: " + b.last());
   rig.block();
-  check(a.events.back().firstSample == 480 && b.events.back().firstSample == 0,
-        "each consumer counts samples from its own start");
+  check(a.last() == "Audio/1@480+480" && b.last() == "Audio/9@0+480",
+        "each consumer counts samples from its own start: " + a.last() + " / " + b.last());
 }
 
 void lingerAfterLastStop() {
@@ -213,26 +217,24 @@ void lingerAfterLastStop() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
   rig.block();
-  rig.hub.control(a.id, {1, StreamControl::Stop});
+  a.control({1, StreamControl::Stop});
   rig.hub.tick(rig.now);
-  check(is(a.events.back(), StreamEvent::Kind::Ended, 1) && a.events.back().error.empty() &&
-            a.events.back().firstSample == 480,
-        "a stop is answered with a clean end after the consumer's last sample");
+  check(a.last() == "Ended/1@480", "a stop is answered with a clean end after the consumer's last sample: " + a.last());
   rig.now += 500;
   rig.hub.tick(rig.now);
-  check(rig.count(StreamControl::Stop) == 0 && rig.hub.active(), "the stream lingers after the last stop");
-  rig.hub.control(b.id, {4, StreamControl::Start});
+  check(rig.daemon.count(StreamControl::Stop) == 0 && rig.hub.active(), "the stream lingers after the last stop");
+  b.control({4, StreamControl::Start});
   rig.hub.tick(rig.now);
   rig.block();
-  check(rig.count(StreamControl::Probe) == 1 && b.events.size() == 2 && b.events[1].firstSample == 0,
-        "a start during the linger joins the running stream");
-  rig.hub.control(b.id, {4, StreamControl::Stop});
+  check(rig.daemon.count(StreamControl::Probe) == 1 && b.all() == "Started/4, Audio/4@0+480",
+        "a start during the linger joins the running stream: " + b.all());
+  b.control({4, StreamControl::Stop});
   rig.now += MicrophoneHub::kLingerMs;
   rig.hub.tick(rig.now);
-  check(rig.count(StreamControl::Stop) == 1, "after the linger the upstream stream stops");
+  check(rig.daemon.count(StreamControl::Stop) == 1, "after the linger the upstream stream stops");
   rig.upstream(StreamEvent::Kind::Ended);
   check(!rig.hub.active(), "its end leaves the hub idle");
 }
@@ -241,15 +243,14 @@ void leaseExpires() {
   Rig rig;
   Rig::Consumer a;
   rig.attach(a);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
   rig.wait(750, a, 1);
-  check(a.events.back().kind == StreamEvent::Kind::Started, "keepalives every 150 ms keep the stream");
-  check(rig.count(StreamControl::Keepalive) >= 4, "the hub renews its own upstream lease");
+  check(a.last() == "Started/1", "keepalives every 150 ms keep the stream: " + a.last());
+  check(rig.daemon.count(StreamControl::Keepalive) >= 4, "the hub renews its own upstream lease: " + rig.sent());
   rig.now += tc002::kStreamLeaseMs + 1;
   rig.hub.tick(rig.now);
-  check(is(a.events.back(), StreamEvent::Kind::Ended, 1) && a.events.back().error == "consumer lease expired",
-        "a consumer without keepalive loses its stream");
+  check(a.last() == "Ended/1@0 (consumer lease expired)", "a consumer without keepalive loses its stream: " + a.last());
 }
 
 void oneLeaseExpires() {
@@ -257,15 +258,15 @@ void oneLeaseExpires() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
-  rig.hub.control(b.id, {2, StreamControl::Start});
+  a.control({1, StreamControl::Start});
+  b.control({2, StreamControl::Start});
   rig.stream();
   rig.wait(tc002::kStreamLeaseMs + 150, b, 2);
-  check(is(a.events.back(), StreamEvent::Kind::Ended, 1) && a.events.back().error == "consumer lease expired",
-        "one consumer without keepalive loses its stream");
+  check(a.last() == "Ended/1@0 (consumer lease expired)",
+        "one consumer without keepalive loses its stream: " + a.last());
   rig.block();
-  check(is(b.events.back(), StreamEvent::Kind::Audio, 2) && rig.count(StreamControl::Stop) == 0,
-        "while the other one keeps it");
+  check(b.last() == "Audio/2@0+480" && rig.daemon.count(StreamControl::Stop) == 0,
+        "while the other one keeps it: " + b.last());
 }
 
 void upstreamEndReachesAll() {
@@ -273,35 +274,35 @@ void upstreamEndReachesAll() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
-  rig.hub.control(b.id, {2, StreamControl::Start});
+  a.control({1, StreamControl::Start});
+  b.control({2, StreamControl::Start});
   rig.stream();
   rig.upstream(StreamEvent::Kind::Ended, true, "microphone UART frame lost or corrupt");
-  check(a.events.back().error == "microphone UART frame lost or corrupt" &&
-            b.events.back().error == "microphone UART frame lost or corrupt",
-        "an upstream failure ends every consumer with its reason");
-  check(!rig.hub.active() && rig.count(StreamControl::Probe) == 1, "the hub does not retry on its own");
+  check(a.last() == "Ended/1@0 (microphone UART frame lost or corrupt)" &&
+            b.last() == "Ended/2@0 (microphone UART frame lost or corrupt)",
+        "an upstream failure ends every consumer with its reason: " + a.last() + " / " + b.last());
+  check(!rig.hub.active() && rig.daemon.count(StreamControl::Probe) == 1, "the hub does not retry on its own");
 }
 
 void unavailableMicrophone() {
   Rig rig;
   Rig::Consumer a;
   rig.attach(a);
-  rig.hub.control(a.id, {5, StreamControl::Start});
+  a.control({5, StreamControl::Start});
   rig.upstream(StreamEvent::Kind::Support, false);
-  check(is(a.events.back(), StreamEvent::Kind::Ended, 5) && !a.events.back().error.empty() && !rig.hub.active(),
-        "a start on an MCU without the stream ends with a reason");
+  check(a.last() == std::string("Ended/5@0 (") + tc002::kStreamUnavailable + ")" && !rig.hub.active(),
+        "a start on an MCU without the stream ends with a reason: " + a.last());
 }
 
 void gapIsPassedOn() {
   Rig rig;
   Rig::Consumer a;
   rig.attach(a);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
   rig.block();
   rig.block(240);
-  check(a.events.back().firstSample == 720, "a gap upstream is a gap for the consumer");
+  check(a.last() == "Audio/1@720+480", "a gap upstream is a gap for the consumer: " + a.last());
 }
 
 void sampleCountWraps() {
@@ -309,49 +310,51 @@ void sampleCountWraps() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
-  rig.upstreamSample = UINT32_MAX - 959;
+  rig.daemon.sample = UINT32_MAX - 959;
   rig.block();
-  rig.hub.control(b.id, {2, StreamControl::Start});
+  b.control({2, StreamControl::Start});
   rig.hub.tick(rig.now);
   for (int i = 0; i < 3; ++i) rig.block();
-  check(heard(b) == 1440 && gapless(b), "the consumer's count runs on where the upstream count wraps past 2^32");
+  check(heard(b) == 1440 && gapless(b),
+        "the consumer's count runs on where the upstream count wraps past 2^32: " + b.all());
 }
 
 void callbackCallsBack() {
   Rig rig;
   Rig::Consumer probeThenStart;
-  probeThenStart.id = rig.hub.attach([&](const StreamEvent& e, int64_t) {
+  probeThenStart.handle = rig.hub.attach([&](const StreamEvent& e, int64_t) {
     probeThenStart.events.push_back(e);
     if (e.kind == StreamEvent::Kind::Support && e.available)
-      rig.hub.control(probeThenStart.id, {e.epoch, StreamControl::Start});
+      probeThenStart.control({e.epoch, StreamControl::Start});
   });
-  rig.hub.control(probeThenStart.id, {8, StreamControl::Probe});
+  probeThenStart.control({8, StreamControl::Probe});
   rig.upstream(StreamEvent::Kind::Support);
-  check(rig.count(StreamControl::Start) == 1, "a start from inside the support answer starts the stream");
+  check(rig.daemon.count(StreamControl::Start) == 1, "a start from inside the support answer starts the stream");
   rig.upstream(StreamEvent::Kind::Started);
-  check(is(probeThenStart.events.back(), StreamEvent::Kind::Started, 8), "and the consumer hears it");
+  check(probeThenStart.last() == "Started/8", "and the consumer hears it: " + probeThenStart.last());
 }
 
 void selfDetach() {
   Rig rig;
   Rig::Consumer a;
   rig.attach(a);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
-  int self = 0;
+  MicrophoneHub::Consumer self;
   unsigned deliveries = 0;
   self = rig.hub.attach([&](const StreamEvent&, int64_t) {
     ++deliveries;
-    rig.hub.detach(self);
+    self.detach();
   });
-  rig.hub.control(self, {2, StreamControl::Start});
+  const tc002::MicrophonePort port = self.port();
+  port({2, StreamControl::Start});
   rig.hub.tick(rig.now);
   rig.block();
-  check(deliveries == 1 && !rig.hub.control(self, {2, StreamControl::Stop}),
-        "a consumer that detaches itself inside its delivery hears nothing after");
-  check(is(a.events.back(), StreamEvent::Kind::Audio, 1), "and the stream goes on for the others");
+  check(deliveries == 1 && !self.port()({2, StreamControl::Start}) && !port({2, StreamControl::Stop}),
+        "a consumer that detaches itself inside its delivery hears nothing after: " + std::to_string(deliveries));
+  check(a.last() == "Audio/1@0+480", "and the stream goes on for the others: " + a.last());
 }
 
 void probeWhileStarting() {
@@ -359,68 +362,61 @@ void probeWhileStarting() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.upstream(StreamEvent::Kind::Support);
-  rig.hub.control(b.id, {6, StreamControl::Probe});
+  b.control({6, StreamControl::Probe});
   rig.hub.tick(rig.now);
-  check(b.events.size() == 1 && is(b.events[0], StreamEvent::Kind::Support, 6) && b.events[0].available &&
-            rig.count(StreamControl::Probe) == 1,
-        "a probe while the stream starts is answered at once, without asking upstream");
+  check(b.all() == "Support/6" && rig.daemon.count(StreamControl::Probe) == 1,
+        "a probe while the stream starts is answered at once, without asking upstream: " + b.all());
 }
 
 void probeLeavesStreamEpoch() {
   Rig rig;
   Rig::Consumer a;
   rig.attach(a);
-  rig.hub.control(a.id, {5, StreamControl::Start});
+  a.control({5, StreamControl::Start});
   rig.stream();
-  rig.hub.control(a.id, {6, StreamControl::Probe});
+  a.control({6, StreamControl::Probe});
   rig.block();
-  const auto n = a.events.size();
-  check(n >= 2 && is(a.events[n - 2], StreamEvent::Kind::Support, 6) && a.events[n - 2].available &&
-            is(a.events[n - 1], StreamEvent::Kind::Audio, 5),
-        "a probe while streaming is answered under its own epoch and leaves the stream's");
+  check(a.last(2) == "Support/6, Audio/5@0+480",
+        "a probe while streaming is answered under its own epoch and leaves the stream's: " + a.last(2));
   rig.wait(600, a, 5);
   rig.block();
-  check(is(a.events.back(), StreamEvent::Kind::Audio, 5), "the stream's keepalive still renews it");
-  rig.hub.control(a.id, {5, StreamControl::Stop});
+  check(a.last() == "Audio/5@480+480", "the stream's keepalive still renews it: " + a.last());
+  a.control({5, StreamControl::Stop});
   rig.hub.tick(rig.now);
-  check(is(a.events.back(), StreamEvent::Kind::Ended, 5) && a.events.back().error.empty(),
-        "and the stream's stop still ends it");
+  check(a.last() == "Ended/5@960", "and the stream's stop still ends it: " + a.last());
 }
 
 void startUnderNewEpoch() {
   Rig rig;
   Rig::Consumer a;
   rig.attach(a);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
   rig.block();
   rig.block();
-  rig.hub.control(a.id, {2, StreamControl::Start});
+  a.control({2, StreamControl::Start});
   rig.hub.tick(rig.now);
-  const auto n = a.events.size();
-  check(is(a.events[n - 2], StreamEvent::Kind::Ended, 1) && a.events[n - 2].firstSample == 960 &&
-            is(a.events[n - 1], StreamEvent::Kind::Started, 2),
-        "a start under a new epoch first ends the running stream at its position");
+  check(a.last(2) == "Ended/1@960, Started/2",
+        "a start under a new epoch first ends the running stream at its position: " + a.last(2));
 }
 
 void restartWhileStopping() {
   Rig rig;
   Rig::Consumer a;
   rig.attach(a);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
-  rig.hub.control(a.id, {1, StreamControl::Stop});
+  a.control({1, StreamControl::Stop});
   rig.now += MicrophoneHub::kLingerMs;
   rig.hub.tick(rig.now);
-  rig.hub.control(a.id, {2, StreamControl::Start});
+  a.control({2, StreamControl::Start});
   rig.upstream(StreamEvent::Kind::Ended);
-  check(rig.count(StreamControl::Probe) == 1 && rig.count(StreamControl::Start) == 2 &&
-            rig.up.back().operation == StreamControl::Start && rig.up.back().epoch != rig.up.front().epoch,
-        "a start while stopping starts a new upstream stream once the old one ended, without a probe");
+  check(rig.sent() == "0/1 1/1 2/1 1/2",
+        "a start while stopping starts a new upstream stream once the old one ended, without a probe: " + rig.sent());
   rig.upstream(StreamEvent::Kind::Started);
-  check(is(a.events.back(), StreamEvent::Kind::Started, 2), "which reaches the consumer");
+  check(a.last() == "Started/2", "which reaches the consumer: " + a.last());
 }
 
 void holdKeepsTheStreamOpen() {
@@ -429,28 +425,27 @@ void holdKeepsTheStreamOpen() {
   rig.attach(a);
   rig.attach(b);
   rig.hub.hold(true);
-  check(rig.up.empty() && !rig.hub.active(), "a hold opens no stream");
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  check(rig.daemon.controls.empty() && !rig.hub.active(), "a hold opens no stream");
+  a.control({1, StreamControl::Start});
   rig.stream();
   rig.block();
-  rig.hub.control(a.id, {1, StreamControl::Stop});
+  a.control({1, StreamControl::Stop});
   rig.now += 2 * MicrophoneHub::kLingerMs;
   rig.hub.tick(rig.now);
-  check(rig.count(StreamControl::Stop) == 0 && rig.hub.active(), "while held, the stream outlives its linger");
-  rig.hub.control(b.id, {2, StreamControl::Start});
+  check(rig.daemon.count(StreamControl::Stop) == 0 && rig.hub.active(), "while held, the stream outlives its linger");
+  b.control({2, StreamControl::Start});
   rig.hub.tick(rig.now);
   rig.block();
-  check(rig.count(StreamControl::Start) == 1 && is(b.events[0], StreamEvent::Kind::Started, 2) &&
-            b.events.back().kind == StreamEvent::Kind::Audio && b.events.back().firstSample == 0,
-        "a consumer that starts meanwhile joins it");
-  rig.hub.control(b.id, {2, StreamControl::Stop});
+  check(rig.daemon.count(StreamControl::Start) == 1 && b.all() == "Started/2, Audio/2@0+480",
+        "a consumer that starts meanwhile joins it: " + b.all());
+  b.control({2, StreamControl::Stop});
   rig.hub.hold(false);
   rig.now += MicrophoneHub::kLingerMs - 1;
   rig.hub.tick(rig.now);
-  check(rig.count(StreamControl::Stop) == 0, "after the release the stream lingers");
+  check(rig.daemon.count(StreamControl::Stop) == 0, "after the release the stream lingers");
   rig.now += 1;
   rig.hub.tick(rig.now);
-  check(rig.count(StreamControl::Stop) == 1, "and then stops");
+  check(rig.daemon.count(StreamControl::Stop) == 1, "and then stops");
 }
 
 void holdWhileStarting() {
@@ -458,18 +453,16 @@ void holdWhileStarting() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.upstream(StreamEvent::Kind::Support);
   rig.hub.hold(true);
-  rig.hub.control(a.id, {1, StreamControl::Stop});
+  a.control({1, StreamControl::Stop});
   rig.upstream(StreamEvent::Kind::Started);
-  check(rig.count(StreamControl::Stop) == 0 && rig.hub.active(), "a held stream that is still starting goes on");
-  rig.hub.control(b.id, {2, StreamControl::Start});
+  check(rig.daemon.count(StreamControl::Stop) == 0 && rig.hub.active(), "a held stream that is still starting goes on");
+  b.control({2, StreamControl::Start});
   rig.hub.tick(rig.now);
   rig.block();
-  check(is(b.events[0], StreamEvent::Kind::Started, 2) && b.events.back().kind == StreamEvent::Kind::Audio &&
-            b.events.back().firstSample == 0,
-        "and a consumer joins it from its first block");
+  check(b.all() == "Started/2, Audio/2@0+480", "and a consumer joins it from its first block: " + b.all());
 }
 
 void closeStopsAtOnce() {
@@ -477,20 +470,18 @@ void closeStopsAtOnce() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
   rig.block();
-  rig.hub.control(b.id, {2, StreamControl::Probe});
+  b.control({2, StreamControl::Probe});
   rig.hub.hold(true);
   rig.hub.close();
-  check(rig.count(StreamControl::Stop) == 1, "closing stops the upstream stream at once, held or not");
+  check(rig.daemon.count(StreamControl::Stop) == 1, "closing stops the upstream stream at once, held or not");
   rig.hub.tick(rig.now);
-  check(is(a.events.back(), StreamEvent::Kind::Ended, 1) && a.events.back().error == "microphone closed" &&
-            a.events.back().firstSample == 480,
-        "and ends each consumer's stream at its position");
+  check(a.last() == "Ended/1@480 (microphone closed)",
+        "and ends each consumer's stream at its position: " + a.last());
   rig.upstream(StreamEvent::Kind::Ended);
-  check(!rig.hub.active() && rig.count(StreamControl::Probe) == 1 && rig.count(StreamControl::Start) == 1,
-        "nothing restarts");
+  check(!rig.hub.active() && rig.sent() == "0/1 1/1 2/1", "nothing restarts: " + rig.sent());
 }
 
 void probeWhileStopping() {
@@ -498,16 +489,15 @@ void probeWhileStopping() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
-  rig.hub.control(a.id, {1, StreamControl::Stop});
+  a.control({1, StreamControl::Stop});
   rig.now += MicrophoneHub::kLingerMs;
   rig.hub.tick(rig.now);
-  rig.hub.control(b.id, {3, StreamControl::Probe});
+  b.control({3, StreamControl::Probe});
   rig.hub.tick(rig.now);
-  check(b.events.size() == 1 && is(b.events[0], StreamEvent::Kind::Support, 3) && b.events[0].available &&
-            rig.count(StreamControl::Probe) == 1,
-        "a probe while the stream stops is answered at once, without asking upstream again");
+  check(b.all() == "Support/3" && rig.daemon.count(StreamControl::Probe) == 1,
+        "a probe while the stream stops is answered at once, without asking upstream again: " + b.all());
 }
 
 void lastConsumerLeavesWhileStarting() {
@@ -515,21 +505,21 @@ void lastConsumerLeavesWhileStarting() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.upstream(StreamEvent::Kind::Support);
-  rig.hub.control(a.id, {1, StreamControl::Stop});
-  check(rig.count(StreamControl::Stop) == 1, "the last consumer stopping while the stream starts stops it upstream");
+  a.control({1, StreamControl::Stop});
+  check(rig.daemon.count(StreamControl::Stop) == 1,
+        "the last consumer stopping while the stream starts stops it upstream: " + rig.sent());
   rig.upstream(StreamEvent::Kind::Started);
   rig.upstream(StreamEvent::Kind::Ended);
-  check(!rig.hub.active() && rig.count(StreamControl::Probe) == 1 && a.events.size() == 1 &&
-            is(a.events[0], StreamEvent::Kind::Ended, 1),
-        "its end restarts nothing");
-  rig.hub.control(b.id, {2, StreamControl::Start});
+  check(!rig.hub.active() && rig.daemon.count(StreamControl::Probe) == 1 && a.all() == "Ended/1@0",
+        "its end restarts nothing: " + a.all());
+  b.control({2, StreamControl::Start});
   rig.upstream(StreamEvent::Kind::Support);
-  rig.hub.detach(b.id);
-  check(rig.count(StreamControl::Stop) == 2, "a detach stops it as well");
+  b.handle.detach();
+  check(rig.daemon.count(StreamControl::Stop) == 2, "a detach stops it as well: " + rig.sent());
   rig.upstream(StreamEvent::Kind::Ended);
-  check(!rig.hub.active() && rig.count(StreamControl::Probe) == 2, "again without a restart");
+  check(!rig.hub.active() && rig.daemon.count(StreamControl::Probe) == 2, "again without a restart: " + rig.sent());
 }
 
 void upstreamTimeouts() {
@@ -537,47 +527,44 @@ void upstreamTimeouts() {
   Rig::Consumer a;
   rig.attach(a);
   rig.hub.tick(rig.now);
-  rig.hub.control(a.id, {1, StreamControl::Start});
-  rig.wait(MicrophoneHub::kAnswerMs, a, 1);
-  check(is(a.events.back(), StreamEvent::Kind::Ended, 1) && a.events.back().error == "microphone did not answer" &&
-            !rig.hub.active(),
-        "an unanswered probe ends the attempt");
-  rig.hub.control(a.id, {2, StreamControl::Start});
+  a.control({1, StreamControl::Start});
+  rig.wait(tc002::kStreamAnswerMs, a, 1);
+  const std::string noAnswer = std::string(" (") + tc002::kStreamNoAnswer + ")";
+  check(a.last() == "Ended/1@0" + noAnswer && !rig.hub.active(), "an unanswered probe ends the attempt: " + a.last());
+  a.control({2, StreamControl::Start});
   rig.upstream(StreamEvent::Kind::Support);
-  rig.wait(MicrophoneHub::kAnswerMs, a, 2);
-  check(rig.count(StreamControl::Stop) == 1 && is(a.events.back(), StreamEvent::Kind::Ended, 2) &&
-            a.events.back().error == "microphone did not answer" && !rig.hub.active(),
-        "an unanswered start is stopped upstream and ends the attempt");
-  rig.hub.control(a.id, {3, StreamControl::Start});
+  rig.wait(tc002::kStreamAnswerMs, a, 2);
+  check(rig.daemon.count(StreamControl::Stop) == 1 && a.last() == "Ended/2@0" + noAnswer && !rig.hub.active(),
+        "an unanswered start is stopped upstream and ends the attempt: " + a.last());
+  a.control({3, StreamControl::Start});
   rig.stream();
-  rig.hub.control(a.id, {3, StreamControl::Stop});
+  a.control({3, StreamControl::Stop});
   rig.now += MicrophoneHub::kLingerMs;
   rig.hub.tick(rig.now);
-  rig.hub.control(a.id, {4, StreamControl::Start});
-  rig.wait(MicrophoneHub::kAnswerMs, a, 4);
-  check(rig.count(StreamControl::Probe) == 3 && rig.count(StreamControl::Start) == 3 && rig.hub.active(),
-        "a stop that never ends gives way to a waiting start after its timeout");
+  a.control({4, StreamControl::Start});
+  rig.wait(tc002::kStreamAnswerMs, a, 4);
+  check(rig.daemon.count(StreamControl::Probe) == 3 && rig.daemon.count(StreamControl::Start) == 3 &&
+            rig.hub.active(),
+        "a stop that never ends gives way to a waiting start after its timeout: " + rig.sent());
   rig.upstream(StreamEvent::Kind::Started);
-  check(is(a.events.back(), StreamEvent::Kind::Started, 4), "which gets its stream");
+  check(a.last() == "Started/4", "which gets its stream: " + a.last());
 }
 
 void refusedLink() {
   Rig rig;
   Rig::Consumer a;
   rig.attach(a);
-  rig.linkUp = false;
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  rig.daemon.linkUp = false;
+  a.control({1, StreamControl::Start});
   rig.hub.tick(rig.now);
-  check(is(a.events.back(), StreamEvent::Kind::Ended, 1) && a.events.back().error == "supervisor link refused" &&
-            !rig.hub.active(),
-        "a probe the link refuses ends the attempt at once");
-  rig.linkUp = true;
-  rig.hub.control(a.id, {2, StreamControl::Start});
-  rig.linkUp = false;
+  check(a.last() == "Ended/1@0 (supervisor link refused)" && !rig.hub.active(),
+        "a probe the link refuses ends the attempt at once: " + a.last());
+  rig.daemon.linkUp = true;
+  a.control({2, StreamControl::Start});
+  rig.daemon.linkUp = false;
   rig.upstream(StreamEvent::Kind::Support);
-  check(is(a.events.back(), StreamEvent::Kind::Ended, 2) && a.events.back().error == "supervisor link refused" &&
-            !rig.hub.active(),
-        "so does a start the link refuses");
+  check(a.last() == "Ended/2@0 (supervisor link refused)" && !rig.hub.active(),
+        "so does a start the link refuses: " + a.last());
 }
 
 void probeOfUnansweredAttemptIsDropped() {
@@ -586,36 +573,28 @@ void probeOfUnansweredAttemptIsDropped() {
   rig.attach(a);
   rig.attach(b);
   rig.hub.tick(rig.now);
-  rig.hub.control(a.id, {1, StreamControl::Start});
-  rig.hub.control(b.id, {6, StreamControl::Probe});
-  rig.wait(MicrophoneHub::kAnswerMs, a, 1);
-  check(b.events.empty() && !rig.hub.active(), "an attempt the daemon never answers drops the waiting probe");
-  rig.hub.control(a.id, {2, StreamControl::Start});
+  a.control({1, StreamControl::Start});
+  b.control({6, StreamControl::Probe});
+  rig.wait(tc002::kStreamAnswerMs, a, 1);
+  check(b.events.empty() && !rig.hub.active(),
+        "an attempt the daemon never answers drops the waiting probe: " + b.all());
+  a.control({2, StreamControl::Start});
   rig.stream();
-  check(b.events.empty(), "and a later stream does not answer it");
+  check(b.events.empty(), "and a later stream does not answer it: " + b.all());
 }
 
 void probeFromInsideSupportIsAnswered() {
   Rig rig;
   Rig::Consumer a, b;
   rig.attach(b);
-  a.id = rig.hub.attach([&](const StreamEvent& e, int64_t) {
+  a.handle = rig.hub.attach([&](const StreamEvent& e, int64_t) {
     a.events.push_back(e);
-    if (e.kind == StreamEvent::Kind::Support) rig.hub.control(b.id, {4, StreamControl::Probe});
+    if (e.kind == StreamEvent::Kind::Support) b.control({4, StreamControl::Probe});
   });
-  rig.hub.control(a.id, {3, StreamControl::Probe});
+  a.control({3, StreamControl::Probe});
   rig.upstream(StreamEvent::Kind::Support);
-  check(b.events.size() == 1 && is(b.events[0], StreamEvent::Kind::Support, 4) && b.events[0].available &&
-            a.events.size() == 1 && !rig.hub.active(),
-        "a probe from inside an answer is answered too");
-}
-
-// The upstream samples a consumer heard, by their value: block() fills each with its upstream index.
-std::vector<int16_t> heardSamples(const Rig::Consumer& c) {
-  std::vector<int16_t> out;
-  for (const auto& e : c.events)
-    if (e.kind == StreamEvent::Kind::Audio) out.insert(out.end(), e.samples.begin(), e.samples.end());
-  return out;
+  check(b.all() == "Support/4" && a.all() == "Support/3" && !rig.hub.active(),
+        "a probe from inside an answer is answered too: " + a.all() + " / " + b.all());
 }
 
 void startFromAMark() {
@@ -623,25 +602,42 @@ void startFromAMark() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
   rig.block();
-  const tc002::MicrophoneMark mark = rig.hub.markOf(a.id, 240);
+  const tc002::MicrophoneMark mark = a.handle.markOf(240);
   check(mark.epoch != 0 && mark.sample == 240, "a consumer's position is a mark of the upstream stream");
   rig.block();
   rig.block();
-  rig.hub.startFrom(b.id, mark);
-  rig.hub.control(b.id, {2, StreamControl::Start});
+  b.handle.startFrom(mark);
+  b.control({2, StreamControl::Start});
   rig.hub.tick(rig.now);
   rig.block();
   const auto heard = heardSamples(b);
-  check(is(b.events[0], StreamEvent::Kind::Started, 2) && heard.size() == 1440 - 240 + 480 && heard[0] == 240 &&
-            gapless(b),
-        "a start from a mark gets the held audio since the mark, then the live stream, gapless");
+  check(!b.events.empty() && describe(b.events.front()) == "Started/2" && heard.size() == 1440 - 240 + 480 &&
+            heard[0] == 240 && gapless(b),
+        "a start from a mark gets the held audio since the mark, then the live stream, gapless: " + startOf(heard));
   bool stale = true;
   for (const auto& e : b.events)
     if (e.kind == StreamEvent::Kind::Audio && e.firstSample < 1200) stale = stale && e.hostAtMs == 0;
   check(stale, "audio from the past carries no capture time");
+}
+
+void startFromOffTheGrid() {
+  Rig rig;
+  Rig::Consumer a, b;
+  rig.attach(a);
+  rig.attach(b);
+  a.control({1, StreamControl::Start});
+  rig.stream();
+  rig.block();
+  rig.block();
+  b.handle.startFrom(a.handle.markOf(250));
+  b.control({2, StreamControl::Start});
+  rig.hub.tick(rig.now);
+  const auto heard = heardSamples(b);
+  check(heard.size() == 960 - 240 && heard[0] == 240 && gapless(b),
+        "a mark off the 24-sample grid starts at the grid point before it: " + startOf(heard));
 }
 
 void startFromBeyondTheRing() {
@@ -649,16 +645,59 @@ void startFromBeyondTheRing() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
   const tc002::MicrophoneMark mark = rig.hub.mark();
   for (int i = 0; i < 40; ++i) rig.block();
-  rig.hub.startFrom(b.id, mark);
-  rig.hub.control(b.id, {2, StreamControl::Start});
+  b.handle.startFrom(mark);
+  b.control({2, StreamControl::Start});
   rig.hub.tick(rig.now);
   const auto heard = heardSamples(b);
-  check(heard.size() == MicrophoneHub::kRingSamples && heard[0] == static_cast<int16_t>(40 * 480 - 16000),
-        "a mark older than the ring starts at the oldest held sample");
+  check(heard.size() == MicrophoneHub::kRingSamples &&
+            heard[0] == static_cast<int16_t>(40 * 480 - MicrophoneHub::kRingSamples),
+        "a mark older than the ring starts at the oldest held sample: " + startOf(heard));
+  bool onGrid = true;
+  for (const auto& e : b.events)
+    if (e.kind == StreamEvent::Kind::Audio) onGrid = onGrid && e.firstSample % 24 == 0 && e.samples.size() % 24 == 0;
+  check(onGrid, "the held audio keeps the contract's grid of 24 samples: " + b.all());
+}
+
+void startFromAMarkAcrossTheWrap() {
+  Rig rig;
+  Rig::Consumer a, b;
+  rig.attach(a);
+  rig.attach(b);
+  a.control({1, StreamControl::Start});
+  rig.stream();
+  rig.daemon.sample = UINT32_MAX - 959;
+  rig.block();
+  const tc002::MicrophoneMark mark = rig.hub.mark();
+  rig.block();
+  rig.block();
+  b.handle.startFrom(mark);
+  b.control({2, StreamControl::Start});
+  rig.hub.tick(rig.now);
+  rig.block();
+  const auto heard = heardSamples(b);
+  check(heard.size() == 960 + 480 && heard[0] == static_cast<int16_t>((UINT32_MAX - 479) % 32768) && gapless(b),
+        "a start from a mark before the wrap past 2^32 gets the held audio across it, gapless: " + startOf(heard));
+}
+
+void startFromAMarkAhead() {
+  Rig rig;
+  Rig::Consumer a, b;
+  rig.attach(a);
+  rig.attach(b);
+  a.control({1, StreamControl::Start});
+  rig.stream();
+  rig.block();
+  rig.block();
+  b.handle.startFrom(a.handle.markOf(1440));
+  b.control({2, StreamControl::Start});
+  rig.hub.tick(rig.now);
+  rig.block();
+  const auto heard = heardSamples(b);
+  check(heard.size() == 480 && heard[0] == 960, "a mark ahead of the stream starts now: " + startOf(heard));
 }
 
 void startFromAnotherStream() {
@@ -666,21 +705,28 @@ void startFromAnotherStream() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
   rig.block();
   const tc002::MicrophoneMark old = rig.hub.mark();
-  rig.hub.control(a.id, {1, StreamControl::Stop});
+  check(rig.hub.live(old) && !rig.hub.live({}), "a mark of the running stream is live, no mark is not");
+  a.control({1, StreamControl::Stop});
   rig.now += MicrophoneHub::kLingerMs;
   rig.hub.tick(rig.now);
   rig.upstream(StreamEvent::Kind::Ended);
-  rig.hub.startFrom(b.id, old);
-  rig.hub.control(b.id, {2, StreamControl::Start});
-  rig.upstream(StreamEvent::Kind::Support);
-  rig.upstream(StreamEvent::Kind::Started);
+  check(!rig.hub.live(old), "a mark is not live once its stream ended");
+  a.control({2, StreamControl::Start});
+  rig.stream();
+  check(!rig.hub.live(old) && rig.hub.live(rig.hub.mark()), "nor in the next stream, whose marks are");
+  for (int i = 0; i < 4; ++i) rig.block();
+  b.handle.startFrom(old);
+  b.control({3, StreamControl::Start});
+  rig.hub.tick(rig.now);
   rig.block();
-  check(heardSamples(b).size() == 480 && b.events.back().firstSample == 0,
-        "a mark of an ended stream starts now");
+  const auto heard = heardSamples(b);
+  check(heard.size() == 480 && heard[0] == 1920 && b.handle.markOf(0).sample == 1920,
+        "a mark of an ended stream starts now, even where the new stream holds a sample of that number: " +
+            startOf(heard));
   check(rig.hub.mark().epoch != old.epoch, "each upstream stream has marks of its own");
 }
 
@@ -689,38 +735,37 @@ void gapClearsTheRing() {
   Rig::Consumer a, b;
   rig.attach(a);
   rig.attach(b);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
   rig.block();
-  const tc002::MicrophoneMark mark = rig.hub.markOf(a.id, 0);
+  const tc002::MicrophoneMark mark = a.handle.markOf(0);
   rig.block(96);
-  rig.hub.startFrom(b.id, mark);
-  rig.hub.control(b.id, {2, StreamControl::Start});
+  b.handle.startFrom(mark);
+  b.control({2, StreamControl::Start});
   rig.hub.tick(rig.now);
-  check(heardSamples(b).size() == 480 && heardSamples(b)[0] == static_cast<int16_t>(576),
-        "a gap clears the held audio: a later start begins at the gap");
-  check(rig.hub.markOf(b.id, 0).sample == 576 && rig.hub.markOf(42, 0).epoch == 0,
-        "markOf names the consumer's sample 0; an unknown consumer has no mark");
+  const auto heard = heardSamples(b);
+  check(heard.size() == 480 && heard[0] == static_cast<int16_t>(576),
+        "a gap clears the held audio: a later start begins at the gap: " + startOf(heard));
+  check(b.handle.markOf(0).sample == 576 && MicrophoneHub::Consumer().markOf(0).epoch == 0,
+        "markOf names the consumer's sample 0; a detached consumer has no mark");
 }
 
 void restartFromAMark() {
   Rig rig;
   Rig::Consumer a;
   rig.attach(a);
-  rig.hub.control(a.id, {1, StreamControl::Start});
+  a.control({1, StreamControl::Start});
   rig.stream();
   rig.block();
-  rig.hub.startFrom(a.id, rig.hub.markOf(a.id, 240));
-  rig.hub.control(a.id, {2, StreamControl::Start});
+  a.handle.startFrom(a.handle.markOf(240));
+  a.control({2, StreamControl::Start});
   rig.hub.tick(rig.now);
-  const auto n = a.events.size();
-  check(is(a.events[n - 3], StreamEvent::Kind::Ended, 1) && is(a.events[n - 2], StreamEvent::Kind::Started, 2) &&
-            is(a.events[n - 1], StreamEvent::Kind::Audio, 2) && a.events[n - 1].samples.size() == 240 &&
-            a.events[n - 1].samples[0] == 240,
-        "a restart under a new epoch begins at its mark too");
+  const bool fromTheMark = !a.events.empty() && !a.events.back().samples.empty() && a.events.back().samples[0] == 240;
+  check(a.last(3) == "Ended/1@480, Started/2, Audio/2@0+240" && fromTheMark,
+        "a restart under a new epoch begins at its mark too: " + a.last(3));
 }
 
-}  // namespace
+}
 
 int main() {
   probeAlone();
@@ -752,7 +797,10 @@ int main() {
   probeOfUnansweredAttemptIsDropped();
   probeFromInsideSupportIsAnswered();
   startFromAMark();
+  startFromOffTheGrid();
   startFromBeyondTheRing();
+  startFromAMarkAcrossTheWrap();
+  startFromAMarkAhead();
   startFromAnotherStream();
   gapClearsTheRing();
   restartFromAMark();

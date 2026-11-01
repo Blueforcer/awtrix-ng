@@ -4,12 +4,15 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/audio/Mp3Decoder.h"
 #include "core/audio/Mp3FileDecoder.h"
 #include "core/sound/Rtttl.h"
+#include "platform/tc002/audio/ClipKind.h"
 
 namespace awtrix {
 namespace tc002 {
@@ -141,7 +144,7 @@ class WavMemorySource final : public PcmSource {
 // A clip is a whole recording sent in one piece: RIFF/WAVE PCM16 (mono or stereo at 16, 22.05,
 // 24, 32, 44.1 or 48 kHz) or MPEG layer III, an ID3 tag allowed. checkClip() judges the bytes
 // without decoding them and names what is wrong; openClip() plays bytes it accepted.
-bool checkClip(const std::string& bytes, std::string& error);
+std::optional<ClipKind> checkClip(std::string_view bytes, std::string& error);
 std::unique_ptr<PcmSource> openClip(std::shared_ptr<const std::string> bytes);
 
 }

@@ -1,6 +1,9 @@
 #pragma once
 
 #ifdef __cplusplus
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -36,6 +39,13 @@ inline void require(bool condition, std::string_view message = "condition failed
     std::exit(EXIT_FAILURE);
   }
   ++passed();
+}
+
+inline pid_t endedProcess() {
+  const pid_t pid = ::fork();
+  if (pid == 0) ::_exit(0);
+  require(pid > 0 && ::waitpid(pid, nullptr, 0) == pid, "the pid of a process that ended");
+  return pid;
 }
 
 inline int finish(const char* name) {

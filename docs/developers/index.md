@@ -185,7 +185,8 @@ TC002:
 - [Developer guide](site:tc002/developers/tc002/): boot chain, loader, release slot, supervisor, updates,
   security.
 - [MCU updates](site:tc002/developers/tc002/mcu-update/), [microphone](site:tc002/developers/tc002/microphone/),
-  [audio gate](site:tc002/developers/tc002/audio-gate/), [Home Assistant Voice](site:tc002/developers/tc002/ha-voice/).
+  [audio gate](site:tc002/developers/tc002/audio-gate/), [Home Assistant Voice](site:tc002/developers/tc002/ha-voice/),
+  [voice module](site:tc002/developers/tc002/voice-module/).
 - [Tools overview](site:tc002/developers/tc002/tools/), [install tools](site:tc002/developers/tc002/install-tools/),
   [desktop installer](site:tc002/developers/tc002/desktop-installer/), [browser image tools](site:tc002/developers/tc002/browser-image/).
 - [Kernel modules](site:tc002/developers/tc002/kernel/), [Wi-Fi driver](site:tc002/developers/tc002/wifi-driver/),

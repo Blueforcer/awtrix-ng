@@ -4,7 +4,8 @@ only: [tc002]
 
 # TC002 wake word
 
-The TC002 can start [Home Assistant Voice](ha-voice.md) when it hears "Hey AWTRIX". The clock
+The TC002 can start its voice assistant, [Home Assistant Voice](ha-voice.md) or an app that uses
+the [voice module](voice-module.md), when it hears "Hey AWTRIX". The clock
 detects the word itself: it runs a [microWakeWord](https://github.com/kahrendt/microWakeWord) v2
 streaming model on the continuous microphone stream ([Continuous microphone audio](audio-gate.md)),
 and nothing leaves the clock before a detection. The code is in
@@ -52,28 +53,47 @@ these names. The bundle tools accept the two files only together.
 - The setting is `wakeWord` in the Voice configuration (`voice-private/voice.json`), off by
   default. The web UI switch and `POST /api/v1/voice` change it; see
   [Credentials and configuration API](ha-voice.md#credentials-and-configuration-api).
-- The listener streams while the wake word is on and Voice is on, connected and idle. The boot
-  intro, an update and setup mode pause it, as they pause Voice. It listens through the
-  [microphone hub](microphone.md#microphone-hub), which shares the stream with Voice. Its epochs
-  and sample positions are its own.
-- A detection starts Voice exactly as the knob's 500 ms hold does (`startVoice`). Voice's overlay
-  appears at once. Voice is then busy, so the listener stops its stream. The hub keeps the stream
-  open until Voice's capture joins it. Listening resumes when Voice is done.
+- The listener streams while the wake word is on and the assistant is there
+  (`AssistantRouter::present`):
+  - With Home Assistant as the assistant: while Voice is on, connected and idle.
+  - With an app: while that app is installed with `@needs voice`, switched on and neither a module
+    nor headless. The Voice switch plays no part.
+
+  The boot intro, an update and setup mode stop it, as they pause Voice. It listens through the
+  [microphone hub](microphone.md#microphone-hub), which shares the stream with Voice and the voice
+  module. Its epochs and sample positions are its own.
+- It reports a detection only while the assistant could start, the same check as for the knob's
+  hold. Otherwise it is muted: while a script records or plays, while a trigger waits for its app,
+  and while the app has a transfer or result of the [voice module](voice-module.md) outstanding. A
+  muted listener keeps its stream and its detector running, so "Hey AWTRIX" right after an answer
+  needs no new stream and no warm-up. A detection in audio that arrived while it was muted is
+  dropped, and its cool-off still runs, so the clock's own voice does not start the assistant.
+- A detection starts the assistant the Voice settings name, as the knob's 500 ms hold does
+  (`AssistantRouter::start`). For Home Assistant, Voice's overlay appears at once. Voice is then busy, so
+  the listener stops its stream, and the hub keeps the stream open until Voice's capture joins it.
+  For an app, the detection's position in the stream (`markOf`) becomes the start of the app's
+  recording, and the hub keeps the stream and its last second while the app opens
+  ([A trigger](voice-module.md#a-trigger)). Listening resumes when Voice is done, and reports resume
+  once the app holds nothing.
 - A detection that arrives after listening stopped being wanted is dropped.
-- It sends a keepalive every 150 ms. The hub ends the listener's stream when keepalives stop for
-  500 ms.
+- It sends a keepalive every 150 ms through its `MicrophoneClient`
+  ([microphone hub](microphone.md#microphone-hub)). The hub ends the listener's stream when
+  keepalives stop for 500 ms.
 - A stream that ends with an error restarts after 1, 2, 5, 10 and then 30 s. An MCU without the
   stream is asked again after 30 s.
 - A jump in the sample position, or a full worker queue (16 blocks), resets the detector.
 - While it listens, `music.level()`, `music.bands()` and `music.pitch()` read the hub's stream
   instead of separate snapshots.
 - Each detection writes `wake word: heard (score …)` to the log. The listener keeps no audio beyond
-  the blocks its worker has not processed yet. The hub passes each block on without keeping it.
-  Neither writes audio to a file.
+  the blocks its worker has not processed yet. While the stream runs, the hub keeps its last second
+  in memory ([lead-in](microphone.md#microphone-hub)), so it holds one all the time the listener
+  streams. It overwrites that second continuously and drops it when the stream ends. Neither writes
+  audio to a file.
 
 ## Speech end detection
 
-`Endpointer` finds where speech in a recording begins and ends. It runs the
+`Endpointer` finds where speech in a recording begins and ends; `VoiceCapture` runs it for every
+recording of the [voice module](voice-module.md). It runs the
 [microWakeWord](https://github.com/kahrendt/microWakeWord) voice activity model from
 [`assets/tc002/vad/`](https://github.com/Blueforcer/awtrix-ng/tree/main/assets/tc002/vad) on its
 own `ModelStream`. The model, its ESPHome manifest `vad.json` and the repository's `NOTICE` are
@@ -89,14 +109,13 @@ unchanged from [esphome/micro-wake-word-models](https://github.com/esphome/micro
   - The speech has ended after `silenceMs` without voice (`Ended`).
   - Without speech by `waitMs`, the recording heard nothing (`Silence`).
   - At `maxMs` it ends in any case (`Limit`).
-- **Lead-in:** `start(settings, from)` lets audio before stream position `from` warm up the model
-  without counting.
 - **Latency:** the model holds its verdict after speech. On calls recorded from the clock, voice began
   about 0.5 s after the speech and ended about 0.45 s after it. A recording therefore ends
   about `silenceMs` + 0.45 s after the last word. Silero VAD v6 ended about 0.28 s sooner at the same
   tolerance for pauses, but needs a float runtime of its own.
-- **Cost:** an arena of 2656 bytes and about 14 µs per step on a desktop CPU. The release carries the
-  model, `vad.json` and the `NOTICE` as `share/vad/`; the daemon passes it to a runtime with the
+- **Cost:** an arena of 2656 bytes and about 14 µs per step on a desktop CPU. `VoiceCapture` reads
+  the model when a recording starts, in about 0.1 ms on a desktop CPU, and frees it when the recording
+  ends. The release carries the model, `vad.json` and the `NOTICE` as `share/vad/`; the daemon passes it to a runtime with the
   speaker as `--vad FILE`. The bundle tools take the three files only together.
 
 ## Training notes
@@ -114,7 +133,7 @@ pymicro_features and the LiteRT reference kernels on committed fixtures (`tests/
 It also checks the detector's window, cutoff, pause and warm-up, and refuses truncated and mutated
 files. `tools/tc002/wake/make_golden.py` writes the fixtures. `tests/tc002/arm/` runs the same test
 on Cortex-A7 under qemu-arm. `test_wake_listener.cpp` covers the settings file, the stream states,
-detections, the stop while Voice is busy, restarts and gaps. `test_assist_session.cpp` covers the
+detections, muting, the stop while Voice is busy, restarts and gaps. `test_assist_session.cpp` covers the
 `wakeWord` setting. `test_wake.cpp` also checks the voice activity model bit for bit, and
 `test_endpointer.cpp` the endpointer's decisions on exact voice patterns and the model on speech of
 the English voice pack, a pause within a sentence and room noise; both run on qemu-arm too.
@@ -122,5 +141,5 @@ the English voice pack, a pause within a sentence and room noise; both run on qe
 ## Related
 
 - [TC002 developer guide](index.md)
-- [Home Assistant Voice](ha-voice.md)
+- [Home Assistant Voice](ha-voice.md), [Voice module](voice-module.md)
 - [Microphone](microphone.md), [Continuous microphone audio](audio-gate.md)

@@ -13,8 +13,7 @@ integer-only, so the test regenerates it bit for bit instead of storing it:
   clip<k>.pcm, clip<k>.features.bin, <name>.clip<k>.bin  the same for each --clip, not for the repo
 
 Each stream starts on a fresh interpreter. Run in a scratch venv:
-  pip install numpy pymicro-features ai-edge-litert
-  pip install numpy pymicro-features ai-edge-litert flatbuffers
+  pip install numpy pymicro-features ai-edge-litert flatbuffers soundfile
   python3 make_golden.py --out tests/tc002/runtime/wake --zoo --model smoke=tests/tc002/runtime/wake/smoke.tflite
 """
 
@@ -45,7 +44,6 @@ class XorShift:
 
 
 def synthetic(seconds=SIGNAL_SECONDS):
-    """Silence, rising noise, a 100 Hz to 7 kHz chirp, silence, full-scale square bursts; every 4 s."""
     rng = XorShift(0x12345678)
     count = seconds * RATE
     out = np.zeros(count, dtype=np.int16)
@@ -82,7 +80,6 @@ def random_frames(count=RANDOM_FRAMES):
 
 
 def frontend_features(pcm):
-    """The trainer's MicroSpeechExtractor loop, returning the frontend's uint16 values."""
     from pymicro_features import MicroFrontend
 
     data = pcm.astype("<i2").tobytes()
@@ -99,7 +96,6 @@ def frontend_features(pcm):
 
 
 def trainer_input(values, scale, zero):
-    """features.py rounds value * 0.0390625 to int8, train.py quantises that with the input scale."""
     feats = np.clip(np.round(values.astype(np.float32) * np.float32(0.0390625)), -128, 127).astype(np.int8)
     feats = feats.astype(np.float32)
     q = np.round(feats / scale) + zero

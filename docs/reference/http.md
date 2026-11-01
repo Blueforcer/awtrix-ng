@@ -2548,7 +2548,7 @@ These keys appear only while the feature is available:
 | `gamepad` | `true`: scripts can read a gamepad. See [`GET /api/v1/gamepad`](#get-apiv1gamepad) |
 | `gamepadRemote` | `true`: a phone can be a gamepad. See [`POST /api/v1/gamepad/remote`](#post-apiv1gamepadremote) |
 | `mqttTls` | `true`: MQTT can connect over TLS. See [`GET /api/v1/mqtt/tls`](#get-apiv1mqtttls) |
-| `voice` | `true`: Home Assistant Voice is available. See [`/api/v1/voice`](#apiv1voice) |
+| `voice` | `true`: the [voice assistant](../guides/voice.md) is available. See [`/api/v1/voice`](#apiv1voice). Also the [`@needs`](../guides/scripting/sharing.md#what-your-script-asks-of-the-clock) name of `import voice` |
 | `bootSound` | `true`: the clock plays a sound when it starts. The [`bootSound`](settings.md#sound) setting turns it off |
 | `enlargeApps` | `true`: pushed apps and notifications can be shown at double size. The [`enlargeApps`](settings.md#global-text) setting turns it off |
 | `oauth` | `true`: scripts can sign in to services, see [Script sign-in](#script-sign-in) |
@@ -3203,10 +3203,10 @@ curl -X DELETE http://<awtrix-ip>/api/v1/mqtt/tls/ca
 
 ### GET /api/v1/voice {#apiv1voice}
 
-Reads the [Home Assistant Voice](../guides/voice.md) settings and connection state.
+Reads the [voice assistant](../guides/voice.md) settings and the Home Assistant connection state.
 
-This route and `POST` below exist only while [capabilities](#get-apiv1capabilities) say
-`"voice": true`. Otherwise they answer `404`.
+This route, `POST` below and [`POST /api/v1/voice/start`](#post-apiv1voicestart) exist only while
+[capabilities](#get-apiv1capabilities) say `"voice": true`. Otherwise they answer `404`.
 
 **Request:** no body.
 
@@ -3214,8 +3214,9 @@ This route and `POST` below exist only while [capabilities](#get-apiv1capabiliti
 
 | Key | Type | Meaning |
 |---|---|---|
-| `config.enabled` | boolean | Voice is switched on |
-| `config.wakeWord` | boolean | saying "Hey AWTRIX" starts a request |
+| `config.assistant` | string | who answers the knob, the wake word, MQTT and [`/api/v1/voice/start`](#post-apiv1voicestart): `ha` for Home Assistant, `app:<name>` for that app |
+| `config.enabled` | boolean | Home Assistant Voice is switched on. It counts only while `config.assistant` is `ha` |
+| `config.wakeWord` | boolean | saying "Hey AWTRIX" starts the assistant |
 | `config.url` | string | the Home Assistant address, `""` when none is set |
 | `config.pipeline` | string | the chosen Assist pipeline ID, `""` for Home Assistant's default |
 | `config.device` | string | the Home Assistant device ID whose area is the clock's room, `""` when none is set |
@@ -3223,6 +3224,7 @@ This route and `POST` below exist only while [capabilities](#get-apiv1capabiliti
 | `state` | string | `offline`, `connecting`, `ready`, `starting`, `listening`, `processing`, `speaking` or `error` |
 | `error` | string | why the last attempt failed, as a code such as `tokenRejected`. `""` when all is well. The web UI shows each code as a sentence |
 | `wakeWordAvailable` | boolean | the clock can hear "Hey AWTRIX". When `false`, `config.wakeWord` does nothing |
+| `assistantApps` | array | the names of the installed apps that can be the assistant: scripts that name `voice` in their [`@needs`](../guides/scripting/sharing.md#what-your-script-asks-of-the-clock), but no modules and no headless scripts. Apps switched off on the **Apps** tab are listed too |
 | `pipelines` | array | Home Assistant's Assist pipelines once connected. `[]` before |
 
 ```bash
@@ -3231,19 +3233,23 @@ curl http://<awtrix-ip>/api/v1/voice
 
 ### POST /api/v1/voice
 
-Changes the Home Assistant Voice settings.
+Changes the voice assistant settings.
 
-**Request:** any of `enabled`, `wakeWord`, `url`, `pipeline`, `device`, `token`, or
+**Request:** any of `assistant`, `enabled`, `wakeWord`, `url`, `pipeline`, `device`, `token`, or
 `"clearToken": true` to delete the token. Fields you leave out keep their value.
 
+* `assistant` is `ha` (the default) or `app:<name>`. The name follows the rules for app names: 1 to
+  32 letters, digits, `_` or `-`, and not `active`, `next`, `previous` or `order`. With an app, the
+  clock keeps no connection to Home Assistant, and every start opens that app. An app that is not
+  installed, is switched off or cannot answer starts nothing.
 * `device` is a Home Assistant device ID (letters and digits, up to 64), `""` for none.
-* `wakeWord` is `true` or `false`. With `true`, saying "Hey AWTRIX" starts a request while Voice is
-  connected.
+* `wakeWord` is `true` or `false`. With `true`, saying "Hey AWTRIX" starts the assistant while it is
+  ready.
 
-* `enabled: true` needs an address and a token.
+* `enabled: true` needs an address and a token, also with an app as the assistant.
 * After you change the address, send the token again.
-* With `"enabled": false` the clock closes its connection to Home Assistant, and neither a long
-  press on the knob nor the wake word starts a request.
+* With `"enabled": false` and Home Assistant as the assistant, the clock closes its connection to
+  Home Assistant, and neither a long press on the knob nor the wake word starts a request.
 
 This route accepts requests only from the device's own web UI: it needs the header
 `X-Awtrix-Voice: 1` and an `Origin` header naming the device, as a browser sends it. This keeps
@@ -3256,7 +3262,7 @@ other web pages and scripts from sending your voice to another server.
 | Status | Condition |
 |---|---|
 | 403 | `forbiddenOrigin`: not sent from the device's own web UI |
-| 422 | `validationFailed`: `field` names the wrong value: `url`, `token`, `pipeline`, `device`, `enabled` or `wakeWord` |
+| 422 | `validationFailed`: `field` names the wrong value: `assistant`, `url`, `token`, `pipeline`, `device`, `enabled` or `wakeWord` |
 | 500 | `internalError`: the settings could not be saved |
 
 ```bash
@@ -3265,6 +3271,33 @@ curl -X POST http://<awtrix-ip>/api/v1/voice \
   -H "X-Awtrix-Voice: 1" \
   -H "Origin: http://<awtrix-ip>" \
   -d '{"enabled":false}'
+```
+
+### POST /api/v1/voice/start
+
+Starts the voice assistant, as if you held the knob: Home Assistant Voice, or the app that
+`assistant` names.
+
+This route accepts requests only from the device's own web UI, like
+[`POST /api/v1/voice`](#post-apiv1voice): it needs the header `X-Awtrix-Voice: 1` and an `Origin`
+header naming the device.
+
+**Request:** no body.
+
+**Response:** `200` `{"ok":true}`: Home Assistant Voice started a request, or the app opened.
+
+**Errors:**
+
+| Status | Condition |
+|---|---|
+| 403 | `forbiddenOrigin`: not sent from the device's own web UI |
+| 405 | `methodNotAllowed`: a method other than `POST` |
+| 409 | `voiceUnavailable`, `assistant not ready`: nothing started. Home Assistant Voice is off, not connected yet or busy, an app is recording or playing voice, the chosen app cannot start, or the clock shows its start animation, installs an update or is in setup mode |
+
+```bash
+curl -X POST http://<awtrix-ip>/api/v1/voice/start \
+  -H "X-Awtrix-Voice: 1" \
+  -H "Origin: http://<awtrix-ip>"
 ```
 
 ### GET /api/v1/speech/voice
@@ -3894,8 +3927,9 @@ Any other path answers **404** `notFound` with the message `unknown route`.
 | GET | `/api/v1/mqtt/tls` | [how the MQTT broker is trusted](#get-apiv1mqtttls) |
 | PUT | `/api/v1/mqtt/tls/ca` | [upload the broker's CA](#put-apiv1mqtttlsca) |
 | DELETE | `/api/v1/mqtt/tls/ca` | [delete the broker's CA](#delete-apiv1mqtttlsca) |
-| GET | `/api/v1/voice` | [Home Assistant Voice state](#apiv1voice) |
-| POST | `/api/v1/voice` | [change Home Assistant Voice](#post-apiv1voice) |
+| GET | `/api/v1/voice` | [voice assistant state](#apiv1voice) |
+| POST | `/api/v1/voice` | [change the voice assistant](#post-apiv1voice) |
+| POST | `/api/v1/voice/start` | [start the voice assistant](#post-apiv1voicestart) |
 | GET | `/api/v1/speech/voice` | [which voice speaks](#get-apiv1speechvoice) |
 | POST | `/api/v1/speech/voice` | [upload a voice pack](#post-apiv1speechvoice) |
 | DELETE | `/api/v1/speech/voice` | [back to the built-in voice](#delete-apiv1speechvoice) |

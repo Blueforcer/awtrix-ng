@@ -1,7 +1,3 @@
-/* Home Assistant Voice card on the System page: capability gating, state rendering,
-   failure reasons, the on/off and wake word switches, saving, removing the token with
-   confirm, and a text for every reason the firmware can report.
-   Run: node voice-card.test.js */
 const { boot, goto, flush } = require('./harness');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -26,15 +22,15 @@ function voiceMock(window, vc) {
     if (body.token) next.tokenSet = true;
     const field = vc.reject || (next.enabled && (!next.url || !next.tokenSet) ? 'enabled' : null);
     if (field) return new Response(JSON.stringify({ error: { code: 'validationFailed', field, message: 'invalid value' } }), { status: 422 });
-    for (const k of ['enabled', 'wakeWord', 'url', 'pipeline', 'tokenSet']) vc.config[k] = next[k];
+    for (const k of ['enabled', 'wakeWord', 'url', 'pipeline', 'tokenSet', 'assistant']) vc.config[k] = next[k];
     return new Response('{"ok":true}');
   };
   return log;
 }
 
 function state(overrides = {}) {
-  return { state: 'offline', error: '', pipelines: PIPES, wakeWordAvailable: true, ...overrides,
-    config: { enabled: false, wakeWord: false, url: '', pipeline: '', tokenSet: false, ...overrides.config } };
+  return { state: 'offline', error: '', pipelines: PIPES, wakeWordAvailable: true, assistantApps: [], ...overrides,
+    config: { enabled: false, wakeWord: false, url: '', pipeline: '', tokenSet: false, assistant: 'ha', ...overrides.config } };
 }
 
 async function open(voice, vc) {
@@ -46,14 +42,16 @@ async function open(voice, vc) {
   const buttons = sec ? [...sec.querySelectorAll('button')] : [];
   const inputs = sec ? [...sec.querySelectorAll('input')] : [];
   const tr = window.eval('t');
+  const switchOf = label => inputs.find(i => i.type === 'checkbox' && i.closest('.frow').querySelector('b').textContent === tr(label));
   return { window, log, vc, sec, tr,
     posts: () => log.filter(l => l.method === 'POST'),
     toast: () => window.document.querySelector('.toast')?.textContent || '',
     badges: sec ? [...sec.querySelectorAll('.badge')] : [],
     url: inputs.find(i => i.type === 'text'), token: inputs.find(i => i.type === 'password'),
     dev: inputs.filter(i => i.type === 'text')[1],
-    toggle: inputs.find(i => i.type === 'checkbox'), wake: inputs.filter(i => i.type === 'checkbox')[1],
-    pipe: sec && sec.querySelector('select'),
+    toggle: switchOf('vcOn'), wake: switchOf('vcWake'),
+    assist: sec && sec.querySelectorAll('select')[0],
+    pipe: sec && sec.querySelectorAll('select')[1],
     save: buttons.find(b => b.textContent === tr('vcSave')),
     clear: buttons.find(b => b.textContent === tr('vcTokenClear')) };
 }
@@ -220,6 +218,28 @@ async function removeToken() {
   } finally { c.window.close(); }
 }
 
+async function assistant() {
+  let c = await open(true, state({ assistantApps: ['Chat', 'Talk'] }));
+  try {
+    assert.deepEqual([...c.assist.options].map(o => o.value), ['ha', 'app:Chat', 'app:Talk'],
+      'Home Assistant and every app that can answer');
+    assert.equal(c.assist.value, 'ha');
+    assert.notEqual(c.url.closest('.frow').style.display, 'none', 'the HA fields show for Home Assistant');
+    c.assist.value = 'app:Chat';
+    c.assist.dispatchEvent(new c.window.Event('change'));
+    await flush(80);
+    assert.deepEqual(c.posts().map(p => p.body), [{ assistant: 'app:Chat' }], 'the choice saves at once and only itself');
+    for (const field of [c.badges[0], c.toggle, c.url, c.token, c.pipe, c.dev, c.save])
+      assert.equal(field.closest('.frow').style.display, 'none', 'an app needs none of the HA fields');
+    assert.notEqual(c.wake.closest('.frow').style.display, 'none', 'the wake word starts an app too');
+  } finally { c.window.close(); }
+
+  c = await open(true, state({ config: { assistant: 'app:Gone' } }));
+  try {
+    assert.equal(c.assist.value, 'app:Gone', 'a saved app that is no longer installed stays selected');
+  } finally { c.window.close(); }
+}
+
 function firmwareCodes() {
   const source = fs.readFileSync(path.join(__dirname, '../../src/platform/tc002/voice/VoiceErrors.def'), 'utf8');
   const records = source.split(/\r?\n/).filter(line => line.trim() && !line.startsWith('//'));
@@ -247,6 +267,7 @@ async function reasons() {
   await onOff();
   await saving();
   await removeToken();
+  await assistant();
   await reasons();
-  console.log('voice-card: gating, states and reasons, on/off, saving, confirmed token removal and reason texts passed');
+  console.log('voice-card: gating, states and reasons, on/off, saving, confirmed token removal, assistant choice and reason texts passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

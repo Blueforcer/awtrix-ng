@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstddef>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace awtrix::script {
@@ -266,6 +267,15 @@ inline std::vector<std::string> splitNeeds(const std::string& raw) {
     pos = end + 1;
   }
   return out;
+}
+
+inline bool namesNeed(std::string_view needs, std::string_view need) {
+  for (std::size_t at = 0; at < needs.size();) {
+    const std::size_t end = std::min(needs.find(' ', at), needs.size());
+    if (needs.substr(at, end - at) == need) return true;
+    at = end + 1;
+  }
+  return false;
 }
 
 // One `@needs` line: capability names separated by spaces, tabs or commas, up to a `#`, which

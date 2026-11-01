@@ -1,7 +1,7 @@
 {
   "components": [
     {
-      "files_sha256": "e22fb556b2b938d13dc0d4a8e7425f7d8955ba19b7d0477cab56c5c0df0a52cf",
+      "files_sha256": "7cac752971973226bae6d03ff734b3085bce8c504c91cd7c409d76fcdd71926e",
       "id": "berry",
       "license": {
         "file": "LICENSES/MIT-Berry.txt",
@@ -92,6 +92,12 @@
             "lib/berry/src/berry.h"
           ],
           "summary": "2026-10-25: be_raiseline() reads the line where the last raise left the innermost function of a named chunk from the saved trace stack, so script runtime errors carry a line, and a compile() error saves its own trace so the line is not an older raise's; the lexer keeps the line a string literal ended on, so code after a string at the end of a line is no longer tagged with the next line (still wrong upstream)."
+        },
+        {
+          "files": [
+            "lib/berry/src/be_byteslib.c"
+          ],
+          "summary": "2026-11-01: bytes.get() of four bytes, little- or big-endian, shifts the top byte as uint32_t; shifted as int, a top byte from 0x80 up overflowed into the sign bit, which is undefined behaviour (UBSan stopped linux-crypto-script on it)."
         }
       ],
       "paths": [
@@ -478,7 +484,7 @@
       "version": null
     },
     {
-      "files_sha256": "1878632c6c182221b1c2bd0ae1ef2aed8e02cefc24ed79d987dc39a8c56bdf71",
+      "files_sha256": "c98e8d0028e3f271d5c2cd052e1a6b5102c704c051cbf7f832fb71dbb85d79d1",
       "id": "tflite-micro-port",
       "license": {
         "file": "LICENSES/Apache-2.0.txt",
@@ -511,7 +517,7 @@
       "version": "LiteRT 2.3"
     },
     {
-      "files_sha256": "9459abd7a32b291bd0cb8d0a973c3eb8b2367c8de60838bb7d3f54dacb3ea7cf",
+      "files_sha256": "bdd4a4b5f3a9fa98a2d75420aa6be6ddb5db28b56c74c9978e7ed11d7208039d",
       "id": "kissfft-port",
       "license": {
         "file": "LICENSES/BSD-3-Clause-KISS-FFT.txt",

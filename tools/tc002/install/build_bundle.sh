@@ -10,8 +10,6 @@
 #   share/index.html.gz (the minified web UI with its Linux-only parts, WEBUI_FULL_GZ in WebUiAsset.h)
 #   share/boot.mp3  share/ca-certificates.crt
 #   share/speech/voice.atts (the voice, when the commit holds assets/speech/voice.atts)
-#   share/wake/hey_awtrix.tflite  share/wake/hey_awtrix.json (the wake word model and its settings)
-#   share/vad/vad.tflite  share/vad/vad.json  share/vad/NOTICE (the voice activity model, Apache-2.0)
 #   share/licenses.txt.gz (every licence text the release ships)
 #   lib/modules/{aic8800_bsp,aic8800_fdrv}.ko, the Wi-Fi driver rebuilt without key logging
 #   (tools/tc002/kernel/build_aic8800.sh; needs the tree tools/tc002/kernel/prepare-tree.sh prepares)

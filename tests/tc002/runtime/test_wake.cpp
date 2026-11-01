@@ -1,13 +1,4 @@
 #include "../../support.h"
-// The wake-word engine against the references of the microWakeWord trainer, as
-// tools/tc002/wake/make_golden.py recorded them in tests/tc002/runtime/wake: the frontend against
-// pymicro_features, the smoke model and an op coverage model (tools/tc002/wake/zoo_model.py) against
-// LiteRT's reference kernels, the detector end to end,
-// the decision against the trainer's streaming benchmark, and the loader's refusals.
-//
-// tc002-wake-test <fixtures> [<name> <model.tflite> <golden dir>]... also checks further models
-// against a golden dir of make_golden.py: its signal and clip<k> features, <name>.signal.bin,
-// .random.bin and .clip<k>.bin.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -19,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "platform/tc002/wake/ModelStream.h"
 #include "platform/tc002/wake/WakeDetector.h"
 #include "platform/tc002/wake/WakeFrontend.h"
 #include "platform/tc002/wake/WakeModel.h"
@@ -58,7 +50,6 @@ struct XorShift {
   }
 };
 
-// synthetic() of make_golden.py.
 std::vector<int16_t> synthetic(int seconds) {
   constexpr int rate = 16000;
   XorShift rng{0x12345678u};
@@ -91,7 +82,6 @@ std::vector<int16_t> synthetic(int seconds) {
   return out;
 }
 
-// random_frames() of make_golden.py.
 std::vector<int8_t> randomFrames(std::size_t frames) {
   XorShift rng{0x9E3779B9u};
   std::vector<int8_t> out(frames * WakeModel::kFeatures);
@@ -201,32 +191,73 @@ void checkModel(const std::string& name, const std::vector<uint8_t>& file, const
               us / static_cast<double>(model->frames()));
 }
 
+uint64_t invokePosition(std::size_t invoke, std::size_t stride) {
+  return WakeFrontend::kWindowSamples + WakeFrontend::kStepSamples * ((invoke + 1) * stride - 1);
+}
+
+void testStream(const std::string& dir, const std::vector<uint8_t>& file, const std::vector<int16_t>& pcm) {
+  std::string error;
+  ModelStream stream;
+  const int16_t* samples = pcm.data();
+  std::size_t count = pcm.size();
+  uint8_t probability = 0;
+  check(!stream.next(samples, count, probability) && count == pcm.size(), "nothing happens without a model");
+  const std::string_view bytes(reinterpret_cast<const char*>(file.data()), file.size());
+  require(stream.load(bytes, error), "stream: " + error);
+  const std::vector<uint8_t> expected = readFile(dir + "/smoke.signal.bin");
+  const std::size_t stride = stream.model()->frames();
+  for (int pass = 0; pass < 2; ++pass) {
+    stream.reset();
+    std::vector<uint8_t> got;
+    std::size_t misplaced = 0;
+    for (std::size_t at = 0; at + WakeFrontend::kStepSamples <= pcm.size(); at += WakeFrontend::kStepSamples) {
+      samples = pcm.data() + at;
+      count = WakeFrontend::kStepSamples;
+      while (stream.next(samples, count, probability)) {
+        misplaced += stream.position() != invokePosition(got.size(), stride);
+        got.push_back(probability);
+      }
+    }
+    check(got == expected, "stream probabilities differ from the reference");
+    check(misplaced == 0, "an invoke happens after the last sample of its stride");
+  }
+}
+
 void testDetector(const std::string& dir, const std::vector<uint8_t>& file, const std::vector<int16_t>& pcm) {
   std::string error;
   WakeDetector detector;
-  check(!detector.feed(pcm.data(), pcm.size()) && detector.position() == 0,
-        "nothing happens without a model");
+  check(!detector.feed(pcm.data(), pcm.size()), "nothing is heard without a model");
   const std::string_view bytes(reinterpret_cast<const char*>(file.data()), file.size());
   require(detector.load(bytes, error), "detector: " + error);
-  require(detector.configure(0.5f, 3), "configure");
+  const WakeConfig config{0.5f, 3, 0};
+  require(detector.configure(config, error), error);
+  ModelStream stream;
+  require(stream.load(bytes, error), "stream: " + error);
+  WakeWindow window;
+  require(window.configure(config, error), error);
   const std::vector<uint8_t> expected = readFile(dir + "/smoke.signal.bin");
-  const std::size_t stride = detector.model()->frames();
-  for (int pass = 0; pass < 2; ++pass) {
-    detector.reset();
-    std::size_t invokes = 0, wrong = 0;
-    for (std::size_t at = 0; at + 160 <= pcm.size(); at += 160) {
-      detector.feed(pcm.data() + at, 160);
-      const uint64_t position = detector.position();
-      if (position < 480 || ((position - 480) / 160 + 1) % stride != 0) continue;
-      wrong += invokes >= expected.size() || detector.probability() != expected[invokes] / 255.0f;
-      ++invokes;
-    }
-    check(invokes == expected.size() && wrong == 0, "detector probabilities differ from the reference");
-  }
-  check(!detector.configure(0.5f, 0) && !detector.configure(1.5f, 3) && detector.configure(0.5f, 64),
-        "bad windows and cutoffs are refused");
+  std::vector<uint64_t> want;
+  WakeEvent event;
+  for (std::size_t i = 0; i < expected.size(); ++i)
+    if (window.push(expected[i], invokePosition(i, stream.model()->frames()), event)) want.push_back(event.sample);
+  const auto hear = [&] {
+    std::vector<uint64_t> heard;
+    for (std::size_t at = 0; at + WakeFrontend::kStepSamples <= pcm.size(); at += WakeFrontend::kStepSamples)
+      if (const auto detection = detector.feed(pcm.data() + at, WakeFrontend::kStepSamples))
+        heard.push_back(detection->sample);
+    return heard;
+  };
+  check(hear() == want, "the detector hears where the window over the reference fires");
+  std::printf("detector: %zu detections over the reference signal\n", want.size());
+  check(!detector.configure({0.5f, 0}, error) && error == "the window must be within 1..64" &&
+            !detector.configure({1.5f, 3}, error) && error == "the cutoff must be within 0..1" &&
+            detector.configure({0.5f, 64}, error),
+        "bad windows and cutoffs are refused: " + error);
   const std::string garbage(64, 'x');
-  check(!detector.load(garbage, error) && !error.empty() && detector.loaded(), "a bad file keeps the model");
+  check(!detector.load(garbage, error) && !error.empty(), "a bad file is refused");
+  require(detector.configure(config, error), error);
+  detector.reset();
+  check(hear() == want, "a bad file keeps the model");
 
   WakeFrontend frontend;
   std::vector<uint16_t> sink;
@@ -236,7 +267,6 @@ void testDetector(const std::string& dir, const std::vector<uint8_t>& file, cons
   std::printf("frontend: %.1f us per 10 ms frame\n", us);
 }
 
-// eval/streaming.py detections(), with probabilities raw / 255.
 std::vector<std::size_t> trainerDetections(const std::vector<uint8_t>& raw, double cutoff, std::size_t window,
                                            long cooloffFrames) {
   std::vector<std::size_t> out;
@@ -274,7 +304,7 @@ void testWindow() {
           const uint64_t sample = 480 + 160 * static_cast<uint64_t>(i);
           if (decision.push(raw[i], sample, event)) {
             mine.push_back(i);
-            check(event.sample == sample && event.peak * 255.0f + 0.5f >= raw[i], "event fields");
+            check(event.sample == sample && event.score >= cutoff, "event fields");
           }
         }
         const auto expected =
@@ -289,23 +319,18 @@ void testWindow() {
   std::string error;
   require(decision.configure({0.6f, 4, 1000}, error), error);
   WakeEvent event;
-  for (int i = 0; i < 3; ++i) {
-    check(!decision.push(255, 1000 + i, event), "no detection before the window is full");
-    check(decision.mean() == 0.0f, "no mean before the window is full");
-  }
-  check(decision.push(255, 2000, event) && event.score == 1.0f && event.peak == 1.0f, "full window fires");
-  check(decision.takePeak() == 1.0f && decision.takePeak() == 0.0f, "takePeak resets");
+  for (int i = 0; i < 3; ++i) check(!decision.push(255, 1000 + i, event), "no detection before the window is full");
+  check(decision.push(255, 2000, event) && event.score == 1.0f, "full window fires");
   check(!decision.configure({-0.1f, 3, 0}, error) && !decision.configure({0.5f, 65, 0}, error),
         "bad configs are refused");
   require(decision.configure({0.6f, 2, 1000, 1000}, error), error);
   bool early = false;
   for (uint64_t sample = 480; sample < 16000; sample += 480) early |= decision.push(255, sample, event);
-  check(!early && decision.takePeak() == 0.0f, "nothing fires and no peak counts within the warm-up");
+  check(!early, "nothing fires within the warm-up");
   check(decision.push(255, 16000, event) && event.sample == 16000, "the first output after the warm-up fires");
   std::printf("window: %zu configurations match the trainer's streaming detections\n", cases);
 }
 
-// The few flatbuffer steps the refusal tests need to find a field to break.
 struct Patch {
   std::vector<uint8_t>& b;
   uint32_t u32(std::size_t at) const {
@@ -398,6 +423,7 @@ int main(int argc, char** argv) {
     std::printf("%s: %zu signal frames checked against pymicro_features\n", golden.c_str(), frames);
     checkModel(argv[i], readFile(argv[i + 1]), golden, values);
   }
+  testStream(dir, smoke, pcm);
   testDetector(dir, smoke, pcm);
   testWindow();
   testRefusals(smoke);

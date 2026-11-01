@@ -19,6 +19,7 @@
 #include "persistence/AssetProbe.h"
 #include "platform/tc002/runtime/Tc002Speaker.h"
 #include "platform/tc002/contract/AudioProtocol.h"
+#include "platform/tc002/voice/Tc002VoiceSpeaker.h"
 #include "system/MonotonicClock.h"
 
 using namespace awtrix;
@@ -137,6 +138,10 @@ int main() {
     const int64_t deadline = monotonicMs() + 2000;
     while (monotonicMs() < deadline && speaker.available()) ::usleep(5000);
     require(!speaker.available(), "a missing helper makes the speaker unavailable");
+    const tc002::voice::Tc002VoiceSpeaker voice(speaker);
+    require(!speaker.voiceQuiet(), "the sink of a speaker without helper does not report its voice quiet");
+    require(!voice.available() && voice.quiet() && voice.finished(),
+            "the voice adapter counts a speaker that is gone as quiet and finished, so nothing waits for it");
   }
   std::puts("linux speaker: ok");
   return 0;

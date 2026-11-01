@@ -149,7 +149,6 @@ int main() {
   check(stream.active() && stream.error() == "microphone consumer expired" &&
             stream.deadline() > renewedTo + 500,
         "a long stream still drains once its consumer stops renewing");
-  // Past 2^32 ms, which a 32-bit tick difference since the start cannot hold.
   const uint64_t fiftyDays = uint64_t{50} * 24 * 3600 * 1000, halves = fiftyDays / 3 * 2;
   check(mcu::Stream::steady(fiftyDays, halves) && mcu::Stream::steady(fiftyDays + 3, halves),
         "fifty days of stream keep their timing check");

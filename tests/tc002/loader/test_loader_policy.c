@@ -1,6 +1,7 @@
 #include "../../support.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -262,7 +263,7 @@ static void test_deploy_token_files(void) {
   CHECK(deploy_token_file_active(token, &watch, 90, 1));
   CHECK(tc002_sync_parent(token) == 0);
   CHECK(!tc002_mounted(root));
-  CHECK(tc002_clock_seconds((clockid_t)-999) < 0);
+  CHECK(tc002_clock_seconds((clockid_t)INT_MAX) < 0);
 
   unlink(link);
   unlink(fifo);

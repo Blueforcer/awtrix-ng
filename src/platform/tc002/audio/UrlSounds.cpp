@@ -1,10 +1,7 @@
 #include "platform/tc002/audio/UrlSounds.h"
 
-#include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-#include <cstring>
 
 #include "core/net/Url.h"
 
@@ -26,47 +23,15 @@ std::string failureText(const net::FileDownload::Result& result) {
 
 constexpr char kPrefix[] = "awtrix-sound";
 
-// Folders a runtime that did not end cleanly left in /tmp, which only a reboot would empty.
-void removeLeftovers(const std::string& directory) {
-  DIR* dir = ::opendir(directory.c_str());
-  if (!dir) return;
-  while (const dirent* entry = ::readdir(dir)) {
-    if (std::strncmp(entry->d_name, kPrefix, sizeof(kPrefix) - 1) != 0) continue;
-    const std::string folder = directory + "/" + entry->d_name;
-    if (DIR* inner = ::opendir(folder.c_str())) {
-      while (const dirent* file = ::readdir(inner))
-        if (file->d_name[0] != '.') ::unlink((folder + "/" + file->d_name).c_str());
-      ::closedir(inner);
-    }
-    ::rmdir(folder.c_str());
-  }
-  ::closedir(dir);
-}
-
 }
 
 UrlSounds::UrlSounds(std::string directory, Speaker speaker,
                      std::function<bool(uint64_t&)> available)
-    : speaker_(std::move(speaker)), available_(std::move(available)) {
-  removeLeftovers(directory);
+    : speaker_(std::move(speaker)), room_(std::move(available), kKeepFreeBytes) {
   const net::FileDownload::Limits limits{kMaxBytes, kTimeoutMs, true,
-                                         [this](std::size_t more) { return room(more); }};
+                                         [this](std::size_t more) { return room_.fits(more); }};
   oneShot_.download = std::make_unique<net::FileDownload>(directory, kPrefix, limits);
   loop_.download = std::make_unique<net::FileDownload>(directory, kPrefix, limits);
-}
-
-// The files first: each download removes its folder, which only works once it is empty.
-UrlSounds::~UrlSounds() {
-  forget(oneShot_, loop_);
-  forget(loop_, oneShot_);
-  oneShot_.download.reset();
-  loop_.download.reset();
-}
-
-// Download thread: available_ only reads /proc/meminfo.
-bool UrlSounds::room(std::size_t more) const {
-  uint64_t free = 0;
-  return available_ && available_(free) && free >= kKeepFreeBytes && free - kKeepFreeBytes >= more;
 }
 
 // The layer lets go of its file; the other layer may still play the same one.

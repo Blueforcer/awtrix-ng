@@ -2,27 +2,27 @@
 
 namespace awtrix::tc002::wake {
 namespace {
-constexpr uint64_t kSamplesPerMs = 16;
-}  // namespace
+constexpr uint64_t kSamplesPerMs = WakeFrontend::kSamplesPerMs;
+constexpr uint32_t kNoCooloffMs = 0, kNoWarmupMs = 0;
+}
 
-void EndpointTimer::start(const EndpointSettings& settings, uint64_t from) {
+void EndpointTimer::start(const EndpointSettings& settings) {
   settings_ = settings;
-  from_ = start_ = end_ = from;
+  end_ = 0;
   speaking_ = done_ = false;
 }
 
 Endpoint EndpointTimer::step(bool voice, uint64_t at) {
-  if (done_ || at < from_) return Endpoint::None;
+  if (done_) return Endpoint::None;
   if (voice) {
     end_ = at;
     if (!speaking_) {
       speaking_ = true;
-      start_ = at;
       return Endpoint::Started;
     }
   }
   if (speaking_ && !voice && (at - end_) / kSamplesPerMs >= settings_.silenceMs) return finish(Endpoint::Ended);
-  const uint64_t ms = (at - from_) / kSamplesPerMs;
+  const uint64_t ms = at / kSamplesPerMs;
   if (ms >= settings_.maxMs) return finish(speaking_ ? Endpoint::Limit : Endpoint::Silence);
   if (!speaking_ && ms >= settings_.waitMs) return finish(Endpoint::Silence);
   return Endpoint::None;
@@ -33,21 +33,16 @@ Endpoint EndpointTimer::finish(Endpoint kind) {
   return kind;
 }
 
-bool Endpointer::load(std::string_view model, float cutoff, std::size_t window, std::string& error) {
-  // Without a cool-off, WakeWindow says for every step whether the window mean reaches the cutoff. Unlike
-  // the wake word, the model needs no warm-up after a reset: on noise of -50 to -20 dBFS its first steps
-  // stay near 0.
-  WakeWindow verdict;
-  if (!verdict.configure({cutoff, window, 0, 0}, error)) return false;
-  if (!stream_.load(model, error)) return false;
-  window_ = verdict;
-  return true;
+bool Endpointer::load(std::string_view model, std::string& error) { return stream_.load(model, error); }
+
+bool Endpointer::configure(float cutoff, std::size_t window, std::string& error) {
+  return window_.configure({cutoff, window, kNoCooloffMs, kNoWarmupMs}, error);
 }
 
-void Endpointer::start(const EndpointSettings& settings, uint64_t from) {
+void Endpointer::start(const EndpointSettings& settings) {
   stream_.reset();
   window_.reset();
-  timer_.start(settings, from);
+  timer_.start(settings);
 }
 
 Endpoint Endpointer::next(const int16_t*& samples, std::size_t& count) {

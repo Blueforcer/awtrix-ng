@@ -1,7 +1,6 @@
 #include "platform/linux/LinuxScriptHttp.h"
 #include <chrono>
 #include "platform/linux/host/vendor/httplib.h"
-#include "core/script/HttpBodyFilter.h"
 #include "core/script/ModbusTcp.h"
 #include "platform/linux/host/compat/WiFiClient.h"
 #include "system/Log.h"
@@ -97,19 +96,12 @@ void LinuxScriptHttp::run() {
     const bool reading = method == "GET" || method == "HEAD";
     net::configure(client, {script::kHttpTimeoutMs, 3, reading});
     interrupt_.watch(client);
-    script::HttpBodyFilter filter;
-    filter.begin(req.find, req.keep, script::httpBodyCap(req.maxBytes));
-    const auto response = net::send(client, method, path, req.body, req.headers,
-                                   [&](const char* bytes, std::size_t n) {
-      filter.feed(bytes, n);
-      return !filter.outOfRoom();
-    });
+    net::FilteredAnswer answer = net::sendFiltered(client, method, path, std::move(req.body), req.headers,
+                                                   {req.find, req.keep, req.maxBytes});
     interrupt_.release();
-    if (response) {
-      result.status = response->status;
-      result.ok = filter.matched() && !filter.outOfRoom();
-      if (result.ok) result.body = std::move(filter.body());
-    }
+    result.status = answer.status;
+    result.ok = answer.ok;
+    result.body = std::move(answer.body);
     {
       std::lock_guard<std::mutex> lock(mutex_);
       if (stopping_) return;

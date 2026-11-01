@@ -438,7 +438,7 @@ static uint32_t buf_get4_le(buf_impl* attr, size_t offset)
 {
     if (buf_room(attr, offset, 4)) {
         return attr->bufptr[offset] | (attr->bufptr[offset+1] << 8) |
-            (attr->bufptr[offset+2] << 16) | (attr->bufptr[offset+3] << 24);
+            (attr->bufptr[offset+2] << 16) | ((uint32_t)attr->bufptr[offset+3] << 24);
     }
     return 0;
 }
@@ -447,7 +447,7 @@ static uint32_t buf_get4_be(buf_impl* attr, size_t offset)
 {
     if (buf_room(attr, offset, 4)) {
         return attr->bufptr[offset+3] | (attr->bufptr[offset+2] << 8) |
-            (attr->bufptr[offset+1] << 16) | (attr->bufptr[offset] << 24);
+            (attr->bufptr[offset+1] << 16) | ((uint32_t)attr->bufptr[offset] << 24);
     }
     return 0;
 }

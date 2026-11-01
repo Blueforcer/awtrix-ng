@@ -4,6 +4,7 @@
 #include <cctype>
 #include <climits>
 
+#include "core/script/HttpHeaders.h"
 #include "platform/linux/oauth/OAuthText.h"
 
 namespace awtrix::oauth {
@@ -222,13 +223,12 @@ uint32_t Service::request(const std::string& app, const std::string& method, con
   job.call.url = url;
   job.call.body = body;
   job.call.cap = std::clamp<std::size_t>(cap, 1, kMaxCap);
-  bool contentType = false;
   for (const auto& h : headers) {
     if (!cleanHeader(h) || blockedHeader(h.first)) return 0;
-    contentType = contentType || lowercase(h.first) == "content-type";
     job.call.headers.push_back(h);
   }
-  if (!body.empty() && !contentType) job.call.headers.emplace_back("Content-Type", "application/json");
+  if (!body.empty() && !script::hasHeader(job.call.headers, "Content-Type"))
+    job.call.headers.emplace_back("Content-Type", "application/json");
   job.app = app;
   job.generation = generation_[app];
   job.id = nextId_++;

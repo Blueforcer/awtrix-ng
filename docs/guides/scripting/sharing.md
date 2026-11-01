@@ -233,6 +233,7 @@ cannot be the name of a built-in app such as `Time`. `@name` is only for display
 | `crypto` | lets scripts compute [checksums and signatures and mine](../hashing.md) (`import crypto`) |
 | `layout` | lets scripts prepare text, icon and chart regions |
 | `tcp` | lets scripts [talk TCP](../tcp.md) (`import tcp`) |
+| `voice` | records and plays voice (`import voice`) |
 <!-- /only -->
 
 Each name matches what `GET /api/v1/capabilities` reports for the clock, at the same path:

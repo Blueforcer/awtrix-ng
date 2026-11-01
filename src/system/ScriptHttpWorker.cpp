@@ -211,7 +211,7 @@ void ScriptHttpWorker::fetch(const script::HttpRequest& req) {
     if (code > 0) {
       res.status = code;
       script::HttpBodyFilter filter;
-      filter.begin(req.find, req.keep, script::httpBodyCap(req.maxBytes));
+      filter.begin(req.find, req.keep, script::bodyCapWithinHeapGrowth(req.maxBytes));
       FilterSink sink(filter);
       http.writeToStream(&sink);
       res.ok = filter.matched() && !filter.outOfRoom();

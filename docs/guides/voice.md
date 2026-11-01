@@ -14,7 +14,23 @@ While Voice is on, the clock keeps a connection to your Home Assistant. Holding 
 request, and so does the wake word "Hey AWTRIX" once you switch it on: the clock records what you
 say and sends it to your Assist pipeline. Home Assistant
 carries out the request and sends back a spoken answer, which the clock plays through its speaker.
-After a failure, the clock connects again by itself, at most every ten seconds.
+After a failure, the clock connects again by itself, at most every ten seconds. An app on the clock
+can answer instead of Home Assistant.
+
+## Choose the assistant
+
+The assistant answers the knob, the wake word and the **Assist** button. It is Home Assistant, or an
+installed app that can listen and answer.
+
+1. Open the web UI and go to **System → Voice assistant**.
+2. Under **Assistant**, pick **Home Assistant** or one of your apps. The list shows the installed
+   apps that can answer. The choice is saved at once.
+
+With an app, holding the knob, saying "Hey AWTRIX" or pressing **Assist** opens that app on the
+display, and the app answers. The clock then keeps no connection to Home Assistant, and the Home
+Assistant fields are hidden. **Wake word** works for both. If the display was off, it comes on for
+the app and goes off again when the app is done. A radio station waits until then. An app that is
+switched off on the **Apps** tab does not answer.
 
 ## What you need
 
@@ -27,16 +43,17 @@ After a failure, the clock connects again by itself, at most every ten seconds.
 
 ## Set it up
 
-1. Open the web UI and go to **System → Home Assistant Voice**.
-2. Enter the Home Assistant **Address**, for example `http://homeassistant.local:8123`. Only the
+1. Open the web UI and go to **System → Voice assistant**.
+2. Under **Assistant**, keep **Home Assistant**.
+3. Enter the Home Assistant **Address**, for example `http://homeassistant.local:8123`. Only the
    address: no path such as `/lovelace`.
-3. Paste the access token into **Token**.
-4. Choose an Assist **Pipeline**, or keep *Default*. Only pipelines with
+4. Paste the access token into **Token**.
+5. Choose an Assist **Pipeline**, or keep *Default*. Only pipelines with
    speech-to-text and text-to-speech are listed.
-5. Press **Save and connect**. This also switches **Voice** on.
+6. Press **Save and connect**. This also switches **Voice** on.
 
-**Connection** at the top of the section shows *Ready* once the clock is connected. If it cannot
-connect, it shows why. See [When it does not work](#when-it-does-not-work).
+**Connection** shows *Ready* once the clock is connected. If it cannot connect, it shows why. See
+[When it does not work](#when-it-does-not-work).
 
 The token is kept on the clock and never shown again. To keep it, leave the field empty when you
 change something else. When you change the Home Assistant address, enter the token again.
@@ -69,14 +86,15 @@ between them while the bars are shown, as described in
 
 Instead of holding the knob, you can say "Hey AWTRIX".
 
-1. In the web UI, go to **System → Home Assistant Voice** and switch on **Wake word**. It takes
+1. In the web UI, go to **System → Voice assistant** and switch on **Wake word**. It takes
    effect at once.
 2. Say "Hey AWTRIX". The Home Assistant house appears on the display.
 3. Speak once the house opens its mouth wide, as after holding the knob.
 
-The wake word works while **Connection** shows *Ready*. The clock does not react to it while it
-answers or handles another request. If the house does not appear, say "Hey AWTRIX" again, a
-little closer to the clock.
+The wake word works while **Connection** shows *Ready*. With an app as the assistant, it opens the
+app instead and works while the app is installed and switched on. The clock does not react to it
+while it answers or handles another request. If nothing appears, say "Hey AWTRIX" again, a little
+closer to the clock.
 
 ## Commands for the clock's room
 
@@ -88,7 +106,7 @@ tell the clock which room it is in:
    **Area**.
 2. Copy the address of that device page from the browser, for example
    `http://homeassistant.local:8123/config/devices/device/0123456789abcdef0123456789abcdef`.
-3. In the web UI, paste it into **Room device** under **System → Home Assistant Voice** and press
+3. In the web UI, paste it into **Room device** under **System → Voice assistant** and press
    **Save and connect**. The clock keeps only the device ID at the end.
 
 Requests then use that device's area. If you move the device to another area in Home Assistant,
@@ -104,8 +122,9 @@ automation.
 2. In Home Assistant, open the clock's device page. It has a button called **Assist**.
 3. Press it. The clock starts listening, just as if you had held the knob.
 
-The button works only while **Connection** shows *Ready*. Without discovery, publish an empty
-message to [`<prefix>/cmd/voice/start`](../reference/mqtt.md#voicestart).
+The button works only while **Connection** shows *Ready*. With an app as the assistant, it opens
+the app instead. Without discovery, publish an empty message to
+[`<prefix>/cmd/voice/start`](../reference/mqtt.md#voicestart).
 
 ## When it does not work
 
@@ -130,12 +149,19 @@ the knob, or a minute has passed. The recording goes straight to your Home Assis
 pipeline, and is not stored on the clock. With Voice switched off, the microphone is not
 used for Voice at all.
 
-With **Wake word** on, the microphone listens all the time while Voice is ready. The clock itself
-listens for "Hey AWTRIX" and keeps nothing of what it hears. Only the request after the wake word
-goes to Home Assistant.
+With **Wake word** on, the microphone listens all the time while the assistant is ready, and while
+an app answers. The clock itself listens for "Hey AWTRIX". While it listens, it keeps at most the
+last second of sound in memory and stores nothing. Only the request after the wake word goes to
+Home Assistant.
+
+With an app as the assistant, the app records what you say and decides where it goes, for example
+to a speech service on the internet. Any app that uses voice can record while it is shown, also
+when it is not the assistant. Its recordings stay in the clock's memory only while the app uses
+them.
 
 ## Related
 
 - [Home Assistant](home-assistant.md): entities and notifications over MQTT
 - [Install on TC002](../getting-started/tc002.md)
-- [`/api/v1/voice`](../reference/http.md#apiv1voice): the same settings over HTTP
+- [`/api/v1/voice`](../reference/http.md#apiv1voice): the same settings over HTTP, and
+  [`POST /api/v1/voice/start`](../reference/http.md#post-apiv1voicestart) to start the assistant

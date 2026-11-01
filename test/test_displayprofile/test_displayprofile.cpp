@@ -132,7 +132,7 @@ static void test_capabilities_list_clock_faces_only_where_the_platform_draws_the
   PlatformDescriptor platform{"tc002", {52, 16, false}, false};
   std::string json = api::capabilitiesJson({}, {}, {}, {}, &platform);
   TEST_ASSERT_FALSE(api::present(api::memberValue(api::JsonReader(json), "clockFaces")));
-  LinuxCapabilities platformCaps(false, false);
+  LinuxCapabilities platformCaps(false, false, false);
   platformCaps.clockFaces = true;
   json = api::capabilitiesJson({}, {}, {}, {}, &platform, nullptr, [&](api::JsonWriter& writer) {
     platformCaps.write(writer);
@@ -145,7 +145,7 @@ static void test_capabilities_list_clock_faces_only_where_the_platform_draws_the
 static void test_capabilities_offer_enlarged_apps_only_where_pages_can_be_enlarged() {
   PlatformDescriptor platform{"tc002", {52, 16, false}, false};
   for (bool enlarge : {false, true}) {
-    LinuxCapabilities platformCaps(false, false);
+    LinuxCapabilities platformCaps(false, false, false);
     platformCaps.enlargeApps = enlarge;
     const auto json = api::capabilitiesJson({}, {}, {}, {}, &platform, nullptr,
         [&](api::JsonWriter& writer) { platformCaps.write(writer); });

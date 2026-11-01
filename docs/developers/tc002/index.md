@@ -268,9 +268,9 @@ The TC002 code of the runtime is in `src/platform/tc002/runtime/` unless noted:
 | `Tc002ClockApp`, `Tc002StatusApp` | the TC002's clock (registered as `Time`, five faces by `clockFace`) and status page |
 | `Tc002Speaker`, `src/platform/tc002/audio/` | the speaker behind the engine's tone and PCM sinks: melodies, MP3 and radio over descriptor 104 |
 | `MicrophoneInput` | the audio visualisation's microphone input: snapshots, or the hub's stream while it runs ([Microphone](microphone.md)) |
-| `MicrophoneHub` | shares the continuous microphone stream between Voice and the wake word ([Microphone hub](microphone.md#microphone-hub)) |
-| `src/platform/tc002/voice/` | Home Assistant Voice ([Home Assistant Voice](ha-voice.md)) |
-| `src/platform/tc002/wake/` | the wake word that starts Voice, and the speech end detection ([Wake word](wake-word.md)) |
+| `MicrophoneHub` | shares the continuous microphone stream between Voice, the wake word and the voice module ([Microphone hub](microphone.md#microphone-hub)) |
+| `src/platform/tc002/voice/` | Home Assistant Voice ([Home Assistant Voice](ha-voice.md)), the scripts' `import voice` and the assistant router that hands every trigger to Voice or an app ([Voice module](voice-module.md)) |
+| `src/platform/tc002/wake/` | the wake word that starts the voice assistant, and the speech end detection ([Wake word](wake-word.md)) |
 | `Tc002BootIntro`, `BootIntroWide`, `BootInfoWide`, `TerminalFont` | the power-on intro timed by the boot sound, then the info screen with the version and the address, both in the 3x5 terminal font |
 | `tls/` (`src/platform/linux/tls/`) | the one TLS layer: the policy the `--hardened` listener and the MQTT client use, the public CA store every HTTPS client verifies against ([CA certificates](ca-certificates.md)), broker trust with pinned fingerprints and `/api/v1/mqtt/tls`, and the `--hardened` server identity |
 | `LinuxLanLogin`, `LinuxScriptHttp`, `LinuxMqttTls` (`src/platform/linux/`) | the web login as on the ESP32, the scripts' HTTP worker, the MQTT TLS transport |
@@ -307,7 +307,7 @@ The shared paths are in
 | `src/platform/linux/host/` | host implementations of the engine's services (stores, HTTP server, MQTT, TLS, media), shared by `awtrix-linux` and the native tests |
 | `src/platform/linux/` | `awtrix-linux`: `main_linux.cpp` and generic Linux infrastructure ([AWTRIX on Linux](../linux/index.md)) |
 | `src/platform/tc002/runtime/` | TC002 runtime adapters, target policy, built-in apps and update integration |
-| `src/platform/tc002/voice/` | Home Assistant Voice |
+| `src/platform/tc002/voice/` | Home Assistant Voice and the voice module |
 | `src/platform/tc002/update/` | `UpdateState`, the update state file and its lock |
 | `src/platform/posix/` | file, descriptor, clock and SHA-256 helpers without OpenSSL, for the static programs |
 | `src/platform/tc002/contract/` | what the programs agree on: `tc002_layout.h`, `RuntimeContract.h`, `SupervisorProtocol`, `MicrophoneStream`, `release_slot.h` |
@@ -773,7 +773,7 @@ reaching the Wi-Fi key over the network. **Out of scope:** anything that needs t
   [Bluetooth](bluetooth.md)
 - [CA certificates](ca-certificates.md), [OpenSSL](openssl.md), [wpa_supplicant](wpa-supplicant.md)
 - [MCU updates](mcu-update.md), [Microphone](microphone.md), [Audio gate](audio-gate.md),
-  [Home Assistant Voice](ha-voice.md)
+  [Home Assistant Voice](ha-voice.md), [Wake word](wake-word.md), [Voice module](voice-module.md)
 - [AWTRIX on Linux](../linux/index.md), [Update packages](../linux/updates.md)
 - User docs: [Ulanzi TC002](../../getting-started/tc002.md),
   [Updating firmware](../../guides/updating.md#tc002-updates),

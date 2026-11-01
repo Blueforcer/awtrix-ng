@@ -33,6 +33,7 @@ file(READ "${CMAKE_CURRENT_SOURCE_DIR}/version" AWTRIX_VERSION)
 string(STRIP "${AWTRIX_VERSION}" AWTRIX_VERSION)
 
 include(cmake/Warnings.cmake)
+include(cmake/Sanitizers.cmake)
 include(cmake/Core.cmake)
 include(cmake/Posix.cmake)
 include(cmake/Host.cmake)

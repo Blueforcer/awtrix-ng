@@ -1125,13 +1125,15 @@ const STR={
   //linux:begin
   gpNone:'No gamepad paired',gpPair:'Add gamepad',gpPairH:'Put the gamepad in pairing mode, then press Pair.',gpPairBtn:'Pair',gpForget:'Forget',gpPhone:'Phone',
   gpDevice:'Controller',gpPlayer:'Player',gpFull:'Forget a controller to add another.',
-  vcSection:'Home Assistant Voice',vcSectionH:'Hold the knob for a moment, then speak.',
+  vcSection:'Voice assistant',vcSectionH:'Hold the knob for a moment, then speak.',
+  vcAssist:'Assistant',vcAssistH:'Who answers the knob, the wake word and MQTT.',vcAssistHa:'Home Assistant',
   svSection:'Speech voice',svSectionH:'The voice that reads speech aloud, in its own language.',
   svActive:'Voice',svNone:'No voice',svBuiltinTag:'built in',svBuiltin:'Use built-in',
   svPack:'Voice pack',svPackH:'An .atts file. Replaces the built-in voice until you remove it.',
   svUpload:'Upload',svLine:'Test',svLineP:'Hello, this is my voice.',svSay:'Speak',
+  capVoice:'Voice',
   vcOn:'Voice',vcOnH:'Off: nothing starts Voice.',vcUrl:'Address',
-  vcWake:'Wake word',vcWakeH:'"Hey AWTRIX" starts Voice. The microphone listens all the time.',
+  vcWake:'Wake word',vcWakeH:'"Hey AWTRIX" starts the assistant. The microphone listens all the time.',
   vcToken:'Token',vcTokenH:'Long-lived token from your HA profile.',
   vcTokenSet:'Saved',vcTokenNone:'None',vcTokenKeep:'Empty keeps it',vcTokenClear:'Remove',
   vcPipe:'Pipeline',vcPipeH:'Needs STT and TTS.',vcPipeDef:'Default',vcSave:'Save and connect',
@@ -1142,7 +1144,7 @@ const STR={
   vcepipelineIncomplete:'Pipeline lacks STT/TTS',vcenothingUnderstood:'Not understood',vceaudioTooSlow:'Wi-Fi too slow',
   vcetimeout:'HA too slow',vcemicrophoneFailed:'Microphone error',vceplaybackFailed:'Playback error',
   vcemicrophoneUpdate:'Microphone update pending',vceconfigUnavailable:'Settings unreadable',
-  vcfurl:'Address only, no path',vcftoken:'Enter token again',vcfpipeline:'Pick a pipeline',vcfdevice:'Not a device address',vcfenabled:'Needs address and token',
+  vcfurl:'Address only, no path',vcftoken:'Enter token again',vcfpipeline:'Pick a pipeline',vcfdevice:'Not a device address',vcfenabled:'Needs address and token',vcfassistant:'Not a valid app name',
   ipOn:'iPhone link',ipOnH:'Then pair the clock on the iPhone under Settings › Bluetooth.',ipWait:'Waiting for iPhone',
   ipForget:'Forget iPhone',ipForgot:'Also forget the clock on the iPhone.',
   oaSection:'Sign-in',oaStatus:'Status',oaId:'Client ID',oaSecret:'Client secret',oaKeep:'Saved – type to replace',
@@ -1552,11 +1554,12 @@ function editorMax(){const {width,height}=displayGeometry();return width+'x'+hei
 // The names a script can ask for with @needs, each a boolean in /api/v1/capabilities. The same
 // list is in test/fixtures/script_header_vectors.json; script-header.test.js keeps both equal.
 const CAP_NAMES=['audio.mp3','audio.rtttl','audio.song','audio.speech','audio.track','audio.radio','audio.effect','microphone','sensors.light','ble','gamepad','oauth','crypto','tcp'];
-//linux:begin
-CAP_NAMES.push('layout');
-//linux:end
 const CAP_WORDS={gamepad:'capGamepad',ble:'capBle','audio.effect':'capEffect','audio.song':'capSong',microphone:'capMic','audio.speech':'capSpeech','audio.mp3':'capMp3',
   'audio.radio':'capRadio','audio.rtttl':'capRtttl','audio.track':'capTrack','sensors.light':'capLight',oauth:'capOauth',crypto:'capCrypto',tcp:'capTcp'};
+//linux:begin
+CAP_NAMES.push('layout','voice');
+CAP_WORDS.voice='capVoice';
+//linux:end
 function capPresent(name){
   let v=S.caps;
   for(const k of String(name).split('.'))v=v&&typeof v==='object'?v[k]:undefined;
@@ -4255,17 +4258,23 @@ function gamepadSection(page){
   poller(load,()=>!cur||cur.devices?.some(p=>p.state==='pairing'||p.state==='connecting')?2000:5000);
 }
 function voiceSection(page){
+  const HA='ha',APP='app:';
   const state=el('div',{class:'badge'}),tokenState=el('div',{class:'badge'});
   const url=el('input',{type:'text',inputmode:'url',autocomplete:'off',spellcheck:'false',placeholder:'http://homeassistant.local:8123','aria-label':t('vcUrl')});
   const token=el('input',{type:'password',autocomplete:'new-password',spellcheck:'false','aria-label':t('vcToken')});
   const pipe=el('select',{'aria-label':t('vcPipe')});
   const dev=el('input',{type:'text',autocomplete:'off',spellcheck:'false',placeholder:t('vcDevP'),'aria-label':t('vcDev')});
+  const assist=el('select',{'aria-label':t('vcAssist')});
+  assist.addEventListener('change',()=>store({assistant:assist.value},t('saved')));
   const on=mkSwitch(false,()=>store({enabled:on.input.checked},t('saved')));
   const wake=mkSwitch(false,()=>store({wakeWord:wake.input.checked},t('saved')));
   const wakeRow=actionRow(t('vcWake'),t('vcWakeH'),[wake.node]);
   const save=el('button',{class:'pri'},t('vcSave'));
-  let cur=null,pipes='';
   const clear=armable(el('button',null,t('vcTokenClear')),()=>store({clearToken:true,enabled:false},t('saved')));
+  const haRows=[actionRow(t('mqStatus'),null,[state]),actionRow(t('vcOn'),t('vcOnH'),[on.node]),
+    actionRow(t('vcUrl'),null,[url]),actionRow(t('vcToken'),t('vcTokenH'),[tokenState,token,clear]),
+    actionRow(t('vcPipe'),t('vcPipeH'),[pipe]),actionRow(t('vcDev'),t('vcDevH'),[dev]),actionRow('',null,[save])];
+  let cur=null,pipes='',apps='';
   const reason=code=>code?(STR['vce'+code]?t('vce'+code):code):'';
   function paint(d){
     const first=!cur;cur=d;
@@ -4274,6 +4283,14 @@ function voiceSection(page){
     on.input.checked=!!c.enabled;
     wake.input.checked=!!c.wakeWord;
     wakeRow.style.display=d.wakeWordAvailable?'':'none';
+    const names=d.assistantApps||[],target=c.assistant||HA;
+    if(first||JSON.stringify(names)!==apps){
+      apps=JSON.stringify(names);
+      assist.replaceChildren(el('option',{value:HA},t('vcAssistHa')),...names.map(n=>el('option',{value:APP+n},n)));
+    }
+    if(![...assist.options].some(o=>o.value===target))assist.append(el('option',{value:target},target.slice(APP.length)));
+    assist.value=target;
+    for(const row of haRows)row.style.display=target===HA?'':'none';
     tokenState.className='badge'+(c.tokenSet?' good':'');
     tokenState.replaceChildren(t(c.tokenSet?'vcTokenSet':'vcTokenNone'));
     token.placeholder=c.tokenSet?t('vcTokenKeep'):'';
@@ -4312,14 +4329,7 @@ function voiceSection(page){
     store(body,t('saved'));
   });
   page.section('voice',t('vcSection'),t('vcSectionH'),[
-    actionRow(t('mqStatus'),null,[state]),
-    actionRow(t('vcOn'),t('vcOnH'),[on.node]),
-    wakeRow,
-    actionRow(t('vcUrl'),null,[url]),
-    actionRow(t('vcToken'),t('vcTokenH'),[tokenState,token,clear]),
-    actionRow(t('vcPipe'),t('vcPipeH'),[pipe]),
-    actionRow(t('vcDev'),t('vcDevH'),[dev]),
-    actionRow('',null,[save])]);
+    actionRow(t('vcAssist'),t('vcAssistH'),[assist]),wakeRow,...haRows]);
   poller(load,2000);
 }
 const SV='/api/v1/speech/voice';

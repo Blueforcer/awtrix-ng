@@ -75,9 +75,7 @@ struct RuntimeOptions {
   std::string bootSound;
   // The voice file, passed as --speech-voice to every runtime that gets the speaker.
   std::string speechVoice;
-  // The wake word model, passed as --wake-word to every runtime that gets the speaker.
   std::string wakeWord;
-  // The voice activity model, passed as --vad to every runtime that gets the speaker.
   std::string vad;
   int64_t prepareRetryMs = 100;
   std::vector<int64_t> backoffMs{1000, 2000, 5000, 10000, 30000};

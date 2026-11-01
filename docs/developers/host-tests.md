@@ -21,9 +21,11 @@ cmake --build .cache/platform-host-tests
 ctest --test-dir .cache/platform-host-tests --output-on-failure
 ```
 
-On Linux they build with ASan and UBSan (the address and undefined-behaviour sanitizers). These
-catch, among other things, stale memory access during delayed resolver destruction.
-`-DAWTRIX_SANITIZE=OFF` turns them off.
+`-DAWTRIX_SANITIZE=ON` builds every host target with ASan and UBSan (the address and
+undefined-behaviour sanitizers): the tests, the libraries they test and `awtrix-linux`. These catch,
+among other things, stale memory access during delayed resolver destruction. Undefined behaviour
+stops the test that hits it. Warnings do not stop the sanitizer build; the normal build still treats
+them as errors.
 
 | CTest name | Source | Built |
 |---|---|---|

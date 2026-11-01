@@ -6,8 +6,6 @@
 
 namespace awtrix::tc002::wake {
 
-// KISS FFT's real FFT over 512 points in 16-bit fixed point, as the microfrontend runs it. The twiddle
-// tables are the same for every instance and computed once. Never allocates.
 class WakeFft {
  public:
   struct Cpx {

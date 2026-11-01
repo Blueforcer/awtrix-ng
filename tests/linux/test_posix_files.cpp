@@ -1,9 +1,11 @@
+#include "../support.h"
 #include "platform/posix/Files.h"
 #include "platform/posix/Text.h"
 #include "platform/posix/Time.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -72,6 +74,28 @@ int main() {
   check(::mkfifo((root + "/pipe").c_str(), 0600) == 0, "FIFO fixture");
   check(!readRegularFile(directory.get(), "pipe", 100, text), "refuse FIFO without blocking");
   check(!readRegularFile(directory.get(), ".", 100, text), "refuse directory as regular file");
+  check(MappedFile(path, 3).valid() && MappedFile(path, 3).bytes() == "new", "a mapped file shows its bytes");
+  check(!MappedFile(path, 2).valid(), "bounded mapping");
+  check(!MappedFile(root + "/link", 100).valid(), "refuse mapping a file symlink");
+  check(!MappedFile(root + "/pipe", 100).valid(), "refuse mapping a FIFO without blocking");
+  check(!MappedFile(root, 100).valid(), "refuse mapping a directory");
+  check(replaceText(root + "/empty", "") && MappedFile(root + "/empty", 0).valid() &&
+            MappedFile(root + "/empty", 0).bytes().empty(),
+        "an empty file maps to no bytes");
+  {
+    const UniqueFd file(::open((root + "/placed").c_str(), O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0600));
+    char back[6] = {};
+    check(file.valid() && pwriteAll(file.get(), 2, "cdef", 4) && pwriteAll(file.get(), 0, "ab", 2) &&
+              preadAll(file.get(), 0, back, 6) && std::string_view(back, 6) == "abcdef",
+          "positioned writes land at their offsets");
+    check(!pwriteAll(-1, 0, "x", 1) && errno == EBADF, "a positioned write to no file fails");
+  }
+  {
+    check(replaceText(root + "/mapped", "kept"), "mapped fixture");
+    const MappedFile mapped(root + "/mapped", 4);
+    check(::unlink((root + "/mapped").c_str()) == 0 && mapped.bytes() == "kept",
+          "a mapping keeps the bytes of a file deleted meanwhile");
+  }
 
   const std::string leaf = root + "/private";
   check(openPrivateDirectory(leaf, true).valid(), "create private directory");
@@ -83,5 +107,35 @@ int main() {
   check(::stat(leaf.c_str(), &info) == 0 && (info.st_mode & 07777) == 0700, "repaired mode");
   check(::symlink("private", (root + "/dir-link").c_str()) == 0, "directory symlink fixture");
   check(!openPrivateDirectory(root + "/dir-link", true).valid(), "refuse directory symlink");
+
+  const pid_t gone = awtrix::test::endedProcess();
+  const std::string dead = root + "/old-" + std::to_string(gone);
+  const std::string stale = dead + "-a1B2c3", shared = dead + "-d4E5f6", deep = dead + "-g7H8i9";
+  const std::string alive = root + "/old-1-j0K1l2", other = root + "/older-" + std::to_string(gone) + "-m3N4o5";
+  for (const std::string& fixture : {stale, shared, deep, alive, other})
+    check(openPrivateDirectory(fixture, true).valid() && replaceText(fixture + "/a", "x"), "directory fixture");
+  check(replaceText(stale + "/b", "y") && ::chmod(shared.c_str(), 0755) == 0 &&
+            openPrivateDirectory(deep + "/inner", true).valid() &&
+            ::symlink("older", (dead + "-p6Q7r8").c_str()) == 0 && replaceText(dead + "-s9T0u1x", "x") &&
+            ::mkdir((dead + "-v2W3").c_str(), 0700) == 0,
+        "stale, shared, nested, linked and misnamed fixtures");
+  std::string created;
+  {
+    const PrivateTemporaryDirectory first(root, "old"), second(root, "old");
+    check(!std::filesystem::exists(stale), "a stale private directory of an ended process goes with its files");
+    check(std::filesystem::exists(shared + "/a") && std::filesystem::exists(deep + "/inner") &&
+              std::filesystem::exists(alive + "/a") && std::filesystem::exists(other + "/a") &&
+              std::filesystem::is_symlink(dead + "-p6Q7r8") && std::filesystem::exists(dead + "-s9T0u1x") &&
+              std::filesystem::exists(dead + "-v2W3"),
+          "shared or nested directories, running creators, other prefixes, links and other names stay");
+    created = first.path();
+    const std::string own = root + "/old-" + std::to_string(::getpid()) + "-";
+    check(first.valid() && second.valid() && created.rfind(own, 0) == 0 && created.size() == own.size() + 6 &&
+              second.path() != created && std::filesystem::exists(created),
+          "a new directory names its creator and a sibling of the same process stays");
+    check(::stat(created.c_str(), &info) == 0 && (info.st_mode & 07777) == 0700, "the new directory is private");
+    check(replaceText(created + "/one", "1") && replaceText(created + "/two", "2"), "files in it");
+  }
+  check(!std::filesystem::exists(created), "it goes with its files");
   std::filesystem::remove_all(root);
 }

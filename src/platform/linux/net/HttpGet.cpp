@@ -21,7 +21,7 @@ HttpGet::Result HttpGet::fetch(const std::string& url, const Limits& limits, std
     interrupt_.rearm();
   }
 
-  ReceivedBody received;
+  ResponseState received;
   const auto response = receive200(client, target, {limits.maxBytes, {}, {}}, received,
                                    [&](const char* bytes, std::size_t count) {
     body.append(bytes, count);

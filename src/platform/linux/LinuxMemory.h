@@ -2,7 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string_view>
+#include <utility>
 
 namespace awtrix {
 
@@ -10,6 +12,24 @@ namespace awtrix {
 // counterpart of the ESP32's free heap. Both leave bytes alone when the kernel does not say.
 bool parseMemAvailable(std::string_view meminfo, std::uint64_t& bytes);
 bool readMemAvailable(std::uint64_t& bytes);
+
+constexpr std::uint64_t kKeepFreeBytes = 4u << 20;
+
+class MemoryRoom {
+ public:
+  using Reader = std::function<bool(std::uint64_t& available)>;
+
+  MemoryRoom(Reader available, std::uint64_t keepFree) : available_(std::move(available)), keepFree_(keepFree) {}
+
+  bool fits(std::uint64_t bytes) const {
+    std::uint64_t available = 0;
+    return available_ && available_(available) && available >= keepFree_ && available - keepFree_ >= bytes;
+  }
+
+ private:
+  Reader available_;
+  std::uint64_t keepFree_;
+};
 
 // The script VM gets a quarter of memory available at startup, at most kScriptHeapCapBytes.
 constexpr std::size_t kScriptHeapCapBytes = 4u << 20;

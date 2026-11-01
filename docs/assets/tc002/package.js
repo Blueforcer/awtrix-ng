@@ -14,6 +14,7 @@ const MCU_PATCH = ['share/mcu/LICENSE.txt', 'share/mcu/extension.bin', 'share/mc
 const SPEECH_VOICE = 'share/speech/voice.atts';
 const WAKE_WORD = ['share/wake/hey_awtrix.json', 'share/wake/hey_awtrix.tflite'];
 const VAD = ['share/vad/NOTICE', 'share/vad/vad.json', 'share/vad/vad.tflite'];
+const OPTIONAL_GROUPS = [[MCU_PATCH, 'MCU patch'], [WAKE_WORD, 'wake word'], [VAD, 'voice activity model']];
 const NOTICES = ['notices/LICENSE.md', 'notices/SOURCE-NOTICE.txt', 'notices/THIRD-PARTY-NOTICES.md'];
 const MANIFEST = 'bundle/manifest.json';
 const IMAGE = 'bundle/release.img';
@@ -168,18 +169,11 @@ function sourceReference(source) {
 
 function publicFiles(paths) {
   const expected = [...PUBLIC_FILES];
-  if (MCU_PATCH.some(path => paths.includes(path))) {
-    check(MCU_PATCH.every(path => paths.includes(path)), 'incomplete MCU patch');
-    expected.push(...MCU_PATCH);
-  }
   if (paths.includes(SPEECH_VOICE)) expected.push(SPEECH_VOICE);
-  if (WAKE_WORD.some(path => paths.includes(path))) {
-    check(WAKE_WORD.every(path => paths.includes(path)), 'incomplete wake word');
-    expected.push(...WAKE_WORD);
-  }
-  if (VAD.some(path => paths.includes(path))) {
-    check(VAD.every(path => paths.includes(path)), 'incomplete voice activity model');
-    expected.push(...VAD);
+  for (const [group, label] of OPTIONAL_GROUPS) {
+    if (!group.some(path => paths.includes(path))) continue;
+    check(group.every(path => paths.includes(path)), `incomplete ${label}`);
+    expected.push(...group);
   }
   return expected.sort();
 }

@@ -13,7 +13,6 @@
 #include "core/render/FontCatalog.h"
 #include "core/script/BerryVM.h"
 #include "core/script/HttpHeaders.h"
-#include "core/script/ScriptHeap.h"
 #include "core/script/ScriptApplication.h"
 
 namespace awtrix {
@@ -31,16 +30,6 @@ class ScriptExtensionLifecycle;
 // How much of a response is kept when a script does not ask for a specific maxBytes itself.
 constexpr std::size_t kMaxHttpBody = 8 * 1024;
 constexpr std::size_t kMaxPendingHttp = 8;
-
-// How much of a response may actually be collected. A script names the figure it wants, but the
-// bytes land chunk by chunk on the fetching task's heap, and an append that cannot allocate takes
-// the firmware down with it. Measured when the filter is armed, so a script that asks for little
-// pays for little and nothing is set aside in advance.
-inline std::size_t httpBodyCap(std::size_t wanted) {
-  const std::size_t room = heap::growthBudget();
-  return wanted < room ? wanted : room;
-}
-
 
 // Free heap an install needs beyond the source itself. Replacing costs less because the old
 // copy's memory comes back during the swap.

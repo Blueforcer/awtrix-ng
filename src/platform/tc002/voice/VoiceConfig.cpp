@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 
+#include "core/api/ApiRouter.h"
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
 #include "core/net/Url.h"
@@ -14,6 +15,13 @@
 
 namespace awtrix::tc002::voice {
 namespace {
+bool namesApp(const std::string& assistant) {
+  return assistant.compare(0, kAssistantAppPrefix.size(), kAssistantAppPrefix) == 0;
+}
+bool validAssistant(const std::string& assistant) {
+  return assistant == kHomeAssistant ||
+         (namesApp(assistant) && api::isValidAppName(assistant.substr(kAssistantAppPrefix.size())));
+}
 bool safe(std::string_view text) {
   return std::all_of(text.begin(), text.end(), [](unsigned char c) {
     return c > 32 && c < 127 && c != '\\';
@@ -38,6 +46,7 @@ std::string serialize(const Config& c, bool secret) {
   w.beginObject()
       .member("enabled", c.enabled)
       .member("wakeWord", c.wakeWord)
+      .member("assistant", c.assistant)
       .member("url", c.url)
       .member("pipeline", c.pipeline)
       .member("device", c.device)
@@ -53,6 +62,7 @@ const char* applyConfig(std::string_view json, Config& c) {
   if (!r.isObject()) return "";
   if (!boolField(r, "enabled", c.enabled)) return "enabled";
   if (!boolField(r, "wakeWord", c.wakeWord)) return "wakeWord";
+  if (!stringField(r, "assistant", c.assistant, 68) || !validAssistant(c.assistant)) return "assistant";
   if (!stringField(r, "url", c.url, 512)) return "url";
   if (!stringField(r, "token", c.token, 4096)) return "token";
   if (!stringField(r, "pipeline", c.pipeline, 128)) return "pipeline";
@@ -108,7 +118,6 @@ bool ttsTarget(const Config& config, std::string_view url,
   target.assign(url);
   return true;
 }
-// Everything the settings file stores, so a field added to Config counts as soon as it is saved.
 bool sameConnection(const Config& a, const Config& b) {
   Config other = b;
   other.wakeWord = a.wakeWord;
@@ -116,6 +125,10 @@ bool sameConnection(const Config& a, const Config& b) {
 }
 ConfigStore::ConfigStore(std::string directory)
     : directory_(std::move(directory)) {}
+void ConfigStore::replace(Config next) {
+  config_ = std::move(next);
+  assistantApp_ = namesApp(config_.assistant) ? config_.assistant.substr(kAssistantAppPrefix.size()) : std::string();
+}
 bool ConfigStore::load() {
   if (!posix::ensurePrivateDirectory(directory_)) return false;
   const std::string path = directory_ + "/voice.json";
@@ -127,7 +140,7 @@ bool ConfigStore::load() {
   Config next;
   if (!posix::readText(path, json, 8192) || applyConfig(json, next))
     return false;
-  config_ = std::move(next);
+  replace(std::move(next));
   return true;
 }
 bool ConfigStore::update(std::string_view json, Rejection& rejection) {
@@ -160,7 +173,7 @@ bool ConfigStore::update(std::string_view json, Rejection& rejection) {
     rejection.message = "could not save";
     return false;
   }
-  config_ = std::move(next);
+  replace(std::move(next));
   return true;
 }
 std::string ConfigStore::publicJson() const {
@@ -170,7 +183,7 @@ bool ConfigStore::erase() {
   if (!posix::ensurePrivateDirectory(directory_)) return false;
   if (::unlink((directory_ + "/voice.json").c_str()) != 0 && errno != ENOENT)
     return false;
-  config_ = {};
+  replace({});
   return posix::fsyncDirectory(directory_);
 }
 }  // namespace awtrix::tc002::voice

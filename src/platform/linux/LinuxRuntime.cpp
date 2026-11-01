@@ -12,6 +12,7 @@
 #include "AppConfig.h"
 #include "core/FrameClock.h"
 #include "core/api/CapabilitiesJson.h"
+#include "core/api/JsonWriter.h"
 #include "core/effects/EffectNoise.h"
 #include "core/net/DeviceUrl.h"
 #include "core/render/PaletteStore.h"
@@ -24,7 +25,9 @@
 #include "platform/linux/LinuxAdminSecurity.h"
 #include "platform/linux/LinuxMemory.h"
 #include "platform/linux/tls/TlsTrust.h"
+#include "platform/posix/WorkerThread.h"
 #include "platform/tc002/contract/RuntimeContract.h"
+#include "platform/tc002/contract/tc002_layout.h"
 #include "platform/tc002/runtime/BootIntroWide.h"
 #include "platform/tc002/runtime/MusicPitch.h"
 #include "platform/tc002/voice/VoiceMqtt.h"
@@ -71,6 +74,7 @@ int LinuxRuntime::start() {
   composeScriptServices();
   composeBluetooth();
   composeExtensions();
+  composeAssistant();
   composePlatformRoutes();
   startScripts();
   return startServices();
@@ -281,7 +285,8 @@ void LinuxRuntime::composeAccess() {
 void LinuxRuntime::composeConnectivity() {
   const bool supervised = o_.supervised;
   const int port = o_.port;
-  platformCapabilities_.emplace(o_.bluetooth, cfg_.scriptingEnabled, o_.height > 8 ? &layoutLimits_ : nullptr);
+  platformCapabilities_.emplace(o_.bluetooth, cfg_.scriptingEnabled, supervised && speaker_,
+                                o_.height > 8 ? &layoutLimits_ : nullptr);
   resolver_ = net::makeHostResolver();
   if (mqttAllowed_) {
     bootstrap::beginMqtt(mqtt_, engine(), board(), cfg_, o_.uid, *resolver_, mqttTls_.get());
@@ -300,7 +305,6 @@ void LinuxRuntime::composeConnectivity() {
   platform.microphonePcm = supervised;
   LinuxCapabilities& capabilities = *platformCapabilities_;
   capabilities.clockFaces = target_->clockFaces;
-  capabilities.voice = supervised && speaker_;
   capabilities.mqttTls = o_.administration.lan;
   capabilities.bootSound = supervised && speaker_;
   capabilities.enlargeApps = pageZoom_->available();
@@ -342,22 +346,24 @@ void LinuxRuntime::composeScriptServices() {
   if (supervised && speaker_) {
     if (!o_.wakeWord.empty()) {
       std::string error;
-      wakeConsumer_ = microphoneHub_->attach([this](const tc002::StreamEvent& e, int64_t now) {
+      auto microphone = microphoneHub_->attach([this](const tc002::StreamEvent& e, int64_t now) {
         if (wake_) wake_->receive(e, now);
       });
-      wake_ = tc002::wake::WakeListener::open(o_.wakeWord, microphoneHub_->port(wakeConsumer_), error);
-      if (!wake_) {
-        microphoneHub_->detach(wakeConsumer_);
-        wakeConsumer_ = 0;
-        logf("wake word: %s", error.c_str());
-      }
+      wake_ = tc002::wake::WakeListener::open(o_.wakeWord, microphone.port(), std::make_unique<posix::WorkerThread>(),
+                                              error);
+      if (wake_) wakeMicrophone_ = std::move(microphone);
+      else logf("wake word: %s", error.c_str());
     }
+    voiceSpeaker_.emplace(*speaker_);
     const auto privateDirectory = std::filesystem::u8path(host::dataDir()).parent_path() / "voice-private";
-    const int consumer = microphoneHub_->attach([this](const tc002::StreamEvent& e, int64_t now) {
+    voiceMicrophone_ = microphoneHub_->attach([this](const tc002::StreamEvent& e, int64_t now) {
       if (voice_) voice_->receive(e, now);
     });
-    voice_ = std::make_unique<tc002::voice::VoiceRuntime>(privateDirectory.string(), *speaker_,
-      microphoneHub_->port(consumer), wake_ != nullptr);
+    voice_ = std::make_unique<tc002::voice::VoiceRuntime>(privateDirectory.string(), *voiceSpeaker_,
+      voiceMicrophone_.port(), wake_ != nullptr,
+      tc002::voice::VoiceRuntime::Hooks{[this] { return assistantRouter_->apps(); }, [this] {
+        return assistantRouter_->start(tc002::voice::VoiceTrigger::Api, monotonicMs());
+      }});
   }
   oauthVault_.emplace((std::filesystem::u8path(host::dataDir()).parent_path() / "script-private").string());
   oauthService_.emplace(
@@ -429,6 +435,19 @@ void LinuxRuntime::composeExtensions() {
     x.list.push_back(x.audio.get());
     x.list.push_back(&x.crypto);
     x.list.push_back(&x.tcp);
+    if (voice_) {
+      scriptMicrophone_ = microphoneHub_->attach([this](const tc002::StreamEvent& e, int64_t now) {
+        if (extensions_.voice) extensions_.voice->receive(e, now);
+      });
+      x.voice = std::make_unique<tc002::voice::VoiceScripting>(tc002::voice::VoiceScripting::Services{
+          scriptMicrophone_.port(),
+          [this](tc002::MicrophoneMark mark) { scriptMicrophone_.startFrom(mark); },
+          [this](tc002::MicrophoneMark mark) { return microphoneHub_->live(mark); },
+          &*voiceSpeaker_, [this] { return voice_->busy(); },
+          [this](const std::string& app) { return engine().currentAppId() == app; },
+          [] { return monotonicMs(); }, TC002_VOLATILE_DIR, readMemAvailable, o_.vad});
+      x.list.push_back(x.voice.get());
+    }
     x.list.push_back(&*oauthScripting_);
     oauthService_->dropStale();
     oauthService_->begin();
@@ -450,6 +469,24 @@ void LinuxRuntime::composeExtensions() {
                                                            std::move(iphoneOptions));
     bleService_->start();
   }
+}
+
+void LinuxRuntime::composeAssistant() {
+  if (!voice_) return;
+  assistantRouter_.emplace(
+      tc002::voice::AssistantRouter::Ports{
+          [this] { return voiceAllowedNow(); },
+          [this](const std::string& app) { return scripts_ ? scripts_->metaOf(app) : nullptr; },
+          [] { return ScriptStore<host::ScriptFiles>::savedNames(); },
+          [this](const std::string& app) { return engine().isScriptApp(app) && engine().isEnabled(app); },
+          [this](const std::string& json, DispatchDetail& detail) { return engine().switchApp(json, detail); },
+          [this](const std::string& app) { return engine().currentAppId() == app; },
+          [this] { return engine().state().runtime().matrixOff; },
+          [this](bool on) { scriptServices_.application->setDisplayPower(on); },
+          [this] { quickSettings_->dismiss(); },
+          [this] { return speaker_->holdMusic(); }},
+      tc002::voice::AssistantRouter::Parts{*voice_, extensions_.voice.get(), knobGesture_, *microphoneHub_,
+                                           wake_.get(), wakeMicrophone_});
 }
 
 void LinuxRuntime::composePlatformRoutes() {
@@ -570,8 +607,9 @@ void LinuxRuntime::bindPlatformCommands() {
   if (o_.supervised) mqttEntities_.push_back(kChargingEntity);
   if (voice_) mqttEntities_.push_back(tc002::voice::kStartButton);
   mqtt_.setPlatformCommands([this](const std::string& topic, const std::string&, std::string& result) {
-    return voice_ && tc002::voice::handleMqtt(topic,
-        [this] { return voiceAllowedNow() && startVoice(monotonicMs()); }, result);
+    return voice_ && tc002::voice::handleMqtt(topic, [this] {
+      return assistantRouter_->start(tc002::voice::VoiceTrigger::Mqtt, monotonicMs());
+    }, result);
   }, mqttEntities_.data(), mqttEntities_.size());
 }
 
@@ -583,12 +621,6 @@ void LinuxRuntime::applyConfig() {
 
 bool LinuxRuntime::voiceAllowedNow() const {
   return !intro_ && !(update_ && update_->ownsPanel()) && !supervision_->accessPoint();
-}
-
-bool LinuxRuntime::startVoice(int64_t now) {
-  if (!voice_->ready()) return false;
-  quickSettings_->dismiss();
-  return voice_->begin(now);
 }
 
 float LinuxRuntime::audioPitch(int64_t now, bool onScreen) {

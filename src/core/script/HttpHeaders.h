@@ -1,8 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
+
+#include "core/StrCase.h"
 
 namespace awtrix::script {
 
@@ -17,5 +21,10 @@ bool normalizeMethod(const std::string& in, std::string& out);
 bool headerAllowed(const std::string& name);
 
 bool parseHeaderBlock(const std::string& block, HttpHeaders& out);
+
+inline bool hasHeader(const HttpHeaders& headers, std::string_view name) {
+  return std::any_of(headers.begin(), headers.end(),
+                     [name](const auto& header) { return strcase::equalsIgnoreCase(header.first, name); });
+}
 
 }

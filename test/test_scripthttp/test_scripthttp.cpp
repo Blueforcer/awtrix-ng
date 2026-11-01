@@ -96,6 +96,14 @@ static void test_drops_transport_owned_headers_case_insensitively() {
   TEST_ASSERT_TRUE(script::headerAllowed("Authorization"));
 }
 
+static void test_header_lookup_ignores_case() {
+  const script::HttpHeaders h{{"content-TYPE", "text/plain"}, {"Accept", "*/*"}};
+  TEST_ASSERT_TRUE(script::hasHeader(h, "Content-Type"));
+  TEST_ASSERT_TRUE(script::hasHeader(h, "accept"));
+  TEST_ASSERT_FALSE(script::hasHeader(h, "Authorization"));
+  TEST_ASSERT_FALSE(script::hasHeader({}, "Accept"));
+}
+
 static void test_rejects_injected_control_characters() {
   script::HttpHeaders h;
   TEST_ASSERT_FALSE(script::parseHeaderBlock("X-A: v\r\nEvil: yes", h));
@@ -301,18 +309,18 @@ static void test_only_the_new_block_is_weighed_against_the_budget() {
 // A script names the size it wants and gets it, as long as the memory to collect it is there.
 static void test_a_cap_that_fits_is_passed_through() {
   script::heap::testing::setGrowthBudget(64 * 1024);
-  TEST_ASSERT_EQUAL_UINT32(8u * 1024u, static_cast<uint32_t>(script::httpBodyCap(8 * 1024)));
-  TEST_ASSERT_EQUAL_UINT32(64u * 1024u, static_cast<uint32_t>(script::httpBodyCap(64 * 1024)));
+  TEST_ASSERT_EQUAL_UINT32(8u * 1024u, static_cast<uint32_t>(script::bodyCapWithinHeapGrowth(8 * 1024)));
+  TEST_ASSERT_EQUAL_UINT32(64u * 1024u, static_cast<uint32_t>(script::bodyCapWithinHeapGrowth(64 * 1024)));
 }
 
 // A script may ask for a quarter of a megabyte. Collecting it would run the heap out and the
 // append that failed would abort the firmware, so the figure is met with what is actually there.
 static void test_a_cap_beyond_the_room_available_is_brought_down_to_it() {
   script::heap::testing::setGrowthBudget(20 * 1024);
-  TEST_ASSERT_EQUAL_UINT32(20u * 1024u, static_cast<uint32_t>(script::httpBodyCap(256 * 1024)));
+  TEST_ASSERT_EQUAL_UINT32(20u * 1024u, static_cast<uint32_t>(script::bodyCapWithinHeapGrowth(256 * 1024)));
 
   script::heap::testing::setGrowthBudget(0);
-  TEST_ASSERT_EQUAL_UINT32(0u, static_cast<uint32_t>(script::httpBodyCap(256 * 1024)));
+  TEST_ASSERT_EQUAL_UINT32(0u, static_cast<uint32_t>(script::bodyCapWithinHeapGrowth(256 * 1024)));
 }
 
 // With nothing to spare the filter keeps nothing, and a search reports no match rather than
@@ -320,7 +328,7 @@ static void test_a_cap_beyond_the_room_available_is_brought_down_to_it() {
 static void test_with_no_room_a_search_reports_no_match() {
   script::heap::testing::setGrowthBudget(0);
   script::HttpBodyFilter f;
-  f.begin("\"n\":", 64, script::httpBodyCap(256 * 1024));
+  f.begin("\"n\":", 64, script::bodyCapWithinHeapGrowth(256 * 1024));
   feedChunked(f, "{\"n\":40444}", 4);
   TEST_ASSERT_FALSE(f.matched());
   TEST_ASSERT_EQUAL_STRING("", f.body().c_str());
@@ -331,7 +339,7 @@ static void test_with_no_room_a_search_reports_no_match() {
 static void test_the_collected_body_stops_at_the_room_available() {
   script::heap::testing::setGrowthBudget(16);
   script::HttpBodyFilter f;
-  f.begin("", 0, script::httpBodyCap(64 * 1024));
+  f.begin("", 0, script::bodyCapWithinHeapGrowth(64 * 1024));
   feedChunked(f, std::string(4096, 'a'), 100);
   TEST_ASSERT_EQUAL_UINT32(16u, static_cast<uint32_t>(f.body().size()));
 }
@@ -356,6 +364,7 @@ int main(int, char**) {
   RUN_TEST(test_values_keep_their_inner_spacing);
   RUN_TEST(test_empty_value_survives);
   RUN_TEST(test_drops_transport_owned_headers_case_insensitively);
+  RUN_TEST(test_header_lookup_ignores_case);
   RUN_TEST(test_rejects_injected_control_characters);
   RUN_TEST(test_rejects_malformed_names);
   RUN_TEST(test_failed_parse_leaves_out_untouched);

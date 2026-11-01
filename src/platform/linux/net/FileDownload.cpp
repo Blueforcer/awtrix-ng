@@ -14,7 +14,8 @@
 namespace awtrix::net {
 struct FileDownload::Impl {
   Limits limits;
-  std::string directory, origin, target;
+  posix::PrivateTemporaryDirectory folder;
+  std::string origin, target;
   std::mutex mutex;
   std::condition_variable changed;
   std::thread thread;
@@ -22,9 +23,7 @@ struct FileDownload::Impl {
   uint64_t generation = 0;
   Result result;
   SocketInterrupt interrupt;
-  Impl(const std::string& dir, const std::string& prefix, Limits l) : limits(std::move(l)) {
-    std::string pattern = dir + "/" + prefix + "-XXXXXX";
-    if (::mkdtemp(pattern.data())) directory = std::move(pattern);
+  Impl(const std::string& dir, const std::string& prefix, Limits l) : limits(std::move(l)), folder(dir, prefix) {
     thread = std::thread([this] { run(); });
   }
   ~Impl() {
@@ -36,8 +35,6 @@ struct FileDownload::Impl {
     }
     changed.notify_one();
     thread.join();
-    if (!result.path.empty()) ::unlink(result.path.c_str());
-    if (!directory.empty()) ::rmdir(directory.c_str());
   }
   bool current(uint64_t g) {
     std::lock_guard<std::mutex> lock(mutex);
@@ -58,28 +55,28 @@ struct FileDownload::Impl {
       lock.unlock();
       configure(connection, {limits.timeoutMs, 5, limits.followRedirects});
       interrupt.watch(connection);
-      std::string file = directory + "/file-XXXXXX";
-      int fd = directory.empty() ? -1 : ::mkstemp(file.data());
+      std::string file = folder.path() + "/file-XXXXXX";
+      int fd = folder.valid() ? ::mkstemp(file.data()) : -1;
       Failure failure = Failure::Network;
       int status = 0;
       if (fd >= 0 && current(g)) {
-        ReceivedBody received;
+        ResponseState received;
         bool noRoom = false;
-        const BodyPolicy policy{limits.maxBytes, [&] { return current(g); },
+        const BodyPolicy policy{limits.maxBytes, [&](int, const std::string&) { return current(g); },
                                 [&](std::size_t more) {
           noRoom = limits.room && !limits.room(more);
           return !noRoom;
         }};
         auto response = receive200(connection, path, policy, received,
             [&](const char* bytes, std::size_t count) {
-              return posix::writeAll(fd, bytes, count);
+              return current(g) && posix::writeAll(fd, bytes, count);
             });
         status = received.status;
         if (received.tooLarge) failure = Failure::TooLarge;
         else if (noRoom) failure = Failure::NoRoom;
         else if (status != 200 && status != 0) failure = Failure::Status;
         else if (response && response->status == 200)
-          failure = received.size > 0 ? Failure::None : Failure::Empty;
+          failure = received.receivedBytes > 0 ? Failure::None : Failure::Empty;
       }
       if (fd >= 0) ::close(fd);
       interrupt.release();

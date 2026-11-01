@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -10,7 +11,10 @@
 namespace httplib {
 class Client;
 class Result;
-struct Request;
+}
+
+namespace awtrix::posix {
+class MappedFile;
 }
 
 namespace awtrix::net {
@@ -32,35 +36,64 @@ struct ClientLimits {
 // a User-Agent the caller sets wins.
 void configure(httplib::Client& client, const ClientLimits& limits);
 
-// httplib starts the clock of its total timeout only in its own Get(), Post() and so on; a
-// request handed to send() needs it started here.
-void startClock(httplib::Request& request);
-
 using BodyReceiver = std::function<bool(const char*, std::size_t)>;
 using RequestHeaders = std::vector<std::pair<std::string, std::string>>;
 
-// Any method, with a total timeout and at most 1 MiB delivered to the receiver.
+struct RequestBody {
+  RequestBody() = default;
+  RequestBody(std::string text) : head(std::move(text)) {}
+  RequestBody(const char* text) : head(text) {}
+  RequestBody(std::string before, std::shared_ptr<const posix::MappedFile> mapped, std::string after)
+      : head(std::move(before)), file(std::move(mapped)), tail(std::move(after)) {}
+
+  std::string head;
+  std::shared_ptr<const posix::MappedFile> file;
+  std::string tail;
+};
+
+constexpr std::size_t kMaxAnswerBytes = 1024 * 1024;
+
 httplib::Result send(httplib::Client& client, const std::string& method,
-                     const std::string& path, const std::string& body,
+                     const std::string& path, RequestBody body,
                      const RequestHeaders& headers, const BodyReceiver& receive);
 
 struct BodyPolicy {
   std::size_t maxBytes;
-  std::function<bool()> active;
+  std::function<bool(int status, const std::string& contentType)> accept;
   // Checks the announced size (when present) and then each incoming chunk. This checks
   // available space; it must not reserve it twice.
   std::function<bool(std::size_t)> room;
 };
-struct ReceivedBody {
+struct ResponseState {
   int status = 0;
-  std::size_t size = 0;
+  std::string contentType;
+  std::size_t announcedBytes = 0;
+  std::size_t receivedBytes = 0;
   bool tooLarge = false;
 };
+
+httplib::Result exchange(httplib::Client& client, const std::string& method, const std::string& path,
+                         RequestBody body, const RequestHeaders& headers, const BodyPolicy& policy,
+                         ResponseState& state, const BodyReceiver& receive);
+
+struct AnswerFilter {
+  std::string find;
+  std::size_t keep = 0;
+  std::size_t cap = 0;
+};
+struct FilteredAnswer {
+  int status = 0;
+  bool ok = false;
+  std::string body;
+};
+
+FilteredAnswer sendFiltered(httplib::Client& client, const std::string& method, const std::string& path,
+                            RequestBody body, const RequestHeaders& headers, const AnswerFilter& filter);
 
 // Accepts only status 200; enforces both Content-Length and the actual received size.
 // Client configuration, interruption and mapping failures to public errors remain with callers.
 httplib::Result receive200(httplib::Client& client, const std::string& path,
-                           const BodyPolicy& policy, ReceivedBody& state,
+                           const BodyPolicy& policy, ResponseState& state,
                            const BodyReceiver& receive);
 
 // Ends a request from another thread wherever it is. The socket in use is shut down through a

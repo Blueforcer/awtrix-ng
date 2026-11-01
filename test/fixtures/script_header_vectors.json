@@ -15,7 +15,8 @@
     "microphone",
     "oauth",
     "sensors.light",
-    "tcp"
+    "tcp",
+    "voice"
   ],
   "cases": [
     {

@@ -5,13 +5,13 @@
 #include "platform/tc002/voice/WebSocket.h"
 
 namespace awtrix::tc002::voice {
+constexpr std::string_view kHomeAssistant = "ha", kAssistantAppPrefix = "app:";
 struct Config {
   bool enabled = false;
-  // Saying the wake word starts a session like the knob's long press.
   bool wakeWord = false;
   std::string url, token, pipeline, device;
+  std::string assistant{kHomeAssistant};
 };
-// The same connection settings: everything but the wake word, which a session never reads.
 bool sameConnection(const Config& a, const Config& b);
 // An origin only: credentials, paths, queries and fragments are rejected.
 bool parseOrigin(std::string_view url, WebSocket::Endpoint& endpoint);
@@ -30,10 +30,14 @@ class ConfigStore {
   bool erase();
   std::string publicJson() const;
   const Config& get() const { return config_; }
+  const std::string& assistantApp() const { return assistantApp_; }
   const std::string& directory() const { return directory_; }
 
  private:
+  void replace(Config next);
+
   std::string directory_;
   Config config_;
+  std::string assistantApp_;
 };
 }  // namespace awtrix::tc002::voice

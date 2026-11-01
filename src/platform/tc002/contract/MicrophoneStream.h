@@ -10,9 +10,9 @@ namespace awtrix::tc002 {
 // epoch; capturedMs is the MCU tick at the validating checkpoint (wraps at
 // 2^32).
 constexpr unsigned kStreamBlockSamples = 480;
-// A consumer renews its stream at least every kStreamKeepaliveMs; a stream not renewed within
-// kStreamLeaseMs is ended.
-constexpr int64_t kStreamKeepaliveMs = 150, kStreamLeaseMs = 500;
+constexpr int64_t kStreamKeepaliveMs = 150, kStreamLeaseMs = 500, kStreamAnswerMs = 2000;
+inline constexpr char kStreamNoAnswer[] = "microphone did not answer";
+inline constexpr char kStreamUnavailable[] = "the microphone stream needs the MCU extension";
 struct StreamEvent {
   enum class Kind { Started, Audio, Ended, Support };
   int epoch = 0;
@@ -28,7 +28,6 @@ struct StreamControl {
   int epoch = 0;
   Operation operation = Probe;
 };
-// Where a consumer sends its controls: in the runtime, a port of the microphone hub.
 using MicrophonePort = std::function<bool(StreamControl)>;
 std::string encodeStreamControl(const StreamControl& control);
 std::string encodeStreamEvent(const StreamEvent& event);

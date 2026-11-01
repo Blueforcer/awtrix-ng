@@ -2,195 +2,146 @@
 
 #include <algorithm>
 #include <array>
-#include <climits>
 #include <utility>
 
+#include "platform/tc002/contract/SupervisorProtocol.h"
 #include "platform/tc002/wake/ModelFiles.h"
 #include "platform/tc002/wake/WakeDetector.h"
 #include "system/Log.h"
 
 namespace awtrix::tc002::wake {
 namespace {
-constexpr int64_t kStopMs = 2000;
-constexpr std::size_t kQueueBlocks = 16;
-// The frontend's noise estimate settles within about 0.4 s of a reset; measured on room noise and
-// on recordings from the clock, a fresh stream reached a window mean of 0.62 before that.
+static_assert(kMicrophonePcmRate == WakeFrontend::kSampleRate, "the detector takes the microphone's PCM as it comes");
 constexpr uint32_t kCooloffMs = 1000, kWarmupMs = 1000;
 constexpr std::array<int64_t, 5> kBackoffMs{1000, 2000, 5000, 10000, 30000};
 
-}  // namespace
+}
 
 std::unique_ptr<WakeListener> WakeListener::open(const std::string& modelPath, MicrophonePort microphone,
-                                                 std::string& error) {
+                                                 std::unique_ptr<posix::Executor> worker, std::string& error) {
   ModelFiles files;
   if (!readModelFiles(modelPath, files, error)) return nullptr;
   auto detector = std::make_unique<WakeDetector>();
   if (!detector->load(files.model, error)) return nullptr;
-  if (files.window < 1 || files.window > 64 ||
-      !detector->configure(static_cast<float>(files.cutoff), static_cast<std::size_t>(files.window), kCooloffMs,
-                           kWarmupMs)) {
-    error = files.settingsPath + ": cutoff must be 0 to 1, window 1 to 64";
+  if (!detector->configure({static_cast<float>(files.cutoff), files.window, kCooloffMs, kWarmupMs}, error)) {
+    error = files.settingsPath + ": " + error;
     return nullptr;
   }
-  return std::unique_ptr<WakeListener>(new WakeListener(std::move(detector), std::move(microphone)));
+  return std::unique_ptr<WakeListener>(new WakeListener(std::move(detector), std::move(microphone), std::move(worker)));
 }
 
-WakeListener::WakeListener(std::unique_ptr<WakeDetector> detector, MicrophonePort microphone)
-    : microphone_(std::move(microphone)), detector_(std::move(detector)) {
-  worker_ = std::thread([this] { run(); });
-}
+WakeListener::WakeListener(std::unique_ptr<WakeDetector> detector, MicrophonePort microphone,
+                           std::unique_ptr<posix::Executor> worker)
+    : microphone_(std::move(microphone)), detector_(std::move(detector)), worker_(std::move(worker)) {}
 
 WakeListener::~WakeListener() {
   cancel();
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    quit_ = true;
-  }
-  wake_.notify_all();
-  worker_.join();
+  worker_.reset();
 }
 
-void WakeListener::send(StreamControl::Operation operation) { microphone_({epoch_, operation}); }
+void WakeListener::cancel() { microphone_.cancel(); }
 
-void WakeListener::startStream(int64_t now) {
-  epoch_ = nextEpoch_;
-  nextEpoch_ = nextEpoch_ == INT32_MAX ? 1 : nextEpoch_ + 1;
-  state_ = State::Probing;
-  stateAt_ = now;
-  send(StreamControl::Probe);
-}
-
-// A probe has no stream to end, so its stop is answered by nothing.
-void WakeListener::stopStream(int64_t now) {
-  send(StreamControl::Stop);
-  if (state_ == State::Probing) {
-    epoch_ = 0;
-    state_ = State::Idle;
-    return;
-  }
-  state_ = State::Stopping;
-  stopDeadline_ = now + kStopMs;
-}
-
-void WakeListener::ended(const std::string& error, int64_t now) {
-  const bool wanted = state_ != State::Stopping;
-  epoch_ = 0;
-  state_ = State::Idle;
-  stopDeadline_ = -1;
-  queue({{}, true, 0});
-  if (!wanted) return;
-  if (error != error_) logf("wake word: microphone stream ended%s%s", error.empty() ? "" : ": ", error.c_str());
-  error_ = error;
-  retryAt_ = now + kBackoffMs[std::min<std::size_t>(failures_++, kBackoffMs.size() - 1)];
-}
-
-void WakeListener::cancel() {
-  if (state_ == State::Probing || state_ == State::Starting || state_ == State::Listening) send(StreamControl::Stop);
-  epoch_ = 0;
-  state_ = State::Idle;
-  stopDeadline_ = -1;
-}
-
-std::optional<WakeHeard> WakeListener::tick(int64_t now, bool listen) {
+std::optional<WakeHeard> WakeListener::tick(int64_t now, Listen listen) {
   std::vector<WakeHeard> heard;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     heard.swap(heard_);
   }
-  switch (state_) {
-    case State::Idle:
-    case State::Unavailable:
-      if (listen && now >= retryAt_) startStream(now);
-      break;
-    case State::Probing:
-      if (!listen) stopStream(now);
-      else if (now - stateAt_ >= kStopMs) ended("microphone did not answer", now);
-      break;
-    case State::Starting:
-    case State::Listening:
-      if (!listen) stopStream(now);
-      else if (now - keepaliveAt_ >= kStreamKeepaliveMs) {
-        keepaliveAt_ = now;
-        send(StreamControl::Keepalive);
-      }
-      break;
-    case State::Stopping:
-      // The daemon's consumer lease ends the stream on its own if the end never arrives.
-      if (now >= stopDeadline_) ended({}, now);
-      break;
+  muted_ = listen != Listen::On;
+  if (microphone_.phase() == MicrophoneClient::Phase::Idle) {
+    if (listen != Listen::Off && now >= retryAt_) microphone_.open(now);
+  } else if (listen == Listen::Off) {
+    microphone_.stop(now);
   }
-  if (heard.empty() || !listen) return std::nullopt;
+  apply(microphone_.tick(now), now);
+  if (heard.empty() || muted_) return std::nullopt;
   logf("wake word: heard (score %.2f)", static_cast<double>(heard.back().score));
   return heard.back();
 }
 
 void WakeListener::receive(const StreamEvent& event, int64_t now) {
-  if (!epoch_ || event.epoch != epoch_) return;
-  switch (event.kind) {
-    case StreamEvent::Kind::Support:
-      if (state_ != State::Probing) return;
-      if (!event.available) {
-        epoch_ = 0;
-        state_ = State::Unavailable;
-        if (error_.empty()) logf("wake word: the microphone stream needs the MCU extension");
-        error_ = "unavailable";
-        retryAt_ = now + kBackoffMs.back();
-        return;
-      }
-      state_ = State::Starting;
-      keepaliveAt_ = now;
-      send(StreamControl::Start);
-      return;
-    case StreamEvent::Kind::Started:
-      if (state_ != State::Starting) return;
-      state_ = State::Listening;
-      expected_ = 0;
+  const MicrophoneClient::Report kind = microphone_.receive(event, now);
+  switch (kind) {
+    case MicrophoneClient::Report::Gap:
+      restart(event.firstSample);
+      [[fallthrough]];
+    case MicrophoneClient::Report::Audio:
+      return queue({event.samples, false, event.firstSample, muted_});
+    case MicrophoneClient::Report::None:
+    case MicrophoneClient::Report::Unavailable:
+    case MicrophoneClient::Report::Started:
+    case MicrophoneClient::Report::Ended:
+    case MicrophoneClient::Report::Stopped:
+      return apply(kind, now);
+  }
+}
+
+void WakeListener::apply(MicrophoneClient::Report report, int64_t now) {
+  switch (report) {
+    case MicrophoneClient::Report::Unavailable:
+      return unavailable(now);
+    case MicrophoneClient::Report::Started:
       failures_ = 0;
       error_.clear();
-      queue({{}, true, 0});
-      return;
-    case StreamEvent::Kind::Audio:
-      if (state_ != State::Listening) return;
-      if (event.firstSample != expected_) queue({{}, true, event.firstSample});
-      expected_ = event.firstSample + static_cast<uint32_t>(event.samples.size());
-      queue({event.samples, false, event.firstSample});
-      return;
-    case StreamEvent::Kind::Ended:
-      ended(event.error, now);
+      return restart(0);
+    case MicrophoneClient::Report::Ended:
+      return failed(now);
+    case MicrophoneClient::Report::Stopped:
+      return restart(0);
+    case MicrophoneClient::Report::None:
+    case MicrophoneClient::Report::Audio:
+    case MicrophoneClient::Report::Gap:
       return;
   }
 }
 
+void WakeListener::unavailable(int64_t now) {
+  if (error_.empty()) logf("wake word: %s", kStreamUnavailable);
+  error_ = "unavailable";
+  retryAt_ = now + kBackoffMs.back();
+}
+
+void WakeListener::failed(int64_t now) {
+  restart(0);
+  const std::string& error = microphone_.error();
+  if (error != error_) logf("wake word: microphone stream ended%s%s", error.empty() ? "" : ": ", error.c_str());
+  error_ = error;
+  retryAt_ = now + kBackoffMs[std::min<std::size_t>(failures_++, kBackoffMs.size() - 1)];
+}
+
+void WakeListener::restart(uint32_t origin) { queue({{}, true, origin}); }
+
 void WakeListener::queue(Block block) {
+  bool idle = false;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (blocks_.size() >= kQueueBlocks) {
       blocks_.clear();
-      blocks_.push_back({{}, true, block.at});
+      blocks_.push_back({{}, true, block.firstSample});
     }
     blocks_.push_back(std::move(block));
+    idle = !std::exchange(draining_, true);
   }
-  wake_.notify_one();
+  if (idle) worker_->post([this] { drain(); });
 }
 
-void WakeListener::run() {
+void WakeListener::drain() {
   std::unique_lock<std::mutex> lock(mutex_);
-  for (;;) {
-    wake_.wait(lock, [this] { return quit_ || !blocks_.empty(); });
-    if (quit_) return;
+  while (!blocks_.empty()) {
     Block block = std::move(blocks_.front());
     blocks_.pop_front();
     lock.unlock();
     if (block.reset) {
       detector_->reset();
+      detectorOrigin_ = block.firstSample;
       lock.lock();
-      base_ = block.at;
       continue;
     }
     const auto heard = detector_->feed(block.samples.data(), block.samples.size());
     lock.lock();
-    if (heard) heard_.push_back({heard->score, base_ + static_cast<uint32_t>(heard->sample)});
+    if (heard && !block.muted) heard_.push_back({heard->score, detectorOrigin_ + static_cast<uint32_t>(heard->sample)});
   }
+  draining_ = false;
 }
 
-}  // namespace awtrix::tc002::wake
+}

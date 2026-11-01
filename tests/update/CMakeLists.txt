@@ -5,4 +5,4 @@ add_awtrix_test(NAME update-package-contract
           --verifier "$<TARGET_FILE:awtrix-update-verify>" --faults "$<TARGET_FILE:awtrix_update_test_faults>"
   TIMEOUT 120)
 add_awtrix_test(NAME update-state-policy SOURCES test_state.cpp LIBRARIES awtrix_update_state
-  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/target_vectors.json" SANITIZE TIMEOUT 60)
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/target_vectors.json" TIMEOUT 60)

@@ -167,7 +167,7 @@ void Tc002AudioSink::run() {
     if (available_.load()) reconcile(now);
     player_.pump(now);
     afterPump();
-    voiceQuiet_.store(voiceOwned_.load() && playing_ == Playing::None &&
+    voiceQuiet_.store(voiceChannelClaimed_.load() && playing_ == Playing::None &&
       link_.status().state == TC002_AUDIO_IDLE && (!link_.generation() || link_.finished(link_.generation())));
   }
   player_.stop();

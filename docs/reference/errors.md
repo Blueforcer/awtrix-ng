@@ -88,7 +88,7 @@ These answers use the normal error body instead:
 <!-- /only -->
 | `unauthorized` | 401 | every route, when login is on | Missing or wrong username or password. See [Authentication](#authentication-401). |
 | `forbidden` | 403 | routes unavailable in setup mode | Not allowed while AWTRIX is in setup mode. See [Setup mode lockdown](#provisioning-lockdown-403). |
-| `forbiddenOrigin` | 403 | `GET /api/v1/system?secrets=1`, `PUT /api/v1/system`, `POST /api/v1/restore`, `POST /update`, `POST /api/v1/device/factory-reset`<!-- only tc002 -->, `POST /api/v1/voice` and the script sign-in changes<!-- /only --> | The request came from a web page of another site: its `Origin` header names another host, or `Sec-Fetch-Site` is neither `same-origin` nor `none`. Nothing was done. See [Requests from other web pages](http.md#cross-origin). |
+| `forbiddenOrigin` | 403 | `GET /api/v1/system?secrets=1`, `PUT /api/v1/system`, `POST /api/v1/restore`, `POST /update`, `POST /api/v1/device/factory-reset`<!-- only tc002 -->, `POST /api/v1/voice`, `POST /api/v1/voice/start` and the script sign-in changes<!-- /only --> | The request came from a web page of another site: its `Origin` header names another host, or `Sec-Fetch-Site` is neither `same-origin` nor `none`. Nothing was done. See [Requests from other web pages](http.md#cross-origin). |
 | `notFound` | 404 | many routes | Unknown route, or an app, sound or file with that name does not exist. |
 | `methodNotAllowed` | 405 | any known route | The path exists, but not for this method. `message` lists the allowed methods. |
 | `payloadTooLarge` | 413 | any route with a body | The body is larger than allowed for that route ([Limits](limits.md#requests)). Nothing was applied. |
@@ -101,6 +101,7 @@ These answers use the normal error body instead:
 | `notNewer` | 409 | `POST /update` | The package is not newer than the installed version. Going back to an older version works over USB only. |
 | `gamepadsFull` | 409 | `POST /api/v1/gamepad/pair` | Both gamepad slots hold a gamepad. The message is `no free slot`. Forget one with `DELETE /api/v1/gamepad/{id}` first. |
 | `updateBusy` | 409 | `POST /update` | Another update is being uploaded or installed, or the last one is still being confirmed. Try again in a few minutes. |
+| `voiceUnavailable` | 409 | `POST /api/v1/voice/start` | The voice assistant cannot start now. The message is `assistant not ready`. See [`POST /api/v1/voice/start`](http.md#post-apiv1voicestart). |
 <!-- /only -->
 | `nameTaken` | 409 | `PUT /api/v1/audio/melodies/{name}`, `POST /api/v1/audio/mp3`, `POST /api/v1/files` into `/MP3` or `/MELODIES`, `POST /api/v1/audio/mp3/rename`, `POST /api/v1/icons/rename` | An MP3 and a melody would share a name, or renaming an MP3 or an icon would use an existing name (`field: "to"`). The message is `name taken`. Nothing is stored. The sounds in a script's own folder do not count. |
 | `validationFailed` | 422 | write routes | The JSON is valid, but a value is not. Usually has `field`. **Nothing was applied.** |
@@ -135,7 +136,7 @@ How large a body may be and how many apps and notifications fit: [Limits](limits
 | 413 | no | Body too large. |
 <!-- /only -->
 <!-- only tc002 -->
-| 409 | no | Script update refused because the script changed (`scriptChanged`); update refused: not newer, another update running, or not enough space; both gamepad slots taken (`gamepadsFull`); or an MP3 and a melody would share a name (`nameTaken`). |
+| 409 | no | Script update refused because the script changed (`scriptChanged`); update refused: not newer, another update running, or not enough space; both gamepad slots taken (`gamepadsFull`); the voice assistant cannot start (`voiceUnavailable`); or an MP3 and a melody would share a name (`nameTaken`). |
 | 413 | no | Body too large, or not enough memory for an update. |
 <!-- /only -->
 | 415 | no | Wrong `Content-Type` on a `PUT`/`PATCH`, or an uploaded file that does not match its folder. |
@@ -263,6 +264,7 @@ A wrong method on a supported route below answers `405`, and the `message` is
 | `/api/v1/oauth/{name}` | `GET, POST, DELETE` |
 | `/api/v1/oauth/{name}/start` · `/api/v1/oauth/{name}/code` | `POST` |
 | `/api/v1/voice` | `GET, POST` |
+| `/api/v1/voice/start` | `POST` |
 <!-- /only -->
 | `/api/v1/files` | `GET, POST, DELETE` |
 <!-- only tc002 -->

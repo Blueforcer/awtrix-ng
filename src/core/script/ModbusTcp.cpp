@@ -2,6 +2,8 @@
 
 #include <cstdio>
 
+#include "core/script/ScriptHeap.h"
+
 namespace awtrix::script::modbus {
 namespace {
 bool number(std::string_view s, unsigned max, unsigned& out) {

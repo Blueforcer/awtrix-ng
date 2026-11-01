@@ -29,7 +29,6 @@ class FileDownload {
     int status = 0;
     bool success() const { return failure == Failure::None; }
   };
-  // Files go to a private folder "<directory>/<prefix>-XXXXXX", removed again with this object.
   FileDownload(const std::string& directory, const std::string& prefix, Limits limits);
   ~FileDownload();
   // origin is "http(s)://host[:port]", target the path and query.

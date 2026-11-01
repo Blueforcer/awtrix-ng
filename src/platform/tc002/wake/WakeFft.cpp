@@ -1,7 +1,5 @@
 // A port of KISS FFT 1.3.0's real FFT (kiss_fftr, kf_work, kf_bfly4; Copyright (c) 2003-2010 Mark
 // Borgerding, BSD-3-Clause) with FIXED_POINT 16, as TensorFlow Lite Micro's microfrontend builds it.
-// Every int16 step and every wrap follows the original. The twiddles are computed in double, as
-// the original computes them.
 #include "platform/tc002/wake/WakeFft.h"
 
 #include <array>
@@ -11,7 +9,6 @@ namespace awtrix::tc002::wake {
 namespace {
 
 int16_t narrow(int32_t v) { return static_cast<int16_t>(v); }
-// KISS FFT's sround: Q15 product back to a sample, rounded.
 int16_t sround(int32_t v) { return narrow((v + (1 << 14)) >> 15); }
 
 struct Twiddles {
@@ -69,7 +66,6 @@ void WakeFft::run(const Input& input, Spectrum& spectrum) {
   }
 }
 
-// One radix-4 stage of KISS FFT's kf_work over n = 4 * m points read `stride` apart.
 void WakeFft::work(Cpx* out, const Cpx* in, std::size_t stride, std::size_t m) const {
   if (m == 1) {
     for (std::size_t k = 0; k < 4; ++k) out[k] = in[k * stride];

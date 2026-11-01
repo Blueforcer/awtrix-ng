@@ -3,9 +3,16 @@
 #include <cstddef>
 #include <string>
 
+#include "core/script/ScriptHeap.h"
+
 namespace awtrix::script {
 
 constexpr std::size_t kDefaultHttpKeep = 256;
+
+inline std::size_t bodyCapWithinHeapGrowth(std::size_t wanted) {
+  const std::size_t room = heap::growthBudget();
+  return wanted < room ? wanted : room;
+}
 
 // Largest single step the kept bytes grow by. Doubling would ask for a block twice the size of
 // what is already held, which a device with room for the answer itself may not have in one piece.

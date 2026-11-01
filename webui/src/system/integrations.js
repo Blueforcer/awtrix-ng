@@ -56,17 +56,23 @@ function gamepadSection(page){
   poller(load,()=>!cur||cur.devices?.some(p=>p.state==='pairing'||p.state==='connecting')?2000:5000);
 }
 function voiceSection(page){
+  const HA='ha',APP='app:';
   const state=el('div',{class:'badge'}),tokenState=el('div',{class:'badge'});
   const url=el('input',{type:'text',inputmode:'url',autocomplete:'off',spellcheck:'false',placeholder:'http://homeassistant.local:8123','aria-label':t('vcUrl')});
   const token=el('input',{type:'password',autocomplete:'new-password',spellcheck:'false','aria-label':t('vcToken')});
   const pipe=el('select',{'aria-label':t('vcPipe')});
   const dev=el('input',{type:'text',autocomplete:'off',spellcheck:'false',placeholder:t('vcDevP'),'aria-label':t('vcDev')});
+  const assist=el('select',{'aria-label':t('vcAssist')});
+  assist.addEventListener('change',()=>store({assistant:assist.value},t('saved')));
   const on=mkSwitch(false,()=>store({enabled:on.input.checked},t('saved')));
   const wake=mkSwitch(false,()=>store({wakeWord:wake.input.checked},t('saved')));
   const wakeRow=actionRow(t('vcWake'),t('vcWakeH'),[wake.node]);
   const save=el('button',{class:'pri'},t('vcSave'));
-  let cur=null,pipes='';
   const clear=armable(el('button',null,t('vcTokenClear')),()=>store({clearToken:true,enabled:false},t('saved')));
+  const haRows=[actionRow(t('mqStatus'),null,[state]),actionRow(t('vcOn'),t('vcOnH'),[on.node]),
+    actionRow(t('vcUrl'),null,[url]),actionRow(t('vcToken'),t('vcTokenH'),[tokenState,token,clear]),
+    actionRow(t('vcPipe'),t('vcPipeH'),[pipe]),actionRow(t('vcDev'),t('vcDevH'),[dev]),actionRow('',null,[save])];
+  let cur=null,pipes='',apps='';
   const reason=code=>code?(STR['vce'+code]?t('vce'+code):code):'';
   function paint(d){
     const first=!cur;cur=d;
@@ -75,6 +81,14 @@ function voiceSection(page){
     on.input.checked=!!c.enabled;
     wake.input.checked=!!c.wakeWord;
     wakeRow.style.display=d.wakeWordAvailable?'':'none';
+    const names=d.assistantApps||[],target=c.assistant||HA;
+    if(first||JSON.stringify(names)!==apps){
+      apps=JSON.stringify(names);
+      assist.replaceChildren(el('option',{value:HA},t('vcAssistHa')),...names.map(n=>el('option',{value:APP+n},n)));
+    }
+    if(![...assist.options].some(o=>o.value===target))assist.append(el('option',{value:target},target.slice(APP.length)));
+    assist.value=target;
+    for(const row of haRows)row.style.display=target===HA?'':'none';
     tokenState.className='badge'+(c.tokenSet?' good':'');
     tokenState.replaceChildren(t(c.tokenSet?'vcTokenSet':'vcTokenNone'));
     token.placeholder=c.tokenSet?t('vcTokenKeep'):'';
@@ -113,14 +127,7 @@ function voiceSection(page){
     store(body,t('saved'));
   });
   page.section('voice',t('vcSection'),t('vcSectionH'),[
-    actionRow(t('mqStatus'),null,[state]),
-    actionRow(t('vcOn'),t('vcOnH'),[on.node]),
-    wakeRow,
-    actionRow(t('vcUrl'),null,[url]),
-    actionRow(t('vcToken'),t('vcTokenH'),[tokenState,token,clear]),
-    actionRow(t('vcPipe'),t('vcPipeH'),[pipe]),
-    actionRow(t('vcDev'),t('vcDevH'),[dev]),
-    actionRow('',null,[save])]);
+    actionRow(t('vcAssist'),t('vcAssistH'),[assist]),wakeRow,...haRows]);
   poller(load,2000);
 }
 const SV='/api/v1/speech/voice';

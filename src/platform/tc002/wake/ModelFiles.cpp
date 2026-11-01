@@ -1,5 +1,8 @@
 #include "platform/tc002/wake/ModelFiles.h"
 
+#include <algorithm>
+#include <limits>
+
 #include "core/api/JsonReader.h"
 #include "platform/posix/Files.h"
 #include "platform/tc002/wake/WakeFrontend.h"
@@ -7,15 +10,23 @@
 namespace awtrix::tc002::wake {
 namespace {
 constexpr std::size_t kModelLimit = 512 * 1024, kSettingsLimit = 4096;
-// The frontend makes a feature frame every 10 ms; a model trained on another step would run on the
-// wrong features.
-constexpr long long kStepMs = WakeFrontend::kStepSamples / 16;
+constexpr long long kFrontendStepMs = WakeFrontend::kStepMs;
 
-bool settings(const api::JsonReader& object, double& cutoff, long long& window) {
-  return api::memberValue(object, "probability_cutoff").asDouble(cutoff) &&
-         api::memberValue(object, "sliding_window_size").asLong(window);
+std::size_t clampedSize(long long value) {
+  if (value < 0) return 0;
+  return static_cast<std::size_t>(
+      std::min<unsigned long long>(static_cast<unsigned long long>(value), std::numeric_limits<std::size_t>::max()));
 }
-}  // namespace
+
+bool settings(const api::JsonReader& object, double& cutoff, std::size_t& window) {
+  long long size = 0;
+  if (!api::memberValue(object, "probability_cutoff").asDouble(cutoff) ||
+      !api::memberValue(object, "sliding_window_size").asLong(size))
+    return false;
+  window = clampedSize(size);
+  return true;
+}
+}
 
 bool readModelFiles(const std::string& modelPath, ModelFiles& out, std::string& error) {
   const auto dot = modelPath.rfind('.');
@@ -34,8 +45,8 @@ bool readModelFiles(const std::string& modelPath, ModelFiles& out, std::string& 
   }
   const api::JsonReader step = api::memberValue(top ? root : micro, "feature_step_size");
   long long stepMs = 0;
-  if (api::present(step) && (!step.asLong(stepMs) || stepMs != kStepMs)) {
-    error = out.settingsPath + ": feature_step_size must be " + std::to_string(kStepMs);
+  if (api::present(step) && (!step.asLong(stepMs) || stepMs != kFrontendStepMs)) {
+    error = out.settingsPath + ": feature_step_size must be " + std::to_string(kFrontendStepMs);
     return false;
   }
   if (!posix::readText(modelPath, out.model, kModelLimit)) {

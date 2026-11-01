@@ -112,7 +112,8 @@ int main() {
 
   char directory[] = "/tmp/awtrix-url-sounds-XXXXXX";
   check(::mkdtemp(directory) != nullptr, "test directory");
-  const std::string leftover = std::string(directory) + "/awtrix-sound-old";
+  const pid_t gone = awtrix::test::endedProcess();
+  const std::string leftover = std::string(directory) + "/awtrix-sound-" + std::to_string(gone) + "-a1B2c3";
   check(::mkdir(leftover.c_str(), 0700) == 0 &&
             awtrix::posix::replaceText(leftover + "/file-x", "stale"),
         "leftover of an earlier run");
