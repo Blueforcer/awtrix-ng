@@ -32,7 +32,6 @@ std::string base64(const unsigned char* data, std::size_t size);
 std::string base64Url(const unsigned char* data, std::size_t size);
 // base64url of `bytes` random bytes; "" when the generator fails.
 std::string randomToken(std::size_t bytes);
-std::string sha256Hex(std::string_view text);
 // RFC 7636 S256.
 std::string pkceChallenge(const std::string& verifier);
 

@@ -47,7 +47,7 @@ struct TransferResult {
 
 class TransferQueue {
  public:
-  explicit TransferQueue(std::size_t perOwner);
+  explicit TransferQueue(std::size_t perOwner, FillRequest fill = {});
   ~TransferQueue();
   TransferQueue(const TransferQueue&) = delete;
   TransferQueue& operator=(const TransferQueue&) = delete;
@@ -63,6 +63,7 @@ class TransferQueue {
   bool runs(const std::string& owner) const;
 
   const std::size_t perOwner_;
+  const FillRequest fill_;
   mutable std::mutex mutex_;
   std::condition_variable ready_;
   std::deque<TransferRequest> queue_;

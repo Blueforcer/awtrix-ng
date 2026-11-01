@@ -224,6 +224,10 @@ bool LinuxRuntime::eraseAll(std::error_code& error) {
     std::fputs("Factory reset could not erase script sign-ins\n", stderr);
     return false;
   }
+  if (!secrets_->eraseAll()) {
+    std::fputs("Factory reset could not erase script keys\n", stderr);
+    return false;
+  }
   // Only the explicitly selected application data directory is erased. Keep
   // the held lock inode so a second process cannot enter during the reset.
   const auto root = std::filesystem::u8path(host::dataDir());

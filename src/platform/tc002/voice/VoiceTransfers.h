@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "platform/linux/LinuxMemory.h"
@@ -14,9 +16,11 @@ namespace awtrix::tc002::voice {
 class VoiceTransfers {
  public:
   enum class Kind { Send, Fetch };
+  using SendData = std::variant<ClipId, std::string>;
   struct SendOptions {
     std::string url, method, headers, as, field, fields, find;
     int keep = 0, cap = 0;
+    uint32_t timeoutSec = 0;
   };
   struct Done {
     std::string app;
@@ -26,13 +30,13 @@ class VoiceTransfers {
     std::optional<std::string> text;
   };
 
-  VoiceTransfers(ClipStore& clips, MemoryRoom memory);
+  VoiceTransfers(ClipStore& clips, MemoryRoom memory, net::FillRequest fill);
   VoiceTransfers(const VoiceTransfers&) = delete;
   VoiceTransfers& operator=(const VoiceTransfers&) = delete;
 
-  int send(const std::string& app, ClipId clip, const SendOptions& options);
+  int send(const std::string& app, SendData data, const SendOptions& options);
   int fetch(const std::string& app, const std::string& url, const std::string& method, std::string body,
-            const std::string& headers);
+            const std::string& headers, uint32_t timeoutSec);
   std::vector<Done> cancel(const std::string& app);
   std::optional<Done> poll();
   bool holds(const std::string& app) const;

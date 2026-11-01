@@ -14,6 +14,7 @@
     "layout",
     "microphone",
     "oauth",
+    "secret",
     "sensors.light",
     "tcp",
     "voice"
@@ -71,6 +72,14 @@
       "name": "an empty @oauth line needs nothing",
       "source": "# @oauth\n",
       "needs": [],
+      "display": null,
+      "icons": [],
+      "requires": []
+    },
+    {
+      "name": "an @secret line needs nothing",
+      "source": "# @secret key label=\"API key\"\n# @needs voice\n",
+      "needs": ["voice"],
       "display": null,
       "icons": [],
       "requires": []

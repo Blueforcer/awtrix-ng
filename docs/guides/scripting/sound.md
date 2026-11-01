@@ -354,6 +354,10 @@ return TalkingClock()
   `sound.playing()` is `true` while it speaks.
 - On a clock without a voice, `sound.play()` returns `false`. Give a list to play something else
   there: `sound.play([{'speech': 'Door open'}, 'doorbell'])`.
+<!-- only tc002 -->
+- To play speech from a service on the internet, or to record what someone says, use
+  [`voice.fetch` and `voice.play`](../voice-scripts.md#fetch-audio-and-play-it).
+<!-- /only -->
 - Empty text, or text longer than 512 bytes, raises a `value_error`. On a clock with a voice, so
   does text with nothing to read, for example `'...'`.
 
@@ -771,5 +775,8 @@ Every sound limit is in [Limits](../../reference/limits.md#sounds-and-radio).
 <!-- only esp32-s3 tc002 -->
 - [Song text](../../reference/songs.md): instruments and notes in a string
 - [Internet radio](../radio.md): the stations `music` reads
+<!-- /only -->
+<!-- only tc002 -->
+- [Voice in scripts](../voice-scripts.md): record what someone says, and play speech from a service
 <!-- /only -->
 - [Controlling the device](device.md#notifications): a sound together with a notification

@@ -2,6 +2,7 @@
 #include <chrono>
 #include "platform/linux/host/vendor/httplib.h"
 #include "core/script/ModbusTcp.h"
+#include "core/script/ScriptBindings.h"
 #include "platform/linux/host/compat/WiFiClient.h"
 #include "system/Log.h"
 
@@ -37,20 +38,21 @@ bool LinuxScriptHttp::request(const script::HttpRequest& req) {
     if (script::modbus::isUrl(req.url)) logf("modbus: queue full");
     return false;
   }
-  queue_.push_back(req);
+  queue_.push_back({script::BindingScope::currentScript(), req});
   ready_.notify_one();
   return true;
 }
 void LinuxScriptHttp::run() {
   for (;;) {
-    script::HttpRequest req;
+    Job job;
     {
       std::unique_lock<std::mutex> lock(mutex_);
       ready_.wait(lock, [this] { return stopping_ || !queue_.empty(); });
       if (stopping_) return;
-      req = std::move(queue_.front()); queue_.pop_front();
+      job = std::move(queue_.front()); queue_.pop_front();
       interrupt_.rearm();
     }
+    script::HttpRequest& req = job.request;
     script::HttpResult result;
     result.id = req.id;
     if (script::modbus::isUrl(req.url)) {
@@ -88,16 +90,19 @@ void LinuxScriptHttp::run() {
       if (result_) result_(std::move(result));
       continue;
     }
+    const net::RequestFill filled = fill_ ? fill_(job.owner, req.url, req.headers) : net::RequestFill::Unchanged;
     std::string origin, path;
     net::splitUrl(req.url, origin, path);
     httplib::Client client(origin);
     const std::string method = req.method.empty() ? "GET" : req.method;
     // Redirects are followed for reads only, as on the ESP32: a POST is never sent twice.
     const bool reading = method == "GET" || method == "HEAD";
-    net::configure(client, {script::kHttpTimeoutMs, 3, reading});
+    net::configure(client, {script::kHttpTimeoutMs, 3, reading && filled == net::RequestFill::Unchanged});
     interrupt_.watch(client);
-    net::FilteredAnswer answer = net::sendFiltered(client, method, path, std::move(req.body), req.headers,
-                                                   {req.find, req.keep, req.maxBytes});
+    net::FilteredAnswer answer;
+    if (filled != net::RequestFill::Refused)
+      answer = net::sendFiltered(client, method, path, std::move(req.body), req.headers,
+                                 {req.find, req.keep, req.maxBytes});
     interrupt_.release();
     result.status = answer.status;
     result.ok = answer.ok;

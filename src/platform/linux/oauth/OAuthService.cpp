@@ -6,6 +6,8 @@
 
 #include "core/script/HttpHeaders.h"
 #include "platform/linux/oauth/OAuthText.h"
+#include "platform/linux/script/HeaderAttributes.h"
+#include "platform/posix/Digest.h"
 
 namespace awtrix::oauth {
 namespace {
@@ -17,7 +19,7 @@ constexpr std::size_t kMaxCode = 2048;
 constexpr long long kDefaultLifetimeSeconds = 3600;
 constexpr long long kRenewEarlyMs = 60000;
 
-std::string bindingOf(const std::string& app, const Spec& spec) { return sha256Hex(app + "\n" + spec.line); }
+std::string bindingOf(const std::string& app, const Spec& spec) { return posix::sha256Hex(app + "\n" + spec.line); }
 
 bool blockedHeader(const std::string& name) {
   const std::string n = lowercase(name);
@@ -70,7 +72,7 @@ Status Service::status(const std::string& app) {
   const auto spec = specLocked(app, &s.invalid);
   s.declared = spec.has_value() || !s.invalid.empty();
   if (!spec) return s;
-  s.provider = hostOf(spec->authorize);
+  s.provider = script::hostOf(spec->authorize);
   s.scope = spec->scope;
   s.pkce = spec->pkce;
   Record rec;

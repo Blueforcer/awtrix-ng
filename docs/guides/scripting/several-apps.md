@@ -456,7 +456,7 @@ and deleting the module deletes its settings.
 ### Every rule of modules
 
 - A name another module already uses is refused. So are the built-in names `json`, `math`,
-  `string`, `modbus`, <!-- only tc002 -->`ble`, `gamepad`, `layout`, `oauth`, `crypto`, `tcp`, <!-- /only -->`global`, `gc`, `strict`, `os`, `sys`, `time`, `debug`,
+  `string`, `modbus`, <!-- only tc002 -->`ble`, `gamepad`, `layout`, `oauth`, `crypto`, `tcp`, `voice`, `secret`, <!-- /only -->`global`, `gc`, `strict`, `os`, `sys`, `time`, `debug`,
   `introspect` and `solidify`.
 - A module **must end with `return`**. Without it, the file installs with an error, like a broken
   app.

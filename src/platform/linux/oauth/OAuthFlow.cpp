@@ -8,7 +8,6 @@
 #include "core/api/JsonWriter.h"
 #include "platform/linux/net/UrlEncode.h"
 #include "platform/linux/oauth/OAuthText.h"
-#include "platform/posix/Files.h"
 
 namespace awtrix::oauth {
 namespace {
@@ -49,12 +48,6 @@ std::string randomToken(std::size_t bytes) {
   std::vector<unsigned char> raw(bytes);
   if (bytes == 0 || RAND_bytes(raw.data(), static_cast<int>(raw.size())) != 1) return {};
   return base64Url(raw.data(), raw.size());
-}
-
-std::string sha256Hex(std::string_view text) {
-  unsigned char digest[SHA256_DIGEST_LENGTH];
-  SHA256(reinterpret_cast<const unsigned char*>(text.data()), text.size(), digest);
-  return posix::hexBytes(digest, sizeof digest);
 }
 
 std::string pkceChallenge(const std::string& verifier) {

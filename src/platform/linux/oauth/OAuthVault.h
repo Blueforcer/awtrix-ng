@@ -2,7 +2,8 @@
 
 #include <functional>
 #include <string>
-#include <utility>
+
+#include "platform/posix/PrivateStore.h"
 
 namespace awtrix::oauth {
 
@@ -21,18 +22,17 @@ struct Record {
 // listing or backup reaches it.
 class Vault {
  public:
-  explicit Vault(std::string directory) : dir_(std::move(directory)) {}
+  explicit Vault(std::string directory);
 
   bool load(const std::string& app, Record& out) const;
   bool save(const std::string& app, const Record& record);
-  bool erase(const std::string& app);
-  bool eraseAll();
+  bool erase(const std::string& app) { return store_.erase(app); }
+  bool eraseAll() { return store_.eraseAll(); }
   // Erases every record keep() turns down, and every file that is no readable record.
   void keepOnly(const std::function<bool(const Record& record)>& keep);
 
  private:
-  std::string path(const std::string& app) const;
-  std::string dir_;
+  posix::PrivateStore store_;
 };
 
 }

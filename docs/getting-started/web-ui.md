@@ -171,6 +171,31 @@ If scripts are switched off under **System → Scripting**, a banner says so at 
 
 The same order can be set over the API: [HTTP API → Apps](../reference/http.md#apps).
 
+<!-- only tc002 -->
+### API keys
+
+Some apps use a service that wants an API key, a password for programs that you get from the service.
+Such an app has an **API keys** block in its settings.
+
+1. On the **Apps** tab, press **⚙** on the app's row.
+2. Open **API keys**. Each field says **Set** or **Empty**.
+3. Paste the key and press **Save**. The app uses it from its next request, without a restart.
+
+**Remove** next to a field deletes that key. Press it twice to confirm. A field you leave empty keeps
+the saved key.
+
+The key stays on the clock. The web UI never shows it again, and the app itself never sees it. It is
+not part of a backup, so enter it again after you restore a backup on a reset clock. Deleting the app
+or a factory reset erases its keys. An update of the app keeps them, unless it changes which addresses
+a key may go to.
+
+Anyone who can open the web UI can replace or delete a key, but cannot read it. Keys are stored on the
+clock without encryption, so keep the clock itself out of other people's hands.
+
+If the block shows **@secret line invalid**, the app's header has a mistake. Only its author can fix
+that.
+<!-- /only -->
+
 ## Scripts
 
 An editor for Berry apps. On the left, a list of what is installed: **Scripts** first, then
@@ -614,7 +639,7 @@ which player it plays. See [Gamepad](../guides/gamepad.md).
 or an installed app that can answer. **Wake word** switches "Hey AWTRIX" on and off. For Home
 Assistant, enter the address, an access token and the Assist pipeline, then press
 **Save and connect**. The **Voice** switch turns it on and off at once. A badge shows the connection
-or, in plain words, why it fails. See [Home Assistant Voice](../guides/voice.md).
+or, in plain words, why it fails. See [Voice assistant](../guides/voice.md).
 
 ### iPhone
 
@@ -674,6 +699,10 @@ The file is built in your browser. Nothing is stored on AWTRIX or sent anywhere 
 !!! warning "Keep the backup safe"
     With **Wi-Fi** or **Settings** ticked, the file contains your Wi-Fi, MQTT and web login
     passwords in plain text.
+
+<!-- only tc002 -->
+An app's [API keys](#api-keys) and sign-ins are not part of a backup.
+<!-- /only -->
 
 **Restore a backup:** press **Choose backup…** and pick the `.zip`. Anything that could not be
 restored is reported as a warning. If the backup changed Wi-Fi, system settings, settings or the

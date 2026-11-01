@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -103,6 +104,9 @@ std::string app(const std::string& setup, const std::string& draw = {}) {
          "def init() self.log = '' end\n"
          "def note(label) return def (c, s)\n"
          "  self.log += label + ' ' + str(s) + (c != nil ? ' ' + c.kind : '') + ';'\n"
+         "end end\n"
+         "def answer(label) return def (body, s)\n"
+         "  self.log += label + ' ' + str(s) + ' ' + str(body) + ';'\n"
          "end end\n"
          "def setup() " + setup + " end\n"
          "def draw() " + draw + " end\n"
@@ -254,6 +258,7 @@ struct Rig {
   const std::string clipDirectory;
   const std::string model;
   Speaker speaker;
+  net::FillRequest fill;
   tc002::MicrophoneHub hub{daemon.link(), [](const StreamEvent&, int64_t) {}};
   tc002::MicrophoneHub::Consumer microphone = hub.attach([this](const StreamEvent& e, int64_t at) {
     module->receive(e, at);
@@ -274,7 +279,10 @@ struct Rig {
         bytes = available;
         return true;
       },
-      model});
+      model,
+      [this](const std::string& owner, std::string& url, net::RequestHeaders& headers) {
+        return fill ? fill(owner, url, headers) : net::RequestFill::Unchanged;
+      }});
   AppRegistry registry;
   script::ScriptServices services;
   script::ScriptHost host{registry, services, nullptr, nullptr};
@@ -300,8 +308,8 @@ struct Rig {
     RenderCtx ctx;
     host.tick(ctx, "S");
   }
-  bool until(const std::string& text) {
-    const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  bool until(const std::string& text, int seconds = 5) {
+    const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
     while (std::chrono::steady_clock::now() < end) {
       frame();
       if (log().find(text) != std::string::npos) return true;
@@ -745,6 +753,148 @@ void sendOptions() {
         "options, also a 17th form field or a Content-Type for a form, are BAD: " + rig.log());
 }
 
+void aStringIsTheBody() {
+  const auto echo = [](const httplib::Request& request, httplib::Response& response) {
+    response.set_content(request.method + " " + request.get_header_value("Content-Type") + " " +
+                             request.get_header_value("X-Key") + " [" + request.body + "]",
+                         "text/plain");
+  };
+  Loopback loopback;
+  loopback.server.Post("/echo", echo);
+  loopback.server.Put("/echo", echo);
+  loopback.listen();
+  Rig rig;
+  rig.fill = [](const std::string&, std::string&, net::RequestHeaders& headers) {
+    for (auto& header : headers) {
+      if (header.second != "{secret:k}") continue;
+      header.second = "s3cret";
+      return net::RequestFill::Filled;
+    }
+    return net::RequestFill::Unchanged;
+  };
+  const std::string url = "'" + loopback.origin + "/echo'";
+  const struct {
+    std::string data, options, answer;
+  } sent[] = {
+      {"'{\"q\":1}'", "nil", "POST application/json  [{\"q\":1}]"},
+      {"''", "nil", "POST application/json  []"},
+      {"'x'", "{'headers': {'content-type': 'text/plain'}}", "POST text/plain  [x]"},
+      {"'x'", "{'as': 'json', 'field': 'y', 'fields': ['z']}", "POST application/json  [x]"},
+      {"'x'", "{'as': 'raw', 'fields': {'a': 'b'}}", "POST application/json  [x]"},
+      {"'x'", "{'method': 'PUT'}", "PUT application/json  [x]"},
+      {"'x'", "{'headers': {'X-Key': '{secret:k}'}}", "POST application/json s3cret [x]"},
+      {"'{\"text\":\"hello\"}'", "{'find': '\"text\":', 'keep': 14}", "\"text\":\"hello\""},
+  };
+  for (const auto& one : sent) {
+    require(rig.install("S", app("voice.send(" + one.data + ", " + url + ", " + one.options + ", self.answer('sent'))")),
+            "a script sends a string with " + one.options);
+    check(rig.until("sent "), "the upload ends: " + rig.log());
+    check(rig.log() == "sent 200 " + one.answer + ";idle",
+          "a string is the body, typed JSON unless a header names a type, and as, field and fields do not apply: " +
+              rig.log());
+  }
+  for (const std::string data : {"5", "nil", "true", "1.5", "['x']", "{}"}) {
+    require(rig.install("S", app("voice.send(" + data + ", " + url + ", nil, self.answer('sent'))")),
+            "a script sends " + data);
+    check(rig.log() == "sent -6 nil;idle", "what is neither a clip nor a string is BAD: " + rig.log());
+  }
+  for (const std::string options : {"{'method': 'BREW'}", "{'keep': -1}"}) {
+    require(rig.install("S", app("voice.send('x', " + url + ", " + options + ", self.answer('sent'))")),
+            "a script sends a string with " + options);
+    check(rig.log() == "sent -6 nil;idle", "bad options are BAD for a string as well: " + rig.log());
+  }
+}
+
+void aStringTravelsLikeAClip() {
+  Gate gate;
+  Loopback loopback;
+  loopback.server.Post("/gate", [&gate](const httplib::Request&, httplib::Response&) { gate.pass(); });
+  loopback.listen();
+  {
+    Rig rig;
+    const std::string send = "voice.send('x', '" + loopback.origin + "/gate', nil, ";
+    require(rig.install("S", app(send + "self.answer('one')) " + send + "self.answer('two')) " + send +
+                                 "self.answer('three'))")),
+            "a script sends three strings");
+    check(rig.log() == "three -2 nil;idle" && rig.module->holds("S") && rig.speaker.music,
+          "two run, a third is BUSY, and they hold the app and the music: " + rig.log());
+    rig.module->cancel("S");
+    rig.frame();
+    check(rig.log() == "three -2 nil;one -3 nil;two -3 nil;idle" && !rig.module->holds("S") && !rig.speaker.music,
+          "voice.cancel() ends them with CANCELLED: " + rig.log());
+  }
+  gate.open = true;
+}
+
+void timeoutOptions() {
+  Loopback loopback;
+  loopback.server.Get("/wav", [](const httplib::Request&, httplib::Response& response) {
+    response.set_content(kAnswer, "audio/wav");
+  });
+  loopback.server.Post("/ok", [](const httplib::Request&, httplib::Response& response) {
+    response.set_content("ok", "text/plain");
+  });
+  loopback.listen();
+  const std::string wav = "'" + loopback.origin + "/wav'", ok = "'" + loopback.origin + "/ok'";
+  Rig rig;
+  for (const std::string bad : {"0", "121", "-1", "1.5", "5.0", "'5'", "true", "[]"}) {
+    const std::string options = "{'timeout': " + bad + "}";
+    require(rig.install("S", app("voice.fetch(" + wav + ", nil, def (c, s)\n"
+                                 "  voice.send(c, " + ok + ", " + options + ", self.answer('clip'))\n"
+                                 "  voice.send('x', " + ok + ", " + options + ", self.answer('text'))\n"
+                                 "  voice.fetch(" + wav + ", " + options + ", self.note('fetch'))\n"
+                                 "end)")),
+            "a script uses " + options);
+    check(rig.until("fetch "), "the requests end: " + rig.log());
+    check(rig.log() == "clip -6 nil;text -6 nil;fetch -6;idle",
+          "a timeout out of range or of the wrong type is BAD: " + options + " " + rig.log());
+  }
+  for (const std::string good : {"1", "120"}) {
+    const std::string options = "{'timeout': " + good + "}";
+    require(rig.install("S", app("voice.fetch(" + wav + ", " + options + ", def (c, s)\n"
+                                 "  self.note('fetch')(c, s)\n"
+                                 "  voice.send(c, " + ok + ", " + options + ", def (body, s)\n"
+                                 "    self.answer('clip')(body, s)\n"
+                                 "    voice.send('x', " + ok + ", " + options + ", self.answer('text'))\n"
+                                 "  end)\n"
+                                 "end)")),
+            "a script uses " + options);
+    check(rig.until("text "), "the requests end: " + rig.log());
+    check(rig.log() == "fetch 200 wav;clip 200 ok;text 200 ok;idle",
+          "the ends of the range are allowed: " + options + " " + rig.log());
+  }
+}
+
+void theBudgetCoversTheFirstByte() {
+  Gate gate;
+  Loopback loopback;
+  loopback.answerAfter("/gate", gate);
+  loopback.server.Post("/gate", [&gate](const httplib::Request&, httplib::Response&) { gate.pass(); });
+  loopback.server.Post("/late", [](const httplib::Request&, httplib::Response& response) {
+    std::this_thread::sleep_for(std::chrono::seconds(6));
+    response.set_content("late", "text/plain");
+  });
+  loopback.listen();
+  {
+    Rig rig;
+    const std::string at = "'" + loopback.origin;
+    require(rig.install("S", app("voice.send('x', " + at + "/gate', {'timeout': 1}, def (body, s)\n"
+                                 "  self.answer('send')(body, s)\n"
+                                 "  voice.fetch(" + at + "/gate', {'timeout': 1}, def (c, s)\n"
+                                 "    self.note('fetch')(c, s)\n"
+                                 "    voice.send('x', " + at + "/late', {'timeout': 8}, self.answer('late'))\n"
+                                 "  end)\n"
+                                 "end)")),
+            "a script waits for answers");
+    check(rig.until("late ", 15), "the requests end: " + rig.log());
+    check(rig.log() == "send 0 nil;fetch 0;late 200 late;idle",
+          "a budget shorter than the server's delay ends with status 0, and one longer outlasts the 5 s other "
+          "requests wait for a first byte: " + rig.log());
+    check(files(rig.folder.path) == 0, "a download out of time leaves no clip");
+  }
+  gate.open = true;
+}
+
 void refusedRequests() {
   Rig rig;
   require(rig.install("S", "import voice\nclass App\nvar log\ndef init() self.log = '' end\n"
@@ -794,6 +944,43 @@ void fetchStatuses() {
             rig.log());
 }
 
+void transfersFillTheirHeaders() {
+  Loopback loopback;
+  std::mutex mutex;
+  std::vector<std::string> keys;
+  loopback.server.Get("/wav", [&](const httplib::Request& request, httplib::Response& response) {
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      keys.push_back(request.get_header_value("X-Key") + " " + request.get_param_value("q"));
+    }
+    response.set_content(kAnswer, "audio/wav");
+  });
+  loopback.listen();
+  Rig rig;
+  std::string asked;
+  rig.fill = [&asked](const std::string& owner, std::string& url, net::RequestHeaders& headers) {
+    for (auto& header : headers) {
+      if (header.second != "{secret:k}") continue;
+      asked = owner + " " + url;
+      header.second = "s3cret";
+      url.replace(url.find("{secret:k}"), 10, "s3cret");
+      return net::RequestFill::Filled;
+    }
+    return net::RequestFill::Refused;
+  };
+  const std::string wav = "'" + loopback.origin + "/wav";
+  require(rig.install("S", app("voice.fetch(" + wav + "?q={secret:k}', {'headers': {'X-Key': '{secret:k}'}}, def (c, s)\n"
+                               "  self.note('filled')(c, s)\n"
+                               "  voice.fetch(" + wav + "', {'headers': {'X-Key': 'plain'}}, self.note('refused'))\n"
+                               "end)")),
+          "the script loads");
+  check(rig.until("refused "), "both downloads end: " + rig.log());
+  check(rig.log() == "filled 200 wav;refused 0;idle", "a refused fill ends with status 0: " + rig.log());
+  std::lock_guard<std::mutex> lock(mutex);
+  check(keys == std::vector<std::string>{"s3cret s3cret"} && asked == "S " + loopback.origin + "/wav?q={secret:k}",
+        "the module's transfers fill URL and headers for the app that asked, and only the filled one is sent");
+}
+
 void forgetDuringTransfer() {
   Gate gate;
   Loopback loopback;
@@ -806,7 +993,7 @@ void forgetDuringTransfer() {
     check(rig.speaker.music && rig.module->holds("S"), "a running download holds the music and the app");
     rig.host.remove("S");
     check(!rig.speaker.music && !rig.module->holds("S"), "removing the app lets the music go");
-    check(rig.module->fetch("S", slow, "GET", "", "") > 0 && rig.module->fetch("S", slow, "GET", "", "") > 0,
+    check(rig.module->fetch("S", slow, "GET", "", "", 15) > 0 && rig.module->fetch("S", slow, "GET", "", "", 15) > 0,
           "and the clip its download reserved: two more downloads fit in its 4 MB");
   }
   gate.open = true;
@@ -821,7 +1008,7 @@ void cancelReachesPolledResults() {
   const std::string gated = "voice.fetch('" + loopback.origin + "/gate', nil, ";
   const auto finishDownloads = [&](Rig& rig) {
     gate.open = true;
-    require(rig.module->fetch("T", loopback.origin + "/later", "GET", "", "") > 0, "a download of another app");
+    require(rig.module->fetch("T", loopback.origin + "/later", "GET", "", "", 15) > 0, "a download of another app");
     require(later.reached(), "it reaches the server, so the downloads queued before it have ended");
   };
   {
@@ -855,7 +1042,7 @@ void cancelReachesTakenResults() {
                                  "self.note('second'))")),
             "a script starts two downloads");
     gate.open = true;
-    require(rig.module->fetch("T", loopback.origin + "/later", "GET", "", "") > 0, "a download of another app");
+    require(rig.module->fetch("T", loopback.origin + "/later", "GET", "", "", 15) > 0, "a download of another app");
     require(later.reached(), "it reaches the server, so both downloads have ended");
     rig.module->update(rig.now);
     check(rig.module->holds("S"), "results not yet delivered still hold the app");
@@ -889,7 +1076,7 @@ void transfersRunOn() {
     rig.frame();
     check(rig.log() == "third -4;first -3;second -3;idle" && !rig.module->holds("S"),
           "voice.cancel() ends them with CANCELLED: " + rig.log());
-    check(rig.module->fetch("S", loopback.origin + "/slow", "GET", "", "") > 0,
+    check(rig.module->fetch("S", loopback.origin + "/slow", "GET", "", "", 15) > 0,
           "and releases the clips they reserved");
   }
   gate.open = true;
@@ -934,9 +1121,10 @@ void destructionLetsGo() {
                                                      bytes = uint64_t{1} << 40;
                                                      return true;
                                                    },
-                                                   vadPath});
+                                                   vadPath,
+                                                   {}});
     check(module.record("S", {800, 5000, 15000}, false) > 0 &&
-              module.fetch("S", loopback.origin + "/slow", "GET", "", "") > 0 && speaker.owned && speaker.music,
+              module.fetch("S", loopback.origin + "/slow", "GET", "", "", 15) > 0 && speaker.owned && speaker.music,
           "a recording owns the voice channel and a download holds the music");
   }
   check(!speaker.owned && !speaker.music, "a module that goes away lets go of both: " + speaker.holds);
@@ -1064,8 +1252,13 @@ int main(int argc, char** argv) {
   fullAndLevel();
   assistantRoundTrip();
   sendOptions();
+  aStringIsTheBody();
+  aStringTravelsLikeAClip();
+  timeoutOptions();
+  theBudgetCoversTheFirstByte();
   refusedRequests();
   fetchStatuses();
+  transfersFillTheirHeaders();
   forgetDuringTransfer();
   cancelReachesPolledResults();
   cancelReachesTakenResults();

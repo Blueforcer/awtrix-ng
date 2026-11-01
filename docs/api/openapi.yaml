@@ -1979,6 +1979,106 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '422': {$ref: '#/components/responses/Invalid'}
 
+  /api/v1/secrets:
+    x-only: [tc002]
+    get:
+      tags: [scripts]
+      summary: List scripts with API keys
+      description: |
+        Available when `capabilities.secret` is true. Lists installed scripts with an
+        `@secret` line, also one whose line is invalid. All answers of these routes have
+        `Cache-Control: no-store`, and none ever returns a key.
+        See [API keys](https://blueforcer.github.io/awtrix-ng/reference/http/#api-keys).
+      responses:
+        "404": { $ref: "#/components/responses/NotOnThisDevice" }
+        '200':
+          description: The scripts' names
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apps]
+                properties:
+                  apps: {type: array, items: {type: string}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/secrets/{name}:
+    x-only: [tc002]
+    parameters:
+      - {$ref: '#/components/parameters/SecretApp'}
+    get:
+      tags: [scripts]
+      summary: Read a script's API keys
+      description: Says for each key whether a value is saved. A value is never returned.
+      responses:
+        '200':
+          description: The keys, or why the `@secret` lines are unusable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      required: [key, label, help, set]
+                      properties:
+                        key: {type: string, description: The name the script uses}
+                        label: {type: string, description: 'The name of the field, "" when the line has none'}
+                        help: {type: string, description: 'The line of explanation, "" when the line has none'}
+                        set: {type: boolean, description: A value is saved}
+                  invalid: {type: string, description: Present instead of keys when an @secret line is invalid. The reason.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      tags: [scripts]
+      summary: Save or erase a script's API keys
+      description: |
+        Changes require the device's own Origin and `X-Awtrix-Secret: 1`. An empty string
+        erases that key. Keys left out keep their value. A refused request changes nothing.
+        The body is at most 16 KB, a value at most 512 bytes without CR, LF or NUL.
+      parameters:
+        - {$ref: '#/components/parameters/OAuthOrigin'}
+        - {$ref: '#/components/parameters/SecretHeader'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {type: string, maxLength: 512, writeOnly: true}
+      responses:
+        '200': {$ref: '#/components/responses/Ok'}
+        '400': {$ref: '#/components/responses/BadJson'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/SecretForbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Invalid'}
+  /api/v1/secrets/{name}/{key}:
+    x-only: [tc002]
+    parameters:
+      - {$ref: '#/components/parameters/SecretApp'}
+      - name: key
+        in: path
+        required: true
+        schema: {type: string, pattern: '^[A-Za-z_][A-Za-z0-9_]{0,23}$'}
+        description: A key the script declares.
+    delete:
+      tags: [scripts]
+      summary: Erase one API key
+      description: Answers 200 also when the key was not set. An undeclared key answers 422.
+      parameters:
+        - {$ref: '#/components/parameters/OAuthOrigin'}
+        - {$ref: '#/components/parameters/SecretHeader'}
+      responses:
+        '200': {$ref: '#/components/responses/Ok'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/SecretForbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Invalid'}
+
   /api/v1/scripts/shared:
     get:
       tags: [scripts]
@@ -2191,10 +2291,11 @@ paths:
                   gamepad: {x-only: [tc002], type: boolean, enum: [true], description: "Present only while scripts can import gamepad, which needs scripting on. /api/v1/gamepad exists. A Bluetooth gamepad can be paired where ble is true as well."}
                   gamepadRemote: {x-only: [tc002], type: boolean, enum: [true], description: "Present only while a phone can be a gamepad, which needs scripting on. POST /api/v1/gamepad/remote exists."}
                   mqttTls: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where MQTT can connect over TLS. /api/v1/mqtt/tls exists."}
-                  voice: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where Home Assistant Voice can be set up. /api/v1/voice exists. Also the @needs name of import voice."}
+                  voice: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where the voice assistant can be set up. /api/v1/voice exists. Also the @needs name of import voice."}
                   bootSound: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where the clock plays a sound at power-on. The bootSound setting switches it."}
                   enlargeApps: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where pushed apps and notifications can be shown at double size. The enlargeApps setting switches it."}
                   oauth: {x-only: [tc002], type: boolean, enum: [true], description: "Present only while scripts can import oauth, which needs scripting on. /api/v1/oauth exists."}
+                  secret: {x-only: [tc002], type: boolean, enum: [true], description: "Present only while scripts can keep API keys and import secret, which needs scripting on. /api/v1/secrets exists."}
                   activation: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where the clock asks Help AWTRIX. /api/v1/activation exists."}
                   crypto: {x-only: [tc002], type: boolean, enum: [true], description: Present only while scripts can import crypto, which needs scripting on.}
                   tcp: {x-only: [tc002], type: boolean, enum: [true], description: Present only while scripts can import tcp, which needs scripting on.}
@@ -2972,6 +3073,19 @@ components:
       in: header
       required: true
       schema: {type: string, enum: ['1']}
+    SecretApp:
+      x-only: [tc002]
+      name: name
+      in: path
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9_-]{1,32}$'}
+      description: Installed script with an @secret line.
+    SecretHeader:
+      x-only: [tc002]
+      name: X-Awtrix-Secret
+      in: header
+      required: true
+      schema: {type: string, enum: ['1']}
   securitySchemes:
     basicAuth:
       type: http
@@ -3000,6 +3114,15 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    SecretForbidden:
+      x-only: [tc002]
+      description: |
+        Forbidden in setup mode, or forbiddenOrigin when the Origin does not match
+        this device or X-Awtrix-Secret is missing or is not 1.
+        See [Setup mode](https://blueforcer.github.io/awtrix-ng/reference/errors/#provisioning-lockdown-403).
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
     OAuthForbidden:
       x-only: [tc002]
       description: |

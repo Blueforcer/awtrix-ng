@@ -2,11 +2,11 @@
 only: [tc002]
 ---
 
-# Home Assistant Voice
+# Voice assistant
 
-This page lets you talk to Home Assistant through the clock: hold the knob for a moment or say
-"Hey AWTRIX", then speak. Home Assistant's Assist understands the request, carries it out and
-answers through the clock's speaker.
+This page lets you talk to the clock: hold the knob for a moment or say "Hey AWTRIX", then speak.
+Home Assistant's Assist, or an app such as the [Assistant app](#assistant-app), understands the
+request and answers through the clock's speaker.
 
 ## How it behaves
 
@@ -31,6 +31,9 @@ display, and the app answers. The clock then keeps no connection to Home Assista
 Assistant fields are hidden. **Wake word** works for both. If the display was off, it comes on for
 the app and goes off again when the app is done. A radio station waits until then. An app that is
 switched off on the **Apps** tab does not answer.
+
+To talk to an AI service, use the [Assistant app](#assistant-app). To write such an app yourself,
+see [Voice in scripts](voice-scripts.md).
 
 ## What you need
 
@@ -126,7 +129,80 @@ The button works only while **Connection** shows *Ready*. With an app as the ass
 the app instead. Without discovery, publish an empty message to
 [`<prefix>/cmd/voice/start`](../reference/mqtt.md#voicestart).
 
+## Ask an AI with the Assistant app {#assistant-app}
+
+The Assistant app answers your question with an AI service and needs no Home Assistant. It sends
+what you say to a speech service, the text to a chat service, and reads the reply aloud while the
+words run across the display. OpenAI works with the settings as they are. Any service with the same
+interface works too, also one on a computer in your own network.
+
+1. Install **Assistant** from the [AWTRIX Hub](hub.md).
+2. In the web UI, go to **System → Voice assistant** and pick **Assistant** under **Assistant**.
+3. Go to **Apps** and press **⚙** on the app's row. Under **API keys**, paste your key into
+   **API key** and press **Save**. See [API keys](../getting-started/web-ui.md#api-keys). A local
+   service needs no key.
+4. Hold the knob, or say "Hey AWTRIX" with **Wake word** on, and ask.
+
+Moving bars mean the clock listens, bouncing dots that it thinks. After the answer, a bar runs down
+for ten seconds. Press the knob during that time to ask a follow-up. The app remembers your last four
+questions. A press also ends your question early and interrupts an answer.
+
+### Its settings
+
+The settings are under **Apps → ⚙**.
+
+| Group | Setting | Key | Default | Meaning |
+|---|---|---|---|---|
+| Speech to text | **Address** | `stt_url` | `https://api.openai.com/v1/audio/transcriptions` | the service that turns your question into text |
+| | **Model** | `stt_model` | `gpt-4o-mini-transcribe` | its speech model |
+| | **Language** | `language` | `de` | the language you speak, for example `de` or `en`. Empty: the service detects it. Starting with `de`, the clock's messages are in German |
+| Chat | **Address** | `chat_url` | `https://api.openai.com/v1/chat/completions` | the service that answers |
+| | **Model** | `chat_model` | `gpt-4o-mini` | its chat model |
+| | **Instructions** | `system` | answer briefly in plain text | how the assistant should answer |
+| Answer | **Answer** | `reply` | `local` | `local`: the clock's own voice. `network`: the voice service below. `text`: the display only |
+| | **Address** | `tts_url` | `https://api.openai.com/v1/audio/speech` | with `network`: the service that reads the answer aloud |
+| | **Model** | `tts_model` | `gpt-4o-mini-tts` | with `network`: its speech model |
+| | **Voice** | `tts_voice` | `alloy` | with `network`: its voice |
+| API keys | **API key** | `key` | empty | your key, see below |
+
+### Other services and local ones
+
+Change the addresses and models. Use one service for speech and chat, or a different one for each.
+
+| Service | Speech to text | Chat | Model, for example |
+|---|---|---|---|
+| Groq | `https://api.groq.com/openai/v1/audio/transcriptions` | `https://api.groq.com/openai/v1/chat/completions` | `whisper-large-v3`, `llama-3.3-70b-versatile` |
+| OpenRouter | | `https://openrouter.ai/api/v1/chat/completions` | the name OpenRouter shows |
+| Ollama on your computer | | `http://192.168.1.20:11434/v1/chat/completions` | `llama3.2` |
+| LM Studio on your computer | | `http://192.168.1.20:1234/v1/chat/completions` | the model you loaded |
+| Your own Whisper server | `http://192.168.1.20:8000/v1/audio/transcriptions` | | what the server offers |
+
+Replace `192.168.1.20` with your computer's address. The service has to accept connections from your
+network, not only from its own computer.
+
+!!! warning "One key for all three addresses"
+    The app has one key. Once it is saved, it goes to all three addresses: speech to text, chat and
+    voice. If you mix services, each of them receives the same key, including the key of the other
+    service. Use one service for everything that needs a key, or leave the key empty when only local
+    services are in use. A local service needs no key.
+
+With a key saved, the clock sends it over `https://`, and over `http://` only to an address in your
+own network. See [Where a key may go](scripting/network.md#where-a-key-may-go). Any other `http://`
+address then shows **No network**. Without a key, `http://` works everywhere.
+
+### Messages of the app
+
+| The display shows | What to do |
+|---|---|
+| **Nothing heard** (*Nichts gehört*) | Speak once the bars move, a little closer to the clock. |
+| **No network** (*Kein Netz*) | The service did not answer. Check its address, and that it can be reached from the clock. A key does not go to a public `http://` address. |
+| **Key missing** (*Schlüssel fehlt*) | The service wants a key. Enter it under **Apps → ⚙**. |
+| **Error 401**, **Error 404** (*Fehler 401*) | The service's own answer. 401 usually means a wrong key, 404 a wrong address or model. |
+| **Empty answer** (*Antwort leer*) | The service answered, but not in the expected format. Check the address. |
+
 ## When it does not work
+
+With Home Assistant as the assistant, **Connection** says why it fails:
 
 | Connection shows | What to do |
 |---|---|
@@ -159,9 +235,14 @@ to a speech service on the internet. Any app that uses voice can record while it
 when it is not the assistant. Its recordings stay in the clock's memory only while the app uses
 them.
 
+The Assistant app sends each question and the last four questions with their answers to the services
+in its settings. What those services do with them is up to them. With local services, nothing leaves
+your network.
+
 ## Related
 
 - [Home Assistant](home-assistant.md): entities and notifications over MQTT
+- [Voice in scripts](voice-scripts.md): write an app that listens and answers
 - [Install on TC002](../getting-started/tc002.md)
 - [`/api/v1/voice`](../reference/http.md#apiv1voice): the same settings over HTTP, and
   [`POST /api/v1/voice/start`](../reference/http.md#post-apiv1voicestart) to start the assistant

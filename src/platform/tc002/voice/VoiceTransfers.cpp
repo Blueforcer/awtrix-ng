@@ -24,7 +24,8 @@ constexpr char kFieldSeparator = '\x1f';
 constexpr std::size_t kMaxFormFields = 16;
 constexpr std::size_t kTransfersPerApp = 2;
 constexpr std::size_t kFetchBytes = 2 * 1024 * 1024;
-constexpr int64_t kFetchTimeoutMs = 15000;
+constexpr int64_t kMsPerSecond = 1000;
+constexpr const char* kTextType = "application/json";
 constexpr const char* kDownloadTypes[] = {"audio/mpeg", "audio/wav", "audio/x-wav", "application/octet-stream"};
 constexpr const char* kUploadName = "speech";
 
@@ -57,10 +58,32 @@ bool formFields(const std::string& block, std::vector<net::FormField>& out) {
   return true;
 }
 
+int attachClip(const Clip& clip, const VoiceTransfers::SendOptions& options, net::TransferRequest& request) {
+  std::vector<net::FormField> parts;
+  const bool raw = options.as == "raw";
+  const bool typed = script::hasHeader(request.headers, "Content-Type");
+  if ((!raw && (options.as != "form" || typed)) || !formFields(options.fields, parts)) return kBad;
+  auto audio = std::make_shared<const posix::MappedFile>(clip.path, ClipStore::kBytesPerApp);
+  if (!audio->valid()) return kGone;
+  const ClipFormat& format = clipFormat(clip.kind);
+  if (raw) {
+    request.body = net::RequestBody({}, std::move(audio), {});
+    if (!typed) request.headers.emplace_back("Content-Type", format.mediaType);
+    return kOk;
+  }
+  std::optional<net::Form> form =
+      net::buildMultipart(parts, {options.field, std::string(kUploadName) + "." + format.extension, format.mediaType,
+                                  audio->bytes()});
+  if (!form) return kBad;
+  request.body = net::RequestBody(std::move(form->head), std::move(audio), std::move(form->tail));
+  request.headers.emplace_back("Content-Type", std::move(form->contentType));
+  return kOk;
 }
 
-VoiceTransfers::VoiceTransfers(ClipStore& clips, MemoryRoom memory)
-    : clips_(clips), memory_(std::move(memory)), queue_(kTransfersPerApp) {}
+}
+
+VoiceTransfers::VoiceTransfers(ClipStore& clips, MemoryRoom memory, net::FillRequest fill)
+    : clips_(clips), memory_(std::move(memory)), queue_(kTransfersPerApp, std::move(fill)) {}
 
 VoiceTransfers::Done VoiceTransfers::report(std::string app, Kind kind, int number, int status) {
   Done out{};
@@ -71,42 +94,31 @@ VoiceTransfers::Done VoiceTransfers::report(std::string app, Kind kind, int numb
   return out;
 }
 
-int VoiceTransfers::send(const std::string& app, ClipId id, const SendOptions& options) {
-  const Clip* clip = clips_.find(app, id);
-  if (!clip) return kGone;
+int VoiceTransfers::send(const std::string& app, SendData data, const SendOptions& options) {
+  const ClipId* const id = std::get_if<ClipId>(&data);
+  const Clip* const clip = id ? clips_.find(app, *id) : nullptr;
+  if (id && !clip) return kGone;
   net::TransferRequest request;
-  std::vector<net::FormField> parts;
-  const bool raw = options.as == "raw";
-  if (options.keep < 0 || (!raw && options.as != "form") ||
-      !net::splitUrl(options.url, request.origin, request.target) ||
+  if (options.keep < 0 || !net::splitUrl(options.url, request.origin, request.target) ||
       !script::normalizeMethod(options.method, request.method) ||
-      !script::parseHeaderBlock(options.headers, request.headers) || !formFields(options.fields, parts))
+      !script::parseHeaderBlock(options.headers, request.headers))
     return kBad;
-  const bool typed = script::hasHeader(request.headers, "Content-Type");
-  if (!raw && typed) return kBad;
-  auto audio = std::make_shared<const posix::MappedFile>(clip->path, ClipStore::kBytesPerApp);
-  if (!audio->valid()) return kGone;
-  const ClipFormat& format = clipFormat(clip->kind);
-  if (raw) {
-    request.body = net::RequestBody({}, std::move(audio), {});
-    if (!typed) request.headers.emplace_back("Content-Type", format.mediaType);
+  if (clip) {
+    const int attached = attachClip(*clip, options, request);
+    if (attached != kOk) return attached;
   } else {
-    std::optional<net::Form> form =
-        net::buildMultipart(parts, {options.field, std::string(kUploadName) + "." + format.extension, format.mediaType,
-                                    audio->bytes()});
-    if (!form) return kBad;
-    request.body = net::RequestBody(std::move(form->head), std::move(audio), std::move(form->tail));
-    request.headers.emplace_back("Content-Type", std::move(form->contentType));
+    request.body = std::move(std::get<std::string>(data));
+    if (!script::hasHeader(request.headers, "Content-Type")) request.headers.emplace_back("Content-Type", kTextType);
   }
   request.owner = app;
-  request.timeoutMs = script::kHttpTimeoutMs;
+  request.timeoutMs = options.timeoutSec * kMsPerSecond;
   request.filter = {options.find, static_cast<std::size_t>(options.keep),
                     options.cap > 0 ? static_cast<std::size_t>(options.cap) : script::kMaxHttpBody};
   return start(std::move(request), Kind::Send, 0);
 }
 
 int VoiceTransfers::fetch(const std::string& app, const std::string& url, const std::string& method,
-                          std::string body, const std::string& headers) {
+                          std::string body, const std::string& headers, uint32_t timeoutSec) {
   net::TransferRequest request;
   if (!net::splitUrl(url, request.origin, request.target) || !script::normalizeMethod(method, request.method) ||
       !script::parseHeaderBlock(headers, request.headers))
@@ -116,7 +128,7 @@ int VoiceTransfers::fetch(const std::string& app, const std::string& url, const 
   if (!clip) return kFull;
   request.owner = app;
   request.body = std::move(body);
-  request.timeoutMs = kFetchTimeoutMs;
+  request.timeoutMs = timeoutSec * kMsPerSecond;
   request.followRedirects = request.method == "GET";
   request.download = net::TransferDownload{clips_.path(clip), kFetchBytes, downloadableType, verifyClip,
                                            [memory = memory_](std::size_t more) { return memory.fits(more); }};

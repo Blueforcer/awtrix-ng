@@ -58,6 +58,8 @@ first answer arrives, it shows `...`.
   only paints it.
 - **`loop()` runs about once a second, also while your app is hidden.** Start requests there,
   spaced out with a counter, so the data is ready when your app comes round.
+- **Requests take turns.** All scripts share one queue, and a request runs when the one before it
+  has finished. So a slow service also delays the requests of every other script.
 - **MQTT works the same way.** `mqtt.subscribe()` returns at once, and your callback runs for
   every message.
 
@@ -98,10 +100,156 @@ body. [Details](#http-calls) lists every method.
 <!-- only tc002 -->
     Outbound HTTPS checks the certificate and host name. An untrusted or mismatched certificate
     fails the request.
+
+    On this clock a key does not have to be in the script: see
+    [Keep an API key out of your script](#api-keys).
 <!-- /only -->
 
     So: set a login, and use a token that can only read what the script needs and that you can
     revoke on its own.
+
+<!-- only tc002 -->
+## Keep an API key out of your script {#api-keys}
+
+With `@secret`, a key stays out of your script. The user enters it in the app's settings, and the
+clock puts it into your request at the last moment. Your script never sees it, and reading the
+script does not reveal it.
+
+```berry
+# @name    Quote
+# @desc    Shows a quote from a service that wants a key
+# @version 1.0
+# @needs   secret
+# @secret  key label="API key" help="Your key from example.com" hosts=api.example.com
+
+import secret
+
+class Quote
+  var label, ticks
+
+  def init()
+    self.label = "..."
+    self.ticks = 0
+  end
+
+  def loop()
+    if !secret.has('key')
+      self.label = "NO KEY"
+      return
+    end
+    if self.ticks <= 0
+      self.ticks = 300
+      http.get("https://api.example.com/v1/quote", / body, status -> self.on_body(body, status),
+               {'headers': {'Authorization': "Bearer {secret:key}"},
+                'find': "\"price\":", 'keep': 32})
+    end
+    self.ticks -= 1
+  end
+
+  def on_body(body, status)
+    if status == 401
+      self.label = "BAD KEY"
+      return
+    end
+    var found = body != nil ? re.search("\"price\":([0-9.]+)", body) : nil
+    if found != nil self.label = found[1] end
+  end
+
+  def draw()
+    clear()
+    scroll_text(self.label)
+  end
+end
+
+return Quote()
+```
+
+The field appears under [**API keys**](../../getting-started/web-ui.md#api-keys) in the app's
+settings. Until the user fills it, `secret.has('key')` is `false`.
+
+Add `# @needs secret` as well, so other models show the script as not suitable: an `@secret` line
+alone does not ask for anything. On other models the line is ignored and `{secret:key}` goes out as
+plain text, so a script for every model has to check for the module first. See
+[Scripts for every model](../ble.md#scripts-for-every-model).
+
+### The line
+
+`# @secret <key> label="…" help="…" hosts=a,b`, one line per key, at most 4 in a script. Only the key
+is required.
+
+| Part | Meaning |
+|---|---|
+| `key` | the name your script uses, as for [`@config`](storage.md#settings-the-user-can-change): a letter or `_` first, then letters, digits and `_`, at most 24 characters |
+| `label` | the name of the field, at most 48 characters. Without one, the key is shown |
+| `help` | a line of explanation under the field, at most 96 characters |
+| `hosts` | the only hosts the key may go to, 1 to 8, separated by commas: names or IPv4 addresses, exactly as in the address. The port does not count |
+
+### Where `{secret:key}` works
+
+Write `{secret:key}` in a header value, or in the path or query of the address. In the address, the
+clock percent-encodes the value.
+
+```berry
+http.get("https://api.example.com/v1/quote?token={secret:key}", / body, status -> self.on_body(body, status))
+```
+
+It works in `http.*`, and in [`voice.send` and `voice.fetch`](../voice-scripts.md). Everywhere else,
+it is plain text: in a request body, in a form field, in a header name, and in any other module.
+
+### Where a key may go {#where-a-key-may-go}
+
+| Address | The key goes there |
+|---|---|
+| `https://` | yes |
+| `http://` to your own network | yes |
+| any other `http://` | never |
+| another host than `hosts=` lists | never, also with `https://` |
+
+Your own network means an IPv4 address in `10.x.x.x`, `172.16.x.x` to `172.31.x.x`, `192.168.x.x`,
+`127.x.x.x` or `169.254.x.x`, the IPv6 addresses `[::1]`, `fc00::/7` and `fe80::/10`, and a name
+ending in `.local`. The clock judges the address as you wrote it and looks nothing up, so
+`http://localhost` and `http://nas.fritz.box` do not count. Write an IP address or a `.local` name
+instead.
+
+Nothing is sent when the clock refuses a key: the key is unknown or not filled in, or the address is
+not allowed. Your callback gets `nil` and status `0`, as without a network. The log shows the reason
+while [`debugMode`](../../reference/system.md#miscellaneous) is on.
+
+A placeholder in the scheme, the host, the port or the user name makes the address itself invalid.
+`http.*` then gets `nil` and status `0`, and `voice.send` and `voice.fetch` get `voice.BAD`. The part
+of an address after `#` is never sent, so a key has no use there.
+
+Once a key is in a request, the request follows no redirect. The answer is then the redirect itself,
+with its status, for example 302. Send such a request straight to the final address.
+
+### Ask whether a key is there
+
+`import secret` gives one call:
+
+| Call | Does |
+|---|---|
+| `secret.has(key)` | `true` when the key is declared and filled in, otherwise `false` |
+
+Send the header only when the key is there, and the same app also works with a service that wants no
+key. This is how the [Assistant app](../voice.md#assistant-app) talks to a local server:
+
+```berry
+var headers = {}
+if secret.has('key') headers['Authorization'] = "Bearer {secret:key}" end
+```
+
+### How long a key stays
+
+A key stays until the user removes it, the app is deleted, the clock is reset, or the header changes:
+
+- A changed `hosts=` erases the key, so nobody can send it to a new host by updating the script.
+- A key whose line disappears is erased.
+- A mistake in any `@secret` line erases all keys of the app when you save it. The settings show the
+  mistake.
+- A new `label` or `help` keeps the key.
+
+A key is not part of a backup.
+<!-- /only -->
 
 ## Pick one field out of a big answer {#picking-one-field-out-of-a-big-answer}
 
@@ -456,8 +604,13 @@ Each call returns at once. `cb(body, status)` runs once, later. `opts` is an opt
 - Only `http://` and `https://` addresses work.
 - An answer is kept up to 8 KB, or up to `cap` if you set one. It is less when the device is short
   of free memory.
-- Each script can have **8 requests** open at once.
+- Each script can have **8 requests** open at once. They run one after another, together with those
+  of all other scripts.
 - `GET` follows redirects. A `POST` or `PUT` does not follow them reliably.
+<!-- only tc002 -->
+- An answer has to start within 5 seconds. A service that thinks longer, for example a chat model,
+  belongs on [`voice.send`](../voice-scripts.md#slow-services).
+<!-- /only -->
 <!-- only esp32 esp32-s3 -->
 - For about 15 seconds after the clock joins Wi-Fi, `https://` requests wait, then run. The first
   result simply arrives a few seconds later. When memory is too tight for HTTPS, the request is
@@ -505,6 +658,7 @@ Every limit a script runs under is in [Limits](../../reference/limits.md#scripti
 <!-- only tc002 -->
 - [TCP in scripts](../tcp.md): services that send text line by line
 - [Signing in from scripts](../oauth.md): services that need a sign-in
+- [Voice in scripts](../voice-scripts.md): record, send and play voice, and ask slow services
 <!-- /only -->
 - [MQTT](../mqtt.md): AWTRIX's own topics
 - [Tutorial 3: Feed it real data](../../tutorials/real-data.md): a weather forecast, step by step

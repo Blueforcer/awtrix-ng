@@ -171,6 +171,7 @@ static void test_platform_needs_and_advertisement_follow_the_same_flags() {
         }
         TEST_ASSERT_EQUAL(bluetooth, caps.has("ble"));
         TEST_ASSERT_EQUAL(scripting, caps.has("gamepad"));
+        TEST_ASSERT_EQUAL(scripting, caps.has("secret"));
         TEST_ASSERT_EQUAL(voice, caps.has("voice"));
       }
     }

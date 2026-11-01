@@ -26,7 +26,7 @@ void dropOwned(std::deque<Entry>& entries, const std::string& owner, Drop drop) 
 
 }
 
-TransferQueue::TransferQueue(std::size_t perOwner) : perOwner_(perOwner) {}
+TransferQueue::TransferQueue(std::size_t perOwner, FillRequest fill) : perOwner_(perOwner), fill_(std::move(fill)) {}
 
 TransferQueue::~TransferQueue() {
   {
@@ -111,10 +111,15 @@ TransferResult TransferQueue::perform(TransferRequest& request) {
   TransferResult result;
   result.owner = request.owner;
   result.id = request.id;
+  std::string url = request.origin + request.target;
+  const RequestFill filled = fill_ ? fill_(request.owner, url, request.headers) : RequestFill::Unchanged;
+  if (filled == RequestFill::Refused || (filled == RequestFill::Filled && !splitUrl(url, request.origin, request.target)))
+    return result;
   httplib::Client client(request.origin);
   ClientLimits limits;
   limits.timeoutMs = request.timeoutMs;
-  limits.followRedirects = request.followRedirects;
+  limits.ioTimeoutSec = static_cast<int>((request.timeoutMs + 999) / 1000);
+  limits.followRedirects = request.followRedirects && filled == RequestFill::Unchanged;
   configure(client, limits);
   interrupt_.watch(client);
   if (request.download) {

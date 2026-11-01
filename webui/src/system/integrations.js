@@ -3,6 +3,8 @@ document.head.append(el('style',null,`
 #sec-voice .badge:not(.bad){flex:none;white-space:nowrap;word-break:normal}
 #sec-voice .ctl{flex-wrap:wrap}
 #sec-voice .ctl input[type=password]{flex:1 1 180px}
+.cfgsection.secret .ctl{flex-wrap:wrap}
+.cfgsection.secret .ctl input[type=password]{flex:1 1 180px}
 `));
 const GPSTATE={ready:'mqup',waiting:'mqdown',connecting:'mqbusy',pairing:'scanning'};
 function gamepadSection(page){
@@ -111,7 +113,7 @@ function voiceSection(page){
   async function store(body,done){
     save.disabled=true;
     try{
-      await api('/api/v1/voice',{method:'POST',headers:{'Content-Type':'application/json','X-Awtrix-Voice':'1'},body:JSON.stringify(body)});
+      await ownPageSend('/api/v1/voice','X-Awtrix-Voice','POST',body);
       if(body.token)token.value='';
       toast(done);
     }catch(e){
@@ -212,29 +214,21 @@ function iphoneSection(page){
     actionRow(t('mqStatus'),null,[state,forget])]);
   poller(load,()=>cur.state==='connecting'?2000:5000);
 }
-const OAUTH='/api/v1/oauth/';
-const oauthSend=(path,body,method='POST')=>api(OAUTH+path,{method,
-  headers:{'Content-Type':'application/json','X-Awtrix-OAuth':'1'},body:JSON.stringify(body||{})});
-async function loadOauthApps(){
-  if(!S.oauth||S.oauthLoading)return;
-  S.oauthLoading=true;
-  try{
-    const{data}=await api('/api/v1/oauth');
-    const names=(data.apps||[]).map(a=>a.name).sort();
-    if(names.join('\n')!==[...(S.oauthApps||[])].sort().join('\n')){
-      S.oauthApps=new Set(names);
-      if(location.hash.startsWith('#/apps'))render();
-    }
-  }catch(e){}
-  S.oauthLoading=false;
+const ownPageSend=(url,marker,method,body)=>api(url,{method,
+  headers:{'Content-Type':'application/json',[marker]:'1'},body:JSON.stringify(body||{})});
+function scriptSectionBox(cls,title,open){
+  const rows=el('div',{class:'cfgrows'});
+  const box=el('details',{class:'cfgsection '+cls},
+    el('summary',null,icon('chev'),el('h3',{class:'cfggrp'},title)),rows);
+  box.open=!!open;
+  return{box,rows};
 }
+const OAUTH='/api/v1/oauth/';
+const oauthSend=(path,body,method='POST')=>ownPageSend(OAUTH+path,'X-Awtrix-OAuth',method,body);
 async function oauthSection(name,open){
   const path=encodeURIComponent(name);
   const{data:s}=await api(OAUTH+path);
-  const rows=el('div',{class:'cfgrows'});
-  const box=el('details',{class:'cfgsection oauth'},
-    el('summary',null,icon('chev'),el('h3',{class:'cfggrp'},t('oaSection')+(s.provider?' · '+s.provider:''))),rows);
-  box.open=!!open;
+  const{box,rows}=scriptSectionBox('oauth',t('oaSection')+(s.provider?' · '+s.provider:''),open);
   const reload=async()=>box.replaceWith(await oauthSection(name,box.open));
   const id=el('input',{type:'text',autocomplete:'off',spellcheck:'false',value:s.clientId||'','aria-label':t('oaId')});
   const secret=el('input',{type:'password',autocomplete:'new-password',spellcheck:'false','aria-label':t('oaSecret'),
@@ -267,17 +261,69 @@ async function oauthSection(name,open){
     el('div',{class:'cfgbar'},el('span',{class:'grow'}),save,go));
   return box;
 }
-// Scripts with an @oauth line get the sign-in as their own first section, also after every save.
+const SECRETS='/api/v1/secrets/';
+const secretSend=(path,method,body)=>ownPageSend(SECRETS+path,'X-Awtrix-Secret',method,body);
+async function secretSection(name,open){
+  const path=encodeURIComponent(name);
+  const{data:s}=await api(SECRETS+path);
+  const{box,rows}=scriptSectionBox('secret',t('seSection'),open);
+  if(s.invalid){
+    rows.append(el('div',{class:'badge bad'},t('seInvalid')+' · '+s.invalid));
+    return box;
+  }
+  const reload=async()=>box.replaceWith(await secretSection(name,box.open));
+  const fields=(s.keys||[]).map(k=>{
+    const label=k.label||k.key;
+    const input=el('input',{type:'password',autocomplete:'new-password',spellcheck:'false','aria-label':label,
+      placeholder:t(k.set?'seSet':'seEmpty')});
+    const remove=k.set?armable(el('button',null,t('seRemove')),()=>
+      secretSend(path+'/'+encodeURIComponent(k.key),'DELETE').then(reload).catch(toastErr)):null;
+    rows.append(actionRow(label,k.help||null,[input,remove]));
+    return[k.key,input];
+  });
+  const save=el('button',{class:'pri'},t('save'));
+  save.addEventListener('click',async()=>{
+    const filled=fields.filter(([,input])=>input.value);
+    if(!filled.length)return;
+    try{
+      await secretSend(path,'PUT',Object.fromEntries(filled.map(([key,input])=>[key,input.value])));
+      toast(t('saved'));
+      await reload();
+    }catch(e){toastErr(e);}
+  });
+  rows.append(el('div',{class:'cfgbar'},el('span',{class:'grow'}),save));
+  return box;
+}
+const SCRIPT_SECTIONS=[
+  {cap:'oauth',apps:'oauthApps',list:'/api/v1/oauth',names:d=>(d.apps||[]).map(a=>a.name),cls:'oauth',make:oauthSection,first:true},
+  {cap:'secret',apps:'secretApps',list:'/api/v1/secrets',names:d=>d.apps||[],cls:'secret',make:secretSection}];
+const hasScriptSection=name=>SCRIPT_SECTIONS.some(s=>S[s.apps]?.has(name));
+async function loadScriptSection(s){
+  if(!S[s.cap]||s.loading)return;
+  s.loading=true;
+  try{
+    const names=s.names((await api(s.list)).data).sort();
+    if(names.join('\n')!==[...(S[s.apps]||[])].sort().join('\n')){
+      S[s.apps]=new Set(names);
+      if(location.hash.startsWith('#/apps'))render();
+    }
+  }catch(e){}
+  s.loading=false;
+}
+function loadScriptSections(){SCRIPT_SECTIONS.forEach(loadScriptSection);}
 const fillScriptConfig=fillConfigPanel;
 fillConfigPanel=async(name,box,saveError,builtin)=>{
-  const open=box.querySelector('.cfgsection.oauth')?.open;
+  const open=new Map(SCRIPT_SECTIONS.map(s=>[s.cls,box.querySelector('.cfgsection.'+s.cls)?.open]));
   const ok=await fillScriptConfig(name,box,saveError,builtin);
-  if(!ok||builtin||!S.oauthApps||!S.oauthApps.has(name))return ok;
-  try{
-    const section=await oauthSection(name,open);
-    [...box.children].find(n=>n.textContent===t('cfgNone'))?.remove();
-    box.prepend(section);
-  }catch(e){box.append(el('div',{class:'badge bad'},e.message));}
+  if(!ok||builtin)return ok;
+  for(const s of SCRIPT_SECTIONS){
+    if(!S[s.apps]?.has(name))continue;
+    try{
+      const section=await s.make(name,open.get(s.cls));
+      [...box.children].find(n=>n.textContent===t('cfgNone'))?.remove();
+      if(s.first)box.prepend(section);else box.append(section);
+    }catch(e){box.append(el('div',{class:'badge bad'},e.message));}
+  }
   return ok;
 };
 // Back from the provider through the Hub: #oauth=<code>&state=<state>, or #oauth_error=<reason>.

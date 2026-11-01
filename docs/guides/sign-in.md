@@ -90,4 +90,6 @@ out of other people's hands.
 
 ## Related
 
+- [API keys](../getting-started/web-ui.md#api-keys): for an app that asks for a key instead of a
+  sign-in
 - [Signing in from scripts](oauth.md): write such an app yourself

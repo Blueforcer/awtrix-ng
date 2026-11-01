@@ -30,6 +30,7 @@ function asset(name) {
         'voice styles ship only in the Linux asset');
       assert.equal(html.includes('musicSource'), full, 'music-source controls ship only in the Linux asset');
       assert.equal(html.includes('clockFace'), full, 'clock-face controls ship only in the Linux asset');
+      assert.equal(html.includes('/api/v1/secrets'), full, 'script keys ship only in the Linux asset');
     } finally {
       window.close();
     }

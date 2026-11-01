@@ -56,6 +56,9 @@
 #include "platform/linux/script/ExtensionHost.h"
 #include "platform/linux/script/KnobScripting.h"
 #include "platform/linux/script/TcpScripting.h"
+#include "platform/linux/secrets/SecretApi.h"
+#include "platform/linux/secrets/SecretScripting.h"
+#include "platform/linux/secrets/SecretService.h"
 #include "platform/linux/tls/BrokerTrust.h"
 #include "platform/linux/tls/BrokerTrustApi.h"
 #include "platform/tc002/audio/AudioScripting.h"
@@ -163,6 +166,7 @@ class LinuxRuntime {
   void applyConfig();
   bool voiceAllowedNow() const;
   float audioPitch(int64_t now, bool onScreen);
+  net::FillRequest fillSecrets();
   CoreEngine& engine() { return app_->engine(); }
   LinuxBoard& board() { return *selectedBoard_; }
 
@@ -237,6 +241,10 @@ class LinuxRuntime {
   std::optional<oauth::Service> oauthService_;
   std::optional<oauth::OAuthScripting> oauthScripting_;
   std::optional<oauth::Api> oauthApi_;
+  std::optional<posix::PrivateStore> secretStore_;
+  std::optional<secrets::Service> secrets_;
+  std::optional<secrets::SecretScripting> secretScripting_;
+  std::optional<secrets::Api> secretApi_;
   std::optional<audio::AnalysisRouter> analysis_;
   Extensions extensions_;
   std::optional<tc002::voice::AssistantRouter> assistantRouter_;
@@ -244,7 +252,7 @@ class LinuxRuntime {
   script::ScriptHost* scripts_ = nullptr;
   std::unique_ptr<script::ExtensionHost> scriptExtensions_;
   // Stopped before its callback target is destroyed, also while an exception unwinds.
-  LinuxScriptHttp scriptHttp_;
+  LinuxScriptHttp scriptHttp_{fillSecrets()};
   // Declared after the scripts, so its worker stops before the host its events go to.
   std::unique_ptr<ble::BleService> bleService_;
   // Declared after the Bluetooth service it hands its requests to, and after the fetcher it asks.

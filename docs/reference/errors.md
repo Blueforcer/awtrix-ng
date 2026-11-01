@@ -88,7 +88,7 @@ These answers use the normal error body instead:
 <!-- /only -->
 | `unauthorized` | 401 | every route, when login is on | Missing or wrong username or password. See [Authentication](#authentication-401). |
 | `forbidden` | 403 | routes unavailable in setup mode | Not allowed while AWTRIX is in setup mode. See [Setup mode lockdown](#provisioning-lockdown-403). |
-| `forbiddenOrigin` | 403 | `GET /api/v1/system?secrets=1`, `PUT /api/v1/system`, `POST /api/v1/restore`, `POST /update`, `POST /api/v1/device/factory-reset`<!-- only tc002 -->, `POST /api/v1/voice`, `POST /api/v1/voice/start` and the script sign-in changes<!-- /only --> | The request came from a web page of another site: its `Origin` header names another host, or `Sec-Fetch-Site` is neither `same-origin` nor `none`. Nothing was done. See [Requests from other web pages](http.md#cross-origin). |
+| `forbiddenOrigin` | 403 | `GET /api/v1/system?secrets=1`, `PUT /api/v1/system`, `POST /api/v1/restore`, `POST /update`, `POST /api/v1/device/factory-reset`<!-- only tc002 -->, `POST /api/v1/voice`, `POST /api/v1/voice/start`, the script sign-in changes and the changes of an app's [API keys](http.md#api-keys)<!-- /only --> | The request came from a web page of another site: its `Origin` header names another host, or `Sec-Fetch-Site` is neither `same-origin` nor `none`. Nothing was done. See [Requests from other web pages](http.md#cross-origin). |
 | `notFound` | 404 | many routes | Unknown route, or an app, sound or file with that name does not exist. |
 | `methodNotAllowed` | 405 | any known route | The path exists, but not for this method. `message` lists the allowed methods. |
 | `payloadTooLarge` | 413 | any route with a body | The body is larger than allowed for that route ([Limits](limits.md#requests)). Nothing was applied. |
@@ -265,6 +265,9 @@ A wrong method on a supported route below answers `405`, and the `message` is
 | `/api/v1/oauth/{name}/start` · `/api/v1/oauth/{name}/code` | `POST` |
 | `/api/v1/voice` | `GET, POST` |
 | `/api/v1/voice/start` | `POST` |
+| `/api/v1/secrets` | `GET` |
+| `/api/v1/secrets/{name}` | `GET, PUT` |
+| `/api/v1/secrets/{name}/{key}` | `DELETE` |
 <!-- /only -->
 | `/api/v1/files` | `GET, POST, DELETE` |
 <!-- only tc002 -->

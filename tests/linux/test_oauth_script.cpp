@@ -15,6 +15,7 @@
 #include "core/script/ScriptHost.h"
 #include "platform/linux/script/ExtensionHost.h"
 #include "platform/linux/oauth/OAuthScripting.h"
+#include "platform/posix/Digest.h"
 #include "OAuthTestSupport.h"
 
 using namespace awtrix;
@@ -81,7 +82,7 @@ int main() {
   check(spec.has_value(), "header parses");
   if (!spec) return 1;
   oauth::Record rec;
-  rec.binding = oauth::sha256Hex("S\n" + spec->line);
+  rec.binding = posix::sha256Hex("S\n" + spec->line);
   rec.clientId = "cid";
   rec.accessToken = "LONG";
   check(r.vault.save("S", rec), "record stored");

@@ -365,17 +365,23 @@ void LinuxRuntime::composeScriptServices() {
         return assistantRouter_->start(tc002::voice::VoiceTrigger::Api, monotonicMs());
       }});
   }
-  oauthVault_.emplace((std::filesystem::u8path(host::dataDir()).parent_path() / "script-private").string());
+  const auto privateRoot = std::filesystem::u8path(host::dataDir()).parent_path();
+  const auto scriptNames = [] { return ScriptStore<host::ScriptFiles>::savedNames(); };
+  oauthVault_.emplace((privateRoot / "script-private").string());
   oauthService_.emplace(
       *oauthVault_, [this](const oauth::HttpCall& call) { return oauthTransport_(call); }, savedSource,
       [] { return monotonicMs(); });
   oauthService_->setInterrupt([this] { oauthTransport_.interrupt(); });
   oauthScripting_.emplace(*oauthService_);
-  oauthApi_.emplace(*oauthService_, [] { return ScriptStore<host::ScriptFiles>::savedNames(); });
+  oauthApi_.emplace(*oauthService_, scriptNames);
+  secretStore_.emplace((privateRoot / "script-secrets").string(), secrets::Service::kMaxRecord);
+  secrets_.emplace(*secretStore_, savedSource);
+  secretScripting_.emplace(*secrets_);
+  secretApi_.emplace(*secrets_, scriptNames);
   // Script sign-in exists as the script host does: decided once, at start.
-  httpOptions_.platformHandler = [this, scriptSignIn = cfg_.scriptingEnabled](const httplib::Request& request,
-                                                                             httplib::Response& response) {
-    if (scriptSignIn && oauthApi_->handle(request, response)) return true;
+  httpOptions_.platformHandler = [this, scripting = cfg_.scriptingEnabled](const httplib::Request& request,
+                                                                          httplib::Response& response) {
+    if (scripting && (oauthApi_->handle(request, response) || secretApi_->handle(request, response))) return true;
     if (voicePacks_ && voicePacks_->handle(request, response)) return true;
     return voice_ && voice_->handle(request, response);
   };
@@ -445,11 +451,13 @@ void LinuxRuntime::composeExtensions() {
           [this](tc002::MicrophoneMark mark) { return microphoneHub_->live(mark); },
           &*voiceSpeaker_, [this] { return voice_->busy(); },
           [this](const std::string& app) { return engine().currentAppId() == app; },
-          [] { return monotonicMs(); }, TC002_VOLATILE_DIR, readMemAvailable, o_.vad});
+          [] { return monotonicMs(); }, TC002_VOLATILE_DIR, readMemAvailable, o_.vad, fillSecrets()});
       x.list.push_back(x.voice.get());
     }
     x.list.push_back(&*oauthScripting_);
+    x.list.push_back(&*secretScripting_);
     oauthService_->dropStale();
+    secrets_->dropStale();
     oauthService_->begin();
   }
   x.gamepadApi = std::make_unique<ble::GamepadApi>(bleService_ ? &bleService_->gamepad() : nullptr,
@@ -521,11 +529,15 @@ void LinuxRuntime::startScripts() {
   scriptSlots_.begin(*app_, scriptServices_, cfg_.scriptingEnabled,
       [this, enabled = cfg_.scriptingEnabled](const std::string& name, const std::string& source) {
         store_.save(name, source);
-        if (enabled) oauthService_->sourceSaved(name);
+        if (!enabled) return;
+        oauthService_->sourceSaved(name);
+        secrets_->sourceSaved(name);
       },
       [this, enabled = cfg_.scriptingEnabled](const std::string& name) {
         store_.remove(name);
-        if (enabled) oauthService_->sourceRemoved(name);
+        if (!enabled) return;
+        oauthService_->sourceRemoved(name);
+        secrets_->sourceRemoved(name);
       });
   scripts_ = scriptSlots_.host();
   if (!scripts_) return;
@@ -627,6 +639,12 @@ float LinuxRuntime::audioPitch(int64_t now, bool onScreen) {
   return tc002::musicPitch(static_cast<audio::AnalysisSource>(engine().state().settings().musicSource), now,
                            speaker_ ? &speaker_->playbackPitch() : nullptr,
                            o_.supervised ? &*microphone_ : nullptr, onScreen);
+}
+
+net::FillRequest LinuxRuntime::fillSecrets() {
+  return [this](const std::string& owner, std::string& url, net::RequestHeaders& headers) {
+    return secrets_->fill(owner, url, headers);
+  };
 }
 
 }

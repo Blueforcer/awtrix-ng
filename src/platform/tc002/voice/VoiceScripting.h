@@ -33,6 +33,7 @@ class VoiceScripting : public script::ScriptExtension, public AssistantRouter::M
     std::string clipDirectory;
     MemoryRoom::Reader availableMemory;
     std::string voiceActivityModel;
+    net::FillRequest fillRequest;
   };
   static constexpr int kPerTick = 32;
 
@@ -64,9 +65,9 @@ class VoiceScripting : public script::ScriptExtension, public AssistantRouter::M
   void release(const std::string& app, ClipId clip) { clips_.releaseReady(app, clip); }
   const char* state(const std::string& app) const;
   uint8_t level(const std::string& app) const;
-  int send(const std::string& app, ClipId clip, const VoiceTransfers::SendOptions& options);
+  int send(const std::string& app, VoiceTransfers::SendData data, const VoiceTransfers::SendOptions& options);
   int fetch(const std::string& app, const std::string& url, const std::string& method, std::string body,
-            const std::string& headers);
+            const std::string& headers, uint32_t timeoutSec);
 
  private:
   enum class EventKind { Record, Play, Send, Fetch };

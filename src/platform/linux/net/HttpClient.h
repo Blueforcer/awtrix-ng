@@ -39,6 +39,9 @@ void configure(httplib::Client& client, const ClientLimits& limits);
 using BodyReceiver = std::function<bool(const char*, std::size_t)>;
 using RequestHeaders = std::vector<std::pair<std::string, std::string>>;
 
+enum class RequestFill { Unchanged, Filled, Refused };
+using FillRequest = std::function<RequestFill(const std::string& owner, std::string& url, RequestHeaders& headers)>;
+
 struct RequestBody {
   RequestBody() = default;
   RequestBody(std::string text) : head(std::move(text)) {}

@@ -3,6 +3,8 @@ set(linux "${PROJECT_SOURCE_DIR}/src/platform/linux")
 add_awtrix_test(NAME posix-files SOURCES test_posix_files.cpp LIBRARIES awtrix_posix)
 target_link_options(posix-files-test PRIVATE -Wl,--wrap=fsync)
 add_awtrix_test(NAME posix-worker-thread SOURCES test_worker_thread.cpp LIBRARIES awtrix_posix)
+add_awtrix_test(NAME posix-private-store SOURCES test_private_store.cpp LIBRARIES awtrix_posix)
+add_awtrix_test(NAME linux-own-page SOURCES test_own_page.cpp LIBRARIES awtrix_host)
 
 add_awtrix_test(NAME linux-login SOURCES test_login.cpp "${linux}/LinuxLanLogin.cpp"
   LIBRARIES awtrix_host)
@@ -29,7 +31,10 @@ add_awtrix_test(NAME http-body-limit SOURCES test_http_body_limit.cpp
 add_awtrix_test(NAME linux-file-download SOURCES test_file_download.cpp LIBRARIES awtrix_host awtrix_posix
   TIMEOUT 20)
 add_awtrix_test(NAME linux-multipart SOURCES test_multipart.cpp LIBRARIES awtrix_host)
+add_awtrix_test(NAME linux-private-host SOURCES test_private_host.cpp LIBRARIES awtrix_host)
 add_awtrix_test(NAME linux-transfer-queue SOURCES test_transfer_queue.cpp LIBRARIES awtrix_host TIMEOUT 60)
+add_awtrix_test(NAME linux-script-http SOURCES test_script_http.cpp "${linux}/LinuxScriptHttp.cpp"
+  LIBRARIES awtrix_host TIMEOUT 30)
 add_awtrix_test(NAME linux-tls SOURCES test_tls.cpp "${linux}/LinuxMqttTls.cpp" LIBRARIES awtrix_host TIMEOUT 60)
 add_awtrix_test(NAME linux-button-webhook SOURCES test_button_webhook.cpp "${linux}/LinuxButtonWebhook.cpp"
   LIBRARIES awtrix_core Threads::Threads TIMEOUT 30)
@@ -45,6 +50,7 @@ endif()
 add_awtrix_runtime_test(NAME linux-contract SCRIPT test_contract.py ARGUMENTS ${contract_arguments} TIMEOUT 180)
 add_awtrix_runtime_test(NAME app-config-contract SCRIPT test_app_config.py TIMEOUT 90)
 add_awtrix_runtime_test(NAME linux-oauth-contract SCRIPT test_oauth_contract.py TIMEOUT 120)
+add_awtrix_runtime_test(NAME linux-secret-contract SCRIPT test_secret_contract.py TIMEOUT 120)
 add_awtrix_runtime_test(NAME linux-security SCRIPT test_security.py ARGUMENTS ${security_arguments} TIMEOUT 180
   LABELS needs-mosquitto PROPERTIES SKIP_RETURN_CODE 77)
 add_awtrix_runtime_test(NAME linux-supervisor-channel SCRIPT test_supervisor_channel.py TIMEOUT 90)
@@ -67,6 +73,10 @@ add_awtrix_test(NAME linux-oauth-service SOURCES test_oauth_service.cpp LIBRARIE
 add_awtrix_test(NAME linux-oauth-api SOURCES test_oauth_api.cpp LIBRARIES awtrix_oauth)
 add_awtrix_test(NAME linux-oauth-script SOURCES test_oauth_script.cpp
   LIBRARIES awtrix_oauth awtrix_host TIMEOUT 60)
+add_awtrix_test(NAME linux-secret-spec SOURCES test_secret_spec.cpp LIBRARIES awtrix_secrets)
+add_awtrix_test(NAME linux-secret-service SOURCES test_secret_service.cpp LIBRARIES awtrix_secrets)
+add_awtrix_test(NAME linux-secret-api SOURCES test_secret_api.cpp LIBRARIES awtrix_secrets)
+add_awtrix_test(NAME linux-secret-script SOURCES test_secret_script.cpp LIBRARIES awtrix_secrets TIMEOUT 60)
 add_awtrix_test(NAME linux-pow SOURCES test_pow.cpp LIBRARIES awtrix_script_ext TIMEOUT 120)
 add_awtrix_test(NAME linux-pow-startup SOURCES test_pow_startup.cpp LIBRARIES awtrix_script_ext)
 # Pull std::thread into this executable so the pthread_create fault-injection wrapper

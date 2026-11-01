@@ -14,6 +14,7 @@
 
 #include "platform/linux/oauth/OAuthFlow.h"
 #include "platform/linux/oauth/OAuthService.h"
+#include "platform/posix/Digest.h"
 #include "OAuthTestSupport.h"
 
 using namespace awtrix;
@@ -217,7 +218,7 @@ int main() {
   }
   const auto spec = oauth::parseSpec(kSource);
   oauth::Record longLived;
-  longLived.binding = oauth::sha256Hex("Spot\n" + spec->line);
+  longLived.binding = posix::sha256Hex("Spot\n" + spec->line);
   longLived.clientId = "cid";
   longLived.accessToken = "LONG";
   vault.save("Spot", longLived);

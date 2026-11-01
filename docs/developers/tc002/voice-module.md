@@ -27,6 +27,7 @@ example `no voice activity model`.
 | Speaker | `VoiceSpeaker`, `Tc002VoiceSpeaker` | The speaker as the module and Home Assistant Voice see it: claim the voice channel, hold the music, quiet, play, stop, finished, heard. |
 | Transfers | `VoiceTransfers` | The module's `send` and `fetch`. It checks a script's options, builds the request, reserves a download's clip and commits it when the file is WAV or MP3, and hands each result to the module with its status. |
 | Transfer queue | `net::TransferQueue` | HTTP requests of named owners on one worker thread, started by the first request, one after the other, with a limit per owner and a cancel per owner. An upload keeps its answer through `net::sendFiltered`, the filter of the script `http`. Its body (`net::RequestBody`) can stream a mapped file (`posix::MappedFile`) between two texts, so a clip goes out without a copy in memory. A download runs through `net::exchange`, which sees the status and the `Content-Type` before the body. It writes each block to its file as it arrives, asks a room hook before the body and before each block, and its check runs on the finished file. Nothing in it is voice-specific. |
+| Keys | `secrets::Service` | Fills [`{secret:key}`](#key-filling) on the way out. It is in `src/platform/linux/secrets/` and knows nothing of voice. |
 | Forms | `net::buildMultipart` | A `multipart/form-data` body from fields and one file: a head and a tail that go around the file's bytes. The boundary is random and checked against the parts. |
 | Voice channel | `Tc002AudioSink::claimVoiceChannel()` | A move-only `posix::Hold`, empty while another holder has the channel. |
 | Music hold | `Tc002AudioSink::holdMusic()` | A move-only `posix::Hold`. While any holder lives, the station and a script's music loop wait; the loop starts over afterwards. Nothing else is refused or stopped. |
@@ -151,10 +152,43 @@ a script's music loop wait and every other sound is refused, local speech includ
 | Clips | 4 and 4 MB per app (`ClipStore::kClipsPerApp`, `kBytesPerApp`). A recording reserves its WAV header plus (`max` + one 30 ms model step) × 32 bytes. A download reserves 2 MB until it ends. Every reservation and every block of a download must leave 4 MB of `MemAvailable` free. |
 | Clip length | `clip.ms` is exact for recordings and 0 for downloads |
 | Transfers | 2 per app, queued or running. All apps share one worker. |
-| `voice.send` | a form by default: field `file`, file name `speech.wav` or `speech.mp3`, at most 16 further fields. With `as: 'raw'` the clip is the body, with its own type unless a header names one. A form with a `Content-Type` header is `BAD`. POST by default, 30 s, the answer kept and capped as for `http` (8 KB by default). |
-| `voice.fetch` | status 200 only. WAV or MP3 by `Content-Type` (`audio/mpeg`, `audio/wav`, `audio/x-wav` or `application/octet-stream`) and by its bytes, at most 2 MB within 15 s. Redirects only for GET. POST when a `body` is given. |
+| `voice.send` | a clip or a string. A clip goes as a form by default: field `file`, file name `speech.wav` or `speech.mp3`, at most 16 further fields. With `as: 'raw'` the clip is the body, with its own type unless a header names one. A form with a `Content-Type` header is `BAD`. A string is the body, as `application/json` unless a header names a type, and `as`, `field` and `fields` do not apply. POST by default, the answer kept and capped as for `http` (8 KB by default). |
+| Transfer time | `timeout`, 1 to 120 whole seconds, 30 for `send` and 15 for `fetch`. It is the budget from connecting to the last byte and also the socket's read limit, so a service may take all of it before its first byte. The connection itself has 3 s. |
+| `voice.fetch` | status 200 only. WAV or MP3 by `Content-Type` (`audio/mpeg`, `audio/wav`, `audio/x-wav` or `application/octet-stream`) and by its bytes, at most 2 MB. Redirects only for a GET without a filled key. POST when a `body` is given. |
 | Results | 32 per script tick |
 | Interaction | 3 s for the app to draw. It ends 10 s after the app last held something. |
+
+## Key filling
+
+A script writes [`{secret:key}`](../../guides/scripting/network.md#api-keys) into a header value or
+the path or query of a URL. It stays a plain string in the VM. The transports fill it through one
+hook, `net::FillRequest`, a function of owner, URL and headers that answers a `net::RequestFill`.
+`LinuxRuntime` binds it to `secrets::Service::fill`.
+
+| Transport | Where it calls the hook | On a refusal |
+|---|---|---|
+| `LinuxScriptHttp` (`http.*`) | on its worker, before it splits the URL | no request; the callback gets `nil` and status 0 |
+| `net::TransferQueue` (`voice.send`, `voice.fetch`) | in `perform()`, on its worker | no request; the result has status 0 |
+
+The hook takes the owner the transport recorded when the script asked, not the current script. It
+answers one of three:
+
+- `Unchanged`: no placeholder. The transport sends the request as it is.
+- `Filled`: URL and headers hold the values. The transport turns redirects off, so a key never
+  follows one. `TransferQueue` splits the filled URL again.
+- `Refused`: URL and headers stay as they were. The debug log names the app, the reason and the host,
+  never the URL or a value.
+
+A placeholder is checked before it is filled, against the `Secret` from the app's header: the key
+must be declared and set, `script::urlRefusal` must allow the URL (`https://`, or `http://` to
+`net::isPrivateHost`, no user information, `hosts=` if given), and in the URL it must be in the path or
+query. `isPrivateHost` judges the literal host without DNS. A placeholder in the scheme, host, port
+or user information already fails `net::splitUrl` when the script asks, so `http.*` answers `nil`, 0
+and the module `BAD`.
+
+`VoiceTransfers` splits the URL when the script asks and hands the queue origin and target. A
+fragment is gone at that point, so a placeholder in a fragment never reaches the hook: the request
+goes out without it. In `http.*` the hook sees the whole URL and refuses.
 
 ## Status values
 
@@ -169,7 +203,7 @@ deliver the server's status otherwise, or 0 when no server answered.
 | `voice.CANCELLED` | −3 | `voice.cancel()`, or the app was hidden while it recorded. |
 | `voice.FULL` | −4 | The new clip would exceed the app's 4 clips or 4 MB, or leave less than 4 MB of the clock's memory free. Also a download that runs out of memory. |
 | `voice.GONE` | −5 | `voice.send` with a clip that was released, for example because the app was hidden. |
-| `voice.BAD` | −6 | An option out of range or of the wrong type, a bad URL, method or header, an `as` other than `form` or `raw`, a 17th form field, a `Content-Type` header for a form, a negative `keep`. Also a `fetch` answer 200 that is no WAV or MP3. |
+| `voice.BAD` | −6 | An option out of range or of the wrong type, a bad URL, method or header, an `as` other than `form` or `raw`, a 17th form field, a `Content-Type` header for a form, a negative `keep`, a `timeout` outside 1 to 120 or not whole, `data` neither a clip nor a string. Also a `fetch` answer 200 that is no WAV or MP3, or larger than 2 MB. |
 
 `voice.play()` returns `false` when the clip is not the app's, Voice is busy or the speaker cannot
 play it. Its callback gets whether the clip was heard.
@@ -188,9 +222,11 @@ play it. Its callback gets whether the clip was heard.
 | `test_assistant_router.cpp` (`tc002-assistant-router`) | the router with fakes for Voice and the module: every trigger name and its mark (the wake word on the smoke model), the refusals and their log lines, the panel, the music hold and the trigger's mark over an interaction (3 s, 10 s, the app leaving, a second trigger), the hub hold, when the wake word listens and when it is muted, a frame without allocations, Home Assistant as the assistant, the list of assistant apps |
 | `test_voice_runtime.cpp` (`tc002-voice-runtime`) | `POST /api/v1/voice/start` (405, 403, 409, 200), `wakeWordAvailable` and `assistantApps` in `GET /api/v1/voice`, a wake word switch that keeps the Home Assistant connection while any other change drops it |
 | `webui/test/voice-card.test.js` | the assistant choice in the web UI |
+| `tests/linux/test_secret_spec.cpp`, `test_secret_service.cpp`, `test_secret_api.cpp`, `test_secret_script.cpp`, `test_secret_contract.py`, `test_script_http.cpp` | the `@secret` lines, what is filled and what refused, `/api/v1/secrets`, `secret.has()`, the keys in a running runtime, the hook in `LinuxScriptHttp` |
 
 ## Related
 
 - [TC002 developer guide](index.md)
 - [Home Assistant Voice](ha-voice.md), [Wake word](wake-word.md)
 - [Microphone](microphone.md), [Speech](speech.md)
+- [Voice in scripts](../../guides/voice-scripts.md), the page for script authors

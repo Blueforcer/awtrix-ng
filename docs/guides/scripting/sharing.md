@@ -189,6 +189,7 @@ you save.
 | [`@module`](several-apps.md#sharing-code-between-scripts) | the file is a module other scripts import |
 <!-- only tc002 -->
 | [`@oauth`](../oauth.md#name-the-service) | it signs in to a service with the user's account |
+| [`@secret`](network.md#api-keys) | it sends an API key the user enters in the app's settings |
 <!-- /only -->
 
 ### Install name
@@ -233,7 +234,8 @@ cannot be the name of a built-in app such as `Time`. `@name` is only for display
 | `crypto` | lets scripts compute [checksums and signatures and mine](../hashing.md) (`import crypto`) |
 | `layout` | lets scripts prepare text, icon and chart regions |
 | `tcp` | lets scripts [talk TCP](../tcp.md) (`import tcp`) |
-| `voice` | records and plays voice (`import voice`) |
+| `voice` | [records and plays voice](../voice-scripts.md) (`import voice`) and can be the voice assistant |
+| `secret` | keeps [API keys](network.md#api-keys) for scripts (`import secret`) |
 <!-- /only -->
 
 Each name matches what `GET /api/v1/capabilities` reports for the clock, at the same path:

@@ -46,6 +46,11 @@ add_library(awtrix_oauth STATIC "${LINUX_DIR}/oauth/OAuthSpec.cpp" "${LINUX_DIR}
   "${LINUX_DIR}/oauth/OAuthApi.cpp" "${LINUX_DIR}/oauth/OAuthScripting.cpp")
 target_link_libraries(awtrix_oauth PUBLIC awtrix_script_extensions awtrix_posix awtrix_host Threads::Threads PRIVATE OpenSSL::Crypto awtrix_warnings)
 
+add_library(awtrix_secrets STATIC "${LINUX_DIR}/secrets/SecretSpec.cpp" "${LINUX_DIR}/secrets/SecretService.cpp"
+  "${LINUX_DIR}/secrets/SecretApi.cpp" "${LINUX_DIR}/secrets/SecretScripting.cpp")
+target_link_libraries(awtrix_secrets PUBLIC awtrix_script_extensions awtrix_posix awtrix_host Threads::Threads
+  PRIVATE awtrix_warnings)
+
 # Pictures from URLs: fetched, fitted and kept for every icon, script and layout that names one.
 find_package(JPEG REQUIRED)
 add_library(awtrix_images STATIC "${LINUX_DIR}/images/HttpPictureLoader.cpp" "${LINUX_DIR}/images/PictureDecoder.cpp"
@@ -68,7 +73,7 @@ add_executable(awtrix-linux "${LINUX_DIR}/main_linux.cpp" "${LINUX_DIR}/LinuxOpt
   "${PROJECT_SOURCE_DIR}/src/transport/net/MirrorLink.cpp"
   ${TC002_RUNTIME_SOURCES} ${TC002_BOOT_SCREEN_SOURCES})
 add_dependencies(awtrix-linux awtrix-webui)
-target_link_libraries(awtrix-linux PRIVATE tc002_audio_script awtrix_layout awtrix_host awtrix_images awtrix_script_ext awtrix_oauth awtrix_ble awtrix_ble_script awtrix_iphone tc002_contract tc002_update_verify awtrix_update_state tc002_voice tc002_voice_script tc002_voice_router tc002_wake_listener tc002_microphone_hub tc002_audio tc002_speech_voice awtrix_warnings)
+target_link_libraries(awtrix-linux PRIVATE tc002_audio_script awtrix_layout awtrix_host awtrix_images awtrix_script_ext awtrix_oauth awtrix_secrets awtrix_ble awtrix_ble_script awtrix_iphone tc002_contract tc002_update_verify awtrix_update_state tc002_voice tc002_voice_script tc002_voice_router tc002_wake_listener tc002_microphone_hub tc002_audio tc002_speech_voice awtrix_warnings)
 if(TARGET tc002_mcu_prepare)
   target_link_libraries(awtrix-linux PRIVATE tc002_mcu_prepare)
   target_compile_definitions(awtrix-linux PRIVATE AWTRIX_MCU_PREPARE)

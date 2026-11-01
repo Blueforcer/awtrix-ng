@@ -1,4 +1,5 @@
 #include "../support.h"
+#include "../LogLines.h"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -9,15 +10,20 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/net/Multipart.h"
 #include "platform/linux/net/TransferQueue.h"
 #include "platform/posix/Files.h"
+#include "system/Log.h"
 
+using awtrix::net::RequestFill;
 using awtrix::net::RequestBody;
+using awtrix::net::RequestHeaders;
 using awtrix::net::TransferDownload;
 using awtrix::net::TransferQueue;
 using awtrix::net::TransferRequest;
@@ -62,8 +68,16 @@ struct Server {
   std::thread listener;
   std::string origin;
   std::atomic<bool> release{false}, entered{false};
+  std::mutex keyMutex;
+  std::vector<std::string> keys;
 
   Server() {
+    http.Get("/key", [this](const httplib::Request& request, httplib::Response& response) {
+      std::lock_guard<std::mutex> lock(keyMutex);
+      keys.push_back(request.get_header_value("X-Key") + request.get_param_value("q"));
+      response.set_content(kRiff, "audio/wav");
+    });
+    http.Get("/moved-key", [](const auto&, auto& response) { response.set_redirect("/key"); });
     http.Post("/form", [](const httplib::Request& request, httplib::Response& response) {
       const bool form = request.has_file("file") && request.get_file_value("file").filename == "a.wav" &&
                         request.get_file_value("model").content == "whisper-1";
@@ -87,6 +101,10 @@ struct Server {
       while (!release) std::this_thread::sleep_for(std::chrono::milliseconds(1));
       response.set_content(kRiff, "audio/wav");
     });
+    http.Get("/after", [](const httplib::Request& request, httplib::Response& response) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(std::stoi(request.get_param_value("ms"))));
+      response.set_content("late", "text/plain");
+    });
     const int port = http.bind_to_any_port("127.0.0.1");
     require(port > 0, "a loopback server");
     listener = std::thread([this] { http.listen_after_bind(); });
@@ -101,6 +119,12 @@ struct Server {
   void hold() {
     entered = false;
     release = false;
+  }
+  std::vector<std::string> takeKeys() {
+    std::vector<std::string> taken;
+    std::lock_guard<std::mutex> lock(keyMutex);
+    taken.swap(keys);
+    return taken;
   }
 };
 
@@ -225,6 +249,20 @@ void uploads(Server& server) {
   check(result.ok && result.body == std::to_string(kRiff.size()), "a body in memory goes out as it is: " + result.body);
 }
 
+void theBudgetCoversTheFirstByte(Server& server) {
+  TransferQueue queue(2);
+  TransferResult result;
+  TransferRequest late = request(server.origin, "/after?ms=1200", "A", 30);
+  late.filter.cap = 8192;
+  late.timeoutMs = 1500;
+  require(queue.start(late) && wait(queue, result), "an answer inside the budget");
+  check(result.status == 200 && result.ok && result.body == "late",
+        "a budget of 1.5 s waits longer than one whole second for the first byte: " + std::to_string(result.status));
+  late.timeoutMs = 300;
+  require(queue.start(late) && wait(queue, result), "an answer after the budget");
+  check(result.status == 0 && !result.ok, "a budget that runs out ends with status 0: " + std::to_string(result.status));
+}
+
 void downloads(Server& server) {
   const Files files;
   TransferQueue queue(2);
@@ -275,6 +313,74 @@ void redirects(Server& server) {
   check(result.ok && result.status == 200, "a request that follows redirects arrives: " + std::to_string(result.status));
   require(queue.start(download(server.origin, "/moved", files.path)) && wait(queue, result), "a redirect to keep");
   check(!result.ok && result.status == 302, "one that does not reports the redirect: " + std::to_string(result.status));
+}
+
+TransferRequest keyed(const Server& server, const std::string& target, const std::string& key, int id) {
+  TransferRequest r = request(server.origin, target, "A", id);
+  r.headers.emplace_back("X-Key", key);
+  r.followRedirects = true;
+  r.filter.cap = 8192;
+  return r;
+}
+
+void theWorkerFillsHeadersRightBeforeSending(Server& server) {
+  const Files files;
+  std::vector<std::string> calls;
+  TransferQueue queue(2, [&calls](const std::string& owner, std::string& url, RequestHeaders& headers) {
+    calls.push_back(owner + " " + url);
+    const std::size_t at = url.find("{secret:k}");
+    for (auto& header : headers) {
+      if (header.second == "refuse") return RequestFill::Refused;
+      if (header.second != "{secret:k}") continue;
+      header.second = "s3cret";
+      return RequestFill::Filled;
+    }
+    if (at == std::string::npos) return RequestFill::Unchanged;
+    url.replace(at, 10, "s%26cret");
+    return RequestFill::Filled;
+  });
+  TransferResult result;
+  server.takeKeys();
+
+  require(queue.start(keyed(server, "/key", "refuse", 20)) && wait(queue, result), "a refused request");
+  check(result.id == 20 && result.status == 0 && !result.ok && server.takeKeys().empty(),
+        "a refused fill ends with status 0 and sends nothing: " + std::to_string(result.status));
+  TransferRequest refusedDownload = download(server.origin, "/key", files.path, "A", 21);
+  refusedDownload.headers.emplace_back("X-Key", "refuse");
+  require(queue.start(refusedDownload) && wait(queue, result), "a refused download");
+  check(result.status == 0 && !result.ok && !exists(files.path) && server.takeKeys().empty(),
+        "a refused download opens no file and sends nothing");
+
+  require(queue.start(keyed(server, "/key", "{secret:k}", 22)) && wait(queue, result), "a filled request");
+  check(result.status == 200 && server.takeKeys() == std::vector<std::string>{"s3cret"},
+        "the server sees the filled value");
+  check(calls.size() == 3 && calls.back() == "A " + server.origin + "/key", "the hook gets the owner and the URL");
+
+  require(queue.start(keyed(server, "/moved-key", "{secret:k}", 23)) && wait(queue, result), "a filled redirect");
+  check(result.status == 302 && server.takeKeys().empty(),
+        "a filled request follows no redirect: " + std::to_string(result.status));
+  require(queue.start(keyed(server, "/moved-key", "plain", 24)) && wait(queue, result), "an unfilled redirect");
+  check(result.status == 200 && server.takeKeys() == std::vector<std::string>{"plain"},
+        "without a filled value redirects are followed as before: " + std::to_string(result.status));
+
+  require(queue.start(keyed(server, "/key?q={secret:k}", "", 25)) && wait(queue, result), "a filled query");
+  check(result.status == 200 && server.takeKeys() == std::vector<std::string>{"s&cret"},
+        "the server sees the value in the query, sent from the filled URL");
+  check(calls.back() == "A " + server.origin + "/key?q={secret:k}", "the hook gets the URL with its placeholder");
+  require(queue.start(keyed(server, "/moved-key?q={secret:k}", "", 26)) && wait(queue, result),
+          "a filled query on a redirect");
+  check(result.status == 302 && server.takeKeys().empty(),
+        "a value in the query follows no redirect either: " + std::to_string(result.status));
+
+  awtrix::logbuf::setVerbose(true);
+  const uint32_t mark = awtrix::test::logMark();
+  TransferRequest unreachable = keyed(server, "/x?q={secret:k}", "", 27);
+  unreachable.origin = "http://127.0.0.1:1";
+  require(queue.start(unreachable) && wait(queue, result), "a filled request nobody answers");
+  const std::string log = awtrix::test::logAfter(mark);
+  awtrix::logbuf::setVerbose(false);
+  check(result.status == 0 && log.find("s%26cret") == std::string::npos && log.find("/x?q=") == std::string::npos,
+        "a filled request that fails leaves its URL in no log: " + log);
 }
 
 void cancelTakesBackAnUnpolledResult(Server& server) {
@@ -342,9 +448,11 @@ int main() {
   theWorkerStartsWithTheFirstTransfer(server);
   unpolledResultsLoseTheirFiles(server);
   uploads(server);
+  theBudgetCoversTheFirstByte(server);
   downloads(server);
   aDownloadStopsWhenItsBytesNoLongerFit(server);
   redirects(server);
+  theWorkerFillsHeadersRightBeforeSending(server);
   cancelTakesBackAnUnpolledResult(server);
   cancelCatchesARunningCheck(server);
   twoTransfersPerOwner(server);

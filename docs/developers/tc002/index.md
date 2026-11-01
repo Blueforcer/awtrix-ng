@@ -274,6 +274,9 @@ The TC002 code of the runtime is in `src/platform/tc002/runtime/` unless noted:
 | `Tc002BootIntro`, `BootIntroWide`, `BootInfoWide`, `TerminalFont` | the power-on intro timed by the boot sound, then the info screen with the version and the address, both in the 3x5 terminal font |
 | `tls/` (`src/platform/linux/tls/`) | the one TLS layer: the policy the `--hardened` listener and the MQTT client use, the public CA store every HTTPS client verifies against ([CA certificates](ca-certificates.md)), broker trust with pinned fingerprints and `/api/v1/mqtt/tls`, and the `--hardened` server identity |
 | `LinuxLanLogin`, `LinuxScriptHttp`, `LinuxMqttTls` (`src/platform/linux/`) | the web login as on the ESP32, the scripts' HTTP worker, the MQTT TLS transport |
+| `secrets/` (`src/platform/linux/secrets/`) | a script's API keys: `SecretSpec` reads the `@secret` lines, `SecretService` keeps and fills the values ([Key filling](voice-module.md#key-filling)), `SecretApi` is `/api/v1/secrets`, `SecretScripting` is `import secret` |
+| `posix::PrivateStore` (`src/platform/posix/`) | one small file of mode 0600 per name, in a folder of mode 0700. `SecretService` keeps its values in one, `script-secrets` |
+| `host::fromOwnPage` (`src/platform/linux/host/`) | the check for a change only the device's own web page may make: a marker header with the value `1` and an `Origin` matching `Host`. `/api/v1/secrets` uses it with `X-Awtrix-Secret` |
 
 The web UI is the ESP32's `webui/index.html`, served minified and gzip-encoded from the release. It
 is one file for both platforms: it asks the device what it can do and shows no TC002-only notices.
@@ -289,6 +292,7 @@ The shared paths are in
 | `/tmp/awtrix-release/` | the release, mounted read-only from the release slot: `bin/`, `lib/modules/`, `share/`, `manifest.json` |
 | `/data/awtrix-ng/app/` | the runtime's data: settings, icons, MP3s, scripts, `activation-consent` (`yes` or `no` from the web UI), `activation` (the activation id the Hub took) |
 | `/data/awtrix-ng/network/` | the Wi-Fi credential record |
+| `/data/awtrix-ng/script-private/`, `/data/awtrix-ng/script-secrets/` (0700) | the scripts' sign-ins and API keys, outside `app/` so no backup holds them |
 | `/data/awtrix-ng/state/` (0700) | `boot-attempts`, `update-state.json`, `update-result` (what the flash helper recorded for a web update), `uid`, `rebooted` (the daemon rebooted the clock), `loader.log`, `res-image.json` (what `flash-loader` wrote), `keep-adb-tcp` (developer flag, see [Debugging](#debugging-on-the-clock)), `autostart` (own program, see [Own program at start](#own-program-at-start)) |
 | `/res/lib/libawtrix-loader.so`, `/res/etc/EasyUI.cfg` | the loader and the configuration that names it |
 | `/res/awtrix-ng/loop.ko` | the loop driver the loader mounts the release with |

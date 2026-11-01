@@ -1527,6 +1527,74 @@ curl -X POST http://<awtrix-ip>/api/v1/oauth/Spotify \
   -H "Origin: http://<awtrix-ip>" \
   -d '{"clientId":"4f1c...","clientSecret":"..."}'
 ```
+
+### API keys
+
+Some scripts use a service with an API key, see [`@secret`](../guides/scripting/network.md#api-keys).
+These routes hold the keys. The web UI uses them in the
+[app settings](../getting-started/web-ui.md#api-keys). They exist only while
+[capabilities](#get-apiv1capabilities) say `"secret": true`, which needs scripting switched on.
+
+No route ever returns a key. Every change needs the header `X-Awtrix-Secret: 1` and an `Origin`
+header naming the device, as the device's own web UI sends them. This keeps other web pages from
+changing a key. Answers are never cached.
+
+#### GET /api/v1/secrets
+
+Lists every script with an `@secret` line, also one whose line is invalid.
+
+**Response:** `200` `{"apps": ["Assistant"]}`.
+
+#### GET /api/v1/secrets/{name}
+
+One script's keys.
+
+**Response:** `200`:
+
+```json
+{"keys": [{"key": "key", "label": "API key", "help": "Your OpenAI key", "set": true}]}
+```
+
+| Key | Meaning |
+|---|---|
+| `key` | the name the script uses |
+| `label` | the name of the field, `""` when the line has none |
+| `help` | the line of explanation, `""` when the line has none |
+| `set` | a value is saved |
+
+When an `@secret` line is invalid, the answer is `200` `{"invalid": "@secret: bad key"}` with the
+reason instead.
+
+#### PUT /api/v1/secrets/{name}
+
+Saves or erases keys. **Request:** a JSON object of keys and values, for example
+`{"key": "sk-…"}`. An empty string erases that key. Keys you leave out keep their value. A refused
+request changes nothing. **Response:** `200` `{"ok":true}`.
+
+```bash
+curl -X PUT http://<awtrix-ip>/api/v1/secrets/Assistant \
+  -H "Content-Type: application/json" \
+  -H "X-Awtrix-Secret: 1" \
+  -H "Origin: http://<awtrix-ip>" \
+  -d '{"key":"sk-…"}'
+```
+
+#### DELETE /api/v1/secrets/{name}/{key}
+
+Erases one key. **Response:** `200` `{"ok":true}`, also when it was not set.
+
+**Errors of these routes:**
+
+| Status | Condition |
+|---|---|
+| 400 | `invalidJson`, `invalid JSON`: the body is not a JSON object, or is larger than 16 KB |
+| 403 | `forbiddenOrigin`: not sent from the device's own web UI |
+| 404 | `notFound`, `no @secret line`: no such script, or it has no `@secret` line. `unknown route`: a name that cannot be a script, or a path after the key |
+| 405 | `methodNotAllowed`: `allowed: GET`, `allowed: GET, PUT` or `allowed: DELETE` |
+| 422 | `validationFailed`: `unknown key`, a key the script does not declare. `value too long`, over 512 bytes. `invalid value`, a line break or a zero byte. `values must be strings`. `storage failed`. For an invalid `@secret` line, the reason |
+
+The `404` comes first: a script without an `@secret` line answers it to every method, before `405`
+and `403`.
 <!-- /only -->
 
 ### Back up and restore scripts
@@ -2548,17 +2616,18 @@ These keys appear only while the feature is available:
 | `gamepad` | `true`: scripts can read a gamepad. See [`GET /api/v1/gamepad`](#get-apiv1gamepad) |
 | `gamepadRemote` | `true`: a phone can be a gamepad. See [`POST /api/v1/gamepad/remote`](#post-apiv1gamepadremote) |
 | `mqttTls` | `true`: MQTT can connect over TLS. See [`GET /api/v1/mqtt/tls`](#get-apiv1mqtttls) |
-| `voice` | `true`: the [voice assistant](../guides/voice.md) is available. See [`/api/v1/voice`](#apiv1voice). Also the [`@needs`](../guides/scripting/sharing.md#what-your-script-asks-of-the-clock) name of `import voice` |
+| `voice` | `true`: the [voice assistant](../guides/voice.md) is available. See [`/api/v1/voice`](#apiv1voice). Also the [`@needs`](../guides/scripting/sharing.md#what-your-script-asks-of-the-clock) name of [`import voice`](../guides/voice-scripts.md) |
 | `bootSound` | `true`: the clock plays a sound when it starts. The [`bootSound`](settings.md#sound) setting turns it off |
 | `enlargeApps` | `true`: pushed apps and notifications can be shown at double size. The [`enlargeApps`](settings.md#global-text) setting turns it off |
 | `oauth` | `true`: scripts can sign in to services, see [Script sign-in](#script-sign-in) |
 | `crypto` | `true`: scripts can `import crypto`, see [Hashing](../guides/hashing.md) |
 | `layout` | `true`: scripts can use prepared layouts |
 | `tcp` | `true`: scripts can `import tcp`, see [TCP in scripts](../guides/tcp.md) |
+| `secret` | `true`: scripts can keep [API keys](../guides/scripting/network.md#api-keys) and `import secret`. See [API keys](#api-keys) |
 | `activation` | `true`: the web UI asks **Help AWTRIX**. See [`GET /api/v1/activation`](#get-apiv1activation) |
 | `clockFaces` | the names the [`clockFace`](settings.md#tc002-clock-faces) setting accepts |
 
-`gamepad`, `gamepadRemote`, `oauth`, `crypto`, `layout` and `tcp` need scripting switched on. The `layouts` object
+`gamepad`, `gamepadRemote`, `oauth`, `secret`, `crypto`, `layout` and `tcp` need scripting switched on. The `layouts` object
 holds the limits of prepared layouts.
 <!-- /only -->
 Further keys describe the display size and fonts. They are listed in the
@@ -3939,6 +4008,9 @@ Any other path answers **404** `notFound` with the message `unknown route`.
 | GET, POST, DELETE | `/api/v1/oauth/{name}` | [a script's sign-in](#get-apiv1oauthname) |
 | POST | `/api/v1/oauth/{name}/start` | [start a sign-in](#post-apiv1oauthnamestart) |
 | POST | `/api/v1/oauth/{name}/code` | [finish a sign-in](#post-apiv1oauthnamecode) |
+| GET | `/api/v1/secrets` | [scripts with API keys](#get-apiv1secrets) |
+| GET, PUT | `/api/v1/secrets/{name}` | [a script's API keys](#get-apiv1secretsname) |
+| DELETE | `/api/v1/secrets/{name}/{key}` | [erase one key](#delete-apiv1secretsnamekey) |
 <!-- /only -->
 | GET | `/api/v1/files` | [list](#get-apiv1files) |
 | POST | `/api/v1/files` | [upload](#post-apiv1files) |

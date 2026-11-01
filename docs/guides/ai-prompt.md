@@ -93,7 +93,7 @@ or `awtrixng-xxxxxx.local`.
 > Show the ICE departures from Hamburg Hbf on my AWTRIX at 192.168.1.42.
 
 Without the address, it gives you the script and the same install steps as above. For
-anything secret, such as an API key, it leaves a marked line for you to fill in. It does not
+anything secret, such as an API key, it <!-- only esp32 esp32-s3 -->leaves a marked line for you to fill in<!-- /only --><!-- only tc002 -->adds a field to the [app's settings](../getting-started/web-ui.md#api-keys) for you to fill in<!-- /only -->. It does not
 ask you for the key.
 
 ---

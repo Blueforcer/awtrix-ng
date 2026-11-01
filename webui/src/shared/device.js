@@ -14,8 +14,9 @@ function readAudioCaps(caps){
   S.iphone=caps.ble===true;
   S.mqttTls=caps.mqttTls===true;
   S.oauth=caps.oauth===true;
+  S.secret=caps.secret===true;
   S.activation=caps.activation===true;
-  if(S.oauth)loadOauthApps();
+  loadScriptSections();
   //linux:end
   if(typeof caps.sensors?.light==='boolean')S.light=caps.sensors.light;
   if(Object.hasOwn(caps,'gpio')){
@@ -43,8 +44,9 @@ const CAP_NAMES=['audio.mp3','audio.rtttl','audio.song','audio.speech','audio.tr
 const CAP_WORDS={gamepad:'capGamepad',ble:'capBle','audio.effect':'capEffect','audio.song':'capSong',microphone:'capMic','audio.speech':'capSpeech','audio.mp3':'capMp3',
   'audio.radio':'capRadio','audio.rtttl':'capRtttl','audio.track':'capTrack','sensors.light':'capLight',oauth:'capOauth',crypto:'capCrypto',tcp:'capTcp'};
 //linux:begin
-CAP_NAMES.push('layout','voice');
+CAP_NAMES.push('layout','voice','secret');
 CAP_WORDS.voice='capVoice';
+CAP_WORDS.secret='capSecret';
 //linux:end
 function capPresent(name){
   let v=S.caps;

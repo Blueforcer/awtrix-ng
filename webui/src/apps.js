@@ -94,7 +94,7 @@ async function fillConfigPanel(name,box,saveError,builtin){
 }
 async function viewApps(view){
   //linux:begin
-  loadOauthApps();
+  loadScriptSections();
   //linux:end
   let loop=[],background=[],ondemand=[],disabled=[],modules=[],dragFrom=null,saving=Promise.resolve();
   const panels=new Map(),infos=new Map();
@@ -143,7 +143,7 @@ async function viewApps(view){
   function cfgPanel(a){
     const key=a.origin+':'+a.name;
     //linux:begin
-    if(a.origin!=='builtin'&&S.oauthApps&&S.oauthApps.has(a.name))a={...a,config:true};
+    if(a.origin!=='builtin'&&hasScriptSection(a.name))a={...a,config:true};
     //linux:end
     if(!a.config||panelTaken.has(key))return[null,null];
     panelTaken.add(key);

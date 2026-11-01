@@ -5,6 +5,7 @@
 
 #include "core/api/ApiRouter.h"
 #include "core/api/JsonWriter.h"
+#include "platform/linux/host/OwnPage.h"
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/posix/Files.h"
 #include "platform/tc002/voice/StreamClock.h"
@@ -153,18 +154,14 @@ void sendError(httplib::Response& res, int status, const char* code,
   res.status = status;
   res.set_content(api::errorJson(code, message, field), "application/json");
 }
-bool trusted(const httplib::Request& req) {
-  return req.get_header_value("X-Awtrix-Voice") == "1" &&
-         api::sameOrigin(req.get_header_value("Origin"), req.get_header_value("Host"),
-                         req.get_header_value_count("Origin"), req.get_header_value_count("Host"), true);
-}
+constexpr const char* kMarker = "X-Awtrix-Voice";
 }  // namespace
 bool VoiceRuntime::handle(const httplib::Request& req, httplib::Response& res) {
   if (req.path == "/api/v1/voice/start") {
     res.set_header("Cache-Control", "no-store");
     if (req.method != "POST")
       sendError(res, 405, "methodNotAllowed", "allowed: POST");
-    else if (!trusted(req))
+    else if (!host::fromOwnPage(req, kMarker))
       sendError(res, 403, "forbiddenOrigin", "only from this device's web page");
     else if (!hooks_.startAssistant || !hooks_.startAssistant())
       sendError(res, 409, "voiceUnavailable", "assistant not ready");
@@ -198,7 +195,7 @@ bool VoiceRuntime::handle(const httplib::Request& req, httplib::Response& res) {
         .endObject();
     res.set_content(json, "application/json");
   } else if (req.method == "POST") {
-    if (!trusted(req)) {
+    if (!host::fromOwnPage(req, kMarker)) {
       sendError(res, 403, "forbiddenOrigin",
                 "only from this device's web page");
       return true;

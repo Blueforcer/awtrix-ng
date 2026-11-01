@@ -134,7 +134,7 @@ nav:
       - Layouts: guides/layouts.md
   - Smart home:
       - Home Assistant: guides/home-assistant.md
-      - Home Assistant Voice: guides/voice.md
+      - Voice assistant: guides/voice.md
       - MQTT: guides/mqtt.md
       - Art-Net: guides/artnet.md
       - Mirroring: guides/mirroring.md
@@ -162,6 +162,7 @@ nav:
       - Modbus in scripts: guides/modbus.md
       - Bluetooth LE in scripts: guides/ble.md
       - TCP in scripts: guides/tcp.md
+      - Voice in scripts: guides/voice-scripts.md
       - Hashing & mining in scripts: guides/hashing.md
       - Signing in from scripts: guides/oauth.md
   - Reference:

@@ -7,6 +7,8 @@
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
 #include "persistence/ScriptFiles.h"
+#include "platform/linux/host/ApiPath.h"
+#include "platform/linux/host/OwnPage.h"
 #include "platform/linux/host/vendor/httplib.h"
 
 namespace awtrix::oauth {
@@ -39,12 +41,6 @@ void writeStatus(api::JsonWriter& w, const std::string& name, const Status& s) {
   w.endObject();
 }
 
-bool fromOwnPage(const httplib::Request& req) {
-  return req.get_header_value("X-Awtrix-OAuth") == "1" &&
-         api::sameOrigin(req.get_header_value("Origin"), req.get_header_value("Host"),
-                         req.get_header_value_count("Origin"), req.get_header_value_count("Host"), true);
-}
-
 // A string member: nullopt when absent; false when present but not a string within limit.
 bool stringMember(const api::JsonReader& body, const char* name, std::optional<std::string>& out) {
   const auto m = api::memberValue(body, name);
@@ -58,18 +54,9 @@ bool stringMember(const api::JsonReader& body, const char* name, std::optional<s
 }
 
 bool Api::handle(const httplib::Request& req, httplib::Response& res) {
-  const std::string& path = req.path;
-  if (path.compare(0, kPrefix.size(), kPrefix) != 0 || (path.size() > kPrefix.size() && path[kPrefix.size()] != '/'))
-    return false;
-  res.set_header("Cache-Control", "no-store");
-
   std::string name, action;
-  if (path.size() > kPrefix.size() + 1) {
-    const std::string rest = path.substr(kPrefix.size() + 1);
-    const std::size_t slash = rest.find('/');
-    name = rest.substr(0, slash);
-    if (slash != std::string::npos) action = rest.substr(slash + 1);
-  }
+  if (!host::splitApiPath(req.path, kPrefix, name, action)) return false;
+  res.set_header("Cache-Control", "no-store");
 
   if (name.empty()) {
     if (req.method != "GET") {
@@ -109,7 +96,7 @@ bool Api::handle(const httplib::Request& req, httplib::Response& res) {
     sendError(res, 405, "methodNotAllowed", action.empty() ? "allowed: GET, POST, DELETE" : "allowed: POST");
     return true;
   }
-  if (!fromOwnPage(req)) {
+  if (!host::fromOwnPage(req, "X-Awtrix-OAuth")) {
     sendError(res, 403, "forbiddenOrigin", "only from this device's web page");
     return true;
   }

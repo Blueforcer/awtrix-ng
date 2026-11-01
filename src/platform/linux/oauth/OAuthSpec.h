@@ -28,7 +28,4 @@ std::optional<Spec> parseSpec(const std::string& source, std::string* error = nu
 // An https URL whose host is one of the spec's api hosts.
 bool hostAllowed(const Spec& spec, const std::string& url);
 
-// The lowercase host of an http(s) URL, "" for anything else.
-std::string hostOf(const std::string& url);
-
 }

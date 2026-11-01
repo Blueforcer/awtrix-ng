@@ -63,6 +63,11 @@ var fields = def (map)
   return out.concat('\x1f')
 end
 
+var payload = def (data)
+  if isinstance(data, voice_clip) return data.id end
+  return type(data) == 'string' ? data : nil
+end
+
 var drop = def (entries, app)
   var gone = []
   for number : entries.keys() if entries[number][0] == app gone.push(number) end end
@@ -122,14 +127,14 @@ m.play = def (clip, done)
   plays[number] = [_native_app(), done, clip]
   return true
 end
-m.send = def (clip, url, opts, cb)
+m.send = def (data, url, opts, cb)
   if type(cb) != 'function' raise 'value_error', 'voice.send needs a callback' end
-  if !isinstance(clip, voice_clip) raise 'value_error', 'voice.send needs a clip' end
   if opts != nil && classname(opts) != 'map' raise 'value_error', 'voice.send options must be a map' end
-  started(calls, _voice_send(clip.id, str(url), str(get(opts, 'method', 'POST')), _http_headers(opts),
-                             str(get(opts, 'as', 'form')), str(get(opts, 'field', 'file')),
-                             fields(get(opts, 'fields', nil)), _http_find(opts), _http_keep(opts),
-                             _http_cap(opts)), cb)
+  var form = isinstance(data, voice_clip) ? opts : nil
+  started(calls, _voice_send(payload(data), str(url), str(get(opts, 'method', 'POST')), _http_headers(opts),
+                             str(get(form, 'as', 'form')), str(get(form, 'field', 'file')),
+                             fields(get(form, 'fields', nil)), _http_find(opts), _http_keep(opts),
+                             _http_cap(opts), get(opts, 'timeout', nil)), cb)
 end
 m.fetch = def (url, opts, cb)
   if type(cb) != 'function' raise 'value_error', 'voice.fetch needs a callback' end
@@ -137,24 +142,25 @@ m.fetch = def (url, opts, cb)
   var body = get(opts, 'body', nil)
   var method = get(opts, 'method', body != nil ? 'POST' : 'GET')
   var text = body != nil ? str(body) : ''
-  started(calls, _voice_fetch(str(url), str(method), text, _http_headers(opts)), cb)
+  started(calls, _voice_fetch(str(url), str(method), text, _http_headers(opts), get(opts, 'timeout', nil)), cb)
 end
 return m
 )BERRY";
 
 constexpr int64_t kQuietWaitMs = 1000;
 
-struct MsRange {
+struct Range {
   bint low, high;
 };
-constexpr MsRange kSilenceMs{300, 3000}, kWaitMs{1000, 15000}, kMaxMs{1000, 30000};
+constexpr Range kSilenceMs{300, 3000}, kWaitMs{1000, 15000}, kMaxMs{1000, 30000}, kTimeoutSec{1, 120};
+constexpr uint32_t kSendTimeoutSec = 30, kFetchTimeoutSec = 15;
 
-std::optional<uint32_t> msOption(bvm* vm, int index, MsRange range, uint32_t fallback) {
+std::optional<uint32_t> rangeOption(bvm* vm, int index, Range range, uint32_t fallback) {
   if (be_isnil(vm, index)) return fallback;
   if (!be_isint(vm, index)) return std::nullopt;
-  const bint ms = be_toint(vm, index);
-  if (ms < range.low || ms > range.high) return std::nullopt;
-  return static_cast<uint32_t>(ms);
+  const bint value = be_toint(vm, index);
+  if (value < range.low || value > range.high) return std::nullopt;
+  return static_cast<uint32_t>(value);
 }
 
 std::optional<bool> triggerOption(bvm* vm, int index) {
@@ -170,13 +176,17 @@ const std::string& caller() { return script::ScriptExtensionHost::caller(); }
 std::string bytes(bvm* vm, int index) {
   return {be_tostring(vm, index), static_cast<std::size_t>(be_strlen(vm, index))};
 }
+VoiceTransfers::SendData sendData(bvm* vm, int index) {
+  if (be_isint(vm, index)) return static_cast<ClipId>(be_toint(vm, index));
+  return bytes(vm, index);
+}
 
 }
 
 VoiceScripting::VoiceScripting(Services services)
     : services_(std::move(services)),
       clips_(services_.clipDirectory, MemoryRoom(services_.availableMemory, kKeepFreeBytes)),
-      transfers_(clips_, MemoryRoom(services_.availableMemory, kKeepFreeBytes)),
+      transfers_(clips_, MemoryRoom(services_.availableMemory, kKeepFreeBytes), services_.fillRequest),
       capture_(services_.microphone, services_.startFrom, services_.voiceActivityModel) {}
 
 void VoiceScripting::install(script::ScriptExtensionHost& host) {
@@ -384,15 +394,16 @@ void VoiceScripting::endPlayback(bool heard) {
   playApp_.clear();
 }
 
-int VoiceScripting::send(const std::string& app, ClipId clip, const VoiceTransfers::SendOptions& options) {
-  const int number = transfers_.send(app, clip, options);
+int VoiceScripting::send(const std::string& app, VoiceTransfers::SendData data,
+                         const VoiceTransfers::SendOptions& options) {
+  const int number = transfers_.send(app, std::move(data), options);
   updateMusic();
   return number;
 }
 
 int VoiceScripting::fetch(const std::string& app, const std::string& url, const std::string& method,
-                          std::string body, const std::string& headers) {
-  const int number = transfers_.fetch(app, url, method, std::move(body), headers);
+                          std::string body, const std::string& headers, uint32_t timeoutSec) {
+  const int number = transfers_.fetch(app, url, method, std::move(body), headers, timeoutSec);
   updateMusic();
   return number;
 }
@@ -482,9 +493,9 @@ int VoiceScripting::nRecord(bvm* vm) {
   int status = kBad;
   if (be_top(vm) >= 4) {
     const wake::EndpointSettings defaults;
-    const std::optional<uint32_t> silence = msOption(vm, 1, kSilenceMs, defaults.silenceMs),
-                                  wait = msOption(vm, 2, kWaitMs, defaults.waitMs),
-                                  max = msOption(vm, 3, kMaxMs, defaults.maxMs);
+    const std::optional<uint32_t> silence = rangeOption(vm, 1, kSilenceMs, defaults.silenceMs),
+                                  wait = rangeOption(vm, 2, kWaitMs, defaults.waitMs),
+                                  max = rangeOption(vm, 3, kMaxMs, defaults.maxMs);
     const std::optional<bool> fromTrigger = triggerOption(vm, 4);
     if (silence && wait && max && fromTrigger)
       status = self(vm).record(caller(), {*silence, *wait, *max}, *fromTrigger);
@@ -526,20 +537,24 @@ int VoiceScripting::nState(bvm* vm) {
 
 int VoiceScripting::nSend(bvm* vm) {
   int result = kBad;
-  if (be_top(vm) >= 10 && be_isint(vm, 1) && be_isstring(vm, 2) && be_isstring(vm, 3) && be_isstring(vm, 4) &&
-      be_isstring(vm, 5) && be_isstring(vm, 6) && be_isstring(vm, 7) && be_isstring(vm, 8) && be_isint(vm, 9) &&
-      be_isint(vm, 10)) {
-    VoiceTransfers::SendOptions options;
-    options.url = be_tostring(vm, 2);
-    options.method = be_tostring(vm, 3);
-    options.headers = be_tostring(vm, 4);
-    options.as = be_tostring(vm, 5);
-    options.field = be_tostring(vm, 6);
-    options.fields = bytes(vm, 7);
-    options.find = be_tostring(vm, 8);
-    options.keep = static_cast<int>(be_toint(vm, 9));
-    options.cap = static_cast<int>(be_toint(vm, 10));
-    result = self(vm).send(caller(), static_cast<ClipId>(be_toint(vm, 1)), options);
+  if (be_top(vm) >= 11 && (be_isint(vm, 1) || be_isstring(vm, 1)) && be_isstring(vm, 2) && be_isstring(vm, 3) &&
+      be_isstring(vm, 4) && be_isstring(vm, 5) && be_isstring(vm, 6) && be_isstring(vm, 7) && be_isstring(vm, 8) &&
+      be_isint(vm, 9) && be_isint(vm, 10)) {
+    const std::optional<uint32_t> timeout = rangeOption(vm, 11, kTimeoutSec, kSendTimeoutSec);
+    if (timeout) {
+      VoiceTransfers::SendOptions options;
+      options.url = be_tostring(vm, 2);
+      options.method = be_tostring(vm, 3);
+      options.headers = be_tostring(vm, 4);
+      options.as = be_tostring(vm, 5);
+      options.field = be_tostring(vm, 6);
+      options.fields = bytes(vm, 7);
+      options.find = be_tostring(vm, 8);
+      options.keep = static_cast<int>(be_toint(vm, 9));
+      options.cap = static_cast<int>(be_toint(vm, 10));
+      options.timeoutSec = *timeout;
+      result = self(vm).send(caller(), sendData(vm, 1), options);
+    }
   }
   be_pushint(vm, result);
   be_return(vm);
@@ -547,8 +562,12 @@ int VoiceScripting::nSend(bvm* vm) {
 
 int VoiceScripting::nFetch(bvm* vm) {
   int result = kBad;
-  if (be_top(vm) >= 4 && be_isstring(vm, 1) && be_isstring(vm, 2) && be_isstring(vm, 3) && be_isstring(vm, 4))
-    result = self(vm).fetch(caller(), be_tostring(vm, 1), be_tostring(vm, 2), bytes(vm, 3), be_tostring(vm, 4));
+  if (be_top(vm) >= 5 && be_isstring(vm, 1) && be_isstring(vm, 2) && be_isstring(vm, 3) && be_isstring(vm, 4)) {
+    const std::optional<uint32_t> timeout = rangeOption(vm, 5, kTimeoutSec, kFetchTimeoutSec);
+    if (timeout)
+      result = self(vm).fetch(caller(), be_tostring(vm, 1), be_tostring(vm, 2), bytes(vm, 3), be_tostring(vm, 4),
+                              *timeout);
+  }
   be_pushint(vm, result);
   be_return(vm);
 }

@@ -12,7 +12,7 @@ namespace awtrix {
 class LinuxCapabilities {
  public:
   LinuxCapabilities(bool bluetooth, bool scripting, bool voice, const layout::Limits* layouts = nullptr)
-      : modules_{{{"ble", bluetooth}, {"gamepad", scripting}, {"oauth", scripting},
+      : modules_{{{"ble", bluetooth}, {"gamepad", scripting}, {"oauth", scripting}, {"secret", scripting},
                    {"crypto", scripting}, {"tcp", scripting}, {"layout", layouts && scripting},
                    {"voice", voice}, {}}},
         layouts_(layouts), gamepadRemote_(scripting) {}
@@ -49,7 +49,7 @@ class LinuxCapabilities {
   }
 
  private:
-  std::array<DeviceCapabilities::Extra, 8> modules_;
+  std::array<DeviceCapabilities::Extra, 9> modules_;
   const layout::Limits* layouts_;
   bool gamepadRemote_;
 };
