@@ -119,8 +119,10 @@ Not released and not built by CI; build it yourself.
 
 | Property | Value |
 |---|---|
-| Driver | [LEDMatrixDriver](https://github.com/bartoszbielawski/LEDMatrixDriver), one module per 8 columns |
+| Modules | one per 8 columns, the left module first on the chain |
 | Wiring | SPI: SCK GPIO 18, MOSI (DIN) GPIO 23, CS GPIO 5 (`AWTRIX_MAX7219_CS_PIN`) |
+| SPI clock | 1 MHz (`AWTRIX_MAX7219_SPI_HZ`). Faster clocks latched single rows wrong on 5 V modules |
+| Refresh | only changed rows are sent; once a second every register and row is rewritten |
 | Pixel | lit when the average of its red, green and blue is above 32, off otherwise |
 | Brightness | sets the modules' intensity (16 steps); 0 switches them off |
 

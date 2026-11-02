@@ -28,7 +28,6 @@ every distributed binary.
 | [Mbed TLS](https://github.com/Mbed-TLS/mbedtls) (bundled with ESP-IDF, precompiled) | 2.28.x | Apache-2.0 | [Apache-2.0.txt](LICENSES/Apache-2.0.txt) | The Mbed TLS Contributors |
 | [newlib](https://sourceware.org/newlib/) C library (Espressif fork, from the toolchain) | — | BSD-style, many holders | [newlib.txt](LICENSES/newlib.txt) | Red Hat, Berkeley, Espressif and others |
 | [FastLED](https://github.com/FastLED/FastLED) | ^3.9.6 | MIT | [MIT-FastLED.txt](LICENSES/MIT-FastLED.txt) | Daniel Garcia, Mark Kriegsman and contributors |
-| [LEDMatrixDriver](https://github.com/bartoszbielawski/LEDMatrixDriver) | ^0.2.2, `awtrix_mono` builds only | MIT | [MIT-LEDMatrixDriver.txt](LICENSES/MIT-LEDMatrixDriver.txt) | Bartosz Bielawski |
 | [PubSubClient](https://github.com/knolleary/pubsubclient) | 2.8 with local packet-validation fixes; see `lib/PubSubClient` | MIT | [MIT-PubSubClient.txt](LICENSES/MIT-PubSubClient.txt) | Nicholas O'Leary |
 | [densaugeo/base64](https://github.com/Densaugeo/base64_arduino) | ^1.4.0 | MIT | [MIT-densaugeo-base64.txt](LICENSES/MIT-densaugeo-base64.txt) | Densaugeo |
 | [Adafruit BusIO](https://github.com/adafruit/Adafruit_BusIO) | ^1.17 | MIT | [MIT-Adafruit-BusIO.txt](LICENSES/MIT-Adafruit-BusIO.txt) | Adafruit Industries |
