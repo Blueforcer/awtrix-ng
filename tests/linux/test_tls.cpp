@@ -414,7 +414,7 @@ void sharedTrust(const std::filesystem::path& data) {
   req.headers.emplace("X-Awtrix-Trust", "1"); res = {};
   check(api.handle(req, res) && res.status == 403, "cross-origin mutation refused");
   req.headers.erase("Origin"); req.headers.emplace("Origin", "http://clock.local"); res = {};
-  check(api.handle(req, res) && res.status == 200, "guarded CA upload");
+  check(api.handle(req, res) && res.status == 200, "guarded CA upload: " + std::to_string(res.status) + " " + res.body);
   req.path = "/api/v1/mqtt/tls"; res = {};
   check(!api.handle(req, res), "old broker API retired");
   check(store->remove("localhost") == 200, "forget host");

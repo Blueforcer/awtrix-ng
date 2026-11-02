@@ -2400,7 +2400,11 @@ paths:
       tags: [system]
       summary: Reset saved and pending certificate trust
       responses:
-        "200": { $ref: "#/components/responses/Ok" }
+        "200":
+          description: Shared certificate trust after the change.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CertificateTrust" }
         "403": { description: Same-origin guard missing or invalid. }
         "507": { description: Certificate trust not saved. }
 
@@ -2412,7 +2416,11 @@ paths:
       tags: [system]
       summary: Forget a host's saved and pending certificate trust
       responses:
-        "200": { $ref: "#/components/responses/Ok" }
+        "200":
+          description: Shared certificate trust after the change.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CertificateTrust" }
         "403": { description: Requires matching Origin and Host plus X-Awtrix-Trust header. }
 
   /api/v1/tls/trust/{host}/ca:
@@ -2433,7 +2441,11 @@ paths:
               properties:
                 certificate: { type: string, maxLength: 65536 }
       responses:
-        "200": { $ref: "#/components/responses/Ok" }
+        "200":
+          description: Shared certificate trust after the change.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CertificateTrust" }
         "409": { description: Saved host limit reached. }
         "422": { $ref: "#/components/responses/Invalid" }
         "503": { description: Reset the unusable store first. }
@@ -2442,7 +2454,11 @@ paths:
       tags: [system]
       summary: Remove the host's CA
       responses:
-        "200": { $ref: "#/components/responses/Ok" }
+        "200":
+          description: Shared certificate trust after the change.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CertificateTrust" }
 
   /api/v1/tls/trust/{host}/pin:
     x-only: [tc002]
@@ -2462,14 +2478,22 @@ paths:
               properties:
                 fingerprint: { type: string, pattern: '^[0-9a-f]{64}$' }
       responses:
-        "200": { $ref: "#/components/responses/Ok" }
+        "200":
+          description: Shared certificate trust after the change.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CertificateTrust" }
         "409": { description: Pending fingerprint changed or saved host limit reached. }
         "422": { $ref: "#/components/responses/Invalid" }
     delete:
       tags: [system]
       summary: Remove the host's pin
       responses:
-        "200": { $ref: "#/components/responses/Ok" }
+        "200":
+          description: Shared certificate trust after the change.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CertificateTrust" }
 
   /api/v1/voice:
     x-only: [tc002]

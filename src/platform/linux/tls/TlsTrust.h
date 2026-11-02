@@ -72,12 +72,8 @@ namespace awtrix {
 // none loaded every connection fails.
 bool loadTlsTrust(const std::string& caFile, std::string& error);
 void useTlsTrust(httplib::Client& client);
-// Explicit per-connection roots; the caller must disable redirects.
-void useTlsTrust(httplib::Client& client, std::shared_ptr<const tls::TrustAnchors> anchors,
-                 const std::string& host);
 // A TLS 1.2+ client context that verifies peers against the public anchors during the handshake;
 // nullptr while none are loaded.
 ssl_ctx_st* newTrustedTlsContext();
-ssl_ctx_st* newTrustedTlsContext(std::shared_ptr<const tls::TrustAnchors> anchors);
 inline bool expectTlsPeer(ssl_st* ssl, const std::string& host) { return tls::expectPeer(ssl, host); }
 }

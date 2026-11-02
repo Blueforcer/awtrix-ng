@@ -62,6 +62,7 @@ def case(host, tls, trust, mode, cert, key, custom=None):
     port = listener.getsockname()[1]
     errors = []
     def serve():
+        request = b""
         try:
             with listener:
                 conn, _ = listener.accept()
@@ -80,6 +81,7 @@ def case(host, tls, trust, mode, cert, key, custom=None):
                         request = b""
                         while b"\r\n\r\n" not in request:
                             request += read_exact(conn, 1)
+                        assert mode != "reject", "HTTP upgrade sent before certificate approval"
                         headers = dict(line.split(": ", 1) for line in request.decode().split("\r\n")[1:] if ": " in line)
                         accept = base64.b64encode(hashlib.sha1((headers["Sec-WebSocket-Key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest())
                         if mode == "badaccept":
@@ -87,7 +89,10 @@ def case(host, tls, trust, mode, cert, key, custom=None):
                         conn.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + b"\r\n\r\n")
                         serve_session(conn, mode)
         except Exception as error:
-            if not (mode == "reject" and isinstance(error, EOFError)):
+            if mode == "reject" and isinstance(error, EOFError):
+                if request:
+                    errors.append(AssertionError("partial HTTP upgrade sent before certificate approval"))
+            else:
                 errors.append(error)
     worker = threading.Thread(target=serve)
     if mode != "notrust":

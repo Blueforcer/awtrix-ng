@@ -23,8 +23,8 @@ state, the Voice switch, the Home Assistant address (for example
 have both STT (speech-to-text) and TTS (text-to-speech). An empty pipeline follows Home Assistant's
 preferred pipeline. **Save and connect** saves and switches Voice on. The Voice switch saves at once;
 off closes the Home Assistant connection, and the knob's long press then does nothing. HTTPS
-verifies the certificate chain and host name against the runtime's CA store; there is no insecure
-TLS option. After a failure the runtime reconnects at most every 10 s.
+uses shared host trust from **System → Trusted certificates**, including explicitly approved
+leaf fingerprints. There is no insecure TLS option. After a failure the runtime reconnects at most every 10 s.
 
 ## Operation
 
@@ -78,7 +78,8 @@ exit or restart revokes its capture, and callbacks never cross runtime generatio
 `AssistSession` is a state machine on the render thread with injected transport, capture and
 playback ports. `WebSocket` (`WebSocket.cpp`) is a WebSocket client on plain sockets and OpenSSL,
 with DNS, TCP, TLS and socket I/O on its own worker thread; TLS peers are checked against the
-runtime's CA store (`--ca-file`, `tls/TlsTrust`), the store every HTTPS client uses.
+shared host store (`tls/TrustStore`) before sending the HTTP upgrade or Voice token. The same
+store verifies spoken-answer downloads. Radio, covers and OAuth retain public-root verification.
 `net::FileDownload` (`platform/linux/net`) fetches the answer on another worker, at most 2 MiB
 within 15 s and without redirects; cancelling uses a duplicated socket descriptor and never waits
 for an HTTP client lock. MP3s played from a URL use the same downloader.

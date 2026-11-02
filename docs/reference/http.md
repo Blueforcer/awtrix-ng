@@ -3750,6 +3750,8 @@ Any other path answers **404** `notFound` with the message `unknown route`.
 | DELETE | `/api/v1/gamepad/{id}` | [forget one gamepad](#delete-apiv1gamepadid) |
 | POST | `/api/v1/gamepad/remote` | [make a phone a gamepad](#post-apiv1gamepadremote) |
 | DELETE | `/api/v1/gamepad/remote/{session}` | [end one phone's session](#delete-apiv1gamepadremotesession) |
+| GET, DELETE | `/api/v1/tls/trust` | [shared certificate trust](#get-apiv1tlstrust) |
+| PUT, POST, DELETE | `/api/v1/tls/trust/{host}/*` | [change trusted certificates](#change-trusted-certificates) |
 | GET | `/api/v1/voice` | [Home Assistant Voice state](#apiv1voice) |
 | POST | `/api/v1/voice` | [change Home Assistant Voice](#post-apiv1voice) |
 | GET | `/api/v1/oauth` | [scripts that sign in](#get-apiv1oauth) |

@@ -905,14 +905,14 @@ class LanMqttTlsContracts(unittest.TestCase):
                              lambda value: value is not None)
         self.assertEqual(self.fingerprint, pending)
         self.assertEqual(0, self.json("GET", "/api/v1/device")["mqtt"]["connects"])
-        self.assertIn("localhost certificate not trusted, SHA-256 " + self.fingerprint, self.app.logs())
+        self.assertIn("localhost untrusted SHA-256 " + self.fingerprint, self.app.logs())
         self.json("POST", "/api/v1/tls/trust/localhost/pin", {"fingerprint": pending})
         self.assertEqual("online", operator.wait_topic("contract/availability"))
         self.assertIsNone((self.json("GET", "/api/v1/tls/trust")["hosts"] or [{}])[0].get("pending"))
         self.assertEqual(pending, self.json("GET", "/api/v1/tls/trust")["hosts"][0]["pin"])
         self.assertNotIn(self.password, self.app.logs())
 
-    def test_a_changed_broker_certificate_is_refused_until_trusted_again(self):
+    def test_legacy_broker_pin_is_inactive(self):
         port = self.mqtt_broker()
         values = json.loads((self.app.data / "device.json").read_text())
         values["mqttTlsPin"] = "ab" * 32

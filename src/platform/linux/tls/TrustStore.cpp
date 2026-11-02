@@ -112,7 +112,7 @@ PeerTrust::Verdict TrustStore::check(ssl_st* ssl, const std::string& name, bool*
     const auto fingerprint = verifier.pending();
     if (pending_[host] != fingerprint) {
       pending_[host] = fingerprint;
-      logf("tls: %s certificate not trusted, SHA-256 %s", host.c_str(), fingerprint.c_str());
+      logf("tls: %.20s untrusted SHA-256 %s", host.c_str(), fingerprint.c_str());
     }
   }
   return result;

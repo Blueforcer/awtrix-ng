@@ -189,19 +189,8 @@ void useTlsTrust(httplib::Client& client) {
   });
 }
 
-void useTlsTrust(httplib::Client& client, std::shared_ptr<const tls::TrustAnchors> anchors,
-                 const std::string& host) {
-  client.set_server_certificate_verifier([anchors = std::move(anchors), host](SSL* ssl) {
-    return tls::chainTrusted(anchors.get(), ssl, host) ? httplib::SSLVerifierResponse::CertificateAccepted
-                                                     : httplib::SSLVerifierResponse::CertificateRejected;
-  });
-}
-
 SSL_CTX* newTrustedTlsContext() {
-  return newTrustedTlsContext(tls::publicAnchors());
-}
-
-SSL_CTX* newTrustedTlsContext(std::shared_ptr<const tls::TrustAnchors> anchors) {
+  const auto anchors = tls::publicAnchors();
   if (!anchors) return nullptr;
   SSL_CTX* context = SSL_CTX_new(TLS_client_method());
   if (!context || !tls::applyProtocolPolicy(*context)) {

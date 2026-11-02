@@ -15,6 +15,7 @@ bool TrustStoreApi::handle(const httplib::Request& req, httplib::Response& res) 
     res.set_content(api::errorJson(code, message, field), "application/json");
   };
   if (req.path == base && req.method == "GET") {
+    res.status = 200;
     res.set_content(store_.status(), "application/json");
     return true;
   }
@@ -48,6 +49,7 @@ bool TrustStoreApi::handle(const httplib::Request& req, httplib::Response& res) 
     status = part == "ca" ? store_.uploadCa(host, value) : store_.approve(host, value);
   }
   if (status == 200) {
+    res.status = 200;
     if (changed_) changed_(host);
     res.set_content(store_.status(), "application/json");
   } else if (status == 409) fail(status, "conflict", "pending fingerprint changed or trusted host limit reached");
