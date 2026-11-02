@@ -11,7 +11,6 @@
 #include "core/api/JsonWriter.h"
 #include "core/net/Url.h"
 #include "platform/posix/Files.h"
-#include "platform/linux/tls/TlsTrust.h"
 
 namespace awtrix::tc002::voice {
 namespace {
@@ -41,9 +40,8 @@ std::string serialize(const Config& c, bool secret) {
       .member("url", c.url)
       .member("pipeline", c.pipeline)
       .member("device", c.device)
-      .member("tokenSet", !c.token.empty())
-      .member("caSet", !c.ca.empty());
-  if (secret) w.member("token", c.token).member("ca", c.ca);
+      .member("tokenSet", !c.token.empty());
+  if (secret) w.member("token", c.token);
   w.endObject();
   return out;
 }
@@ -52,7 +50,6 @@ const char* applyConfig(std::string_view json, Config& c) {
   if (json.size() > kMaxConfigBytes || !api::isWellFormed(json)) return "";
   api::JsonReader r(json);
   if (!r.isObject()) return "";
-  const std::string previousUrl = c.url;
   if (!boolField(r, "enabled", c.enabled)) return "enabled";
   if (!stringField(r, "url", c.url, 512)) return "url";
   if (!stringField(r, "token", c.token, 4096)) return "token";
@@ -67,19 +64,6 @@ const char* applyConfig(std::string_view json, Config& c) {
   while (!c.url.empty() && c.url.back() == '/') c.url.pop_back();
   WebSocket::Endpoint endpoint;
   if (!c.url.empty() && !parseOrigin(c.url, endpoint)) return "url";
-  const bool caSupplied = api::present(api::memberValue(r, "ca"));
-  WebSocket::Endpoint previous;
-  if (!caSupplied && (!parseOrigin(previousUrl, previous) || previous.host != endpoint.host ||
-                     previous.port != endpoint.port || previous.tls != endpoint.tls)) {
-    c.ca.clear();
-    c.caTrust.reset();
-  }
-  if (caSupplied) {
-    if (!stringField(r, "ca", c.ca, kMaxCaBytes)) return "ca";
-    c.caTrust = c.ca.empty() ? nullptr : tls::TrustAnchors::fromCaPem(c.ca);
-    if (!c.ca.empty() && !c.caTrust) return "ca";
-  }
-  if (!c.ca.empty() && !endpoint.tls) return "ca";
   if (!c.token.empty() && !safe(c.token)) return "token";
   if (!c.pipeline.empty() && !safe(c.pipeline)) return "pipeline";
   if (c.enabled && (c.url.empty() || c.token.empty())) return "enabled";
@@ -139,6 +123,11 @@ bool ConfigStore::load() {
   return true;
 }
 bool ConfigStore::update(std::string_view json, Rejection& rejection) {
+  if (api::present(api::memberValue(json, "ca"))) {
+    rejection.field = "ca";
+    rejection.message = "use System / Trusted certificates";
+    return false;
+  }
   Config next = config_;
   if (const char* field = applyConfig(json, next)) {
     rejection.field = field;
@@ -164,7 +153,7 @@ bool ConfigStore::update(std::string_view json, Rejection& rejection) {
   }
   const std::string saved = serialize(next, true);
   if (saved.size() > kMaxConfigBytes) {
-    rejection.field = "ca";
+    rejection.field = "";
     rejection.message = "settings too large";
     return false;
   }

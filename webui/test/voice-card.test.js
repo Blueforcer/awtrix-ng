@@ -24,10 +24,9 @@ function voiceMock(window, vc) {
     const next = { ...vc.config, ...body };
     if (body.clearToken) next.tokenSet = false;
     if (body.token) next.tokenSet = true;
-    if ('ca' in body) next.caSet = !!body.ca;
     const field = vc.reject || (next.enabled && (!next.url || !next.tokenSet) ? 'enabled' : null);
     if (field) return new Response(JSON.stringify({ error: { code: 'validationFailed', field, message: 'invalid value' } }), { status: 422 });
-    for (const k of ['enabled', 'url', 'pipeline', 'tokenSet', 'caSet']) vc.config[k] = next[k];
+    for (const k of ['enabled', 'url', 'pipeline', 'tokenSet']) vc.config[k] = next[k];
     return new Response('{"ok":true}');
   };
   return log;
@@ -49,7 +48,7 @@ async function open(voice, vc) {
   const tr = window.eval('t');
   return { window, log, vc, sec, tr,
     posts: () => log.filter(l => l.method === 'POST'),
-    toast: () => [...window.document.querySelectorAll('.toast')].at(-1)?.textContent || '',
+    toast: () => window.document.querySelector('.toast')?.textContent || '',
     badges: sec ? [...sec.querySelectorAll('.badge')] : [],
     url: inputs.find(i => i.type === 'text'), token: inputs.find(i => i.type === 'password'),
     dev: inputs.filter(i => i.type === 'text')[1],
@@ -186,39 +185,6 @@ async function saving() {
   }
 }
 
-async function certificates() {
-  const c = await open(true, state({ config: { tokenSet: true, caSet: true, url: 'https://ha.local' } }));
-  try {
-    const file=c.sec.querySelector('input[type=file]');
-    const remove=[...c.sec.querySelectorAll('button')].find(b=>b.textContent===c.tr('vcCaRemove'));
-    const badge=[...c.sec.querySelectorAll('.badge')].find(b=>b.textContent===c.tr('vcCaSaved'));
-    assert.ok(badge, 'saved custom CA is visible');
-    c.save.click();await flush(80);
-    assert.equal('ca' in c.posts().at(-1).body,false,'ordinary edits keep the saved CA');
-    const choose=async(size,text)=>{
-      Object.defineProperty(file,'files',{configurable:true,value:[{size,text:async()=>text}]});
-      file.dispatchEvent(new c.window.Event('change'));await flush(80);
-    };
-    await choose(16385,'large');
-    assert.equal(c.toast(),c.tr('vcfca'),'oversized certificate explained');
-    await choose(5,'pem');
-    assert.equal(badge.textContent,c.tr('vcCaPending'),'upload staged for Save and connect');
-    c.vc.reject='ca';c.save.click();await flush(80);
-    assert.equal(c.toast(),c.tr('vcfca'),'invalid CA explained');
-    assert.equal(badge.textContent,c.tr('vcCaPending'),'failed upload retained for correction');
-    c.vc.reject=null;c.save.click();await flush(80);
-    assert.equal(c.posts().at(-1).body.ca,'pem','certificate sent on save');
-    assert.equal(badge.textContent,c.tr('vcCaSaved'),'saved CA reflected by server');
-    c.save.click();await flush(80);
-    assert.equal('ca' in c.posts().at(-1).body,false,'saved upload not resent');
-    remove.click();await flush();
-    c.save.click();await flush(80);
-    assert.equal(c.posts().at(-1).body.ca,'','empty CA removes custom trust');
-    assert.equal(badge.textContent,c.tr('vcCaPublic'),'public trust restored');
-    assert.equal(remove.disabled,true,'nothing to remove');
-  } finally { c.window.close(); }
-}
-
 async function removeToken() {
   const c = await open(true, state({ state: 'ready', config: { enabled: true, url: 'http://ha.local:8123', tokenSet: true } }));
   try {
@@ -261,7 +227,6 @@ async function reasons() {
   await onOff();
   await saving();
   await removeToken();
-  await certificates();
   await reasons();
   console.log('voice-card: gating, states and reasons, on/off, saving, confirmed token removal and reason texts passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

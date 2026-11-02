@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Script HTTPS verifies public trust by default and isolates per-request CA and pin policies."""
+"""--ca-file: every script HTTPS request verifies chain and host name against one store read at
+startup, and an unreadable bundle fails closed without stopping the runtime."""
 
 from __future__ import annotations
 import sys
@@ -29,9 +30,10 @@ def openssl(*arguments):
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path.startswith("/redirect"):
+        self.server.received.append((self.command, self.path, b""))
+        if self.path == "/redirect":
             self.send_response(302)
-            self.send_header("Location", f"https://localhost:{self.server.server_port}/")
+            self.send_header("Location", "/final")
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
@@ -42,8 +44,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        self.rfile.read(int(self.headers.get("Content-Length", "0")))
-        self.do_GET()
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        self.server.received.append((self.command, self.path, body))
+        self.send_response(200)
+        self.send_header("Content-Length", "2")
+        self.end_headers()
+        self.wfile.write(b"ok")
 
     def log_message(self, *_):
         pass
@@ -62,13 +68,13 @@ class SharedTrust(unittest.TestCase):
                     "-subj", f"/CN={name}", "-addext", f"subjectAltName={names}", "-keyout", str(key),
                     "-out", str(cert))
             certificates[name] = (key, cert)
-        cls.certificates = certificates
         cls.bundle = cls.root / "bundle.pem"
         cls.bundle.write_bytes(certificates["trusted"][1].read_bytes() + certificates["elsewhere"][1].read_bytes())
         cls.unrelated = certificates["unrelated"][1]
         cls.servers = []
         for name in ("trusted", "elsewhere"):
             server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            server.received = []
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             context.load_cert_chain(certificates[name][1], certificates[name][0])
             server.socket = context.wrap_socket(server.socket, server_side=True)
@@ -91,7 +97,7 @@ class SharedTrust(unittest.TestCase):
         finally:
             connection.close()
 
-    def fetch(self, ca_file, calls=None):
+    def fetch(self, ca_file):
         folder = Path(tempfile.mkdtemp(dir=self.workspace.name))
         port = free_port()
         log = open(folder / "runtime.log", "wb")
@@ -103,16 +109,6 @@ class SharedTrust(unittest.TestCase):
         self.addCleanup(lambda: stop_process(process, logs))
         wait_ready(process, lambda: self.request(port, "GET", "/api/v1/version")[0] == 200, logs)
         trusted, elsewhere = (server.server_port for server in self.servers)
-        if calls is None:
-            calls = [
-                ("ip", f"https://127.0.0.1:{trusted}/", {}, "GET"),
-                ("name", f"https://localhost:{trusted}/", {}, "GET"),
-                ("mismatch", f"https://127.0.0.1:{elsewhere}/", {}, "GET"),
-            ]
-        requests = "\n".join(
-            f'  http.request({json.dumps(method)}, {json.dumps(url)}, '
-            f'/body,status -> shared.set({json.dumps(name)}, status), {json.dumps(options)})'
-            for name, url, options, method in calls)
         source = f'''# @headless true
 class Fetch
  var sent
@@ -120,7 +116,9 @@ class Fetch
  def loop()
   if self.sent return end
   self.sent = true
-{requests}
+  http.get("https://127.0.0.1:{trusted}/", /body,status -> shared.set("ip", status))
+  http.get("https://localhost:{trusted}/", /body,status -> shared.set("name", status))
+  http.get("https://127.0.0.1:{elsewhere}/", /body,status -> shared.set("mismatch", status))
  end
 end
 return Fetch()
@@ -132,61 +130,8 @@ return Fetch()
             status, body = self.request(port, "GET", "/api/v1/scripts/shared")
             self.assertEqual(200, status, body)
             return {row["key"]: row["value"] for row in json.loads(body) if row["owner"] == "cafetch"}
-        values = eventually(shared_values, lambda values: len(values) == len(calls), timeout=20)
+        values = eventually(shared_values, lambda values: len(values) == 3, timeout=20)
         return values
-
-    def pin(self, name):
-        pem = self.certificates[name][1].read_text()
-        import hashlib
-        return hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem)).hexdigest()
-
-    def test_request_ca_and_expected_name_do_not_change_public_trust(self):
-        trusted, elsewhere = (f"https://127.0.0.1:{s.server_port}/" for s in self.servers)
-        ca = self.bundle.read_text()
-        calls = [
-            ("private", trusted, {"ca": ca}, "GET"),
-            ("wrongName", elsewhere, {"ca": ca}, "GET"),
-            ("expectedName", elsewhere, {"ca": ca, "servername": "example.invalid"}, "GET"),
-            ("badExpectedName", elsewhere, {"ca": ca, "servername": "wrong.invalid"}, "GET"),
-            ("otherCa", trusted, {"ca": self.unrelated.read_text()}, "GET"),
-            ("unchanged", trusted, {}, "GET"),
-            ("post", trusted, {"ca": ca, "body": "payload"}, "POST"),
-        ]
-        self.assertEqual(dict(private=200, wrongName=0, expectedName=200, badExpectedName=0,
-                              otherCa=0, unchanged=0, post=200), self.fetch(self.unrelated, calls))
-
-    def test_pin_matches_exact_leaf_even_with_an_unrelated_hostname(self):
-        trusted, elsewhere = (f"https://127.0.0.1:{s.server_port}/" for s in self.servers)
-        pin = self.pin("trusted")
-        separated = ":".join(pin[i:i+2].upper() for i in range(0, len(pin), 2))
-        calls = [
-            ("pinned", trusted, {"pin": pin}, "GET"),
-            ("colon", trusted, {"pin": separated}, "GET"),
-            ("deviceName", elsewhere, {"pin": self.pin("elsewhere")}, "GET"),
-            ("wrongPin", trusted, {"pin": self.pin("elsewhere")}, "GET"),
-            ("unchanged", trusted, {}, "GET"),
-        ]
-        self.assertEqual(dict(pinned=200, colon=200, deviceName=200, wrongPin=0, unchanged=0),
-                         self.fetch(self.unrelated, calls))
-        # A valid public chain must not bypass an explicitly supplied, different pin or CA.
-        self.assertEqual({"wrongPin": 0, "wrongCa": 0}, self.fetch(self.bundle, [
-            ("wrongPin", trusted, {"pin": self.pin("elsewhere")}, "GET"),
-            ("wrongCa", trusted, {"ca": self.unrelated.read_text()}, "GET"),
-        ]))
-
-    def test_invalid_ca_and_redirects_fail_closed(self):
-        url = f"https://127.0.0.1:{self.servers[0].server_port}/"
-        ca = self.bundle.read_text()
-        calls = [
-            ("broken", url, {"ca": "not PEM"}, "GET"),
-            ("trailing", url, {"ca": ca + "invalid"}, "GET"),
-            ("empty", url, {"ca": ""}, "GET"),
-            ("redirectCa", url + "redirect", {"ca": ca}, "GET"),
-            ("redirectPin", url + "redirect", {"pin": self.pin("trusted")}, "GET"),
-            ("normalRedirect", url + "redirect", {}, "GET"),
-        ]
-        self.assertEqual(dict(broken=0, trailing=0, empty=0, redirectCa=302, redirectPin=302,
-                              normalRedirect=200), self.fetch(self.bundle, calls))
 
     def test_bundle_verifies_chain_and_host(self):
         self.assertEqual({"ip": 200, "name": 200, "mismatch": 0}, self.fetch(self.bundle))
@@ -196,6 +141,86 @@ return Fetch()
 
     def test_unreadable_bundle_fails_closed_but_the_runtime_runs(self):
         self.assertEqual({"ip": 0, "name": 0, "mismatch": 0}, self.fetch(self.root / "missing.pem"))
+
+    def test_shared_host_trust_for_scripts(self):
+        folder = Path(tempfile.mkdtemp(dir=self.workspace.name))
+        port = free_port()
+        log = open(folder / "runtime.log", "wb")
+        self.addCleanup(log.close)
+        process = None
+        ca_file = self.unrelated
+        def start():
+            nonlocal process
+            process = subprocess.Popen([OPTIONS.binary, "--data", str(folder / "data"), "--port", str(port),
+                "--webui", OPTIONS.webui, "--lan", "--ca-file", str(ca_file)], stdout=log, stderr=log)
+            wait_ready(process, lambda: self.request(port, "GET", "/api/v1/version")[0] == 200,
+                       lambda: (folder / "runtime.log").read_text(errors="replace"))
+        def stop():
+            nonlocal process
+            if process:
+                stop_process(process, lambda: (folder / "runtime.log").read_text(errors="replace"))
+                process = None
+        self.addCleanup(stop)
+        start()
+        def api(method, path="", value=None, expected=200, origin=None):
+            headers = {"Origin": origin or f"http://127.0.0.1:{port}", "X-Awtrix-Trust": "1",
+                       "Content-Type": "application/json"}
+            status, body = self.request(port, method, "/api/v1/tls/trust" + path,
+                                        json.dumps(value).encode() if value is not None else None, headers)
+            self.assertEqual(expected, status, body)
+            return json.loads(body)
+        endpoint = self.servers[0]
+        endpoint.received.clear()
+        origin = f"https://localhost:{endpoint.server_port}"
+        count = 0
+        def fetch(url, method="GET", options="{}"):
+            nonlocal count
+            count += 1
+            owner = f"trust{count}"
+            call = f'http.get({json.dumps(url)}, /body,status -> shared.set("status", status), {options})'
+            if method == "POST":
+                call = f'http.post({json.dumps(url)}, "secret-payload", /body,status -> shared.set("status", status), {options})'
+            source = f"# @headless true\nclass Fetch\n var sent\n def init() self.sent=false end\n def loop()\n if self.sent return end\n self.sent=true\n {call}\n end\nend\nreturn Fetch()\n"
+            status, body = self.request(port, "PUT", "/api/v1/apps/script/" + owner, source.encode(),
+                                        {"Content-Type": "text/plain"})
+            self.assertEqual(200, status, body)
+            def value():
+                _, shared = self.request(port, "GET", "/api/v1/scripts/shared")
+                return next((r["value"] for r in json.loads(shared) if r["owner"] == owner and r["key"] == "status"), None)
+            return eventually(value, lambda v: v is not None, timeout=20)
+        options = json.dumps({"pin": "a" * 64, "ca": self.bundle.read_text()})
+        self.assertEqual(0, fetch(origin + "/untrusted", "POST", options))
+        self.assertEqual([], endpoint.received, "no payload is sent to an untrusted certificate")
+        pending = api("GET")["hosts"][0]["pending"]
+        api("POST", "/localhost/pin", {"fingerprint": "a" * 64}, 409)
+        api("POST", "/localhost/pin", {"fingerprint": pending}, 403, "http://other.invalid")
+        api("POST", "/localhost/pin", {"fingerprint": pending})
+        self.assertEqual(200, fetch(origin + "/approved", "POST"))
+        self.assertEqual(b"secret-payload", endpoint.received[-1][2])
+        self.assertEqual(302, fetch(origin + "/redirect"))
+        self.assertFalse(any(path == "/final" for _, path, _ in endpoint.received))
+        self.assertEqual(0, fetch(f"https://127.0.0.1:{endpoint.server_port}/other-host", "POST"))
+        self.assertNotIn("BEGIN CERTIFICATE", json.dumps(api("GET")))
+        api("PUT", "/localhost/ca", {"certificate": self.bundle.read_text()})
+        api("DELETE", "/localhost/pin")
+        self.assertEqual(200, fetch(origin + "/ca"))
+        stored = folder / "tls-private" / "trust.json"
+        self.assertEqual(0o600, stored.stat().st_mode & 0o777)
+        stop(); start()
+        self.assertEqual(200, fetch(origin + "/after-restart"))
+        api("DELETE")
+        self.assertEqual(0, fetch(origin + "/revoked", "POST"))
+        stop()
+        stored.write_text("corrupt")
+        ca_file = self.bundle
+        start()
+        self.assertFalse(api("GET")["usable"])
+        self.assertEqual(0, fetch(origin + "/corrupt", "POST"))
+        api("DELETE")
+        self.assertEqual(200, fetch(origin + "/redirect"))
+        self.assertTrue(any(path == "/final" for _, path, _ in endpoint.received))
+        status, _ = self.request(port, "GET", "/api/v1/mqtt/tls")
+        self.assertEqual(404, status, "retired MQTT certificate API")
 
 
 if __name__ == "__main__":

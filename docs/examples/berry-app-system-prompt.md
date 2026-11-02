@@ -568,7 +568,7 @@ body argument is `nil`. `Host`, `Content-Length`, `Transfer-Encoding` and `Conne
 the device and ignored if a script supplies them. A malformed header line fails the whole request
 immediately with `cb(nil, 0)`.
 
-Only `http://` and `https://`; `GET` and `HEAD` follow redirects, other methods do not. ESP32 HTTPS encrypts without certificate verification. TC002 verifies the certificate chain and hostname; trust or hostname failures fail the request. TC002 requests may supply `pin` (SHA-256 certificate fingerprint) or `ca` (PEM authorities, up to 64 KB) with optional `servername` (expected certificate SAN). These options are request-local and disable redirects. `pin` cannot be combined with `ca` or `servername`; `servername` requires `ca`. Pins check certificate validity dates but replace chain and hostname checks. Custom CA trust replaces public roots for that request. ESP32 rejects requests supplying these options. See the scripting network guide for the full contract. Script source is served back by
+Only `http://` and `https://`; `GET` and `HEAD` follow redirects, other methods do not. ESP32 HTTPS encrypts without certificate verification. TC002 verifies the certificate chain and hostname; trust or hostname failures fail the request. Script source is served back by
 `GET /api/v1/apps/script/<name>`, behind the device login only if one is configured - the default
 is none. Prefer APIs that need no key; when a key is unavoidable, say in your answer that the panel
 should have a login set and the token should be scoped and revocable.

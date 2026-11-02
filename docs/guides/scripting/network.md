@@ -443,54 +443,11 @@ Each call returns at once. `cb(body, status)` runs once, later. `opts` is an opt
 <!-- only tc002 -->
 ### HTTPS on your local network
 
-For a device with its own certificate, give the request a certificate fingerprint or a trusted
-certificate authority (CA). A fingerprint identifies one exact certificate. A CA can issue new
-certificates for the device without requiring you to change the script.
+Scripts use the host's trust settings from **System → Trusted certificates**. Run the request
+once, compare the pending fingerprint with the device's certificate, then press **Trust
+certificate**. You can also enter the host there and upload your CA. Scripts need no extra HTTP
+options. See [Trusted certificates](../certificates.md).
 
-Get the SHA-256 fingerprint from a certificate file you trust, such as one exported by the device:
-
-```bash
-openssl x509 -in device.crt -noout -fingerprint -sha256
-```
-
-Copy the fingerprint after the equals sign into your script's `fingerprint` setting. This example
-reads it and the device address from the app settings:
-
-```berry
-# @name Local HTTPS
-# @config url text "Device URL" default="https://192.168.1.20/api"
-# @config fingerprint text "Certificate fingerprint"
-class LocalHttps
-  def init()
-    http.get(store.get("url"), /body,status -> log(str(status)),
-             {'pin': store.get("fingerprint")})
-  end
-end
-return LocalHttps()
-```
-
-| Option | Value | Checks |
-|---|---|---|
-| `pin` | SHA-256 of the server certificate, 64 hexadecimal digits or 32 colon-separated pairs, either case | The exact certificate and its validity dates. The certificate name may differ from the URL. A renewed certificate needs a new pin |
-| `ca` | PEM certificate text, at most 64 KB | The certificate chain, validity dates and the name in the URL, using only these authorities |
-| `servername` | Expected certificate name, with `ca` only | Checks this name instead of the URL host. The network destination, HTTP Host header and TLS server name indication still use the URL |
-
-For a private CA, pass its PEM text as `ca`. If you connect by IP but the certificate names the
-device, also pass `servername`, for example `{'ca': store.get("ca"), 'servername': 'bridge.local'}`.
-The certificate must contain that name in its Subject Alternative Name field.
-
-- Pick `pin` or `ca`. Combining them rejects the request. `servername` requires `ca`.
-- These options apply to one HTTPS request only. They do not change trust for other scripts,
-  Home Assistant Voice, radio or MQTT.
-- Requests with custom trust return redirects to your callback without following them. Use the
-  final HTTPS URL so the trust decision stays with the device you chose.
-- An empty, malformed or oversized option fails with `(nil, 0)`. A trust mismatch also fails
-  before the HTTP request, including any login header, is sent.
-- Without these options, requests use the clock's public certificate authorities as usual.
-<!-- /only -->
-<!-- only esp32 esp32-s3 -->
-The `pin`, `ca` and `servername` HTTP options are unsupported. Requests supplying them fail with
-`(nil, 0)` instead of silently ignoring the requested certificate check.
 <!-- /only -->
 
 ### What your callback gets
@@ -507,7 +464,7 @@ The `pin`, `ca` and `servername` HTTP options are unsupported. Requests supplyin
 - An answer is kept up to 8 KB, or up to `cap` if you set one. It is less when the device is short
   of free memory.
 - Each script can have **8 requests** open at once.
-- `GET` follows redirects unless the request uses custom HTTPS trust. A `POST` or `PUT` does not follow them reliably.
+- `GET` follows redirects. A `POST` or `PUT` does not follow them reliably.
 <!-- only esp32 esp32-s3 -->
 - For about 15 seconds after the clock joins Wi-Fi, `https://` requests wait, then run. The first
   result simply arrives a few seconds later. When memory is too tight for HTTPS, the request is

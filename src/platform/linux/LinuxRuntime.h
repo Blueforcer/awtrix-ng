@@ -56,8 +56,8 @@
 #include "platform/linux/script/ExtensionHost.h"
 #include "platform/linux/script/KnobScripting.h"
 #include "platform/linux/script/TcpScripting.h"
-#include "platform/linux/tls/BrokerTrust.h"
-#include "platform/linux/tls/BrokerTrustApi.h"
+#include "platform/linux/tls/TrustStore.h"
+#include "platform/linux/tls/TrustStoreApi.h"
 #include "platform/tc002/audio/AudioScripting.h"
 #include "platform/tc002/runtime/MicrophoneInput.h"
 #include "platform/tc002/runtime/SupervisedRuntime.h"
@@ -171,9 +171,9 @@ class LinuxRuntime {
   DeviceConfig cfg_;
   std::unique_ptr<LinuxMqttTls> mqttTls_;
   bool mqttAllowed_ = false;
-  // The LAN service's MQTT over TLS trusts its broker as BrokerTrust decides.
-  std::unique_ptr<tls::BrokerTrust> brokerTrust_;
-  std::unique_ptr<tls::BrokerTrustApi> brokerTrustApi_;
+  // Host-scoped trust belongs to the LAN runtime, outside application files.
+  std::shared_ptr<tls::TrustStore> trustStore_;
+  std::unique_ptr<tls::TrustStoreApi> trustStoreApi_;
   std::unique_ptr<LinuxBoard> selectedBoard_;
   Tc002Board* tc002_ = nullptr;
   Tc002Input input_;

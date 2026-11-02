@@ -197,41 +197,6 @@ void useTlsTrust(httplib::Client& client, std::shared_ptr<const tls::TrustAnchor
   });
 }
 
-bool useRequestTlsTrust(httplib::Client& client, const std::string& pin,
-                        const std::string& ca, const std::string& host) {
-  std::size_t at = 0;
-  while (at < ca.size()) {
-    at = ca.find_first_not_of(" \t\r\n", at);
-    if (at == std::string::npos) break;
-    constexpr char begin[] = "-----BEGIN CERTIFICATE-----";
-    constexpr char end[] = "-----END CERTIFICATE-----";
-    if (ca.compare(at, sizeof(begin) - 1, begin) != 0) return false;
-    const auto last = ca.find(end, at + sizeof(begin) - 1);
-    if (last == std::string::npos) return false;
-    const auto block = ca.substr(at, last + sizeof(end) - 1 - at);
-    if (tls::readCertificates(block).size() != 1) return false;
-    at = last + sizeof(end) - 1;
-  }
-  auto anchors = ca.empty() ? nullptr : tls::TrustAnchors::fromPem(ca);
-  if ((!ca.empty() && !anchors) || (pin.empty() && !anchors)) return false;
-  client.set_server_certificate_verifier([anchors = std::move(anchors), pin, host](SSL* ssl) {
-    bool trusted = false;
-    if (!pin.empty()) {
-      X509* leaf = SSL_get0_peer_certificate(ssl);
-      const auto presented = tls::fingerprint(leaf);
-      trusted = leaf && presented.size() == pin.size() &&
-          CRYPTO_memcmp(presented.data(), pin.data(), pin.size()) == 0 &&
-          X509_cmp_current_time(X509_get0_notBefore(leaf)) < 0 &&
-          X509_cmp_current_time(X509_get0_notAfter(leaf)) > 0;
-    } else {
-      trusted = tls::chainTrusted(anchors.get(), ssl, host);
-    }
-    return trusted ? httplib::SSLVerifierResponse::CertificateAccepted
-                   : httplib::SSLVerifierResponse::CertificateRejected;
-  });
-  return true;
-}
-
 SSL_CTX* newTrustedTlsContext() {
   return newTrustedTlsContext(tls::publicAnchors());
 }

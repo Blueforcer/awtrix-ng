@@ -87,7 +87,8 @@ def case(host, tls, trust, mode, cert, key, custom=None):
                         conn.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + b"\r\n\r\n")
                         serve_session(conn, mode)
         except Exception as error:
-            errors.append(error)
+            if not (mode == "reject" and isinstance(error, EOFError)):
+                errors.append(error)
     worker = threading.Thread(target=serve)
     if mode != "notrust":
         worker.start()

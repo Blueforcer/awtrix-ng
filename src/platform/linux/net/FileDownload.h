@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-namespace awtrix::tls { class TrustAnchors; }
+namespace awtrix::tls { class TrustStore; }
 
 namespace awtrix::net {
 // Fetches one HTTP(S) resource into a private temporary file on its own thread. start() and
@@ -35,8 +35,7 @@ class FileDownload {
   FileDownload(const std::string& directory, const std::string& prefix, Limits limits);
   ~FileDownload();
   // origin is "http(s)://host[:port]", target the path and query.
-  uint64_t start(std::string origin, std::string target,
-                 std::shared_ptr<const tls::TrustAnchors> anchors = {});
+  uint64_t start(std::string origin, std::string target, std::shared_ptr<tls::TrustStore> trust = {});
   void cancel();
   // A finished download; its file belongs to the caller from here on.
   bool poll(Result& result);

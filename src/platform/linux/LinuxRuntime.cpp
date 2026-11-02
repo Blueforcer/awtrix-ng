@@ -168,9 +168,13 @@ int LinuxRuntime::loadConfig() {
     }
   }
   if (administration.lan) {
-    brokerTrust_ = std::make_unique<tls::BrokerTrust>(cfg_.mqttTlsPin);
-    brokerTrustApi_ = std::make_unique<tls::BrokerTrustApi>(*brokerTrust_);
-    if (cfg_.mqttTls) mqttTls_ = std::make_unique<LinuxMqttTls>(brokerTrust_->peer());
+    trustStore_ = std::make_shared<tls::TrustStore>(
+        (std::filesystem::u8path(host::dataDir()).parent_path() / "tls-private").string());
+    trustStoreApi_ = std::make_unique<tls::TrustStoreApi>(*trustStore_, [this](const std::string& host) {
+      if (mqttTls_ && (host.empty() || tls::TrustStore::normalizeHost(cfg_.mqttHost) == host)) mqtt_.reconnect();
+      if (voice_) voice_->trustChanged(host);
+    });
+    if (cfg_.mqttTls) mqttTls_ = std::make_unique<LinuxMqttTls>(trustStore_);
   }
   logbuf::setVerbose(cfg_.debugMode);
   applyConfig();
@@ -302,6 +306,7 @@ void LinuxRuntime::composeConnectivity() {
   capabilities.clockFaces = target_->clockFaces;
   capabilities.voice = supervised && speaker_;
   capabilities.mqttTls = o_.administration.lan;
+  capabilities.tlsTrust = bool(trustStore_);
   capabilities.bootSound = supervised && speaker_;
   capabilities.enlargeApps = pageZoom_->available();
   std::string capabilitiesText =
@@ -314,7 +319,6 @@ void LinuxRuntime::composeConnectivity() {
     applyConfig();
     engine().state().runtime().tempDecimals = cfg_.tempDecimals;
     lanLogin_.update(cfg_);
-    if (brokerTrust_) brokerTrust_->setPin(cfg_.mqttTlsPin);
     if (mqttAllowed_) mqtt_.applyHaConfig(cfg_);
     mirror_.configure(cfg_);
   });
@@ -331,8 +335,9 @@ void LinuxRuntime::composeScriptServices() {
   if (supervised && speaker_) {
     const auto privateDirectory = std::filesystem::u8path(host::dataDir()).parent_path() / "voice-private";
     voice_ = std::make_unique<tc002::voice::VoiceRuntime>(privateDirectory.string(), *speaker_, *microphone_,
-      [this](std::string request) { return link_.send(std::move(request)); });
+      [this](std::string request) { return link_.send(std::move(request)); }, trustStore_);
   }
+  scriptHttp_.setTrustStore(trustStore_);
   oauthVault_.emplace((std::filesystem::u8path(host::dataDir()).parent_path() / "script-private").string());
   oauthService_.emplace(
       *oauthVault_, [this](const oauth::HttpCall& call) { return oauthTransport_(call); }, savedSource,
@@ -343,6 +348,7 @@ void LinuxRuntime::composeScriptServices() {
   // Script sign-in exists as the script host does: decided once, at start.
   httpOptions_.platformHandler = [this, scriptSignIn = cfg_.scriptingEnabled](const httplib::Request& request,
                                                                              httplib::Response& response) {
+    if (trustStoreApi_ && trustStoreApi_->handle(request, response)) return true;
     if (scriptSignIn && oauthApi_->handle(request, response)) return true;
     return voice_ && voice_->handle(request, response);
   };
@@ -431,7 +437,6 @@ void LinuxRuntime::composePlatformRoutes() {
     if (path == "/api/v1/audio/clip")
       return speaker_ ? speaker_->routeAudio(method, path, request, body)
                       : tc002::routeClip<tc002::Tc002AudioSink>(method, path, request, body, nullptr, audio_);
-    if (const int status = brokerTrustApi_ ? brokerTrustApi_->handle(method, path, request, body) : 0) return status;
     if (const int status = extensions_.gamepadApi->handle(method, path, request, body)) return status;
     return iphoneBridge_ ? iphoneBridge_->handle(method, path, request, body) : 0;
   };

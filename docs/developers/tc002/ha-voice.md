@@ -23,8 +23,8 @@ state, the Voice switch, the Home Assistant address (for example
 have both STT (speech-to-text) and TTS (text-to-speech). An empty pipeline follows Home Assistant's
 preferred pipeline. **Save and connect** saves and switches Voice on. The Voice switch saves at once;
 off closes the Home Assistant connection, and the knob's long press then does nothing. HTTPS
-verifies the certificate chain and host name against the saved Voice CA when present, otherwise
-the runtime's public CA store. There is no insecure TLS option. After a failure the runtime reconnects at most every 10 s.
+verifies the certificate chain and host name against the runtime's CA store; there is no insecure
+TLS option. After a failure the runtime reconnects at most every 10 s.
 
 ## Operation
 
@@ -78,8 +78,7 @@ exit or restart revokes its capture, and callbacks never cross runtime generatio
 `AssistSession` is a state machine on the render thread with injected transport, capture and
 playback ports. `WebSocket` (`WebSocket.cpp`) is a WebSocket client on plain sockets and OpenSSL,
 with DNS, TCP, TLS and socket I/O on its own worker thread; TLS peers are checked against the
-saved Voice CA or the runtime's public CA store (`--ca-file`, `tls/TlsTrust`). The same immutable
-Voice CA snapshot is passed to spoken-answer downloads without changing public trust.
+runtime's CA store (`--ca-file`, `tls/TlsTrust`), the store every HTTPS client uses.
 `net::FileDownload` (`platform/linux/net`) fetches the answer on another worker, at most 2 MiB
 within 15 s and without redirects; cancelling uses a duplicated socket descriptor and never waits
 for an HTTP client lock. MP3s played from a URL use the same downloader.
@@ -106,20 +105,17 @@ Network reconnects never replay audio.
 The configuration and token are stored in `voice-private/voice.json` beside the application data
 directory (`/data/awtrix-ng/voice-private/`), a private 0700 directory with a 0600 file. The token
 is left out of normal settings, backups, status and logs. Changing the Home Assistant address
-requires entering the token again, so a kept token never moves to another server. A saved CA is
-cleared when the origin changes unless the request supplies a CA for the new server. A full factory
+requires entering the token again, so a kept token never moves to another server. A full factory
 reset erases the private configuration. TTS temporary files live in a private directory under
 `/tmp`, away from flash and the release, and are removed after completion or cancellation.
 Microphone audio is never written to a file.
 
 `GET /api/v1/voice` returns the redacted configuration (`config`), the session `state`, an `error`
-code and the bounded list of Home Assistant `pipelines`. The error codes are `connectionLost`,
+code and the bounded list of Home Assistant `pipelines`. The error codes are `certificateNotTrusted`, `connectionLost`,
 `tokenRejected`, `haError`, `pipelineIncomplete`, `nothingUnderstood`, `audioTooSlow`, `timeout`,
 `microphoneFailed`, `playbackFailed`, `microphoneUpdate` (the MCU does not offer the stream yet) and
 `configUnavailable`; the web UI shows each as a few words. `POST /api/v1/voice` saves the supplied
-fields (`url`, `token`, `pipeline`, `device`, `enabled`, `ca`) and reconnects. `ca` accepts up to
-16384 bytes of strict PEM CA certificates, rejects keys and non-CA certificates, and requires
-HTTPS. Empty removes it. GET reports `caSet` without returning the PEM. A non-empty `device` is
+fields (`url`, `token`, `pipeline`, `device`, `enabled`) and reconnects. A non-empty `device` is
 sent as `device_id` with every `assist_pipeline/run`; Home Assistant takes the area of that device
 as the room for area-aware sentences and ignores an unknown ID. An omitted token is kept;
 `clearToken: true` removes it. The body is limited to 32768 bytes and needs a matching
@@ -151,3 +147,11 @@ needs a clock with the MCU extension and a Home Assistant instance with a workin
 - User docs: [Home Assistant Voice](../../guides/voice.md)
 - Protocol references: [Assist pipelines](https://developers.home-assistant.io/docs/voice/pipelines/)
   and [WebSocket API](https://developers.home-assistant.io/docs/api/websocket/)
+
+## Shared certificate trust
+
+The LAN runtime owns `tls::TrustStore` in the protected `tls-private` directory beside the
+application data directory. Voice uses it for the WebSocket handshake and TTS downloads.
+No Voice token or HTTP upgrade is sent before verification. Trust changes cancel the current
+session and reset reconnect timing. Legacy Voice CA fields are ignored when loading and removed
+on the next save, while URL and token remain intact. Ordinary backups exclude the private store.

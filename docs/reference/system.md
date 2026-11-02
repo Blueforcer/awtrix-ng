@@ -138,7 +138,7 @@ matrix list) are checked separately and answer `400 invalidPinConfig`; the rules
 in [GPIO & boards](gpio.md).
 <!-- /only -->
 <!-- only tc002 -->
-Apart from the number ranges, the IP address fields, `mqttTlsPin` and the rules in the next
+Apart from the number ranges, the IP address fields and the rules in the next
 section, text fields are not checked. Unknown keys are ignored.
 <!-- /only -->
 
@@ -227,8 +227,7 @@ AWTRIX checks the connection every 5 s and reconnects if it dropped.
 | `mqttUser` | string | - | `""` | Broker user name. **Not a secret** – `GET` returns it. If user and password are both empty, AWTRIX connects without login. | yes |
 | `mqttPass` | string | - | `""` | Broker password. **Secret**: left out of `GET`; an empty value on write keeps the stored one. | yes |
 <!-- only tc002 -->
-| `mqttTls` | bool | - | `false` | Connect over TLS, usually on port `8883`. AWTRIX accepts only a broker whose certificate comes from a public certificate authority and names `mqttHost`, or whose certificate you trusted with `mqttTlsPin`. An uploaded broker CA replaces both; see [MQTT → Connect over TLS](../guides/mqtt.md#connect-over-tls-tc002). | yes |
-| `mqttTlsPin` | string | 64 hex digits | `""` | SHA-256 of the broker certificate you trust, in lowercase hex, as `GET /api/v1/mqtt/tls` shows it. `""` trusts none. Anything else → `422` `expected 64 lowercase hex digits`. Applies at the next connection attempt. | no |
+| `mqttTls` | bool | - | `false` | Connect over TLS, usually on port `8883`. Uses the host settings under **System → Trusted certificates**. See [Trusted certificates](../guides/certificates.md). Applies after a restart. | yes |
 <!-- /only -->
 | `mqttPrefix` | string | - | `""` | Start of every topic. Empty → the device uid (MAC address in lowercase, without colons). Used for `<prefix>/cmd/#`, `<prefix>/availability` and `<prefix>/state/*`. | yes |
 | `haDiscovery` | bool | - | `false` | Announce AWTRIX to Home Assistant on `<haPrefix>/device/<uid>/config`. The MQTT topics stay the same either way. Applies at once while connected. Switching it off removes AWTRIX from Home Assistant. | no |

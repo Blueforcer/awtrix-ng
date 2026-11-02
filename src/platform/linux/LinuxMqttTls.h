@@ -5,12 +5,13 @@
 #include "platform/linux/mqtt/IMqttTransport.h"
 
 namespace awtrix {
-namespace tls { class PeerTrust; }
+namespace tls { class PeerTrust; class TrustStore; }
 
 // TLS byte transport for the shared MQTT stack. Trust is checked before any MQTT byte is sent.
 class LinuxMqttTls final : public IMqttTransport, public Client {
  public:
   explicit LinuxMqttTls(std::shared_ptr<tls::PeerTrust> trust);
+  explicit LinuxMqttTls(std::shared_ptr<tls::TrustStore> trust);
   ~LinuxMqttTls() override;
   bool valid() const;
   Client& socket() override { return *this; }

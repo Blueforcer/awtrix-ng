@@ -1,4 +1,4 @@
-"""Private Voice CA persistence and real HTTPS TTS downloads."""
+"""Shared host trust persistence and real HTTPS TTS downloads."""
 import http.server
 import ssl
 import subprocess

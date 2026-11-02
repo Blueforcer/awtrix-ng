@@ -26,7 +26,6 @@ const SYSF={
  mqttPort:F('mqtt','number','Broker port','1883 on most brokers.',{min:1,max:65535}),
  //linux:begin
  mqttTls:F('mqtt','toggle','TLS','Encrypted, usually port 8883.'),
- mqttTlsPin:F('hidden','text','',''),
  //linux:end
  mqttUser:F('mqtt','text','Username','Leave empty if the broker allows anonymous access.'),
  mqttPass:F('mqtt','secret','Password','Leave empty to keep the saved password.'),

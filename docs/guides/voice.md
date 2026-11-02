@@ -41,22 +41,11 @@ The token is kept on the clock and never shown again. To keep it, leave the fiel
 change something else. When you change the Home Assistant address, enter the token again.
 **Remove** next to the token deletes it and switches Voice off.
 
-## Use your own certificate authority
+## HTTPS with your own certificate
 
-If your HTTPS address uses a private certificate authority (CA), save its public CA certificate
-on the clock:
-
-1. Open **System → Home Assistant Voice** and enter the HTTPS address shown in your server certificate.
-2. Under **CA certificate**, press **Choose file** and select your CA's PEM certificate.
-3. Press **Save and connect**. **Custom CA saved** confirms that the certificate is stored.
-
-The clock keeps the CA after a restart and uses it for the Home Assistant connection and spoken
-answers. The server certificate must match the address and be within its validity dates.
-Other apps keep their own certificate settings.
-
-Choose another file to replace the CA. To return to public certificate authorities, press
-**Remove CA**, then **Save and connect**. Changing to a different server clears the saved CA
-unless you select a certificate for the new address too.
+Open **System → Trusted certificates** to trust the pending Home Assistant certificate, or enter
+its hostname and upload your CA. Voice and spoken answers use the same host settings.
+See [Trusted certificates](certificates.md).
 
 ## Switch it off
 
@@ -114,7 +103,8 @@ message to [`<prefix>/cmd/voice/start`](../reference/mqtt.md#voicestart).
 
 | Connection shows | What to do |
 |---|---|
-| HA unreachable | Check the address and that Home Assistant runs. For HTTPS with a private CA, upload its certificate under **CA certificate**. |
+| Certificate not trusted | Open **System → Trusted certificates**, then approve the fingerprint or upload the host's CA. |
+| HA unreachable | Check the address and that Home Assistant runs. Address only, no path. |
 | Token rejected | Create a new long-lived access token and save it. |
 | Pipeline lacks STT/TTS | Pick a pipeline with speech-to-text and text-to-speech. |
 | Not understood | Speak once the house opens its mouth, without long pauses. |

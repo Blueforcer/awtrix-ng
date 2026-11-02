@@ -1,13 +1,34 @@
 #include "platform/linux/LinuxScriptHttp.h"
 #include <chrono>
+#include <algorithm>
+#include "platform/linux/tls/TrustStore.h"
+#include "core/net/Url.h"
 #include "platform/linux/host/vendor/httplib.h"
 #include "core/script/HttpBodyFilter.h"
 #include "core/script/ModbusTcp.h"
-#include "platform/linux/tls/TlsTrust.h"
 #include "platform/linux/host/compat/WiFiClient.h"
 #include "system/Log.h"
 
 namespace awtrix {
+namespace {
+// Redirects create a new client and a new verifier. A destination's custom trust never follows
+// a Location header, even to the same host, and credentials never cross origins.
+std::string redirectUrl(const std::string& current, std::string location) {
+  const auto parsed = net::parseUrl(current);
+  if (!parsed || location.empty()) return {};
+  const auto hash = location.find('#');
+  if (hash != location.npos) location.resize(hash);
+  if (location.compare(0, 2, "//") == 0) return std::string(parsed->scheme) + ':' + location;
+  if (location.find("://") != location.npos) return location;
+  if (location.empty()) return current;
+  if (location.front() == '/') return parsed->origin() + location;
+  std::string path = parsed->requestTarget();
+  if (location.front() == '?') path.resize(path.find('?') == path.npos ? path.size() : path.find('?'));
+  else path.resize(path.substr(0, path.find('?')).rfind('/') + 1);
+  return parsed->origin() + path + location;
+}
+}
+
 LinuxScriptHttp::~LinuxScriptHttp() { stop(); }
 void LinuxScriptHttp::begin(std::function<void(script::HttpResult)> result) {
   result_ = std::move(result);
@@ -26,8 +47,6 @@ void LinuxScriptHttp::stop() {
   if (worker_.joinable()) worker_.join();
 }
 bool LinuxScriptHttp::request(const script::HttpRequest& req) {
-  auto trust = req.tls;
-  if (!script::normalizeHttpTlsOptions(trust, req.url)) return false;
   if (script::modbus::isUrl(req.url)) {
     script::modbus::Read read;
     if (req.method != "GET" || !script::modbus::parse(req.url, read)) return false;
@@ -92,41 +111,58 @@ void LinuxScriptHttp::run() {
       if (result_) result_(std::move(result));
       continue;
     }
-    std::string origin, path;
-    net::splitUrl(req.url, origin, path);
-    httplib::Client client(origin);
     const std::string method = req.method.empty() ? "GET" : req.method;
-    // Custom trust stays with this destination; other reads follow redirects as on the ESP32.
     const bool reading = method == "GET" || method == "HEAD";
-    net::configure(client, {script::kHttpTimeoutMs, 3, reading && !req.tls.active()});
-    if (req.tls.active()) {
-      auto trust = req.tls;
-      std::string host(net::parseUrl(req.url)->host);
-      if (!trust.servername.empty()) host = trust.servername;
+    std::string url = req.url;
+    auto headers = req.headers;
+    const auto started = std::chrono::steady_clock::now();
+    for (unsigned hop = 0; hop <= 20; ++hop) {
+      std::string origin, path;
+      if (!net::splitUrl(url, origin, path)) break;
+      const auto parsed = net::parseUrl(url);
+      std::string host(parsed->host);
       if (host.front() == '[') host = host.substr(1, host.size() - 2);
-      if (!script::normalizeHttpTlsOptions(trust, req.url) ||
-          !useRequestTlsTrust(client, trust.pin, trust.ca, host)) {
-        {
-          std::lock_guard<std::mutex> lock(mutex_);
-          if (stopping_) return;
+      const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - started).count();
+      if (elapsed >= script::kHttpTimeoutMs) break;
+      httplib::Client client(origin);
+      net::configure(client, {script::kHttpTimeoutMs - elapsed, 3, false});
+      bool customTrust = false;
+      if (trust_ && parsed->tls()) tls::useHostTlsTrust(client, trust_, host, &customTrust);
+      interrupt_.watch(client);
+      script::HttpBodyFilter filter;
+      filter.begin(req.find, req.keep, script::httpBodyCap(req.maxBytes));
+      const auto response = net::send(client, method, path, req.body, headers,
+                                     [&](const char* bytes, std::size_t n) {
+        filter.feed(bytes, n);
+        return !filter.outOfRoom();
+      });
+      interrupt_.release();
+      if (!response) break;
+      const int status = response->status;
+      const bool redirect = status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
+      if (reading && redirect && !customTrust && (!trust_ || !parsed->tls() || !trust_->custom(host))) {
+        if (hop == 20) break;
+        const auto next = redirectUrl(url, response->get_header_value("Location"));
+        const auto address = net::parseUrl(next);
+        if (!address || address->userinfo) break;
+        // Even a public server cannot redirect a request into host-specific private trust.
+        std::string nextHost(address->host);
+        if (nextHost.front() == '[') nextHost = nextHost.substr(1, nextHost.size() - 2);
+        if (trust_ && address->tls() && trust_->custom(nextHost)) break;
+        if (origin != address->origin()) {
+          headers.erase(std::remove_if(headers.begin(), headers.end(), [](const auto& header) {
+            return httplib::detail::case_ignore::equal(header.first, std::string("Authorization")) ||
+                httplib::detail::case_ignore::equal(header.first, std::string("Cookie"));
+          }), headers.end());
         }
-        if (result_) result_(std::move(result));
+        url = next;
         continue;
       }
-    }
-    interrupt_.watch(client);
-    script::HttpBodyFilter filter;
-    filter.begin(req.find, req.keep, script::httpBodyCap(req.maxBytes));
-    const auto response = net::send(client, method, path, req.body, req.headers,
-                                   [&](const char* bytes, std::size_t n) {
-      filter.feed(bytes, n);
-      return !filter.outOfRoom();
-    });
-    interrupt_.release();
-    if (response) {
-      result.status = response->status;
+      result.status = status;
       result.ok = filter.matched() && !filter.outOfRoom();
       if (result.ok) result.body = std::move(filter.body());
+      break;
     }
     {
       std::lock_guard<std::mutex> lock(mutex_);

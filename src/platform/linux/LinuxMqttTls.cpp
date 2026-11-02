@@ -21,6 +21,7 @@
 #include "platform/posix/Resolver.h"
 #include "platform/linux/tls/TlsPolicy.h"
 #include "platform/linux/tls/TlsTrust.h"
+#include "platform/linux/tls/TrustStore.h"
 #include "system/Log.h"
 
 namespace awtrix {
@@ -35,6 +36,7 @@ struct LinuxMqttTls::Impl {
   struct Write { std::vector<uint8_t> data; size_t offset = 0; Clock::time_point queued = Clock::now(); };
   tls::ContextPtr context{nullptr, SSL_CTX_free};
   std::shared_ptr<tls::PeerTrust> trust;
+  std::shared_ptr<tls::TrustStore> store;
   SSL* ssl = nullptr;
   int fd = -1;
   std::string peerName;
@@ -159,6 +161,11 @@ LinuxMqttTls::LinuxMqttTls(std::shared_ptr<tls::PeerTrust> trust) : impl_(std::m
   if (impl_->trust) impl_->context = tls::newClientContext();
 }
 
+LinuxMqttTls::LinuxMqttTls(std::shared_ptr<tls::TrustStore> trust) : impl_(std::make_unique<Impl>()) {
+  impl_->store = std::move(trust);
+  if (impl_->store) impl_->context = tls::newClientContext();
+}
+
 LinuxMqttTls::~LinuxMqttTls() { shutdown(); }
 
 bool LinuxMqttTls::valid() const { return impl_->context != nullptr; }
@@ -229,7 +236,9 @@ int LinuxMqttTls::connect(const char* address, uint16_t port) {
   while (!state.cancelled.load() && Clock::now() < deadline) {
     const int result = SSL_connect(state.ssl);
     if (result == 1) {
-      if (state.trust->check(state.ssl, state.peerName) == tls::PeerTrust::Verdict::Trusted) return 1;
+      const auto verdict = state.store ? state.store->check(state.ssl, state.peerName)
+                                       : state.trust->check(state.ssl, state.peerName);
+      if (verdict == tls::PeerTrust::Verdict::Trusted) return 1;
       break;
     }
     const int error = SSL_get_error(state.ssl, result);

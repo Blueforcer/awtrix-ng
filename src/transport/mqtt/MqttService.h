@@ -37,6 +37,9 @@ class MqttService : private PlatformMqttCommands {
   }
   // The web UI address Home Assistant links the device to, asked before every announcement.
   void setWebUrl(std::function<std::string()> url) { webUrl_ = std::move(url); }
+#ifdef AWTRIX_PLATFORM_LINUX
+  void reconnect() { link_.reconnect(); }
+#endif
   void applyHaConfig(const DeviceConfig& cfg);
   // Commands only this platform has, asked after the shared ones with the topic below the prefix
   // ("cmd/..."): false for a topic it does not know, otherwise true with the result to publish.

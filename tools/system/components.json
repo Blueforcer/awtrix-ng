@@ -1,7 +1,7 @@
 {
   "components": [
     {
-      "files_sha256": "5317c94a337e73e3b7942fed9fd743ac651973dc45721af9815281249a866bcd",
+      "files_sha256": "91937ff33ae936bac8b46b572dfd3e24e6c18ae01a54cd37dcb83039856f2338",
       "id": "berry",
       "license": {
         "file": "LICENSES/MIT-Berry.txt",

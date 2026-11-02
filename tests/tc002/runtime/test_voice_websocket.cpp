@@ -3,8 +3,9 @@
 #include <string>
 #include <thread>
 
-#include "platform/linux/tls/TlsTrust.h"
+#include "platform/linux/tls/TrustStore.h"
 #include "platform/posix/Files.h"
+#include <filesystem>
 #include "platform/tc002/voice/WebSocket.h"
 using awtrix::tc002::voice::WebSocket;
 int main(int argc, char** argv) {
@@ -16,11 +17,13 @@ int main(int argc, char** argv) {
   const bool failing = refused || mode == "oversize" || mode == "binary" || mode == "masked";
   WebSocket socket;
   WebSocket::Endpoint endpoint{argv[1], argv[2], "/api/websocket", std::string(argv[3]) == "tls", {}};
+  char directory[] = "/tmp/awtrix-ws-trust-XXXXXX";
+  struct Cleanup { const char* path; ~Cleanup() { std::filesystem::remove_all(path); } } cleanup{directory};
   if (argc == 7) {
-    std::string pem;
-    if (!awtrix::posix::readText(argv[6], pem)) return 9;
-    endpoint.anchors = awtrix::tls::TrustAnchors::fromCaPem(pem);
-    if (!endpoint.anchors) return 10;
+    if (!::mkdtemp(directory)) return 9;
+    endpoint.trust = std::make_shared<awtrix::tls::TrustStore>(directory);
+    std::string ca;
+    if (!awtrix::posix::readText(argv[6], ca) || endpoint.trust->uploadCa(endpoint.host, ca) != 200) return 10;
   }
   auto generation = socket.connect(endpoint);
   auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(8);

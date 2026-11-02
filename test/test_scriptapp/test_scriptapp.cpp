@@ -365,7 +365,6 @@ struct FakeHttp : script::IScriptHttp {
   std::string lastMethod;
   std::string lastBody;
   script::HttpHeaders lastHeaders;
-  script::HttpTlsOptions lastTls;
   int calls = 0;
   bool accept = true;
   bool request(const script::HttpRequest& req) override {
@@ -375,7 +374,6 @@ struct FakeHttp : script::IScriptHttp {
     lastMethod = req.method;
     lastBody = req.body;
     lastHeaders = req.headers;
-    lastTls = req.tls;
     ++calls;
     return accept;
   }
@@ -496,56 +494,6 @@ static void test_http_get_defaults_to_get_without_body_or_headers() {
   TEST_ASSERT_EQUAL_STRING("GET", fake.lastMethod.c_str());
   TEST_ASSERT_EQUAL_STRING("", fake.lastBody.c_str());
   TEST_ASSERT_TRUE(fake.lastHeaders.empty());
-}
-
-static void test_http_tls_options_are_scoped_and_validated() {
-  FakeHttp fake;
-  g_svc.http = &fake;
-  script::BerryVM vm;
-  const std::string pin(64, 'a');
-  const std::string source =
-      "var fails = 0\n"
-      "def cb(b, st) if b == nil && st == 0 fails += 1 end end\n"
-      "def pinned() http.get('https://bridge/', cb, {'pin': '" + std::string(64, 'A') + "'}) end\n"
-      "def ca() http.get('https://bridge/', cb, {'ca': 'PEM', 'servername': 'bridge-id'}) end\n"
-      "def defaults() http.get('https://bridge/', cb) end\n"
-      "def bad()\n"
-      "  http.get('https://bridge/', cb, {'pin': ''})\n"
-      "  http.get('https://bridge/', cb, {'pin': 123})\n"
-      "  http.get('https://bridge/', cb, {'pin': 'abc'})\n"
-      "  http.get('https://bridge/', cb, {'ca': ''})\n"
-      "  http.get('https://bridge/', cb, {'ca': false})\n"
-      "  http.get('https://bridge/', cb, {'servername': 'bridge-id'})\n"
-      "  http.get('https://bridge/', cb, {'ca': 'PEM', 'servername': 'bridge/path'})\n"
-      "  http.get('http://bridge/', cb, {'ca': 'PEM'})\n"
-      "  http.get('https://bridge/', cb, {'ca': 'PEM', 'pin': '" + pin + "'})\n"
-      "  http.get('https://bridge/', cb, {'ca': 'PEM', 'servername': 'bridge:443'})\n"
-      "  http.get('https://bridge/', cb, {'pin': '" + pin + "', 'servername': 'bridge'})\n"
-      "end\n"
-      "def binary(ca) http.get('https://bridge/', cb, {'ca': ca}) end\n"
-      "def result() return str(fails) end";
-  TEST_ASSERT_TRUE(loadWithPrelude(vm, source.c_str()));
-  RenderCtx ctx;
-  script::BindingScope scope(nullptr, &ctx, "T");
-  TEST_ASSERT_TRUE(vm.call("pinned"));
-  TEST_ASSERT_EQUAL_STRING(pin.c_str(), fake.lastTls.pin.c_str());
-  TEST_ASSERT_TRUE(vm.call("ca"));
-  TEST_ASSERT_TRUE(fake.lastTls.pin.empty());
-  TEST_ASSERT_EQUAL_STRING("PEM", fake.lastTls.ca.c_str());
-  TEST_ASSERT_EQUAL_STRING("bridge-id", fake.lastTls.servername.c_str());
-  TEST_ASSERT_TRUE(vm.call("defaults"));
-  TEST_ASSERT_FALSE(fake.lastTls.active());
-  TEST_ASSERT_TRUE(vm.call("bad"));
-  // The Berry lexer truncates NUL literals, so supply an explicit-length native value.
-  const std::string binary("PEM\0trailing", 12);
-  be_getglobal(vm.raw(), "binary");
-  be_pushnstring(vm.raw(), binary.data(), binary.size());
-  TEST_ASSERT_EQUAL_INT(BE_OK, be_pcall(vm.raw(), 1));
-  be_pop(vm.raw(), be_top(vm.raw()));
-  TEST_ASSERT_EQUAL_INT(3, fake.calls);
-  std::string result;
-  TEST_ASSERT_TRUE(vm.callString("result", result));
-  TEST_ASSERT_EQUAL_STRING("12", result.c_str());
 }
 
 static void test_http_post_carries_method_body_and_headers() {
@@ -1803,7 +1751,6 @@ int main(int, char**) {
   RUN_TEST(test_http_failure_dispatch_delivers_nil);
   RUN_TEST(test_http_callback_fires_once);
   RUN_TEST(test_http_get_defaults_to_get_without_body_or_headers);
-  RUN_TEST(test_http_tls_options_are_scoped_and_validated);
   RUN_TEST(test_http_post_carries_method_body_and_headers);
   RUN_TEST(test_http_verbs_reach_the_transport);
   RUN_TEST(test_http_rejects_bad_method_and_malformed_header_before_the_transport);

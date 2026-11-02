@@ -136,6 +136,7 @@ function systemPage(view,data){
   hubTokenSection(page);
   //linux:begin
   if(S.gamepad)gamepadSection(page);
+  if(S.tlsTrust)certificatesSection(page);
   if(S.voice)voiceSection(page);
   if(S.iphone)iphoneSection(page);
   if(S.mqttTls&&sysFields.mqttTls){
@@ -144,7 +145,8 @@ function systemPage(view,data){
       const p=Number(mp.get());
       if(p===1883||p===8883){mp.fill(tl.get()?8883:1883);page.update();}
     });
-    brokerTrustRows(page);
+    if(S.tlsTrust)page.panel.querySelector('#sec-mqtt .rows')?.append(
+      actionRow(t('ctSection'),null,[certificateLink()]));
   }
   //linux:end
   const statusBadge=(id,label,help)=>{

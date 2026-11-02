@@ -760,17 +760,7 @@ int b_http_request(bvm* vm) {
     const int cap = argInt(vm, 8);
     req.maxBytes = cap > 0 ? static_cast<std::size_t>(cap) : kMaxHttpBody;
 
-    const auto tlsString = [&](int index, std::string& out, std::size_t limit) {
-      if (be_top(vm) < index || be_isnil(vm, index)) return true;
-      if (!be_isstring(vm, index)) return false;
-      const auto size = static_cast<std::size_t>(be_strlen(vm, index));
-      if (!size || size > limit) return false;
-      out.assign(be_tostring(vm, index), size);
-      return out.find('\0') == std::string::npos;
-    };
-    const bool validTls = tlsString(9, req.tls.pin, 95) && tlsString(10, req.tls.ca, 65536) &&
-        tlsString(11, req.tls.servername, 253) && normalizeHttpTlsOptions(req.tls, req.url);
-    if (validTls && normalizeMethod(be_tostring(vm, 2), req.method) && keep >= 0 &&
+    if (normalizeMethod(be_tostring(vm, 2), req.method) && keep >= 0 &&
         parseHeaderBlock(headerBlock, req.headers))
       ok = g_svc->http->request(req);
     else if (g_svc->logDebug)

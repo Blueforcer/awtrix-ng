@@ -2083,7 +2083,8 @@ paths:
                   ble: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where scripts can import ble. Radio health is reported by ble.state()."}
                   gamepad: {x-only: [tc002], type: boolean, enum: [true], description: "Present only while scripts can import gamepad, which needs scripting on. /api/v1/gamepad exists. A Bluetooth gamepad can be paired where ble is true as well."}
                   gamepadRemote: {x-only: [tc002], type: boolean, enum: [true], description: "Present only while a phone can be a gamepad, which needs scripting on. POST /api/v1/gamepad/remote exists."}
-                  mqttTls: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where MQTT can connect over TLS. /api/v1/mqtt/tls exists."}
+                  tlsTrust: {x-only: [tc002], type: boolean, enum: [true], description: "Shared host certificate trust API exists."}
+                  mqttTls: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where MQTT can connect over TLS."}
                   voice: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where Home Assistant Voice can be set up. /api/v1/voice exists."}
                   bootSound: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where the clock plays a sound at power-on. The bootSound setting switches it."}
                   enlargeApps: {x-only: [tc002], type: boolean, enum: [true], description: "Present only where pushed apps and notifications can be shown at double size. The enlargeApps setting switches it."}
@@ -2382,28 +2383,46 @@ paths:
         "200": { $ref: "#/components/responses/Ok" }
         "404": { description: 'notFound, "no such session": no phone plays under that number.' }
 
-  /api/v1/mqtt/tls:
+  /api/v1/tls/trust:
     x-only: [tc002]
-    description: "Only where capabilities.mqttTls is true. Elsewhere 404."
+    description: "Only where capabilities.tlsTrust is true. Mutations require matching Origin and Host plus X-Awtrix-Trust: 1."
     get:
       tags: [system]
-      summary: How the MQTT client trusts its broker over TLS
+      summary: Shared host certificate trust and pending fingerprints
       responses:
-        "404": { $ref: "#/components/responses/NotOnThisDevice" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
         "200":
-          description: How the broker is trusted.
+          description: Shared certificate trust.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/MqttTls" }
+              schema: { $ref: "#/components/schemas/CertificateTrust" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    delete:
+      tags: [system]
+      summary: Reset saved and pending certificate trust
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "403": { description: Same-origin guard missing or invalid. }
+        "507": { description: Certificate trust not saved. }
 
-  /api/v1/mqtt/tls/ca:
+  /api/v1/tls/trust/{host}:
     x-only: [tc002]
-    description: "Only where capabilities.mqttTls is true. Elsewhere 404."
+    parameters:
+      - { name: host, in: path, required: true, schema: { type: string, maxLength: 253 } }
+    delete:
+      tags: [system]
+      summary: Forget a host's saved and pending certificate trust
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "403": { description: Requires matching Origin and Host plus X-Awtrix-Trust header. }
+
+  /api/v1/tls/trust/{host}/ca:
+    x-only: [tc002]
+    parameters:
+      - { name: host, in: path, required: true, schema: { type: string, maxLength: 253 } }
     put:
       tags: [system]
-      summary: Upload the CA the MQTT broker's certificate must come from
-      description: Replaces public certificate authorities and mqttTlsPin from the next connection attempt on.
+      summary: Upload the host's CA certificates
+      description: Strict CA PEM, at most 65536 decoded bytes. Requires matching Origin and Host plus X-Awtrix-Trust header. Maximum 32 saved hosts.
       requestBody:
         required: true
         content:
@@ -2412,30 +2431,45 @@ paths:
               type: object
               required: [certificate]
               properties:
-                certificate: { type: string, maxLength: 65536, description: One or more CA certificates in PEM. }
+                certificate: { type: string, maxLength: 65536 }
       responses:
-        "415": { $ref: "#/components/responses/WrongContentType" }
-        "404": { $ref: "#/components/responses/NotOnThisDevice" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "200":
-          description: Saved. How the broker is trusted now.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/MqttTls" }
+        "200": { $ref: "#/components/responses/Ok" }
+        "409": { description: Saved host limit reached. }
         "422": { $ref: "#/components/responses/Invalid" }
-        "507": { description: "insufficientStorage: not saved" }
+        "503": { description: Reset the unusable store first. }
+        "507": { description: Certificate trust not saved. }
     delete:
       tags: [system]
-      summary: Back to public certificate authorities and the trusted fingerprint
-      description: Also deletes an unusable CA.
+      summary: Remove the host's CA
       responses:
-        "404": { $ref: "#/components/responses/NotOnThisDevice" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "200":
-          description: Deleted. How the broker is trusted now.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/MqttTls" }
+        "200": { $ref: "#/components/responses/Ok" }
+
+  /api/v1/tls/trust/{host}/pin:
+    x-only: [tc002]
+    parameters:
+      - { name: host, in: path, required: true, schema: { type: string, maxLength: 253 } }
+    post:
+      tags: [system]
+      summary: Approve the exact pending leaf certificate
+      description: Requires matching Origin and Host plus X-Awtrix-Trust header. Pins ignore certificate dates and hostname checks.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fingerprint]
+              properties:
+                fingerprint: { type: string, pattern: '^[0-9a-f]{64}$' }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "409": { description: Pending fingerprint changed or saved host limit reached. }
+        "422": { $ref: "#/components/responses/Invalid" }
+    delete:
+      tags: [system]
+      summary: Remove the host's pin
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
 
   /api/v1/voice:
     x-only: [tc002]
@@ -2456,25 +2490,24 @@ paths:
                 properties:
                   config:
                     type: object
-                    required: [enabled, url, pipeline, device, tokenSet, caSet]
+                    required: [enabled, url, pipeline, device, tokenSet]
                     properties:
                       enabled: { type: boolean }
                       url: { type: string, description: "Home Assistant address. \"\" when none is set." }
                       pipeline: { type: string, description: "Assist pipeline ID. \"\" for the default." }
                       device: { type: string, description: "Home Assistant device ID whose area is the room for requests. \"\" when none is set." }
                       tokenSet: { type: boolean, description: The token itself is never returned. }
-                      caSet: { type: boolean, description: A custom CA is saved for the Voice connection and spoken answers. }
                   state: { type: string, enum: [offline, connecting, ready, starting, listening, processing, speaking, error] }
                   error:
                     type: string
                     description: |
-                      Why the last attempt failed. "" when all is well. One of connectionLost, tokenRejected, haError, pipelineIncomplete, nothingUnderstood, audioTooSlow, timeout, microphoneFailed, playbackFailed, microphoneUpdate, configUnavailable. Later versions may add codes.
+                      Why the last attempt failed. "" when all is well. One of connectionLost, certificateNotTrusted, tokenRejected, haError, pipelineIncomplete, nothingUnderstood, audioTooSlow, timeout, microphoneFailed, playbackFailed, microphoneUpdate, configUnavailable. Later versions may add codes.
                   pipelines: { type: array, items: { type: object }, description: "Home Assistant's Assist pipelines once connected." }
     post:
       tags: [system]
       summary: Change the Home Assistant Voice settings
       description: |
-        Only from the device's own web page: needs X-Awtrix-Voice: 1 and an Origin matching the device. Body limit 32768 bytes. Left-out fields keep their value. enabled needs an address and a token. A new server needs the token again and clears the saved CA unless ca is supplied too.
+        Only from the device's own web page: needs X-Awtrix-Voice: 1 and an Origin matching the device. Left-out fields keep their value. enabled needs an address and a token. A new address needs the token again.
       parameters:
         - { name: X-Awtrix-Voice, in: header, required: true, schema: { type: string, enum: ["1"] } }
       requestBody:
@@ -2490,10 +2523,6 @@ paths:
                 device: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9]*$", description: "Home Assistant device ID. \"\" for none." }
                 token: { type: string, maxLength: 4096, description: A long-lived access token. }
                 clearToken: { type: boolean, description: true deletes the saved token. }
-                ca:
-                  type: string
-                  maxLength: 16384
-                  description: 'PEM CA certificates, at most 16384 bytes. Needs HTTPS. Replaces public roots for Voice only, including spoken answers. Checks server name and validity dates. No redirects. Empty removes the saved CA.'
       responses:
         "404": { $ref: "#/components/responses/NotOnThisDevice" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -3696,19 +3725,23 @@ components:
           maxItems: 32
           items: { $ref: "#/components/schemas/RadioStation" }
 
-    MqttTls:
+    CertificateTrust:
       x-only: [tc002]
       type: object
-      required: [ca, pending]
+      required: [usable, hosts]
       properties:
-        ca:
-          type: string
-          enum: [public, uploaded, unusable]
-          description: "public: public certificate authorities and mqttTlsPin count. Uploaded: only the uploaded CA. Unusable: the uploaded CA cannot be read, no broker is accepted until it is uploaded again or deleted."
-        pending:
-          type: [string, "null"]
-          pattern: '^[0-9a-f]{64}$'
-          description: SHA-256 of a refused broker certificate that can be trusted with mqttTlsPin.
+        usable: { type: boolean }
+        hosts:
+          type: array
+          maxItems: 64
+          items:
+            type: object
+            required: [host, pin, ca, pending]
+            properties:
+              host: { type: string }
+              ca: { type: boolean }
+              pin: { type: [string, "null"], pattern: '^[0-9a-f]{64}$' }
+              pending: { type: [string, "null"], pattern: '^[0-9a-f]{64}$' }
 
     AudioPlay:
       description: |
@@ -3981,15 +4014,7 @@ components:
           type: boolean
           default: false
           description: |
-            Connect over TLS. The broker is accepted when its certificate chains to a public certificate authority and names mqttHost, or matches mqttTlsPin. An uploaded broker CA (PUT /api/v1/mqtt/tls/ca) replaces both. Applies after a restart.
-        mqttTlsPin:
-          x-only: [tc002]
-          type: string
-          default: ""
-          pattern: '^([0-9a-f]{64})?$'
-          description: >
-            SHA-256 of the trusted broker certificate, as GET /api/v1/mqtt/tls reports it
-            pending. Empty trusts none. Applies at the next connection attempt.
+            Connect over TLS using the shared host certificate store under System / Trusted certificates. Applies after a restart.
         haDiscovery: { type: boolean, default: false, description: Home Assistant auto-discovery }
         haPrefix: { type: string, default: homeassistant }
         # --- time ---

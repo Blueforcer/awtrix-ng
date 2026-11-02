@@ -1,11 +1,12 @@
 #include "../../support.h"
 #include <unistd.h>
 #include <chrono>
+#include <filesystem>
 #include <thread>
 #include "core/api/JsonWriter.h"
 #include "platform/posix/Files.h"
 #include "platform/linux/net/FileDownload.h"
-#include "platform/linux/tls/TlsTrust.h"
+#include "platform/linux/tls/TrustStore.h"
 #include "platform/tc002/voice/VoiceConfig.h"
 
 using namespace awtrix;
@@ -20,34 +21,28 @@ int main(int argc, char** argv) {
   tls::setPublicAnchors(tls::TrustAnchors::fromCaPem(wrong));
   char directory[] = "/tmp/awtrix-voice-ca-XXXXXX";
   check(::mkdtemp(directory) != nullptr, "temporary configuration");
-  ConfigStore store(directory);
+  ConfigStore config(directory);
   ConfigStore::Rejection error;
-  check(store.load(), "new config");
-  const auto settings = [&](const std::string& pem) {
-    std::string json;
-    api::JsonWriter(json).beginObject().member("url", origin).member("token", "test-token")
-        .member("ca", pem).member("enabled", true).endObject();
-    return json;
-  };
-  check(store.update(settings(ca), error) && store.get().caTrust, "save valid private CA");
-  check(store.publicJson().find("\"caSet\":true") != std::string::npos &&
-        store.publicJson().find("BEGIN CERTIFICATE") == std::string::npos &&
-        store.publicJson().find("test-token") == std::string::npos, "redacted status");
-  for (const auto& pem : {std::string("bad"), ca + "trailing", ca + '\0', leaf,
-                           ca + "-----BEGIN PRIVATE KEY-----", std::string(kMaxCaBytes + 1, 'x')}) {
-    check(!store.update(settings(pem), error) && error.field == "ca" && store.get().ca == ca,
-          "invalid CA leaves saved trust untouched");
-  }
-  check(!store.update(R"({"ca":false})", error) && error.field == "ca", "CA must be text");
-  check(store.update(R"({"pipeline":"other"})", error) && store.get().ca == ca,
-        "ordinary edits preserve CA");
-  ConfigStore reloaded(directory);
-  check(reloaded.load() && reloaded.get().ca == ca && reloaded.get().caTrust, "CA survives restart");
-
+  std::string legacy;
+  api::JsonWriter(legacy).beginObject().member("url", origin).member("token", "test-token")
+      .member("enabled", true).member("ca", ca).endObject();
+  check(posix::replaceText(std::string(directory) + "/voice.json", legacy), "old test-build settings");
+  check(config.load() && config.get().token == "test-token" && config.get().url == origin,
+        "legacy Voice settings retain URL and token");
+  check(config.publicJson().find("caSet") == std::string::npos && config.publicJson().find("test-token") == std::string::npos,
+        "no separate Voice trust or token exposed");
+  check(!config.update(R"({"ca":"ignored"})", error) && error.field == "ca", "retired CA input rejected");
+  check(config.update(R"({"pipeline":"other"})", error), "save other Voice setting");
+  std::string saved;
+  check(posix::readText(std::string(directory) + "/voice.json", saved, kMaxConfigBytes) &&
+        saved.find("BEGIN CERTIFICATE") == std::string::npos, "old CA stripped on save");
+  auto store = std::make_shared<tls::TrustStore>(std::string(directory) + "/trust");
+  check(store->uploadCa("localhost", ca) == 200, "shared CA upload");
+  auto reloaded = std::make_shared<tls::TrustStore>(std::string(directory) + "/trust");
   net::FileDownload download("/tmp", "voice-ca-test", {1024, 3000, true, nullptr});
   const auto fetch = [&](const std::string& url, const char* path,
-                         std::shared_ptr<const tls::TrustAnchors> anchors, bool success, int status) {
-    const auto generation = download.start(url, path, std::move(anchors));
+                         std::shared_ptr<tls::TrustStore> trust, bool success, int status) {
+    const auto generation = download.start(url, path, std::move(trust));
     net::FileDownload::Result result;
     const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     bool done = false;
@@ -61,18 +56,14 @@ int main(int argc, char** argv) {
       ::unlink(result.path.c_str());
     } else check(result.path.empty(), "failed download leaves no file");
   };
-  fetch(origin, "/api/tts_proxy/ok", reloaded.get().caTrust, true, 200);
+  fetch(origin, "/api/tts_proxy/ok", reloaded, true, 200);
   fetch(origin, "/api/tts_proxy/default", {}, false, 0);
-  fetch(std::string("https://127.0.0.1:") + argv[4], "/api/tts_proxy/wrong-name", reloaded.get().caTrust, false, 0);
-  fetch(origin, "/api/tts_proxy/redirect", reloaded.get().caTrust, false, 302);
-  fetch(std::string("http://localhost:") + argv[4], "/api/tts_proxy/plain", reloaded.get().caTrust, false, 0);
-  check(store.update(R"({"ca":""})", error) && !store.get().caTrust, "clear CA");
-  check(reloaded.load() && reloaded.get().ca.empty(), "removal survives restart");
-  check(store.update(settings(ca), error), "restore CA");
-  check(store.update(R"({"url":"https://other","token":"new-token"})", error) &&
-        store.get().ca.empty() && !store.get().caTrust, "new origin clears retained CA");
-  check(!store.update(R"({"url":"http://other","token":"new-token","ca":"bad"})", error), "bad trust rejected");
-  check(store.erase() && reloaded.load() && reloaded.get().ca.empty(), "factory reset removes CA");
+  fetch(std::string("https://127.0.0.1:") + argv[4], "/api/tts_proxy/wrong-name", reloaded, false, 0);
+  fetch(origin, "/api/tts_proxy/redirect", reloaded, false, 302);
+  check(reloaded->remove("localhost") == 200, "remove saved host trust");
+  fetch(origin, "/api/tts_proxy/revoked", reloaded, false, 0);
+  check(config.erase(), "factory reset clears Voice settings");
+  std::filesystem::remove_all(std::string(directory) + "/trust");
   ::rmdir(directory);
-  std::puts("Voice CA: validation, persistence, removal, origin binding and scoped TTS downloads passed");
+  std::puts("Shared Voice trust: legacy settings, TTS persistence, name verification, redirects and revocation passed");
 }

@@ -60,10 +60,6 @@ def _http_cap(opts)
   return c == nil ? 0 : int(c)
 end
 
-def _http_tls(opts, key)
-  return opts == nil ? nil : opts.find(key)
-end
-
 def _http_send(method, url, body, cb, opts)
   var id = _http_next
   _http_next += 1
@@ -72,8 +68,7 @@ def _http_send(method, url, body, cb, opts)
   end
   if body == nil body = "" end
   if _native_http_request(id, method, url, str(body), _http_headers(opts),
-                          _http_find(opts), _http_keep(opts), _http_cap(opts),
-                          _http_tls(opts, "pin"), _http_tls(opts, "ca"), _http_tls(opts, "servername"))
+                          _http_find(opts), _http_keep(opts), _http_cap(opts))
     _http_cbs[id] = [_native_app(), cb]
   else
     # No transport, a rejected request (bad method, malformed headers) or a

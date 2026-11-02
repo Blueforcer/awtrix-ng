@@ -74,7 +74,7 @@ void ScriptHttpWorker::begin(ResultFn onResult) {
 // Called from the script VM on the main loop. Queues and returns immediately; the answer arrives
 // later through the result callback. False means it was not even accepted.
 bool ScriptHttpWorker::request(const script::HttpRequest& req) {
-  if (!started_ || req.tls.active()) return false;
+  if (!started_) return false;
   if (!WiFi.isConnected()) {
     if (script::modbus::isUrl(req.url)) logf("modbus: offline");
     return false;

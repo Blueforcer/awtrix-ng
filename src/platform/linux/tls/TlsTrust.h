@@ -75,10 +75,6 @@ void useTlsTrust(httplib::Client& client);
 // Explicit per-connection roots; the caller must disable redirects.
 void useTlsTrust(httplib::Client& client, std::shared_ptr<const tls::TrustAnchors> anchors,
                  const std::string& host);
-// Request-local trust, replacing public roots. A pin identifies the exact leaf; a CA verifies host.
-// Callers must validate options and disable redirects before using this policy.
-bool useRequestTlsTrust(httplib::Client& client, const std::string& pin,
-                        const std::string& ca, const std::string& host);
 // A TLS 1.2+ client context that verifies peers against the public anchors during the handshake;
 // nullptr while none are loaded.
 ssl_ctx_st* newTrustedTlsContext();
