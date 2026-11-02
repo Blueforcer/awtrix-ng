@@ -10,7 +10,7 @@ owner can upload one other pack in its place. This repository holds the request,
 engine, the worker that runs the voice next to the mixer, and the engine. The code is in
 [`src/platform/tc002/speech/`](https://github.com/Blueforcer/awtrix-ng/tree/main/src/platform/tc002/speech),
 its tests in [`tests/tc002/runtime/`](https://github.com/Blueforcer/awtrix-ng/tree/main/tests/tc002/runtime).
-How speech is used: [Speech](../../guides/sounds.md#speech).
+How speech is used: [Speech & voices](../../guides/speech.md).
 
 The voice is the uploaded pack, else `share/speech/voice.atts` in the release
 ([Voice packs](#voice-packs)). Without a pack the runtime accepts it has no voice, so `speaks()` is false: `audio.speech` reports `false`,
@@ -84,24 +84,8 @@ frontend never changes, so any number of threads read it at the same time.
 
 A pack carries its language as two tables: `fe.text` with the phones, letters, numbers, times and
 pronunciation rules, and `fe.lexicon`, a word list with pronunciations. `Frontend::parse()` checks
-both when the pack loads; a table it cannot use refuses the pack.
-
-These parts of `fe.text` are optional:
-
-| Line | Meaning | Example |
-|---|---|---|
-| `[abbreviations]` `km/h` → words | a written abbreviation, folded (lower case, no space), matched at a word's start, longest first | German `kilometer pro stunde` |
-| `[spell]` `b` → words | the name of a letter a–z, for acronyms | German `be` |
-| `hundred N exact` | N·100 with nothing after it | Spanish `cien` (`hundred 1` is `ciento`) |
-| `thousand few` | the thousand word after a count ending in 2–4 but not 12–14 | Polish `tysiące` |
-| `ten thousand` | numbers from 10 000 group by four digits | Mandarin 万 |
-| `zero` | said once where a number skips a place | Mandarin 零: 105, 1005, 100 500 |
-| `ten prefix` | said before 10–19 after a higher place | Mandarin 一: 110 is 一百一十 |
-| `two count` | 2 counting thousands and ten thousands | Mandarin 两 |
-| `percent first` | `n%` reads this before the number, the sign not again | Mandarin 百分之 |
-| `year word` | a four-digit number before this folded word reads digit by digit | Mandarin 年 |
-| `hour N` | hour N (0–23) of a time; `hour one` is `hour 1` | Polish `siódma` |
-| `one before word` ending → ending | a number before a word or a `[symbols]` sign ends this way, longest ending first | Spanish `uno` → `un`, `veintiuno` → `veintiún` |
+both when the pack loads; a table it cannot use refuses the pack. Their format:
+[Language tables](voice-packs.md#language-tables).
 
 ### The plan
 
@@ -211,7 +195,7 @@ tensor; the model never changes afterwards and every utterance reads it at the s
 
 A pack is one `.atts` file: a header with a CRC-32, the model's tensors, `pack.info` (JSON with
 `name`, `language` and an optional `version`) and the two tables. Anything that does not match is
-refused with one of the reasons above.
+refused with one of the reasons above. The layout: [The file](voice-packs.md#the-file).
 
 ### From plan to samples
 
@@ -285,7 +269,7 @@ A refused upload answers `400 validationFailed` with the loader's reason, `507 i
 when the pack would leave less than the upload reserve free on `/data`. The sink holds the voice
 behind a lock: `playSpeech` reads the text with the voice of that moment and hands both to the
 one-shot, so a sentence already speaking keeps its voice while the next one speaks with the new
-pack. The web UI shows the active voice under **System → Speech voice**, with upload, a way back to
+pack. The web UI shows the active voice under **System → Clock voice**, with upload, a way back to
 the built-in voice and a test line.
 
 ## The English lexicon

@@ -7,7 +7,7 @@ namespace awtrix::posix {
 class Executor {
  public:
   virtual ~Executor() = default;
-  virtual void post(std::function<void()> task) = 0;
+  virtual bool post(std::function<void()> task) = 0;
 };
 
 }

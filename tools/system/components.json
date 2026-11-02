@@ -248,7 +248,7 @@
       "version": "R0.03"
     },
     {
-      "files_sha256": "5a4538c4bf0add984d136134a55fc6ecc40ed06f85136a04a6aff02206b19631",
+      "files_sha256": "37cc96913aef2f67f647872c71300f4f2a351263ba2d9159d038bf4806b8a270",
       "id": "cpp-httplib",
       "license": {
         "file": "LICENSES/MIT-cpp-httplib.txt",
@@ -288,6 +288,24 @@
             "src/platform/linux/host/vendor/httplib.h"
           ],
           "summary": "2026-10-04: the client accepts response status and header lines that end in a bare LF (streamABC/regiocast and other radio servers) and Shoutcast's ICY 200 OK as HTTP/1.0; request and trailer parsing are unchanged"
+        },
+        {
+          "files": [
+            "src/platform/linux/host/vendor/httplib.h"
+          ],
+          "summary": "2026-11-01: a client's max timeout that has run out waits no more instead of reaching poll as a negative timeout (poll would never return), and it also limits the wait to write"
+        },
+        {
+          "files": [
+            "src/platform/linux/host/vendor/httplib.h"
+          ],
+          "summary": "2026-11-01: the client parses response status lines and redirect locations by hand instead of with std::regex, whose recursion per character overran a thread's stack (musl's default thread stack: a Location of 512 characters), and a redirect to a port above 65535 fails instead of throwing std::out_of_range from std::stoi; everything else about these lines is unchanged"
+        },
+        {
+          "files": [
+            "src/platform/linux/host/vendor/httplib.h"
+          ],
+          "summary": "2026-11-01: a server route \".*\" matches with a plain check instead of std::regex, whose recursion per character overran a thread's stack (musl's default thread stack: a request path of 1024 bytes crashed the process); it still refuses a path holding CR or LF, as \".*\" does, and leaves Request::matches empty, which nothing here reads"
         }
       ],
       "paths": [
@@ -484,7 +502,7 @@
       "version": null
     },
     {
-      "files_sha256": "c98e8d0028e3f271d5c2cd052e1a6b5102c704c051cbf7f832fb71dbb85d79d1",
+      "files_sha256": "7f5226ba8a175f0170905a0bb16726a941f7465c0e38540f8253f50b1d83f41e",
       "id": "tflite-micro-port",
       "license": {
         "file": "LICENSES/Apache-2.0.txt",
@@ -503,10 +521,12 @@
       "paths": [
         "src/platform/tc002/wake/WakeFrontend.cpp",
         "src/platform/tc002/wake/WakeFrontendTables.h",
-        "src/platform/tc002/wake/WakeModel.cpp"
+        "src/platform/tc002/wake/WakeKernels.cpp",
+        "src/platform/tc002/wake/WakeLoader.cpp",
+        "src/platform/tc002/wake/WakeOperators.cpp"
       ],
       "review": {
-        "date": "2026-10-31",
+        "date": "2026-11-02",
         "decision": "accepted",
         "rationale": "Apache-2.0 requires the license text and the copyright notice: text in LICENSES/Apache-2.0.txt, row in THIRD-PARTY-NOTICES.md, both in the TC002 bundle's licenses.txt.gz; the files name their origin in their first lines"
       },
@@ -517,7 +537,7 @@
       "version": "LiteRT 2.3"
     },
     {
-      "files_sha256": "bdd4a4b5f3a9fa98a2d75420aa6be6ddb5db28b56c74c9978e7ed11d7208039d",
+      "files_sha256": "70abcfdc243881ca584b6b55a1ec1179fd45fe85023e77683e0460ce8b92a461",
       "id": "kissfft-port",
       "license": {
         "file": "LICENSES/BSD-3-Clause-KISS-FFT.txt",
@@ -538,7 +558,7 @@
         "src/platform/tc002/wake/WakeFft.h"
       ],
       "review": {
-        "date": "2026-10-31",
+        "date": "2026-11-02",
         "decision": "accepted",
         "rationale": "BSD-3-Clause requires the copyright notice, the conditions and the disclaimer with source and binary copies: text in LICENSES/BSD-3-Clause-KISS-FFT.txt, row in THIRD-PARTY-NOTICES.md, both in the TC002 bundle's licenses.txt.gz; the file names its origin in its first lines"
       },

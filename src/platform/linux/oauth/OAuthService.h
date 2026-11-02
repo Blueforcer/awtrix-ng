@@ -13,6 +13,7 @@
 #include "platform/linux/oauth/OAuthFlow.h"
 #include "platform/linux/oauth/OAuthSpec.h"
 #include "platform/linux/oauth/OAuthVault.h"
+#include "platform/linux/script/PerScriptStore.h"
 
 namespace awtrix::oauth {
 
@@ -44,16 +45,15 @@ struct Result {
 
 // Sign-ins of every script. Secrets live here and in the vault, never in the script VM. One worker
 // makes every network call, so a rotating refresh token is never used twice.
-class Service {
+class Service final : public script::PerScriptStore {
  public:
   static constexpr std::size_t kQueuePerApp = 8;
   static constexpr std::size_t kQueueTotal = 16;
   static constexpr std::size_t kMaxCap = 262144;
   static constexpr long long kPendingMs = 10 * 60 * 1000;
 
-  Service(Vault& vault, Transport transport, std::function<std::string(const std::string& app)> source,
-          std::function<long long()> clockMs);
-  ~Service();
+  Service(Vault& vault, Transport transport, script::SourceReader source, std::function<long long()> clockMs);
+  ~Service() override;
   void begin();
   void stop();
   // Ends a network call in flight when stopping.
@@ -66,8 +66,8 @@ class Service {
   bool submitCode(const std::string& app, const std::string& code, const std::string& state, std::string& error);
   void signOut(const std::string& app);
   // At start: erases the sign-ins of scripts that are gone or whose @oauth line changed.
-  void dropStale();
-  bool eraseAll();
+  void dropStale() override;
+  bool eraseAll() override;
 
   // 0 when refused: not signed in, a host the @oauth line does not list, a bad header or a full queue.
   uint32_t request(const std::string& app, const std::string& method, const std::string& url,
@@ -78,8 +78,8 @@ class Service {
   void forget(const std::string& app);
   // A script's source reaches the disk only after it installed; these tell the service when it
   // changed there. A removed script's sign-in is erased.
-  void sourceSaved(const std::string& app);
-  void sourceRemoved(const std::string& app);
+  void sourceSaved(const std::string& app) override;
+  void sourceRemoved(const std::string& app) override;
 
  private:
   enum class Renewal { Ok, Gone, Offline };
@@ -121,7 +121,7 @@ class Service {
 
   Vault& vault_;
   Transport transport_;
-  std::function<std::string(const std::string&)> source_;
+  script::SourceReader source_;
   std::function<long long()> clock_;
   std::function<void()> interrupt_;
   std::mutex mutex_;

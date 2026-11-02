@@ -19,13 +19,12 @@ namespace fs = std::filesystem;
 
 namespace {
 
-const std::string kHeader = "# @secret key label=\"API key\"\n# @secret org\n";
+const std::string kHeader = "# @secret key label=\"API key\" hosts=api.test\n# @secret org hosts=api.test\n";
 
 struct Rig {
   fs::path root = fs::temp_directory_path() / ("secret-script-" + std::to_string(::getpid()));
   std::map<std::string, std::string> sources;
-  posix::PrivateStore store{(root / "s").string(), secrets::Service::kMaxRecord};
-  secrets::Service service{store, [this](const std::string& app) {
+  secrets::Service service{(root / "s").string(), [this](const std::string& app) {
                              const auto it = sources.find(app);
                              return it == sources.end() ? std::string() : it->second;
                            }};
@@ -82,5 +81,24 @@ int main() {
         "an app that leaves a function to call outside any app installs");
   r.extensions->call("outside", "", "");
   check(r.probe("S") == "true false", "outside an app has() is false: " + r.probe("S"));
+
+  const std::string allows =
+      "def check() return str(secret.allows('key', 'https://api.test/x')) + ' ' + "
+      "str(secret.allows('key', 'https://evil.test/x')) + ' ' + str(secret.allows('key', 'http://api.test/x')) + ' ' + "
+      "str(secret.allows('org', 'https://api.test/x')) + ' ' + str(secret.allows('nope', 'https://api.test/x')) + ' ' + "
+      "str(secret.allows(7, 'https://api.test/x')) + ' ' + str(secret.allows('key', 7)) + ' ' + "
+      "str(secret.allows('key', nil)) + ' ' + str(secret.allows('key')) + ' ' + str(secret.allows()) end";
+  check(r.install("S", kHeader, allows), "an app asks where its keys may go");
+  check(r.probe("S") == "true false false false false false false false false false",
+        "allows() is true for a set key and its host only, false for anything else: " + r.probe("S"));
+  check(r.install("T", kHeader, allows), "the same keys in another app");
+  check(r.probe("T") == "false false false false false false false false false false",
+        "keys belong to their app: " + r.probe("T"));
+  check(r.install("S", kHeader,
+                  "def setup() global.outside = def (a, b) global.seen = secret.allows('key', 'https://api.test/x') end end\n"
+                  "def check() return str(secret.allows('key', 'https://api.test/x')) + ' ' + str(global.seen) end"),
+        "an app that leaves a function to call outside any app installs");
+  r.extensions->call("outside", "", "");
+  check(r.probe("S") == "true false", "outside an app allows() is false: " + r.probe("S"));
   return awtrix::test::finish("linux-secret-script");
 }

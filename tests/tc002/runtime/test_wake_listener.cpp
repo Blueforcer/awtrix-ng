@@ -19,6 +19,7 @@ using tc002::StreamControl;
 using tc002::StreamEvent;
 using tc002::wake::WakeHeard;
 using tc002::wake::WakeListener;
+using tc002::wake::WakeSensitivity;
 using Listen = WakeListener::Listen;
 
 namespace {
@@ -97,16 +98,20 @@ struct Rig {
 struct Fixture {
   fs::path dir, model, settings;
 
-  explicit Fixture(const fs::path& fixtures)
+  explicit Fixture(const fs::path& shipped)
       : dir(fs::temp_directory_path() / ("wake-listener-" + std::to_string(::getpid()))),
         model(dir / "word.tflite"),
         settings(dir / "word.json") {
     fs::remove_all(dir);
     fs::create_directories(dir);
-    fs::copy_file(fixtures / "smoke.tflite", model);
+    fs::copy_file(shipped, model);
   }
   ~Fixture() { fs::remove_all(dir); }
   void firesAlways() const { writeFile(settings, R"({"ID":"word","probability_cutoff":0,"sliding_window_size":1})"); }
+};
+
+struct Firing : Rig {
+  explicit Firing(const Fixture& f) : Rig((f.firesAlways(), f.model)) { require(listener != nullptr, error); }
 };
 
 std::string positions(const std::vector<WakeHeard>& heard) {
@@ -157,9 +162,7 @@ void settingsAndModelsAreChecked(const Fixture& f) {
 }
 
 void listensWhenAsked(const Fixture& f) {
-  f.firesAlways();
-  Rig rig(f.model);
-  require(rig.listener != nullptr, "listener with the smoke model: " + rig.error);
+  Firing rig(f);
   check(!rig.listener->tick(rig.now, Listen::Off) && rig.sent.empty(), "not wanted: no microphone traffic");
   rig.listener->tick(rig.now, Listen::On);
   check(rig.sent.size() == 1 && rig.last().operation == StreamControl::Probe, "wanted: it probes first");
@@ -174,9 +177,7 @@ void listensWhenAsked(const Fixture& f) {
 }
 
 void detectionsKeepTheirCooloff(const Fixture& f) {
-  f.firesAlways();
-  Rig rig(f.model);
-  require(rig.listener != nullptr, rig.error);
+  Firing rig(f);
   rig.listen();
   const auto heard = rig.feed(110);
   check(heard.size() >= 2 && heard[0].sample >= kSecond && heard.back().sample <= rig.position &&
@@ -185,9 +186,7 @@ void detectionsKeepTheirCooloff(const Fixture& f) {
 }
 
 void aJumpStartsTheWarmUpOver(const Fixture& f) {
-  f.firesAlways();
-  Rig rig(f.model);
-  require(rig.listener != nullptr, rig.error);
+  Firing rig(f);
   rig.listen();
   rig.feed(40);
   rig.position += 96;
@@ -200,9 +199,7 @@ void aJumpStartsTheWarmUpOver(const Fixture& f) {
 }
 
 void aFullQueueStartsTheWarmUpOver(const Fixture& f) {
-  f.firesAlways();
-  Rig rig(f.model);
-  require(rig.listener != nullptr, rig.error);
+  Firing rig(f);
   rig.listen();
   rig.worker->run();
   for (std::size_t i = 0; i < WakeListener::kQueueBlocks; ++i) rig.block();
@@ -216,10 +213,21 @@ void aFullQueueStartsTheWarmUpOver(const Fixture& f) {
             positions(heard));
 }
 
+void aWorkerThatRefusesIsAskedAgain(const Fixture& f) {
+  Firing rig(f);
+  rig.worker->refusing = true;
+  rig.listen();
+  rig.block();
+  check(rig.worker->pending() == 0, "a worker that cannot start leaves the blocks waiting");
+  rig.worker->refusing = false;
+  rig.block();
+  check(rig.worker->pending() == 1, "the next block asks it again");
+  rig.worker->run();
+  check(!rig.feed(70).empty(), "and the listener hears as before");
+}
+
 void mutedKeepsTheStream(const Fixture& f) {
-  f.firesAlways();
-  Rig rig(f.model);
-  require(rig.listener != nullptr, rig.error);
+  Firing rig(f);
   rig.listen();
   rig.feed(40);
   const std::size_t controls = rig.sent.size();
@@ -235,9 +243,7 @@ void mutedKeepsTheStream(const Fixture& f) {
 }
 
 void offStopsTheStream(const Fixture& f) {
-  f.firesAlways();
-  Rig rig(f.model);
-  require(rig.listener != nullptr, rig.error);
+  Firing rig(f);
   const int epoch = rig.listen();
   for (int i = 0; i < 40; ++i) {
     rig.now += kFrameMs;
@@ -255,10 +261,76 @@ void offStopsTheStream(const Fixture& f) {
         "listening resumes with a new epoch after Voice");
 }
 
-void aStopWithoutAnswerEnds(const Fixture& f) {
-  f.firesAlways();
+void theModelLeavesMemoryWhileOff(const Fixture& f) {
+  const fs::path moved = f.dir / "moved.tflite";
+  const auto withoutTheFile = [&](auto act) {
+    fs::rename(f.model, moved);
+    act();
+    fs::rename(moved, f.model);
+  };
+  Firing rig(f);
+  rig.listener->tick(rig.now, Listen::On);
+  rig.listener->cancel();
+  rig.sent.clear();
+  rig.now += WakeListener::kModelOffMs - 1;
+  rig.listener->tick(rig.now, Listen::Off);
+  withoutTheFile([&] {
+    rig.listener->tick(rig.now, Listen::On);
+    check(!rig.sent.empty() && rig.last().operation == StreamControl::Probe,
+          "off for a shorter time it keeps the model, the file is not read");
+  });
+  rig.listener->cancel();
+  rig.sent.clear();
+
+  rig.now += WakeListener::kModelOffMs;
+  rig.listener->tick(rig.now, Listen::Off);
+  withoutTheFile([&] {
+    rig.listener->tick(rig.now, Listen::On);
+    check(rig.sent.empty(), "after a minute off the model is gone, and without its file nothing starts");
+    rig.now += 30000;
+    rig.listener->tick(rig.now, Listen::On);
+    check(rig.sent.empty(), "it stays that way");
+  });
+  rig.now += 30000;
+  rig.listener->tick(rig.now, Listen::On);
+  check(!rig.sent.empty() && rig.last().operation == StreamControl::Probe, "with the file back it loads and listens");
+  rig.answer(StreamEvent::Kind::Support);
+  rig.answer(StreamEvent::Kind::Started);
+  rig.position = 0;
+  rig.feed(40);
+  check(!rig.feed(40).empty(), "and hears with the new model");
+
+  Firing pending(f);
+  pending.listen();
+  pending.block();
+  pending.listener->cancel();
+  pending.now += 2 * WakeListener::kModelOffMs;
+  pending.listener->tick(pending.now, Listen::Off);
+  pending.worker->run();
+  check(pending.worker->pending() == 0, "a block still queued finds the model");
+}
+
+void theLevelApplies(const Fixture& f) {
+  writeFile(f.settings, R"({"probability_cutoff":0.44,"sliding_window_size":1})");
   Rig rig(f.model);
   require(rig.listener != nullptr, rig.error);
+  rig.listen();
+  check(rig.feed(100).empty(), "silence stays under the model's cutoff");
+  rig.listener->setSensitivity(WakeSensitivity::High);
+  check(!rig.feed(60).empty(), "on high it fires, the cutoff of this model drops to 0");
+  check(rig.count(StreamControl::Probe) == 1 && rig.count(StreamControl::Stop) == 0, "on the same stream");
+  rig.listener->setSensitivity(WakeSensitivity::Normal);
+  check(rig.feed(60).empty(), "back on normal it stays silent");
+  rig.listener->setSensitivity(WakeSensitivity::High);
+  rig.listener->cancel();
+  rig.now += WakeListener::kModelOffMs;
+  rig.listener->tick(rig.now, Listen::Off);
+  rig.listen();
+  check(!rig.feed(60).empty(), "a model loaded again takes the level");
+}
+
+void aStopWithoutAnswerEnds(const Fixture& f) {
+  Firing rig(f);
   const int epoch = rig.listen();
   rig.listener->tick(rig.now, Listen::Off);
   require(rig.last().operation == StreamControl::Stop, "the stream is asked to stop");
@@ -273,9 +345,7 @@ void aStopWithoutAnswerEnds(const Fixture& f) {
 }
 
 void failuresBackOff(const Fixture& f) {
-  f.firesAlways();
-  Rig rig(f.model);
-  require(rig.listener != nullptr, rig.error);
+  Firing rig(f);
   const auto retriesAfter = [&rig](int64_t ms) {
     const std::size_t before = rig.sent.size();
     rig.listener->tick(rig.now + ms - 1, Listen::On);
@@ -302,9 +372,7 @@ void failuresBackOff(const Fixture& f) {
 }
 
 void anUnavailableStreamWaits(const Fixture& f) {
-  f.firesAlways();
-  Rig rig(f.model);
-  require(rig.listener != nullptr, rig.error);
+  Firing rig(f);
   rig.listener->tick(rig.now, Listen::On);
   const int epoch = rig.last().epoch;
   rig.answer(StreamEvent::Kind::Support, false);
@@ -325,9 +393,7 @@ void theShippedWakeWordOpens(const fs::path& model) {
 }
 
 void cancelAndWithdraw(const Fixture& f) {
-  f.firesAlways();
-  Rig rig(f.model);
-  require(rig.listener != nullptr, rig.error);
+  Firing rig(f);
   rig.listen();
   rig.listener->cancel();
   check(rig.last().operation == StreamControl::Stop, "cancel stops the stream");
@@ -344,19 +410,22 @@ void cancelAndWithdraw(const Fixture& f) {
 }
 
 int main(int argc, char** argv) {
-  require(argc == 3, "usage: tc002-wake-listener-test <fixture dir> <shipped wake word model>");
+  require(argc == 2, "usage: tc002-wake-listener-test <shipped wake word model>");
   const Fixture fixture(argv[1]);
   settingsAndModelsAreChecked(fixture);
   listensWhenAsked(fixture);
   detectionsKeepTheirCooloff(fixture);
   aJumpStartsTheWarmUpOver(fixture);
   aFullQueueStartsTheWarmUpOver(fixture);
+  aWorkerThatRefusesIsAskedAgain(fixture);
   mutedKeepsTheStream(fixture);
   offStopsTheStream(fixture);
+  theModelLeavesMemoryWhileOff(fixture);
+  theLevelApplies(fixture);
   aStopWithoutAnswerEnds(fixture);
   failuresBackOff(fixture);
   anUnavailableStreamWaits(fixture);
   cancelAndWithdraw(fixture);
-  theShippedWakeWordOpens(argv[2]);
+  theShippedWakeWordOpens(argv[1]);
   return awtrix::test::finish("wake listener");
 }

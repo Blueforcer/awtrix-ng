@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -87,11 +88,13 @@ int main() {
   Fake fake;
   std::mutex sourceMutex;
   std::map<std::string, std::string> sources = {{"Spot", kSource}};
+  bool sourcesReadable = true;
   std::atomic<long long> now{1000};
   oauth::Service service(
       vault, [&](const oauth::HttpCall& c) { return fake.reply(c); },
-      [&](const std::string& app) {
+      [&](const std::string& app) -> std::optional<std::string> {
         std::lock_guard<std::mutex> lock(sourceMutex);
+        if (!sourcesReadable) return std::nullopt;
         const auto it = sources.find(app);
         return it == sources.end() ? std::string() : it->second;
       },
@@ -241,6 +244,20 @@ int main() {
     std::lock_guard<std::mutex> lock(sourceMutex);
     sources["Stale"] = kSource;
   }
+  {
+    std::lock_guard<std::mutex> lock(sourceMutex);
+    sourcesReadable = false;
+  }
+  service.dropStale();
+  check(vault.load("Spot", rec) && vault.load("Stale", rec) && vault.load("Gone", rec),
+        "at start a source that cannot be read keeps its record");
+  service.sourceSaved("Spot");
+  check(vault.load("Spot", rec), "so does a save whose source cannot be read");
+  {
+    std::lock_guard<std::mutex> lock(sourceMutex);
+    sourcesReadable = true;
+  }
+  service.sourceSaved("Spot");
   service.dropStale();
   check(vault.load("Spot", rec) && !vault.load("Stale", rec) && !vault.load("Gone", rec),
         "at start only records that still match their script stay");

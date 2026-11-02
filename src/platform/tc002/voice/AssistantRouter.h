@@ -10,6 +10,7 @@
 #include "platform/posix/Hold.h"
 #include "platform/tc002/runtime/MicrophoneHub.h"
 #include "platform/tc002/voice/KnobGesture.h"
+#include "platform/tc002/wake/WakeSensitivity.h"
 
 namespace awtrix::script {
 struct ScriptMeta;
@@ -28,9 +29,11 @@ class AssistantRouter {
   class Voice {
    public:
     virtual ~Voice() = default;
+    virtual bool off() const = 0;
     virtual bool homeAssistant() const = 0;
     virtual const std::string& assistantApp() const = 0;
     virtual bool wakeWord() const = 0;
+    virtual wake::WakeSensitivity wakeSensitivity() const = 0;
     virtual bool ready() const = 0;
     virtual bool busy() const = 0;
     virtual bool starting() const = 0;
@@ -40,8 +43,10 @@ class AssistantRouter {
   class Module {
    public:
     static constexpr const char* kName = "voice";
+    static constexpr const char* kHook = "on_assistant";
 
     virtual ~Module() = default;
+    virtual bool available() const { return true; }
     virtual bool busy() const = 0;
     virtual bool starting() const = 0;
     virtual bool triggered() const = 0;
@@ -50,13 +55,31 @@ class AssistantRouter {
     virtual void dropTrigger() = 0;
   };
 
+  class NoModule final : public Module {
+   public:
+    bool available() const override { return false; }
+    bool busy() const override { return false; }
+    bool starting() const override { return false; }
+    bool triggered() const override { return false; }
+    bool holds(const std::string&) const override { return false; }
+    void trigger(const std::string&, const std::string&, MicrophoneMark) override {}
+    void dropTrigger() override {}
+  };
+
   struct Ports {
     std::function<bool()> allowed;
     std::function<const script::ScriptMeta*(const std::string&)> meta;
     std::function<std::vector<std::string>()> scripts;
+    std::function<bool(const std::string&, std::string&)> source;
     std::function<bool(const std::string&)> runnable;
+    std::function<bool(const std::string&)> switchedOff;
+    std::function<bool(const std::string&)> failed;
     std::function<DispatchResult(const std::string&, DispatchDetail&)> switchApp;
     std::function<bool(const std::string&)> shown;
+    std::function<bool()> covered;
+    std::function<bool()> speaking;
+    std::function<bool(const std::string&)> inSession;
+    std::function<void()> endSession;
     std::function<bool()> panelOff;
     std::function<void(bool)> setPanelPower;
     std::function<void()> dismissQuickSettings;
@@ -65,7 +88,7 @@ class AssistantRouter {
 
   struct Parts {
     Voice& voice;
-    Module* module;
+    Module& module;
     KnobGesture& gesture;
     MicrophoneHub& microphone;
     wake::WakeListener* wake;
@@ -81,18 +104,21 @@ class AssistantRouter {
   std::vector<std::string> apps() const;
   bool start(VoiceTrigger trigger, int64_t now);
   void tick(int64_t now, bool knob);
+  bool listening() const;
+  const char* appProblem() const;
 
  private:
   struct Interaction {
     std::string app;
     int64_t startedAt = 0, activeAt = 0;
-    bool panelOff = false;
+    bool panelOff = false, session = false;
     posix::Hold music;
   };
 
   bool present() const;
   bool ready() const;
   bool homeAssistantReady() const;
+  bool canBeAssistant(const std::string& app) const;
   bool answers(const std::string& app) const;
   bool startable(const std::string& app) const;
   bool startFrom(VoiceTrigger trigger, MicrophoneMark mark, int64_t now);

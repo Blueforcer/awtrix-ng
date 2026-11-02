@@ -50,10 +50,13 @@ class DeviceState {
   void setPower(const tc002::PowerStatus& value) { power_ = value; notify(powerListeners_); }
   void setNetwork(const tc002::NetworkStatus& value) { network_ = value; notify(networkListeners_); }
   void setTime(const tc002::TimeStatus& value) { time_ = value; notify(timeListeners_); }
+  // The saved Wi-Fi network became another one, so an address from the old one means nothing.
+  void networkReplaced() { notify(replacedListeners_); }
 
   void onPower(Listener listener) { powerListeners_.push_back(std::move(listener)); }
   void onNetwork(Listener listener) { networkListeners_.push_back(std::move(listener)); }
   void onTime(Listener listener) { timeListeners_.push_back(std::move(listener)); }
+  void onNetworkReplaced(Listener listener) { replacedListeners_.push_back(std::move(listener)); }
 
  private:
   static void notify(const std::vector<Listener>& listeners) {
@@ -62,7 +65,7 @@ class DeviceState {
   tc002::PowerStatus power_{false, -1, -1, false};
   tc002::NetworkStatus network_;
   tc002::TimeStatus time_;
-  std::vector<Listener> powerListeners_, networkListeners_, timeListeners_;
+  std::vector<Listener> powerListeners_, networkListeners_, timeListeners_, replacedListeners_;
 };
 
 // Commands that reach the network side from the runtime (web UI / API) or from USB provisioning.

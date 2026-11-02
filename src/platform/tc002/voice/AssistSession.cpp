@@ -5,7 +5,6 @@
 
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
-#include "platform/posix/Sequence.h"
 
 namespace awtrix::tc002::voice {
 namespace {
@@ -13,6 +12,11 @@ long long number(const api::JsonReader& r, const char* key) {
   long long out = -1;
   api::memberValue(r, key).asLong(out);
   return out;
+}
+bool succeeded(const api::JsonReader& r) {
+  bool success = false;
+  api::memberValue(r, "success").asBool(success);
+  return success;
 }
 }  // namespace
 const char* AssistSession::name(State state) {
@@ -44,28 +48,35 @@ bool AssistSession::send(std::string json) {
   return ports_.send(std::move(json), false);
 }
 void AssistSession::connecting(const Config& config, int64_t now) {
-  cancel();
+  drop();
   config_ = config;
-  error_.clear();
   state_ = State::Connecting;
-  deadline_ = now + 10000;
+  deadline_ = now + kConnectMs;
   supported_ = false;
   probeAt_ = now;
-  epoch_ = posix::nextInSequence(epoch_);
-  ports_.microphone({epoch_, StreamControl::Probe});
+  microphone_.probe();
 }
-void AssistSession::cancel() {
-  if (capture_) ports_.microphone({epoch_, StreamControl::Stop});
-  capture_ = false;
+void AssistSession::drop() {
+  microphone_.cancel();
   ports_.stopSpeaker();
   ports_.disconnect();
   state_ = State::Offline;
 }
+void AssistSession::cancel() {
+  drop();
+  error_.clear();
+  lastError_.clear();
+}
 void AssistSession::fail(const char* code, int64_t now) {
-  cancel();
-  error_ = code;
+  if (busy()) {
+    lastError_ = code;
+    lastErrorUntil_ = now + kLastErrorMs;
+  } else {
+    error_ = code;
+  }
+  drop();
   state_ = State::Error;
-  deadline_ = now + 5000;
+  deadline_ = now + kRetryMs;
 }
 void AssistSession::lost(int64_t now) {
   fail(errors::connectionLost, now);
@@ -76,12 +87,10 @@ bool AssistSession::begin(int64_t now) {
     fail(errors::connectionLost, now);
     return false;
   }
-  error_.clear();
+  lastError_.clear();
   handler_ = -1;
-  samples_ = 0;
-  started_ = stopping_ = stt_ = recognitionEnded_ = ended_ = eof_ = runEnded_ =
-      playbackEnded_ = false;
-  epoch_ = posix::nextInSequence(epoch_);
+  stt_ = recognitionEnded_ = runEnded_ = playbackEnded_ = false;
+  microphone_.cancel();
   run_ = ++request_;
   std::string json;
   api::JsonWriter w(json);
@@ -98,39 +107,31 @@ bool AssistSession::begin(int64_t now) {
       .endObject()
       .endObject();
   state_ = State::Starting;
-  deadline_ = now + 5000;
-  began_ = keepalive_ = now;
+  deadline_ = now + kStartMs;
+  began_ = now;
   if (!send(std::move(json))) {
     fail(errors::haError, now);
     return false;
   }
-  // Prepares HA first; capture starts on stt-start. The listening overlay follows
-  // the MCU acknowledgement; no startup speech buffer.
-  capture_ = false;
   return true;
 }
 void AssistSession::stopCapture(int64_t now) {
-  if (capture_ && !stopping_) {
-    stopping_ = true;
-    if (!ports_.microphone({epoch_, StreamControl::Stop}))
-      fail(errors::microphoneFailed, now);
-    else
-      deadline_ = now + 1500;
-  }
+  if (!microphone_.capturing()) return;
+  microphone_.stop(now);
+  deadline_ = now + kCaptureEndMs;
 }
 void AssistSession::endInput(int64_t now) {
   if (state_ == State::Starting || state_ == State::Listening) {
-    if (!capture_) {
+    if (!microphone_.capturing()) {
       cancel();
       return;
     }
     stopCapture(now);
-    if (state_ != State::Error) state_ = State::Processing;
+    state_ = State::Processing;
   }
 }
 bool AssistSession::audio(const StreamEvent& e, int64_t now) {
-  if (handler_ < 0 || !stt_ || now < e.hostAtMs || now - e.hostAtMs > 250)
-    return false;
+  if (now < e.hostAtMs || now - e.hostAtMs > 250) return false;
   std::string bytes(1, static_cast<char>(handler_));
   bytes.reserve(1 + e.samples.size() * 2);
   for (int16_t sample : e.samples) {
@@ -141,63 +142,56 @@ bool AssistSession::audio(const StreamEvent& e, int64_t now) {
   return ports_.send(std::move(bytes), true);
 }
 void AssistSession::eof(int64_t now) {
-  if (!ended_ || !stt_ || recognitionEnded_ || eof_ || handler_ < 0) return;
+  if (recognitionEnded_) return;
   if (!ports_.send(std::string(1, static_cast<char>(handler_)), true)) {
     fail(errors::audioTooSlow, now);
     return;
   }
-  eof_ = true;
   state_ = State::Processing;
-  deadline_ = now + 30000;
+  deadline_ = now + kAnswerMs;
+}
+void AssistSession::apply(MicrophoneClient::Report report, int64_t now) {
+  using Report = MicrophoneClient::Report;
+  switch (report) {
+    case Report::None:
+    case Report::Audio:
+      return;
+    case Report::Available:
+      supported_ = true;
+      return;
+    case Report::Unavailable:
+      supported_ = false;
+      return;
+    case Report::Started:
+      state_ = State::Listening;
+      deadline_ = began_ + kListenMs;
+      return;
+    case Report::Gap:
+    case Report::Ended:
+      fail(errors::microphoneFailed, now);
+      return;
+    case Report::Stopped:
+      if (microphone_.started() && microphone_.error().empty())
+        eof(now);
+      else
+        fail(errors::microphoneFailed, now);
+      return;
+  }
 }
 void AssistSession::receive(const StreamEvent& e, int64_t now) {
-  if (e.epoch != epoch_) return;
-  if (e.kind == StreamEvent::Kind::Support) {
-    supported_ = e.available;
-    return;
-  }
-  if (!capture_) return;
-  if (!e.error.empty()) {
+  const MicrophoneClient::Report report = microphone_.receive(e, now);
+  apply(report, now);
+  if (report != MicrophoneClient::Report::Audio) return;
+  if (!e.error.empty())
     fail(errors::microphoneFailed, now);
-    return;
-  }
-  if (e.kind == StreamEvent::Kind::Started) {
-    if (started_) {
-      fail(errors::microphoneFailed, now);
-      return;
-    }
-    started_ = true;
-    if (stt_ && !stopping_) {
-      state_ = State::Listening;
-      deadline_ = began_ + 60000;
-    }
-    return;
-  }
-  if (!started_ || e.firstSample != samples_) {
-    fail(errors::microphoneFailed, now);
-    return;
-  }
-  if (e.kind == StreamEvent::Kind::Audio) {
-    samples_ += static_cast<uint32_t>(e.samples.size());
-    if (recognitionEnded_) return;
-    if (!audio(e, now)) fail(errors::audioTooSlow, now);
-  } else if (e.kind == StreamEvent::Kind::Ended) {
-    capture_ = false;
-    if (started_ && !stopping_) {
-      fail(errors::microphoneFailed, now);
-      return;
-    }
-    ended_ = true;
-    eof(now);
-  }
+  else if (!audio(e, now))
+    fail(errors::audioTooSlow, now);
 }
-void AssistSession::text(std::string_view json, int64_t now) {
-  if (json.size() > 65536 || !api::isWellFormed(json)) {
-    fail(errors::haError, now);
-    return;
-  }
-  api::JsonReader r(json);
-  const std::string type = api::memberText(r, "type");
+void AssistSession::becomeReady() {
+  state_ = State::Ready;
+  deadline_ = 0;
+}
+bool AssistSession::authenticate(const std::string& type, int64_t now) {
   if (state_ == State::Connecting && type == "auth_required") {
     std::string auth;
     api::JsonWriter(auth)
@@ -206,11 +200,11 @@ void AssistSession::text(std::string_view json, int64_t now) {
         .member("access_token", config_.token)
         .endObject();
     if (!send(std::move(auth))) fail(errors::connectionLost, now);
-    return;
+    return true;
   }
   if (type == "auth_invalid") {
     fail(errors::tokenRejected, now);
-    return;
+    return true;
   }
   if (state_ == State::Connecting && type == "auth_ok") {
     request_ = 0;
@@ -222,52 +216,63 @@ void AssistSession::text(std::string_view json, int64_t now) {
         .member("type", "assist_pipeline/pipeline/list")
         .endObject();
     if (!send(std::move(query))) fail(errors::haError, now);
+    return true;
+  }
+  return false;
+}
+void AssistSession::pipelinesListed(const api::JsonReader& r, int64_t now) {
+  if (!succeeded(r)) {
+    fail(errors::haError, now);
     return;
   }
+  const auto result = api::memberValue(r, "result");
+  const auto pipelines = api::memberValue(result, "pipelines");
+  if (!pipelines.isArray()) {
+    fail(errors::haError, now);
+    return;
+  }
+  pipelines_ = std::string(pipelines.valueText());
+  auto entries = pipelines;
+  entries.enterArray();
+  bool usable = false;
+  const std::string wanted = config_.pipeline.empty()
+                                 ? api::memberText(result, "preferred_pipeline")
+                                 : config_.pipeline;
+  while (entries.nextElement()) {
+    if (api::memberText(entries, "id") == wanted &&
+        !api::memberText(entries, "stt_engine").empty() &&
+        !api::memberText(entries, "tts_engine").empty())
+      usable = true;
+    if (!entries.skipValue()) break;
+  }
+  if (!usable) {
+    fail(errors::pipelineIncomplete, now);
+    return;
+  }
+  error_.clear();
+  becomeReady();
+}
+void AssistSession::text(std::string_view json, int64_t now) {
+  if (json.size() > 65536 || !api::isWellFormed(json)) {
+    fail(errors::haError, now);
+    return;
+  }
+  api::JsonReader r(json);
+  const std::string type = api::memberText(r, "type");
+  if (authenticate(type, now)) return;
   const auto id = number(r, "id");
   if (type == "result" && id == list_ && state_ == State::Connecting) {
-    bool success = false;
-    api::memberValue(r, "success").asBool(success);
-    if (!success) {
-      fail(errors::haError, now);
-      return;
-    }
-    const auto result = api::memberValue(r, "result");
-    const auto pipelines = api::memberValue(result, "pipelines");
-    if (!pipelines.isArray()) {
-      fail(errors::haError, now);
-      return;
-    }
-    pipelines_ = std::string(pipelines.valueText());
-    auto entries = pipelines;
-    entries.enterArray();
-    bool usable = false;
-    const std::string wanted = config_.pipeline.empty()
-                                   ? api::memberText(result, "preferred_pipeline")
-                                   : config_.pipeline;
-    while (entries.nextElement()) {
-      if (api::memberText(entries, "id") == wanted &&
-          !api::memberText(entries, "stt_engine").empty() &&
-          !api::memberText(entries, "tts_engine").empty())
-        usable = true;
-      if (!entries.skipValue()) break;
-    }
-    if (!usable) {
-      fail(errors::pipelineIncomplete, now);
-      return;
-    }
-    state_ = State::Ready;
-    deadline_ = 0;
+    pipelinesListed(r, now);
     return;
   }
   if (!busy() || id != run_) return;
   if (type == "result") {
-    bool success = false;
-    api::memberValue(r, "success").asBool(success);
-    if (!success) fail(errors::haError, now);
+    if (!succeeded(r)) fail(errors::haError, now);
     return;
   }
-  if (type != "event") return;
+  if (type == "event") runEvent(r, now);
+}
+void AssistSession::runEvent(const api::JsonReader& r, int64_t now) {
   const auto event = api::memberValue(r, "event");
   const auto data = api::memberValue(event, "data");
   const std::string stage = api::memberText(event, "type");
@@ -295,21 +300,14 @@ void AssistSession::text(std::string_view json, int64_t now) {
       return;
     }
     stt_ = true;
-    began_ = keepalive_ = now;
-    deadline_ = now + 1500;
-    capture_ = ports_.microphone({epoch_, StreamControl::Start});
-    if (!capture_) {
-      fail(errors::microphoneFailed, now);
-      return;
-    }
+    began_ = now;
+    deadline_ = now + kCaptureStartMs;
+    microphone_.start(now);
   } else if (stage == "stt-end") {
-    // HA's voice activity detector ends the input. Stop this capture.
     recognitionEnded_ = true;
     stopCapture(now);
-    if (state_ != State::Error) {
-      state_ = State::Processing;
-      deadline_ = now + 30000;
-    }
+    state_ = State::Processing;
+    deadline_ = now + kAnswerMs;
   } else if (stage == "tts-end") {
     const auto output = api::memberValue(data, "tts_output");
     const std::string url = api::memberText(output, "url");
@@ -320,17 +318,14 @@ void AssistSession::text(std::string_view json, int64_t now) {
       return;
     }
     state_ = State::Speaking;
-    deadline_ = now + 60000;
+    deadline_ = now + kSpeakMs;
   } else if (stage == "run-end") {
     runEnded_ = true;
     if (state_ != State::Speaking) {
       fail(errors::haError, now);
       return;
     }
-    if (playbackEnded_) {
-      state_ = State::Ready;
-      deadline_ = 0;
-    }
+    if (playbackEnded_) becomeReady();
   }
 }
 void AssistSession::playbackDone(bool success, int64_t now) {
@@ -340,27 +335,21 @@ void AssistSession::playbackDone(bool success, int64_t now) {
     return;
   }
   playbackEnded_ = true;
-  if (runEnded_) {
-    state_ = State::Ready;
-    deadline_ = 0;
-  }
+  if (runEnded_) becomeReady();
 }
 void AssistSession::tick(int64_t now) {
+  if (!lastError_.empty() && now >= lastErrorUntil_) lastError_.clear();
   if (state_ == State::Ready && !supported_ && now - probeAt_ >= kStreamAnswerMs) {
     probeAt_ = now;
-    ports_.microphone({epoch_, StreamControl::Probe});
+    microphone_.probeAgain();
   }
   if (state_ == State::Error || state_ == State::Offline ||
       state_ == State::Ready)
     return;
   if (deadline_ && now >= deadline_) {
-    fail(errors::timeout, now);
+    fail(state_ == State::Connecting ? errors::connectionLost : errors::timeout, now);
     return;
   }
-  if (capture_ && !stopping_ && now - keepalive_ >= kStreamKeepaliveMs) {
-    keepalive_ = now;
-    if (!ports_.microphone({epoch_, StreamControl::Keepalive}))
-      fail(errors::microphoneFailed, now);
-  }
+  apply(microphone_.tick(now), now);
 }
 }  // namespace awtrix::tc002::voice

@@ -6,6 +6,8 @@
 
 namespace awtrix::tc002::wake {
 
+inline int16_t narrow(int32_t v) { return static_cast<int16_t>(v); }
+
 class WakeFft {
  public:
   struct Cpx {

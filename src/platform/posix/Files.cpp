@@ -2,7 +2,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <signal.h>
+#include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 
@@ -15,66 +15,48 @@
 namespace awtrix {
 namespace posix {
 
-bool readAll(int fd, void* data, std::size_t size) {
-  auto* bytes = static_cast<unsigned char*>(data);
-  while (size) {
-    const ssize_t count = ::read(fd, bytes, size);
+namespace {
+
+template <class Byte, class Transfer>
+bool transferAll(Byte* bytes, std::size_t size, Transfer transfer) {
+  for (std::size_t done = 0; done < size;) {
+    const ssize_t count = transfer(bytes + done, size - done, done);
     if (count < 0 && errno == EINTR) continue;
     if (count <= 0) {
       if (count == 0) errno = EIO;
       return false;
     }
-    bytes += count;
-    size -= static_cast<std::size_t>(count);
+    done += static_cast<std::size_t>(count);
   }
   return true;
+}
+
+}
+
+bool readAll(int fd, void* data, std::size_t size) {
+  return transferAll(static_cast<unsigned char*>(data), size,
+                     [fd](unsigned char* bytes, std::size_t left, std::size_t) { return ::read(fd, bytes, left); });
 }
 
 bool preadAll(int fd, uint64_t offset, void* data, std::size_t size) {
-  auto* bytes = static_cast<unsigned char*>(data);
-  while (size) {
-    const ssize_t count = ::pread(fd, bytes, size, static_cast<off_t>(offset));
-    if (count < 0 && errno == EINTR) continue;
-    if (count <= 0) {
-      if (count == 0) errno = EIO;
-      return false;
-    }
-    bytes += count;
-    offset += static_cast<uint64_t>(count);
-    size -= static_cast<std::size_t>(count);
-  }
-  return true;
+  return transferAll(static_cast<unsigned char*>(data), size,
+                     [fd, offset](unsigned char* bytes, std::size_t left, std::size_t done) {
+                       return ::pread(fd, bytes, left, static_cast<off_t>(offset + done));
+                     });
 }
 
 bool writeAll(int fd, const void* data, std::size_t size) {
-  const auto* bytes = static_cast<const unsigned char*>(data);
-  while (size) {
-    const ssize_t count = ::write(fd, bytes, size);
-    if (count < 0 && errno == EINTR) continue;
-    if (count <= 0) {
-      if (count == 0) errno = EIO;
-      return false;
-    }
-    bytes += count;
-    size -= static_cast<std::size_t>(count);
-  }
-  return true;
+  return transferAll(static_cast<const unsigned char*>(data), size,
+                     [fd](const unsigned char* bytes, std::size_t left, std::size_t) {
+                       return ::write(fd, bytes, left);
+                     });
 }
 
 bool pwriteAll(int fd, uint64_t offset, const void* data, std::size_t size) {
-  const auto* bytes = static_cast<const unsigned char*>(data);
-  while (size) {
-    const ssize_t count = ::pwrite(fd, bytes, size, static_cast<off_t>(offset));
-    if (count < 0 && errno == EINTR) continue;
-    if (count <= 0) {
-      if (count == 0) errno = EIO;
-      return false;
-    }
-    bytes += count;
-    offset += static_cast<uint64_t>(count);
-    size -= static_cast<std::size_t>(count);
-  }
-  return true;
+  return transferAll(static_cast<const unsigned char*>(data), size,
+                     [fd, offset](const unsigned char* bytes, std::size_t left, std::size_t done) {
+                       return ::pwrite(fd, bytes, left, static_cast<off_t>(offset + done));
+                     });
 }
 
 bool readText(const std::string& path, std::string& out, std::size_t maximum) {
@@ -237,42 +219,42 @@ void removeRegularFiles(UniqueFd directory) {
   ::closedir(listing);
 }
 
-pid_t creatorOf(std::string_view name, std::string_view prefix) {
-  if (name.size() <= prefix.size() || name.substr(0, prefix.size()) != prefix || name[prefix.size()] != '-') return 0;
+bool temporaryName(std::string_view name, std::string_view prefix) {
+  if (name.size() <= prefix.size() || name.substr(0, prefix.size()) != prefix || name[prefix.size()] != '-')
+    return false;
   name.remove_prefix(prefix.size() + 1);
   const std::size_t dash = name.find('-');
-  if (dash == 0 || dash > kMaxPidDigits || name.size() - dash - 1 != sizeof(kTemporarySuffix) - 1) return 0;
-  pid_t pid = 0;
-  for (const char digit : name.substr(0, dash)) {
-    if (digit < '0' || digit > '9') return 0;
-    pid = pid * 10 + (digit - '0');
-  }
-  return pid;
+  if (dash == 0 || dash > kMaxPidDigits || name.size() - dash - 1 != sizeof(kTemporarySuffix) - 1) return false;
+  for (const char digit : name.substr(0, dash))
+    if (digit < '0' || digit > '9') return false;
+  return true;
 }
 
-bool running(pid_t pid) { return ::kill(pid, 0) == 0 || errno == EPERM; }
+bool hold(int directory) { return ::flock(directory, LOCK_EX | LOCK_NB) == 0; }
 
-void removeStaleDirectories(const std::string& parent, std::string_view prefix) {
+}
+
+void removeStaleTemporaryDirectories(const std::string& parent, std::string_view prefix) {
   DIR* listing = ::opendir(parent.c_str());
   if (!listing) return;
   while (const dirent* entry = ::readdir(listing)) {
-    const pid_t creator = creatorOf(entry->d_name, prefix);
-    if (creator <= 0 || running(creator)) continue;
+    if (!temporaryName(entry->d_name, prefix)) continue;
     UniqueFd directory = openPrivateDirectoryAt(::dirfd(listing), entry->d_name, false);
-    if (!directory.valid()) continue;
+    if (!directory.valid() || !hold(directory.get())) continue;
     removeRegularFiles(std::move(directory));
     ::unlinkat(::dirfd(listing), entry->d_name, AT_REMOVEDIR);
   }
   ::closedir(listing);
 }
 
-}
-
 PrivateTemporaryDirectory::PrivateTemporaryDirectory(const std::string& parent, std::string_view prefix) {
-  removeStaleDirectories(parent, prefix);
+  removeStaleTemporaryDirectories(parent, prefix);
   std::string pattern =
       parent + "/" + std::string(prefix) + "-" + std::to_string(::getpid()) + "-" + kTemporarySuffix;
-  if (::mkdtemp(pattern.data())) path_ = std::move(pattern);
+  if (!::mkdtemp(pattern.data())) return;
+  held_ = openPrivateDirectory(pattern, false);
+  if (held_.valid() && hold(held_.get())) path_ = std::move(pattern);
+  else ::rmdir(pattern.c_str());
 }
 
 PrivateTemporaryDirectory::~PrivateTemporaryDirectory() {

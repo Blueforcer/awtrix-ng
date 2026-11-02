@@ -1,7 +1,5 @@
 #include "platform/tc002/voice/VoiceTransfers.h"
 
-#include <unistd.h>
-
 #include <algorithm>
 #include <iterator>
 #include <memory>
@@ -24,9 +22,12 @@ constexpr char kFieldSeparator = '\x1f';
 constexpr std::size_t kMaxFormFields = 16;
 constexpr std::size_t kTransfersPerApp = 2;
 constexpr std::size_t kFetchBytes = 2 * 1024 * 1024;
+constexpr std::size_t kBodyBytesAcrossApps = 4 * 1024 * 1024;
+constexpr std::uint64_t kCopiesHeld = 2;
 constexpr int64_t kMsPerSecond = 1000;
-constexpr const char* kTextType = "application/json";
-constexpr const char* kDownloadTypes[] = {"audio/mpeg", "audio/wav", "audio/x-wav", "application/octet-stream"};
+constexpr const char* kJsonType = "application/json";
+constexpr const char* kDownloadTypes[] = {"audio/mpeg", "audio/mp3",   "audio/wav",
+                                          "audio/wave", "audio/x-wav", "application/octet-stream"};
 constexpr const char* kUploadName = "speech";
 
 bool downloadableType(const std::string& contentType) {
@@ -58,7 +59,17 @@ bool formFields(const std::string& block, std::vector<net::FormField>& out) {
   return true;
 }
 
-int attachClip(const Clip& clip, const VoiceTransfers::SendOptions& options, net::TransferRequest& request) {
+bool describe(const std::string& app, const VoiceTransfers::Options& options, net::TransferRequest& request) {
+  if (!net::validUrl(options.url) || !script::normalizeMethod(options.method, request.method) ||
+      !script::parseHeaderBlock(options.headers, request.headers))
+    return false;
+  request.owner = app;
+  request.url = options.url;
+  request.timeoutMs = options.timeoutSec * kMsPerSecond;
+  return true;
+}
+
+int attachClip(const Clip& clip, const VoiceTransfers::Options& options, net::TransferRequest& request) {
   std::vector<net::FormField> parts;
   const bool raw = options.as == "raw";
   const bool typed = script::hasHeader(request.headers, "Content-Type");
@@ -82,118 +93,99 @@ int attachClip(const Clip& clip, const VoiceTransfers::SendOptions& options, net
 
 }
 
-VoiceTransfers::VoiceTransfers(ClipStore& clips, MemoryRoom memory, net::FillRequest fill)
-    : clips_(clips), memory_(std::move(memory)), queue_(kTransfersPerApp, std::move(fill)) {}
+VoiceTransfers::VoiceTransfers(ClipStore& clips, net::FillRequest fill)
+    : clips_(clips), queue_(kTransfersPerApp, std::move(fill)) {}
 
-VoiceTransfers::Done VoiceTransfers::report(std::string app, Kind kind, int number, int status) {
-  Done out{};
-  out.app = std::move(app);
-  out.kind = kind;
-  out.number = number;
-  out.status = status;
-  return out;
-}
-
-int VoiceTransfers::send(const std::string& app, SendData data, const SendOptions& options) {
+int VoiceTransfers::send(const std::string& app, SendData data, const Options& options) {
   const ClipId* const id = std::get_if<ClipId>(&data);
   const Clip* const clip = id ? clips_.find(app, *id) : nullptr;
   if (id && !clip) return kGone;
   net::TransferRequest request;
-  if (options.keep < 0 || !net::splitUrl(options.url, request.origin, request.target) ||
-      !script::normalizeMethod(options.method, request.method) ||
-      !script::parseHeaderBlock(options.headers, request.headers))
-    return kBad;
+  if (options.keep < 0 || !describe(app, options, request)) return kBad;
   if (clip) {
     const int attached = attachClip(*clip, options, request);
     if (attached != kOk) return attached;
   } else {
     request.body = std::move(std::get<std::string>(data));
-    if (!script::hasHeader(request.headers, "Content-Type")) request.headers.emplace_back("Content-Type", kTextType);
+    if (!script::hasHeader(request.headers, "Content-Type")) request.headers.emplace_back("Content-Type", kJsonType);
   }
-  request.owner = app;
-  request.timeoutMs = options.timeoutSec * kMsPerSecond;
   request.filter = {options.find, static_cast<std::size_t>(options.keep),
                     options.cap > 0 ? static_cast<std::size_t>(options.cap) : script::kMaxHttpBody};
-  return start(std::move(request), Kind::Send, 0);
+  return start(std::move(request), VoiceEvent::Kind::Send, 0);
 }
 
-int VoiceTransfers::fetch(const std::string& app, const std::string& url, const std::string& method,
-                          std::string body, const std::string& headers, uint32_t timeoutSec) {
+int VoiceTransfers::fetch(const std::string& app, std::string body, const Options& options) {
   net::TransferRequest request;
-  if (!net::splitUrl(url, request.origin, request.target) || !script::normalizeMethod(method, request.method) ||
-      !script::parseHeaderBlock(headers, request.headers))
-    return kBad;
+  if (!describe(app, options, request)) return kBad;
   if (!clips_.ready()) return kBusy;
   const ClipId clip = clips_.reserve(app, kFetchBytes);
   if (!clip) return kFull;
-  request.owner = app;
   request.body = std::move(body);
-  request.timeoutMs = timeoutSec * kMsPerSecond;
   request.followRedirects = request.method == "GET";
   request.download = net::TransferDownload{clips_.path(clip), kFetchBytes, downloadableType, verifyClip,
-                                           [memory = memory_](std::size_t more) { return memory.fits(more); }};
-  const int number = start(std::move(request), Kind::Fetch, clip);
+                                           [this](std::size_t more) { return clips_.fits(more); }};
+  const int number = start(std::move(request), VoiceEvent::Kind::Fetch, clip);
   if (number < 0) clips_.release(app, clip);
   return number;
 }
 
-int VoiceTransfers::start(net::TransferRequest request, Kind kind, ClipId clip) {
+int VoiceTransfers::start(net::TransferRequest request, VoiceEvent::Kind kind, ClipId clip) {
+  const std::size_t bodyBytes = request.body.head.size() + request.body.tail.size();
+  const std::size_t filledCopy = request.body.fillable() ? bodyBytes + net::kMaxFillGrowth : 0;
+  if (bodyBytes > kBodyBytesAcrossApps - bodyBytes_ ||
+      !clips_.fits(kCopiesHeld * (bodyBytes + request.filter.cap) + filledCopy))
+    return kFull;
   number_ = posix::nextInSequence(number_);
   request.id = number_;
-  Transfer transfer{request.owner, kind, clip};
+  Transfer transfer{request.owner, kind, clip, bodyBytes};
   if (!queue_.start(std::move(request))) return kBusy;
+  bodyBytes_ += bodyBytes;
   transfers_[number_] = std::move(transfer);
   return number_;
 }
 
-std::optional<VoiceTransfers::Transfer> VoiceTransfers::take(int number) {
-  const auto it = transfers_.find(number);
-  if (it == transfers_.end()) return std::nullopt;
-  Transfer transfer = std::move(it->second);
-  transfers_.erase(it);
-  return transfer;
+VoiceTransfers::Transfer VoiceTransfers::take(int number) {
+  auto entry = transfers_.extract(number);
+  bodyBytes_ -= entry.mapped().bodyBytes;
+  return std::move(entry.mapped());
 }
 
-std::vector<VoiceTransfers::Done> VoiceTransfers::cancel(const std::string& app) {
-  std::vector<Done> cancelled;
+std::vector<VoiceEvent> VoiceTransfers::cancel(const std::string& app) {
+  std::vector<VoiceEvent> cancelled;
   for (const int number : queue_.cancel(app)) {
-    const std::optional<Transfer> transfer = take(number);
-    if (!transfer) continue;
-    clips_.release(app, transfer->clip);
-    cancelled.push_back(report(app, transfer->kind, number, kCancelled));
+    const Transfer transfer = take(number);
+    clips_.release(app, transfer.clip);
+    cancelled.push_back(VoiceEvent::outcome(app, transfer.kind, number, kCancelled));
   }
   return cancelled;
 }
 
-std::optional<VoiceTransfers::Done> VoiceTransfers::poll() {
+std::optional<VoiceEvent> VoiceTransfers::poll() {
   net::TransferResult result;
-  while (!transfers_.empty() && queue_.poll(result))
-    if (std::optional<Done> finished = finish(result)) return finished;
-  return std::nullopt;
+  if (transfers_.empty() || !queue_.poll(result)) return std::nullopt;
+  return finish(result);
 }
 
-std::optional<VoiceTransfers::Done> VoiceTransfers::finish(net::TransferResult& result) {
-  const std::optional<Transfer> transfer = take(result.id);
-  if (transfer && transfer->kind == Kind::Send) {
-    Done answer = report(result.owner, Kind::Send, result.id, result.status);
-    if (result.ok) answer.text = std::move(result.body);
+VoiceEvent VoiceTransfers::finish(net::TransferResult& result) {
+  const Transfer transfer = take(result.id);
+  if (transfer.kind == VoiceEvent::Kind::Send) {
+    VoiceEvent answer = VoiceEvent::outcome(result.owner, transfer.kind, result.id, result.status);
+    if (result.ok) answer.body = std::move(result.body);
     return answer;
   }
   const ClipFormat* const format = result.ok ? clipFormatOf(result.contentType) : nullptr;
-  if (transfer && format && clips_.commit(transfer->clip, result.fileBytes, 0, format->kind)) {
-    Done download = report(result.owner, Kind::Fetch, result.id, kOk);
-    download.clip = transfer->clip;
-    download.text = format->extension;
-    return download;
-  }
-  if (!result.file.empty()) ::unlink(result.file.c_str());
-  if (!transfer) return std::nullopt;
-  clips_.release(result.owner, transfer->clip);
-  return report(result.owner, Kind::Fetch, result.id, failedFetchStatus(result));
+  if (format && clips_.commit(transfer.clip, result.fileBytes, format->kind))
+    return VoiceEvent::ofClip(result.owner, transfer.kind, result.id, transfer.clip, 0, format->extension);
+  clips_.release(result.owner, transfer.clip);
+  return VoiceEvent::outcome(result.owner, transfer.kind, result.id, failedFetchStatus(result));
 }
 
 bool VoiceTransfers::holds(const std::string& app) const {
-  return std::any_of(transfers_.begin(), transfers_.end(), [&](const auto& entry) { return entry.second.app == app; });
+  return holdsAny([&app](const std::string& owner) { return owner == app; });
+}
+
+bool VoiceTransfers::holdsAny(const std::function<bool(const std::string&)>& app) const {
+  return std::any_of(transfers_.begin(), transfers_.end(), [&](const auto& entry) { return app(entry.second.app); });
 }
 
 }

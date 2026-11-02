@@ -1,5 +1,7 @@
 #include "../support.h"
 #include "../LogLines.h"
+#include "RawServer.h"
+#include "ThreadStacks.h"
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -11,6 +13,7 @@
 #include <iterator>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -21,15 +24,17 @@
 #include "platform/posix/Files.h"
 #include "system/Log.h"
 
-using awtrix::net::RequestFill;
 using awtrix::net::RequestBody;
+using awtrix::net::RequestFill;
 using awtrix::net::RequestHeaders;
 using awtrix::net::TransferDownload;
 using awtrix::net::TransferQueue;
 using awtrix::net::TransferRequest;
 using awtrix::net::TransferResult;
 using awtrix::test::check;
+using awtrix::test::RawServer;
 using awtrix::test::require;
+using awtrix::test::ThreadStacks;
 
 namespace {
 
@@ -78,6 +83,11 @@ struct Server {
       response.set_content(kRiff, "audio/wav");
     });
     http.Get("/moved-key", [](const auto&, auto& response) { response.set_redirect("/key"); });
+    http.Post("/body", [this](const httplib::Request& request, httplib::Response& response) {
+      std::lock_guard<std::mutex> lock(keyMutex);
+      keys.push_back(request.body);
+      response.set_content("ok", "text/plain");
+    });
     http.Post("/form", [](const httplib::Request& request, httplib::Response& response) {
       const bool form = request.has_file("file") && request.get_file_value("file").filename == "a.wav" &&
                         request.get_file_value("model").content == "whisper-1";
@@ -142,8 +152,7 @@ TransferRequest request(const std::string& origin, const std::string& target, co
   r.owner = owner;
   r.id = id;
   r.method = "GET";
-  r.origin = origin;
-  r.target = target;
+  r.url = origin + target;
   r.timeoutMs = 15000;
   return r;
 }
@@ -263,6 +272,115 @@ void theBudgetCoversTheFirstByte(Server& server) {
   check(result.status == 0 && !result.ok, "a budget that runs out ends with status 0: " + std::to_string(result.status));
 }
 
+bool endsNearItsBudget(TransferRequest overrunning, TransferResult& result) {
+  constexpr int64_t kBudgetMs = 300;
+  overrunning.timeoutMs = kBudgetMs;
+  TransferQueue queue(2);
+  const auto begun = std::chrono::steady_clock::now();
+  require(queue.start(std::move(overrunning)) && wait(queue, result), "the overrunning transfer ends");
+  return std::chrono::steady_clock::now() - begun < std::chrono::milliseconds(5 * kBudgetMs);
+}
+
+void anUploadEndsNearItsBudget() {
+  RawServer server([](int peer) {
+    std::string block(64 * 1024, '\0');
+    while (::recv(peer, block.data(), block.size(), 0) > 0)
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  });
+  TransferResult result;
+  check(endsNearItsBudget(upload(server.url(), "", std::string(8 * 1024 * 1024, 'x'), "text/plain"), result) &&
+            result.status == 0 && !result.ok,
+        "an upload that a server reads slowly and never answers ends near its budget");
+}
+
+void aDownloadEndsNearItsBudget() {
+  const Files files;
+  RawServer server([](int peer) {
+    awtrix::test::readRequest(peer);
+    awtrix::test::sendText(peer, "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: 100000000\r\n\r\n");
+    const std::string block(64 * 1024, 'x');
+    const auto silent = std::chrono::steady_clock::now() + std::chrono::milliseconds(900);
+    while (std::chrono::steady_clock::now() < silent && ::send(peer, block.data(), block.size(), MSG_NOSIGNAL) > 0) {
+    }
+    awtrix::test::waitForClose(peer);
+  });
+  TransferRequest slow = download(server.url(), "", files.path);
+  slow.download->maxBytes = 200 * 1000 * 1000;
+  slow.download->room = [](std::size_t) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+    return true;
+  };
+  TransferResult result;
+  check(endsNearItsBudget(slow, result) && result.status == 0 && !result.ok && !exists(files.path),
+        "a download that passes its budget and then goes silent ends near its budget");
+}
+
+void aHandshakeEndsNearItsBudget() {
+  RawServer server(awtrix::test::waitForClose);
+  TransferRequest secure = request(server.url("https"), "", "A", 40);
+  secure.filter.cap = 8192;
+  TransferResult result;
+  check(endsNearItsBudget(secure, result) && result.status == 0 && !result.ok,
+        "a server that never answers the handshake takes no longer than the budget");
+}
+
+void hostileAnswersEndWithAStatus() {
+  const ThreadStacks small(awtrix::test::kSmallStackBytes);
+  for (const awtrix::test::HostileAnswer& hostile : awtrix::test::hostileAnswers()) {
+    RawServer server([&hostile](int peer) {
+      awtrix::test::readRequest(peer);
+      awtrix::test::sendText(peer, hostile.head);
+    });
+    TransferQueue queue(2);
+    TransferRequest asked = request(server.url(), "", "A", 41);
+    asked.followRedirects = true;
+    asked.filter.cap = 8192;
+    TransferResult result;
+    require(queue.start(asked) && wait(queue, result), hostile.name);
+    check(result.status == hostile.status, std::string(hostile.name) + " ends with " + std::to_string(result.status));
+  }
+}
+
+void aWorkerThatCannotStartRefusesTheTransfer(Server& server) {
+  const Files files;
+  TransferQueue queue(2);
+  {
+    const ThreadStacks impossible(awtrix::test::kImpossibleStackBytes);
+    check(!queue.start(download(server.origin, "/riff", files.path)), "a worker that cannot start refuses the transfer");
+  }
+  TransferResult result;
+  check(queue.start(download(server.origin, "/riff", files.path)) && wait(queue, result) && result.ok,
+        "the next transfer starts it after all");
+}
+
+void aDeadlineThatCannotStartEndsTheRequest(Server& server) {
+  const Files files;
+  TransferQueue queue(2);
+  TransferResult result;
+  require(queue.start(download(server.origin, "/riff", files.path)) && wait(queue, result), "the worker runs");
+  {
+    const ThreadStacks impossible(awtrix::test::kImpossibleStackBytes);
+    require(queue.start(download(server.origin, "/riff", files.path)) && wait(queue, result), "a second transfer");
+  }
+  check(result.status == 0 && !result.ok && !exists(files.path), "a deadline that cannot start ends with status 0");
+}
+
+void aRequestThatThrowsEndsWithStatusZero(Server& server) {
+  const Files files;
+  TransferQueue queue(2, [](const std::string&, std::string& url, RequestHeaders&, RequestBody&) {
+    if (url.find("/throw") != std::string::npos) throw std::runtime_error("fill");
+    return RequestFill::Unchanged;
+  });
+  TransferResult result;
+  require(queue.start(request(server.origin, "/throw", "A", 42)) && wait(queue, result), "a fill that throws");
+  check(result.id == 42 && result.status == 0 && !result.ok, "a fill that throws ends with status 0");
+  TransferRequest checked = download(server.origin, "/riff", files.path, "A", 43);
+  checked.download->verify = [](const std::string&, std::string&) -> bool { throw std::runtime_error("verify"); };
+  require(queue.start(checked) && wait(queue, result), "a check that throws");
+  check(result.id == 43 && result.status == 0 && !result.ok && !exists(files.path),
+        "a check that throws ends with status 0 and leaves no file: " + std::to_string(result.status));
+}
+
 void downloads(Server& server) {
   const Files files;
   TransferQueue queue(2);
@@ -326,13 +444,19 @@ TransferRequest keyed(const Server& server, const std::string& target, const std
 void theWorkerFillsHeadersRightBeforeSending(Server& server) {
   const Files files;
   std::vector<std::string> calls;
-  TransferQueue queue(2, [&calls](const std::string& owner, std::string& url, RequestHeaders& headers) {
+  TransferQueue queue(2, [&calls](const std::string& owner, std::string& url, RequestHeaders& headers,
+                                  RequestBody& body) {
     calls.push_back(owner + " " + url);
     const std::size_t at = url.find("{secret:k}");
     for (auto& header : headers) {
       if (header.second == "refuse") return RequestFill::Refused;
       if (header.second != "{secret:k}") continue;
       header.second = "s3cret";
+      return RequestFill::Filled;
+    }
+    const std::size_t inBody = body.head.find("{secret:k}");
+    if (inBody != std::string::npos) {
+      body.head.replace(inBody, 10, "s3cret");
       return RequestFill::Filled;
     }
     if (at == std::string::npos) return RequestFill::Unchanged;
@@ -372,10 +496,26 @@ void theWorkerFillsHeadersRightBeforeSending(Server& server) {
   check(result.status == 302 && server.takeKeys().empty(),
         "a value in the query follows no redirect either: " + std::to_string(result.status));
 
+  TransferRequest posted = keyed(server, "/body", "", 28);
+  posted.method = "POST";
+  posted.body = "{\"k\":\"{secret:k}\"}";
+  require(queue.start(posted) && wait(queue, result), "a filled body");
+  check(result.status == 200 && server.takeKeys() == std::vector<std::string>{"{\"k\":\"s3cret\"}"},
+        "the server sees the filled body");
+  posted.id = 29;
+  posted.headers = {{"X-Key", "refuse"}};
+  require(queue.start(posted) && wait(queue, result), "a refused body");
+  check(result.status == 0 && !result.ok && server.takeKeys().empty(), "a refused fill sends no body");
+  TransferRequest movedBody = keyed(server, "/moved-key", "", 30);
+  movedBody.body = "{secret:k}";
+  require(queue.start(movedBody) && wait(queue, result), "a filled body on a redirect");
+  check(result.status == 302 && server.takeKeys().empty(),
+        "a filled body follows no redirect: " + std::to_string(result.status));
+
   awtrix::logbuf::setVerbose(true);
   const uint32_t mark = awtrix::test::logMark();
   TransferRequest unreachable = keyed(server, "/x?q={secret:k}", "", 27);
-  unreachable.origin = "http://127.0.0.1:1";
+  unreachable.url = "http://127.0.0.1:1/x?q={secret:k}";
   require(queue.start(unreachable) && wait(queue, result), "a filled request nobody answers");
   const std::string log = awtrix::test::logAfter(mark);
   awtrix::logbuf::setVerbose(false);
@@ -456,5 +596,12 @@ int main() {
   cancelTakesBackAnUnpolledResult(server);
   cancelCatchesARunningCheck(server);
   twoTransfersPerOwner(server);
+  anUploadEndsNearItsBudget();
+  aDownloadEndsNearItsBudget();
+  aHandshakeEndsNearItsBudget();
+  hostileAnswersEndWithAStatus();
+  aRequestThatThrowsEndsWithStatusZero(server);
+  aWorkerThatCannotStartRefusesTheTransfer(server);
+  aDeadlineThatCannotStartEndsTheRequest(server);
   return awtrix::test::finish("linux-transfer-queue");
 }

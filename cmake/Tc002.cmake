@@ -27,8 +27,9 @@ target_compile_options(tc002_speech_voice PRIVATE ${TC002_EXACT_FLOAT_OPTIONS})
 target_link_libraries(tc002_speech_voice PUBLIC tc002_speech awtrix_posix PRIVATE awtrix_warnings)
 set(TC002_WAKE_DIR "${TC002_DIR}/wake")
 set(TC002_WAKE_SOURCES "${TC002_WAKE_DIR}/WakeFft.cpp" "${TC002_WAKE_DIR}/WakeFrontend.cpp"
-  "${TC002_WAKE_DIR}/WakeModel.cpp" "${TC002_WAKE_DIR}/ModelStream.cpp" "${TC002_WAKE_DIR}/WakeDetector.cpp"
-  "${TC002_WAKE_DIR}/Endpointer.cpp")
+  "${TC002_WAKE_DIR}/WakeModel.cpp" "${TC002_WAKE_DIR}/WakeLoader.cpp" "${TC002_WAKE_DIR}/WakeOperators.cpp"
+  "${TC002_WAKE_DIR}/WakeKernels.cpp" "${TC002_WAKE_DIR}/ModelStream.cpp" "${TC002_WAKE_DIR}/ProbabilityWindow.cpp"
+  "${TC002_WAKE_DIR}/WakeDetector.cpp" "${TC002_WAKE_DIR}/Endpointer.cpp")
 add_library(tc002_wake STATIC ${TC002_WAKE_SOURCES})
 target_compile_options(tc002_wake PRIVATE ${TC002_EXACT_FLOAT_OPTIONS})
 target_include_directories(tc002_wake PUBLIC "${PROJECT_SOURCE_DIR}/src")

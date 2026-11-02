@@ -3,6 +3,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <cerrno>
+
 #include "platform/posix/Files.h"
 
 namespace awtrix::tc002::voice {
@@ -43,31 +45,41 @@ std::string wavHeader(uint32_t samples, uint32_t rate) {
 
 WavWriter::~WavWriter() { close(); }
 
+bool WavWriter::put(uint64_t offset, const void* bytes, std::size_t size) {
+  failed_ = !posix::pwriteAll(file_.get(), offset, bytes, size);
+  if (failed_) noRoom_ = errno == ENOSPC;
+  return !failed_;
+}
+
 bool WavWriter::open(const std::string& path, uint32_t rate) {
   close();
   rate_ = rate;
   samples_ = 0;
   failed_ = false;
+  noRoom_ = false;
   file_.reset(::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600));
-  if (!file_.valid()) return false;
+  if (!file_.valid()) {
+    noRoom_ = errno == ENOSPC;
+    return false;
+  }
   const std::string header = wavHeader(0, rate_);
-  if (posix::pwriteAll(file_.get(), 0, header.data(), header.size())) return true;
+  if (put(0, header.data(), header.size())) return true;
   file_.reset();
   return false;
 }
 
 bool WavWriter::write(const int16_t* samples, std::size_t count) {
   if (!file_.valid() || failed_) return false;
-  failed_ = !posix::pwriteAll(file_.get(), wavBytes(samples_), samples, count * kSampleBytes);
-  if (!failed_) samples_ += static_cast<uint32_t>(count);
-  return !failed_;
+  if (!put(wavBytes(samples_), samples, count * kSampleBytes)) return false;
+  samples_ += static_cast<uint32_t>(count);
+  return true;
 }
 
 bool WavWriter::close() {
   if (!file_.valid()) return true;
   if (!failed_) {
     const std::string header = wavHeader(samples_, rate_);
-    failed_ = !posix::pwriteAll(file_.get(), 0, header.data(), header.size());
+    put(0, header.data(), header.size());
   }
   if (::close(file_.release()) != 0) failed_ = true;
   return !failed_;

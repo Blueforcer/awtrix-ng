@@ -417,10 +417,10 @@ details.appgrp:not([open]){gap:0}
 .appcfg .ctl :is(input[type=text],select,.days,.inheritcolor){width:100%}
 .appcfg .days{justify-content:flex-start}
 .appcfg .cfgsection{border-bottom:1px solid var(--brd2)}
-.appcfg .cfgsection>summary{display:flex;align-items:center;gap:10px;min-height:48px;padding:10px 0;cursor:pointer;list-style:none}
-.appcfg .cfgsection>summary::-webkit-details-marker{display:none}
-.appcfg .cfgsection>summary .ic{width:16px;height:16px;color:var(--dim);transform:rotate(-90deg);transition:transform .14s}
-.appcfg .cfgsection[open]>summary .ic{transform:rotate(0deg)}
+.cfgsection>summary{display:flex;align-items:center;gap:10px;min-height:48px;padding:10px 0;cursor:pointer;list-style:none}
+.cfgsection>summary::-webkit-details-marker{display:none}
+.cfgsection>summary .ic{width:16px;height:16px;color:var(--dim);transform:rotate(-90deg);transition:transform .14s}
+.cfgsection[open]>summary .ic{transform:rotate(0deg)}
 .appcfg .cfggrp{font-size:13px;font-weight:600;margin:0}
 .appcfg .cfgrows{padding-left:26px}
 .inheritcolor{display:grid;grid-template-columns:minmax(0,1fr) 86px;align-items:center;gap:10px}
@@ -1125,33 +1125,46 @@ const STR={
   //linux:begin
   gpNone:'No gamepad paired',gpPair:'Add gamepad',gpPairH:'Put the gamepad in pairing mode, then press Pair.',gpPairBtn:'Pair',gpForget:'Forget',gpPhone:'Phone',
   gpDevice:'Controller',gpPlayer:'Player',gpFull:'Forget a controller to add another.',
-  vcSection:'Voice assistant',vcSectionH:'Hold the knob for a moment, then speak.',
-  vcAssist:'Assistant',vcAssistH:'Who answers the knob, the wake word and MQTT.',vcAssistHa:'Home Assistant',
-  svSection:'Speech voice',svSectionH:'The voice that reads speech aloud, in its own language.',
+  vcSection:'Voice assistant',vcSectionH:'Ask the clock something and hear the answer.',
+  vcAssist:'Assistant',vcAssistH:'Who answers: Home Assistant or one of your apps.',vcAssistHa:'Home Assistant',
+  vcUnset:'Not set up',vcUnsetH:'Enter the address and token.',vcLast:'Last try:',
+  svSection:'Clock voice',svSectionH:'The voice that reads speech aloud, in its own language.',
   svActive:'Voice',svNone:'No voice',svBuiltinTag:'built in',svBuiltin:'Use built-in',
   svPack:'Voice pack',svPackH:'An .atts file. Replaces the built-in voice until you remove it.',
   svUpload:'Upload',svLine:'Test',svLineP:'Hello, this is my voice.',svSay:'Speak',
-  capVoice:'Voice',capSecret:'API key storage',
-  vcOn:'Voice',vcOnH:'Off: nothing starts Voice.',vcUrl:'Address',
-  vcWake:'Wake word',vcWakeH:'"Hey AWTRIX" starts the assistant. The microphone listens all the time.',
-  vcToken:'Token',vcTokenH:'Long-lived token from your HA profile.',
-  vcTokenSet:'Saved',vcTokenNone:'None',vcTokenKeep:'Empty keeps it',vcTokenClear:'Remove',
-  vcPipe:'Pipeline',vcPipeH:'Needs STT and TTS.',vcPipeDef:'Default',vcSave:'Save and connect',
-  vcDev:'Room device',vcDevH:'Address of an HA device page. Its area is the room for "turn on the lights".',vcDevP:'Optional',
-  vcoffline:'Off',vcconnecting:'Connecting…',vcready:'Ready',vcstarting:'Starting…',vclistening:'Listening',
-  vcprocessing:'Thinking…',vcspeaking:'Speaking',vcerror:'Error',
-  vceconnectionLost:'HA unreachable',vcetokenRejected:'Token rejected',vcehaError:'HA error',
-  vcepipelineIncomplete:'Pipeline lacks STT/TTS',vcenothingUnderstood:'Not understood',vceaudioTooSlow:'Wi-Fi too slow',
-  vcetimeout:'HA too slow',vcemicrophoneFailed:'Microphone error',vceplaybackFailed:'Playback error',
-  vcemicrophoneUpdate:'Microphone update pending',vceconfigUnavailable:'Settings unreadable',
-  vcfurl:'Address only, no path',vcftoken:'Enter token again',vcfpipeline:'Pick a pipeline',vcfdevice:'Not a device address',vcfenabled:'Needs address and token',vcfassistant:'Not a valid app name',
+  capVoice:'voice recording',capSecret:'API key storage',
+  vcWake:'Wake word',vcWakeH:'Experimental. Say "Hey AWTRIX" to start, with the microphone always on.',vcWakeWait:'Waits until the assistant is ready.',
+  vcSens:'Sensitivity',vcSensH:'High hears you more easily but starts by mistake more often.',
+  vcSenslow:'Low',vcSensnormal:'Normal',vcSenshigh:'High',
+  vcHaBox:'Home Assistant settings',vcUrl:'Address',
+  vcToken:'Token',vcTokenH:'Create one in Home Assistant: your profile › Security.',vcTokenAgain:'Paste it again for this address',vcConnect:'Connect',
+  vcPipe:'HA assistant',vcPipeH:'Which voice assistant of Home Assistant answers.',vcPipeDef:'Default',
+  vcDev:'Room device',vcDevH:'Link to a device in this room, so "lights on" means here.',vcDevP:'Optional',
+  vcready:'Ready',vcstarting:'Starting…',vclistening:'Listening',vcprocessing:'Thinking…',vcspeaking:'Speaking',
+  vceconnectionLost:'No connection',vcxconnectionLost:'Check the address and that Home Assistant is running.',
+  vcetokenRejected:'Token refused',vcxtokenRejected:'Create a new token and paste it below.',
+  vcehaError:'Home Assistant error',vcxhaError:'Its log says why.',
+  vcepipelineIncomplete:'Speech not set up',vcxpipelineIncomplete:'Add speech-to-text and text-to-speech under Voice assistants in Home Assistant.',
+  vcenothingUnderstood:'Not understood',vcxnothingUnderstood:'Speak right after the clock starts listening.',
+  vceaudioTooSlow:'Wi-Fi too slow',vcxaudioTooSlow:'Move the clock closer to the router.',
+  vcetimeout:'Home Assistant too slow',vcxtimeout:'Try faster speech services.',
+  vcemicrophoneFailed:'Microphone error',vcxmicrophoneFailed:'Try again, or restart the clock.',
+  vceplaybackFailed:'Playback error',vcxplaybackFailed:'Use text-to-speech that answers in MP3 or WAV.',
+  vcemicrophoneUpdate:'Microphone update pending',vcxmicrophoneUpdate:'Keep the clock on USB power.',
+  vceconfigUnavailable:'Settings unreadable',vcxconfigUnavailable:'Choose the assistant and set it up again.',
+  vceappMissing:'App not available',vcxappMissing:'Install it or pick another assistant.',
+  vceappOff:'App switched off',vcxappOff:'Switch it on in the Apps tab.',
+  vceappBroken:'App has an error',vcxappBroken:'Open it in the Scripts tab.',
+  vcfurl:'Check the address',vcftoken:'Paste the token again',vcfpipeline:'Pick another one',vcfdevice:'Not a device link',vcfassistant:'Not a valid app name',
   ipOn:'iPhone link',ipOnH:'Then pair the clock on the iPhone under Settings › Bluetooth.',ipWait:'Waiting for iPhone',
   ipForget:'Forget iPhone',ipForgot:'Also forget the clock on the iPhone.',
   oaSection:'Sign-in',oaStatus:'Status',oaId:'Client ID',oaSecret:'Client secret',oaKeep:'Saved – type to replace',
   oaSecretPkce:'Not every provider needs one.',
   oaSignIn:'Sign in',oaSignOut:'Sign out',oaDone:'Signed in',oaInvalid:'@oauth line invalid',
   oasignedIn:'Signed in',oasignedOut:'Not signed in',oapending:'Signing in…',oaerror:'Sign-in failed',
-  seSection:'API keys',seSet:'Set',seEmpty:'Empty',seRemove:'Remove',seInvalid:'@secret line invalid',
+  seSection:'API keys',seSet:'Saved',seEmpty:'Not set',seRemove:'Remove',seInvalid:'Mistake in the app\'s code',
+  seHosts:'Goes only to',
+  seWarn:'Enter keys only for apps you trust. A web login protects them from other web pages.',
   acTitle:'Help AWTRIX',
   acWhy:'Counting TC002 clocks shows how many of them run AWTRIX NG. It is also the basis for a planned cooperation with Ulanzi, in which Ulanzi would support the project for every counted clock. That is the best way to make sure AWTRIX keeps running on future Ulanzi clocks.',
   acWhat:'If you agree, this clock tells the AWTRIX Hub one time that it runs AWTRIX NG, with a code made from its chip ID. The report contains nothing about you: no name, no location, no usage data. It goes only to the Hub, not to Ulanzi. Ulanzi learns only how many clocks were counted. Your clock works exactly the same either way. Once sent, the report cannot be taken back: the Hub cannot tell which clock it came from.',
@@ -1279,11 +1292,11 @@ const APPF={
 const SET_GROUPS=[['bright','grpBright','grpBrightH'],['color','grpColor','grpColorH'],
  ['apps','grpApps','grpAppsH'],['text','grpText','grpTextH'],['overlay','grpOverlay','grpOverlayH']];
 /* TZ-DATA-START */
-/* GENERATED by scripts/tz_data.py from IANA tzdata 2026a - DO NOT EDIT BY HAND.
+/* GENERATED by scripts/tz_data.py from IANA tzdata 2026f - DO NOT EDIT BY HAND.
    Each row is one POSIX TZ rule and the zones that follow it. */
 const TZ_TABLE=[
+['<+00>0','Africa/Casablanca Africa/El_Aaiun'],
 ['<+00>0<+02>-2,M3.5.0/1,M10.5.0/3','Antarctica/Troll'],
-['<+01>-1','Africa/Casablanca Africa/El_Aaiun'],
 ['<+0330>-3:30','Asia/Tehran'],
 ['<+03>-3','Asia/Amman Asia/Baghdad Asia/Damascus Asia/Qatar Asia/Riyadh Europe/Istanbul Europe/Minsk'],
 ['<+0430>-4:30','Asia/Kabul'],
@@ -1334,8 +1347,8 @@ const TZ_TABLE=[
 ['CET-1CEST,M3.5.0,M10.5.0/3','Africa/Ceuta Europe/Andorra Europe/Belgrade Europe/Berlin Europe/Brussels Europe/Budapest Europe/Gibraltar Europe/Madrid Europe/Malta Europe/Paris Europe/Prague Europe/Rome Europe/Tirane Europe/Vienna Europe/Warsaw Europe/Zurich'],
 ['CST-8','Asia/Macau Asia/Shanghai Asia/Taipei'],
 ['CST5CDT,M3.2.0/0,M11.1.0/1','America/Havana'],
-['CST6','America/Bahia_Banderas America/Belize America/Chihuahua America/Costa_Rica America/El_Salvador America/Guatemala America/Managua America/Merida America/Mexico_City America/Monterrey America/Regina America/Swift_Current America/Tegucigalpa'],
-['CST6CDT,M3.2.0,M11.1.0','America/Chicago America/Indiana/Knox America/Indiana/Tell_City America/Matamoros America/Menominee America/North_Dakota/Beulah America/North_Dakota/Center America/North_Dakota/New_Salem America/Ojinaga America/Rankin_Inlet America/Resolute America/Winnipeg'],
+['CST6','America/Bahia_Banderas America/Belize America/Chihuahua America/Costa_Rica America/Edmonton America/El_Salvador America/Guatemala America/Inuvik America/Managua America/Merida America/Mexico_City America/Monterrey America/Regina America/Swift_Current America/Tegucigalpa'],
+['CST6CDT,M3.2.0,M11.1.0','America/Chicago America/Indiana/Knox America/Indiana/Tell_City America/Matamoros America/Menominee America/North_Dakota/Beulah America/North_Dakota/Center America/North_Dakota/New_Salem America/Ojinaga America/Rankin_Inlet America/Resolute'],
 ['ChST-10','Pacific/Guam'],
 ['EAT-3','Africa/Nairobi'],
 ['EET-2','Africa/Tripoli Europe/Kaliningrad'],
@@ -1343,7 +1356,7 @@ const TZ_TABLE=[
 ['EET-2EEST,M3.5.0/0,M10.5.0/0','Asia/Beirut'],
 ['EET-2EEST,M3.5.0/3,M10.5.0/4','Asia/Famagusta Asia/Nicosia Europe/Athens Europe/Bucharest Europe/Chisinau Europe/Helsinki Europe/Kyiv Europe/Riga Europe/Sofia Europe/Tallinn Europe/Vilnius'],
 ['EET-2EEST,M4.5.5/0,M10.5.4/24','Africa/Cairo'],
-['EST5','America/Cancun America/Jamaica America/Panama'],
+['EST5','America/Cancun America/Jamaica America/Panama America/Winnipeg'],
 ['EST5EDT,M3.2.0,M11.1.0','America/Detroit America/Grand_Turk America/Indiana/Indianapolis America/Indiana/Marengo America/Indiana/Petersburg America/Indiana/Vevay America/Indiana/Vincennes America/Indiana/Winamac America/Iqaluit America/Kentucky/Louisville America/Kentucky/Monticello America/New_York America/Port-au-Prince America/Toronto'],
 ['GMT0','Africa/Abidjan Africa/Bissau Africa/Monrovia Africa/Sao_Tome America/Danmarkshavn'],
 ['GMT0BST,M3.5.0/1,M10.5.0','Europe/London'],
@@ -1356,13 +1369,13 @@ const TZ_TABLE=[
 ['JST-9','Asia/Tokyo'],
 ['KST-9','Asia/Pyongyang Asia/Seoul'],
 ['MSK-3','Europe/Kirov Europe/Moscow Europe/Simferopol Europe/Volgograd'],
-['MST7','America/Dawson America/Dawson_Creek America/Fort_Nelson America/Hermosillo America/Mazatlan America/Phoenix America/Whitehorse'],
-['MST7MDT,M3.2.0,M11.1.0','America/Boise America/Cambridge_Bay America/Ciudad_Juarez America/Denver America/Edmonton America/Inuvik'],
+['MST7','America/Dawson America/Dawson_Creek America/Fort_Nelson America/Hermosillo America/Mazatlan America/Phoenix America/Vancouver America/Whitehorse'],
+['MST7MDT,M3.2.0,M11.1.0','America/Boise America/Cambridge_Bay America/Ciudad_Juarez America/Denver'],
 ['NST3:30NDT,M3.2.0,M11.1.0','America/St_Johns'],
 ['NZST-12NZDT,M9.5.0,M4.1.0/3','Pacific/Auckland'],
 ['PKT-5','Asia/Karachi'],
 ['PST-8','Asia/Manila'],
-['PST8PDT,M3.2.0,M11.1.0','America/Los_Angeles America/Tijuana America/Vancouver'],
+['PST8PDT,M3.2.0,M11.1.0','America/Los_Angeles America/Tijuana'],
 ['SAST-2','Africa/Johannesburg'],
 ['SST11','Pacific/Pago_Pago'],
 ['UTC0','UTC'],
@@ -4205,11 +4218,20 @@ function hubTokenSection(page){
 }
 //linux:begin
 document.head.append(el('style',null,`
-#sec-voice .badge:not(.bad){flex:none;white-space:nowrap;word-break:normal}
-#sec-voice .ctl{flex-wrap:wrap}
-#sec-voice .ctl input[type=password]{flex:1 1 180px}
-.cfgsection.secret .ctl{flex-wrap:wrap}
-.cfgsection.secret .ctl input[type=password]{flex:1 1 180px}
+#sec-voice .badge{flex:none;font-size:12.5px;padding:5px 11px;white-space:nowrap;word-break:normal}
+#sec-voice .badge:not(.good,.bad){border:1px solid var(--brd2)}
+#sec-voice .badge::before{content:'';display:inline-block;width:8px;height:8px;margin-right:7px;border-radius:50%;background:currentColor}
+#sec-voice>.rows{padding-bottom:0;margin-bottom:-1px}
+#sec-voice .cfggrp{font-size:13.5px;font-weight:500;margin:0}
+@media(max-width:760px){
+  #sec-voice .vcstate{grid-template-columns:auto minmax(0,1fr)}
+  #sec-voice .vcstate .lab{display:contents}
+  #sec-voice .vcstate .ctl{justify-content:flex-end}
+  #sec-voice .vcstate .help{grid-row:2;grid-column:1/-1}
+  #sec-voice .badge{flex:initial;white-space:normal}
+}
+#sec-voice .ctl,.cfgsection.secret .ctl{flex-wrap:wrap}
+#sec-voice .ctl input[type=password],.cfgsection.secret .ctl input[type=password]{flex:1 1 180px}
 `));
 const GPSTATE={ready:'mqup',waiting:'mqdown',connecting:'mqbusy',pairing:'scanning'};
 function gamepadSection(page){
@@ -4263,78 +4285,125 @@ function gamepadSection(page){
   poller(load,()=>!cur||cur.devices?.some(p=>p.state==='pairing'||p.state==='connecting')?2000:5000);
 }
 function voiceSection(page){
-  const HA='ha',APP='app:';
-  const state=el('div',{class:'badge'}),tokenState=el('div',{class:'badge'});
+  const OFF='off',HA='ha',APP='app:',UNLINKED=['offline','connecting','error'];
+  const assist=el('select',{'aria-label':t('vcAssist')});
+  assist.addEventListener('change',()=>store({assistant:assist.value}));
+  const state=el('div',{class:'badge'}),hint=el('span');
+  const stateRow=actionRow(t('oaStatus'),hint,[state]);
+  stateRow.classList.add('vcstate');
+  const wakeHint=el('span');
+  const wake=mkSwitch(false,()=>store({wakeWord:wake.input.checked}));
+  const wakeRow=actionRow(t('vcWake'),wakeHint,[wake.node]);
+  const sens=el('select',{'aria-label':t('vcSens')},['low','normal','high'].map(v=>el('option',{value:v},t('vcSens'+v))));
+  sens.addEventListener('change',()=>store({wakeSensitivity:sens.value}));
+  const sensRow=actionRow(t('vcSens'),t('vcSensH'),[sens]);
   const url=el('input',{type:'text',inputmode:'url',autocomplete:'off',spellcheck:'false',placeholder:'http://homeassistant.local:8123','aria-label':t('vcUrl')});
   const token=el('input',{type:'password',autocomplete:'new-password',spellcheck:'false','aria-label':t('vcToken')});
+  const clear=armable(el('button',null,t('seRemove')),()=>store({clearToken:true}));
+  const connect=el('button',{class:'pri'},t('vcConnect'));
   const pipe=el('select',{'aria-label':t('vcPipe')});
+  pipe.addEventListener('change',()=>store({pipeline:pipe.value}));
+  const pipeRow=actionRow(t('vcPipe'),t('vcPipeH'),[pipe]);
   const dev=el('input',{type:'text',autocomplete:'off',spellcheck:'false',placeholder:t('vcDevP'),'aria-label':t('vcDev')});
-  const assist=el('select',{'aria-label':t('vcAssist')});
-  assist.addEventListener('change',()=>store({assistant:assist.value},t('saved')));
-  const on=mkSwitch(false,()=>store({enabled:on.input.checked},t('saved')));
-  const wake=mkSwitch(false,()=>store({wakeWord:wake.input.checked},t('saved')));
-  const wakeRow=actionRow(t('vcWake'),t('vcWakeH'),[wake.node]);
-  const save=el('button',{class:'pri'},t('vcSave'));
-  const clear=armable(el('button',null,t('vcTokenClear')),()=>store({clearToken:true,enabled:false},t('saved')));
-  const haRows=[actionRow(t('mqStatus'),null,[state]),actionRow(t('vcOn'),t('vcOnH'),[on.node]),
-    actionRow(t('vcUrl'),null,[url]),actionRow(t('vcToken'),t('vcTokenH'),[tokenState,token,clear]),
-    actionRow(t('vcPipe'),t('vcPipeH'),[pipe]),actionRow(t('vcDev'),t('vcDevH'),[dev]),actionRow('',null,[save])];
-  let cur=null,pipes='',apps='';
-  const reason=code=>code?(STR['vce'+code]?t('vce'+code):code):'';
+  dev.addEventListener('change',()=>{
+    dev.value=dev.value.trim().split(/[/?#]/).filter(Boolean).pop()||'';
+    store({device:dev.value});
+  });
+  const devRow=actionRow(t('vcDev'),t('vcDevH'),[dev]);
+  const{box,rows}=scriptSectionBox('haset',t('vcHaBox'));
+  rows.append(actionRow(t('vcUrl'),null,[url]),actionRow(t('vcToken'),t('vcTokenH'),[token,clear]),
+    el('div',{class:'frow full'},el('div',{class:'ctl'},connect)),pipeRow,devRow);
+  let cur=null,pipes='',apps='',opened=false;
+  const reason=code=>STR['vce'+code]?t('vce'+code):code;
+  const fix=code=>STR['vcx'+code]||'';
+  const show=(nodes,on)=>{for(const node of nodes)node.style.display=on?'':'none';};
+  const warn=(node,on)=>node.parentNode.classList.toggle('warn',on);
+  const originOf=v=>{
+    try{return new URL(/^https?:\/\//i.test(v)?v:'http://'+v).origin;}
+    catch(e){return v;}
+  };
+  const checkConnect=()=>{
+    const c=cur.config,kept=c.tokenSet&&originOf(url.value.trim())===originOf(c.url);
+    connect.disabled=!url.value.trim()||!(token.value.trim()||kept);
+    token.placeholder=kept?t('oaKeep'):c.tokenSet?t('vcTokenAgain'):'';
+  };
+  function status(d,setUp){
+    if(d.error)return[reason(d.error),' bad',fix(d.error)];
+    if(!setUp)return[t('vcUnset'),'',t('vcUnsetH')];
+    const last=d.lastError?t('vcLast')+' '+reason(d.lastError)+'. '+fix(d.lastError):'';
+    if(UNLINKED.includes(d.state))return[t('mqbusy'),'',last];
+    return[t('vc'+d.state),' good',last];
+  }
   function paint(d){
     const first=!cur;cur=d;
-    const c=d.config||{};
-    if(first){url.value=c.url||'';dev.value=c.device||'';}
-    on.input.checked=!!c.enabled;
-    wake.input.checked=!!c.wakeWord;
-    wakeRow.style.display=d.wakeWordAvailable?'':'none';
-    const names=d.assistantApps||[],target=c.assistant||HA;
-    if(first||JSON.stringify(names)!==apps){
-      apps=JSON.stringify(names);
-      assist.replaceChildren(el('option',{value:HA},t('vcAssistHa')),...names.map(n=>el('option',{value:APP+n},n)));
+    const c=d.config,target=c.assistant,off=target===OFF,ha=target===HA;
+    const app=target.startsWith(APP)?target.slice(APP.length):'';
+    if(first){url.value=c.url;dev.value=c.device;}
+    const names=d.assistantApps,listed=app&&!names.includes(app)?[...names,app]:names;
+    const appsSig=JSON.stringify(listed);
+    if(appsSig!==apps){
+      apps=appsSig;
+      assist.replaceChildren(el('option',{value:OFF},t('mqoff')),el('option',{value:HA},t('vcAssistHa')),
+        ...listed.map(n=>el('option',{value:APP+n},n)));
     }
-    if(![...assist.options].some(o=>o.value===target))assist.append(el('option',{value:target},target.slice(APP.length)));
     assist.value=target;
-    for(const row of haRows)row.style.display=target===HA?'':'none';
-    tokenState.className='badge'+(c.tokenSet?' good':'');
-    tokenState.replaceChildren(t(c.tokenSet?'vcTokenSet':'vcTokenNone'));
-    token.placeholder=c.tokenSet?t('vcTokenKeep'):'';
-    clear.disabled=!c.tokenSet;
-    const list=(d.pipelines||[]).filter(p=>p.stt_engine&&p.tts_engine);
-    const sig=JSON.stringify(list);
-    if(first||sig!==pipes){
+    const setUp=!ha||(!!c.url&&c.tokenSet),linked=!UNLINKED.includes(d.state);
+    const[text,cls,help]=status(d,setUp);
+    state.className='badge'+cls;
+    state.replaceChildren(text);
+    hint.replaceChildren(help);
+    warn(hint,!d.error&&!!d.lastError);
+    show([stateRow],!off||!!d.error);
+    const hears=d.wakeWordAvailable&&!off&&setUp;
+    const waiting=c.wakeWord&&!d.wakeListening&&(d.state==='ready'||!linked);
+    wake.input.checked=c.wakeWord;
+    sens.value=c.wakeSensitivity;
+    wakeHint.replaceChildren(t(waiting?'vcWakeWait':'vcWakeH'));
+    warn(wakeHint,waiting);
+    show([wakeRow],hears);
+    show([sensRow],hears&&c.wakeWord);
+    show([box],ha);
+    const want=ha&&(!setUp||(!linked&&!!d.error))?true:linked?false:opened;
+    if(want!==opened&&!box.contains(document.activeElement?.closest('input'))){opened=want;box.open=want;}
+    show([clear],c.tokenSet);
+    checkConnect();
+    const speech=d.pipelines.filter(p=>p.stt_engine&&p.tts_engine).map(p=>[p.id,p.name||p.id]);
+    const choices=c.pipeline&&!speech.some(([id])=>id===c.pipeline)?[...speech,[c.pipeline,c.pipeline]]:speech;
+    const sig=JSON.stringify(choices);
+    if(sig!==pipes){
       pipes=sig;
-      const want=first?c.pipeline||'':pipe.value;
-      pipe.replaceChildren(el('option',{value:''},t('vcPipeDef')),
-        ...list.map(p=>el('option',{value:p.id},p.name||p.id)));
-      if(want&&!list.some(p=>p.id===want))pipe.append(el('option',{value:want},want));
-      pipe.value=want;
+      pipe.replaceChildren(el('option',{value:''},t('vcPipeDef')),...choices.map(([id,name])=>el('option',{value:id},name)));
     }
-    const why=c.enabled?reason(d.error):'';
-    state.className='badge'+(why?' bad':d.state==='ready'?' good':'');
-    state.replaceChildren(why||t('vc'+d.state));
+    pipe.value=c.pipeline;
+    show([pipeRow],speech.length>0);
+    show([devRow],linked||!!c.device);
   }
   async function load(){paint((await api('/api/v1/voice',{timeout:4000})).data);}
-  async function store(body,done){
-    save.disabled=true;
+  async function store(body){
+    connect.disabled=true;
     try{
       await ownPageSend('/api/v1/voice','X-Awtrix-Voice','POST',body);
       if(body.token)token.value='';
-      toast(done);
+      toast(t('saved'));
     }catch(e){
       toast(e.code==='validationFailed'&&STR['vcf'+e.field]?t('vcf'+e.field):e.message,false);
     }
-    save.disabled=false;
+    checkConnect();
     try{await load();}catch(e){}
   }
-  save.addEventListener('click',()=>{
-    const body={url:url.value.trim(),pipeline:pipe.value,device:dev.value.trim().split(/[/?#]/).filter(Boolean).pop()||'',enabled:true};
-    dev.value=body.device;
-    if(token.value)body.token=token.value;
-    store(body,t('saved'));
+  url.addEventListener('input',checkConnect);
+  token.addEventListener('input',checkConnect);
+  connect.addEventListener('click',()=>{
+    connect.focus();
+    const body={url:originOf(url.value.trim())},secret=token.value.trim();
+    url.value=body.url;
+    if(secret)body.token=secret;
+    store(body);
   });
-  page.section('voice',t('vcSection'),t('vcSectionH'),[
-    actionRow(t('vcAssist'),t('vcAssistH'),[assist]),wakeRow,...haRows]);
+  for(const field of[url,token])field.addEventListener('keydown',e=>{if(e.key==='Enter'&&!connect.disabled)connect.click();});
+  const details=[stateRow,wakeRow,sensRow,box];
+  show(details,false);
+  page.section('voice',t('vcSection'),t('vcSectionH'),[actionRow(t('vcAssist'),t('vcAssistH'),[assist]),...details]);
   poller(load,2000);
 }
 const SV='/api/v1/speech/voice';
@@ -4429,7 +4498,7 @@ function scriptSectionBox(cls,title,open){
   return{box,rows};
 }
 const OAUTH='/api/v1/oauth/';
-const oauthSend=(path,body,method='POST')=>ownPageSend(OAUTH+path,'X-Awtrix-OAuth',method,body);
+const oauthSend=(path,method,body)=>ownPageSend(OAUTH+path,'X-Awtrix-OAuth',method,body);
 async function oauthSection(name,open){
   const path=encodeURIComponent(name);
   const{data:s}=await api(OAUTH+path);
@@ -4447,16 +4516,16 @@ async function oauthSection(name,open){
     if(id.value.trim()===(s.clientId||'')&&!secret.value)return;
     const body={clientId:id.value.trim()};
     if(secret.value)body.clientSecret=secret.value;
-    await oauthSend(path,body);
+    await oauthSend(path,'POST',body);
   }
   save.addEventListener('click',async()=>{
     try{await store();toast(t('saved'));await reload();}catch(e){toastErr(e);}
   });
   go.addEventListener('click',async()=>{
     try{
-      if(s.state==='signedIn'){await oauthSend(path,null,'DELETE');await reload();return;}
+      if(s.state==='signedIn'){await oauthSend(path,'DELETE');await reload();return;}
       await store();
-      const{data}=await oauthSend(path+'/start');
+      const{data}=await oauthSend(path+'/start','POST');
       location.assign(data.url);
     }catch(e){toastErr(e);}
   });
@@ -4477,13 +4546,14 @@ async function secretSection(name,open){
     return box;
   }
   const reload=async()=>box.replaceWith(await secretSection(name,box.open));
+  rows.append(el('div',{class:'badge warn'},t('seWarn')));
   const fields=(s.keys||[]).map(k=>{
     const label=k.label||k.key;
     const input=el('input',{type:'password',autocomplete:'new-password',spellcheck:'false','aria-label':label,
       placeholder:t(k.set?'seSet':'seEmpty')});
     const remove=k.set?armable(el('button',null,t('seRemove')),()=>
       secretSend(path+'/'+encodeURIComponent(k.key),'DELETE').then(reload).catch(toastErr)):null;
-    rows.append(actionRow(label,k.help||null,[input,remove]));
+    rows.append(actionRow(label,[k.help,t('seHosts')+' '+k.hosts.join(', ')].filter(Boolean).join(' · '),[input,remove]));
     return[k.key,input];
   });
   const save=el('button',{class:'pri'},t('save'));
@@ -4546,7 +4616,7 @@ async function oauthReturn(){
   if(q.has('oauth_error')){toast(t('oaerror')+' · '+q.get('oauth_error'),false);return;}
   try{
     const path=encodeURIComponent(app);
-    await oauthSend(path+'/code',{code:q.get('oauth')||'',state});
+    await oauthSend(path+'/code','POST',{code:q.get('oauth')||'',state});
     for(let i=0;i<30;i++){
       const{data}=await api(OAUTH+path);
       if(data.state==='signedIn'){toast(t('oaDone'));render();return;}

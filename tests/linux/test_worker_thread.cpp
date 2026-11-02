@@ -1,4 +1,5 @@
 #include "../support.h"
+#include "ThreadStacks.h"
 
 #include <atomic>
 #include <filesystem>
@@ -29,6 +30,19 @@ void startsWithTheFirstTask() {
   worker.post([&ran] { ran.set_value(std::this_thread::get_id()); });
   const std::thread::id runner = id.get();
   check(runner != std::this_thread::get_id() && threads() == before + 1, "the first task starts the worker's thread");
+}
+
+void aThreadThatCannotStartRefusesTheTask() {
+  WorkerThread worker;
+  std::atomic<int> ran{0};
+  {
+    const awtrix::test::ThreadStacks impossible(awtrix::test::kImpossibleStackBytes);
+    check(!worker.post([&ran] { ran += 1; }), "a thread that cannot start refuses the task");
+  }
+  std::promise<void> done;
+  check(worker.post([&done] { done.set_value(); }), "the next task starts it after all");
+  done.get_future().wait();
+  check(ran == 0, "the refused task never runs");
 }
 
 void runsTasksInOrder() {
@@ -75,6 +89,7 @@ void destructionWaitsForTheRunningTask() {
 }
 
 int main() {
+  aThreadThatCannotStartRefusesTheTask();
   startsWithTheFirstTask();
   runsTasksInOrder();
   destructionWaitsForTheRunningTask();

@@ -178,22 +178,35 @@ Some apps use a service that wants an API key, a password for programs that you 
 Such an app has an **API keys** block in its settings.
 
 1. On the **Apps** tab, press **⚙** on the app's row.
-2. Open **API keys**. Each field says **Set** or **Empty**.
-3. Paste the key and press **Save**. The app uses it from its next request, without a restart.
+2. Open **API keys**. A warning above the fields tells you to enter a key only for an app you trust.
+   Each field says **Saved** or **Not set**. The line under it says
+   [where the key may go](../guides/scripting/network.md#where-a-key-may-go): **Goes only to** and the
+   hosts the app names.
+3. Paste the key and press **Save**. The app uses it from its next request, without a restart. A key
+   cannot hold a line break, a tab or another control character.
 
 **Remove** next to a field deletes that key. Press it twice to confirm. A field you leave empty keeps
 the saved key.
+
+To use a key with a host that is not shown, change `hosts=` in the `@secret` line of the app's code on
+the **Scripts** tab, save, and enter the key again.
 
 The key stays on the clock. The web UI never shows it again, and the app itself never sees it. It is
 not part of a backup, so enter it again after you restore a backup on a reset clock. Deleting the app
 or a factory reset erases its keys. An update of the app keeps them, unless it changes which addresses
 a key may go to.
 
-Anyone who can open the web UI can replace or delete a key, but cannot read it. Keys are stored on the
-clock without encryption, so keep the clock itself out of other people's hands.
+The web UI never shows a key, but that does not keep it from everyone: whoever can change an app's
+settings or its script can also get at its key. Keys are stored on the clock without encryption, so
+keep the clock itself out of other people's hands.
 
-If the block shows **@secret line invalid**, the app's header has a mistake. Only its author can fix
-that.
+!!! note "Set a web login"
+    Without a [web login](../reference/http.md#authentication), any web page opened in a browser on
+    the same network can change scripts and app settings on the clock, and with that reach API keys
+    and the microphone. Set a login.
+
+If the block shows **Mistake in the app's code**, an `@secret` line in the app's header is wrong, for
+example a line without `hosts=`. No key can be entered until the line is fixed.
 <!-- /only -->
 
 ## Scripts
@@ -504,7 +517,7 @@ Device settings in these sections: **Wi-Fi**, **Web server**, **MQTT**, **Time**
 <!-- only tc002 -->
 Device settings in these sections: **Wi-Fi**, **Web server**, **MQTT**, **Time**, **Panel**,
 **Brightness & sensors**, **Buttons**, **Audio**, **Scripting**, **Mirroring**, **Misc**, then
-**AWTRIX Hub**, **Gamepad**, **Voice assistant**, **Speech voice**, **iPhone**,
+**AWTRIX Hub**, **Gamepad**, **Voice assistant**, **Clock voice**, **iPhone**,
 **Help AWTRIX**, **Maintenance** and **Backup & restore**.
 <!-- /only -->
 
@@ -635,11 +648,12 @@ which player it plays. See [Gamepad](../guides/gamepad.md).
 
 ### Voice assistant
 
-**Assistant** chooses who answers the knob, the wake word and the **Assist** button: Home Assistant
-or an installed app that can answer. **Wake word** switches "Hey AWTRIX" on and off. For Home
-Assistant, enter the address, an access token and the Assist pipeline, then press
-**Save and connect**. The **Voice** switch turns it on and off at once. A badge shows the connection
-or, in plain words, why it fails. See [Voice assistant](../guides/voice.md).
+**Assistant** chooses who answers the knob, the wake word, the **Assist** button in Home Assistant,
+MQTT and HTTP: **Off** for nobody, Home Assistant or an installed app that can answer. **Status** shows whether it is ready and
+what to do if it is not. **Wake word** switches the experimental "Hey AWTRIX" on and off, and **Sensitivity** sets how
+easily the clock hears it. For Home Assistant, enter the address and an access token under **Home
+Assistant settings** and press **Connect**. With the clock connected, you also find **HA assistant**
+and **Room device** there. See [Voice assistant](../guides/voice.md).
 
 ### iPhone
 

@@ -143,11 +143,13 @@ int main() {
   stream.receive(meta(1, 0, 1000), 10000, writer);
   const int64_t renewedTo = 10000 + 10 * 60000;
   renewedUntil(10000, renewedTo);
-  check(stream.active() && stream.error().empty() && stream.deadline() <= renewedTo + 500,
+  check(stream.active() && stream.error().empty() && stream.deadline() <= renewedTo + awtrix::tc002::kStreamLeaseMs,
         "a stream runs as long as its consumer renews");
-  stream.tick(renewedTo + 500);
+  stream.tick(renewedTo + 1000);
+  check(stream.active() && stream.error().empty(), "a second without a renewal ends nothing");
+  stream.tick(renewedTo + awtrix::tc002::kStreamLeaseMs);
   check(stream.active() && stream.error() == "microphone consumer expired" &&
-            stream.deadline() > renewedTo + 500,
+            stream.deadline() > renewedTo + awtrix::tc002::kStreamLeaseMs,
         "a long stream still drains once its consumer stops renewing");
   const uint64_t fiftyDays = uint64_t{50} * 24 * 3600 * 1000, halves = fiftyDays / 3 * 2;
   check(mcu::Stream::steady(fiftyDays, halves) && mcu::Stream::steady(fiftyDays + 3, halves),

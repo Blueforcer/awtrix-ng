@@ -1,10 +1,13 @@
 #include "../support.h"
+#include "ThreadStacks.h"
 // Parser contracts for the AWTRIX cpp-httplib 0.20.0 hardening patch.
 #include "platform/linux/host/vendor/httplib.h"
 
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <thread>
+#include <vector>
 
 namespace {
 constexpr auto check = awtrix::test::require;
@@ -55,6 +58,122 @@ bool headers(const std::string& text, httplib::Headers& output) {
   return httplib::detail::read_headers(input, output);
 }
 
+void statusLines() {
+  struct Line {
+    std::string text;
+    bool valid;
+    const char* version;
+    int status;
+    const char* reason;
+  };
+  const std::string longReason(16000, 'r');
+  const std::vector<Line> lines = {
+      {"HTTP/1.1 200 OK\r\n", true, "HTTP/1.1", 200, "OK"},
+      {"HTTP/1.0 404 Not Found\n", true, "HTTP/1.0", 404, "Not Found"},
+      {"ICY 200 OK\r\n", true, "HTTP/1.0", 200, "OK"},
+      {"HTTP/1.1 204\r\n", true, "HTTP/1.1", 204, ""},
+      {"HTTP/1.1 200 \r\n", true, "HTTP/1.1", 200, ""},
+      {"HTTP/1.1 200 " + longReason + "\r\n", true, "HTTP/1.1", 200, longReason.c_str()},
+      {"", false, "", 0, ""},
+      {"HTTP/1.1 200 OK", false, "", 0, ""},
+      {"HTTP/1.1 200 OK\r\r\n", false, "", 0, ""},
+      {"HTTP/1.1 20 OK\r\n", false, "", 0, ""},
+      {"HTTP/1.1 2000 OK\r\n", false, "", 0, ""},
+      {"HTTP/1.1 20x OK\r\n", false, "", 0, ""},
+      {"HTTP/1.1  200 OK\r\n", false, "", 0, ""},
+      {"HTTP/1.1 200\tOK\r\n", false, "", 0, ""},
+      {"HTTP/2 200 OK\r\n", false, "", 0, ""},
+      {"http/1.1 200 OK\r\n", false, "", 0, ""},
+      {"ICY200 OK\r\n", false, "", 0, ""},
+  };
+  for (const Line& line : lines) {
+    httplib::Response response;
+    const bool valid = httplib::detail::parse_status_line(line.text.c_str(), response);
+    check(valid == line.valid && (!valid || (response.version == line.version && response.status == line.status &&
+                                             response.reason == line.reason)),
+          "status line: " + line.text.substr(0, 40));
+  }
+}
+
+void locations() {
+  struct Case {
+    std::string text;
+    bool valid;
+    const char* scheme;
+    const char* host;
+    int port;
+    const char* path;
+    const char* query;
+  };
+  const std::string longPath = "/" + std::string(16000, 'a');
+  const std::vector<Case> cases = {
+      {"/x", true, "", "", -1, "/x", ""},
+      {"x/y?q=1#f", true, "", "", -1, "x/y", "?q=1"},
+      {"http://a.b/c", true, "http", "a.b", -1, "/c", ""},
+      {"https://a.b:8443/c?d#e", true, "https", "a.b", 8443, "/c", "?d"},
+      {"//a.b/c", true, "", "a.b", -1, "/c", ""},
+      {"http://[::1]:8080/c", true, "http", "::1", 8080, "/c", ""},
+      {"http://[zz]/c", true, "http", "[zz]", -1, "/c", ""},
+      {"http://[::1/c", true, "http", "[", -1, "::1/c", ""},
+      {"http://a.b:x/c", true, "http", "a.b", -1, ":x/c", ""},
+      {"http://a.b:80x", true, "http", "a.b", 80, "x", ""},
+      {"http://a.b:65535/", true, "http", "a.b", 65535, "/", ""},
+      {"http:x", true, "http", "", -1, "x", ""},
+      {"httpx://a/b", true, "", "", -1, "httpx://a/b", ""},
+      {"///x", true, "", "", -1, "///x", ""},
+      {"?q", true, "", "", -1, "", "?q"},
+      {"#f", true, "", "", -1, "", ""},
+      {"", true, "", "", -1, "", ""},
+      {longPath, true, "", "", -1, longPath.c_str(), ""},
+      {"http://a.b:65536/", false, "", "", 0, "", ""},
+      {"http://a.b:99999999999/x", false, "", "", 0, "", ""},
+      {"/x#a\rb", false, "", "", 0, "", ""},
+  };
+  for (const Case& one : cases) {
+    httplib::detail::LocationParts parts;
+    const bool valid = httplib::detail::parse_location(one.text, parts);
+    check(valid == one.valid && (!valid || (parts.scheme == one.scheme && parts.host == one.host &&
+                                            parts.port == one.port && parts.path == one.path &&
+                                            parts.query == one.query)),
+          "location: " + one.text.substr(0, 40));
+  }
+}
+
+void matchAllRoutes() {
+  const awtrix::test::ThreadStacks small(awtrix::test::kSmallStackBytes);
+  httplib::Server server;
+  const auto answer = [](const httplib::Request&, httplib::Response& response) {
+    response.set_content("ok", "text/plain");
+  };
+  server.Get(".*", answer);
+  server.Post(".*", answer);
+  server.Put(".*", answer);
+  server.Patch(".*", answer);
+  server.Delete(".*", answer);
+  const int port = server.bind_to_any_port("127.0.0.1");
+  std::thread listener([&server] { server.listen_after_bind(); });
+  server.wait_until_ready();
+
+  httplib::Client client("127.0.0.1", port);
+  const std::string longPath = "/" + std::string(CPPHTTPLIB_REQUEST_URI_MAX_LENGTH - 1, 'a');
+  const auto status = [](const httplib::Result& result) { return result ? result->status : -1; };
+  for (const std::string& path : {std::string("/"), std::string("/a/b?c=d"), std::string("/%00"), longPath}) {
+    const std::string name = "match-all route answers " + path.substr(0, 40);
+    check(status(client.Get(path)) == 200, "GET " + name);
+    check(status(client.Post(path, "x", "text/plain")) == 200, "POST " + name);
+    check(status(client.Put(path, "x", "text/plain")) == 200, "PUT " + name);
+    check(status(client.Patch(path, "x", "text/plain")) == 200, "PATCH " + name);
+    check(status(client.Delete(path)) == 200, "DELETE " + name);
+  }
+  for (const char* path : {"/a%0Ab", "/a%0Db", "/%0A", "/%0D"}) {
+    check(status(client.Get(path)) == 404, std::string("match-all route refuses ") + path);
+    check(status(client.Post(path, "x", "text/plain")) == 404, std::string("POST match-all route refuses ") + path);
+  }
+  check(status(client.Get(longPath + "a")) == 414, "a path above the limit stays refused");
+  server.stop();
+  listener.join();
+}
+
 bool chunks(const std::string& text, httplib::Response& response, std::string& body) {
   httplib::detail::BufferStream input;
   input.write(text.data(), text.size());
@@ -65,6 +184,9 @@ bool chunks(const std::string& text, httplib::Response& response, std::string& b
 
 int main() {
   parserChecks();
+  statusLines();
+  locations();
+  matchAllRoutes();
   constexpr size_t maxLine = CPPHTTPLIB_HEADER_MAX_LENGTH;
   constexpr size_t maxBytes = CPPHTTPLIB_HEADER_MAX_TOTAL_LENGTH;
   constexpr size_t maxCount = CPPHTTPLIB_HEADER_MAX_COUNT;

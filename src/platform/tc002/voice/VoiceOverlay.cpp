@@ -7,6 +7,7 @@
 
 #include "core/effects/EffectMath.h"
 #include "platform/tc002/runtime/Tc002Paint.h"
+#include "platform/tc002/voice/PcmLevel.h"
 
 namespace awtrix::tc002::voice {
 namespace {
@@ -198,15 +199,7 @@ void VoiceOverlay::reset(int64_t now) {
 void VoiceOverlay::audio(const int16_t* samples, std::size_t count,
                          int64_t now) {
   if (!samples || count == 0 || now < audioAt_) return;
-  double sum = 0, squares = 0;
-  for (std::size_t i = 0; i < count; ++i) {
-    const double sample = samples[i];
-    sum += sample;
-    squares += sample * sample;
-  }
-  // Remove DC before measuring; the transport itself remains bit-exact.
-  const double mean = sum / count;
-  const double rms = std::sqrt(std::max(0., squares / count - mean * mean));
+  const double rms = pcmRms(samples, count);
   const float level = static_cast<float>(std::clamp(
       (20. * std::log10(std::max(1., rms) / 32768.) + 48.) / 38., 0., 1.));
   const float elapsed =

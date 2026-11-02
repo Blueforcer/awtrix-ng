@@ -4,6 +4,7 @@
 #include "platform/linux/host/vendor/httplib.h"
 
 using awtrix::host::fromOwnPage;
+using awtrix::host::refuseForeign;
 using awtrix::test::check;
 
 namespace {
@@ -37,5 +38,14 @@ int main() {
   httplib::Request twoHosts = request(kMarker, "1", kOwn);
   twoHosts.headers.emplace("Host", "192.168.1.50");
   check(!fromOwnPage(twoHosts, kMarker), "two Host headers");
+
+  httplib::Response untouched;
+  check(!refuseForeign(request(kMarker, "1", kOwn), untouched, kMarker) && untouched.body.empty(),
+        "the device's own page goes on, with nothing answered");
+  httplib::Response refused;
+  check(refuseForeign(request(kMarker, "1", "https://evil.example"), refused, kMarker) && refused.status == 403 &&
+            refused.body.find("forbiddenOrigin") != std::string::npos &&
+            refused.body.find("only from this device's web page") != std::string::npos,
+        "anyone else gets the one refusal");
   return awtrix::test::finish("linux-own-page");
 }

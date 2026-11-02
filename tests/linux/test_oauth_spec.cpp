@@ -80,6 +80,7 @@ int main() {
                           "https://api.spotify.com:0/", "https://api.spotify.com:65536/"})
     check(s && !oauth::hostAllowed(*s, url), "ambiguous or credential-bearing URL refused");
   check(s && oauth::hostAllowed(*s, "https://api.spotify.com:443/v1/me"), "ordinary HTTPS port allowed");
+  check(!oauth::hostAllowed(oauth::Spec{}, "https://api.spotify.com/v1/me"), "a spec without hosts allows nothing");
   check(!oauth::parseSpec("# @oauth authorize=https://a:443@other/x token=https://a/t api=a\n", &error),
         "authorize URL cannot carry user information");
   check(!oauth::parseSpec("# @oauth authorize=https://a/x token=https://user@a/t api=a\n", &error),

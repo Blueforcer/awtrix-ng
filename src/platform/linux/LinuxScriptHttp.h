@@ -12,7 +12,7 @@
 namespace awtrix {
 class LinuxScriptHttp : public script::IScriptHttp {
  public:
-  explicit LinuxScriptHttp(net::FillRequest fill = {}) : fill_(std::move(fill)) {}
+  explicit LinuxScriptHttp(net::FillRequest fill = {}) : requests_(std::move(fill)) {}
   ~LinuxScriptHttp();
   void begin(std::function<void(script::HttpResult)> result);
   void stop();
@@ -23,13 +23,12 @@ class LinuxScriptHttp : public script::IScriptHttp {
     script::HttpRequest request;
   };
   void run();
-  const net::FillRequest fill_;
   std::function<void(script::HttpResult)> result_;
   std::mutex mutex_;
   std::condition_variable ready_;
   std::deque<Job> queue_;
   std::thread worker_;
-  net::SocketInterrupt interrupt_;
+  net::RequestRunner requests_;
   bool stopping_ = false;
 };
 }

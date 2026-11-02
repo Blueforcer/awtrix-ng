@@ -62,18 +62,16 @@ inline std::string lower(const std::string& s) {
 
 }
 
-// Config headers accept an unfinished quote and blanks after '=' for compatibility.
-// OAuth requires closed quotes and takes a blank after '=' as an empty value.
-enum class AttributeSyntax { Config, OAuth };
+enum class AttributeSyntax { Lenient, ClosedQuotes };
 
-template <AttributeSyntax Syntax = AttributeSyntax::Config>
+template <AttributeSyntax Syntax = AttributeSyntax::Lenient>
 inline bool attributeSpace(char c) {
-  if constexpr (Syntax == AttributeSyntax::OAuth)
+  if constexpr (Syntax == AttributeSyntax::ClosedQuotes)
     return std::isspace(static_cast<unsigned char>(c)) != 0;
   return c == ' ' || c == '\t';
 }
 
-template <AttributeSyntax Syntax = AttributeSyntax::Config>
+template <AttributeSyntax Syntax = AttributeSyntax::Lenient>
 inline void skipBlank(const std::string& s, std::size_t& i) {
   const char* bytes = s.data();
   const std::size_t size = s.size();
@@ -83,9 +81,9 @@ inline void skipBlank(const std::string& s, std::size_t& i) {
 }
 
 // Reads one bare or quoted word, preserving whether it was quoted.
-template <AttributeSyntax Syntax = AttributeSyntax::Config>
+template <AttributeSyntax Syntax = AttributeSyntax::Lenient>
 inline bool readWord(const std::string& s, std::size_t& i, std::string& out, bool& quoted) {
-  if constexpr (Syntax == AttributeSyntax::Config) skipBlank<Syntax>(s, i);
+  if constexpr (Syntax == AttributeSyntax::Lenient) skipBlank<Syntax>(s, i);
   out.clear();
   if (i >= s.size()) return false;
   quoted = s[i] == '"';
@@ -103,13 +101,13 @@ inline bool readWord(const std::string& s, std::size_t& i, std::string& out, boo
   out.assign(bytes + start, at - start);
   if (quoted) {
     if (at < size) ++i;
-    else if constexpr (Syntax == AttributeSyntax::OAuth) return false;
+    else if constexpr (Syntax == AttributeSyntax::ClosedQuotes) return false;
     return true;
   }
   return !out.empty();
 }
 
-template <AttributeSyntax Syntax = AttributeSyntax::Config>
+template <AttributeSyntax Syntax = AttributeSyntax::Lenient>
 inline bool readAttr(const std::string& s, std::size_t& i, std::string& name,
                      std::string& value, bool* hasValue = nullptr) {
   skipBlank<Syntax>(s, i);
@@ -124,10 +122,10 @@ inline bool readAttr(const std::string& s, std::size_t& i, std::string& name,
     ++i;
     bool quoted = false;
     const bool read = readWord<Syntax>(s, i, value, quoted);
-    if constexpr (Syntax == AttributeSyntax::OAuth)
+    if constexpr (Syntax == AttributeSyntax::ClosedQuotes)
       if (quoted && !read) return false;
   }
-  if constexpr (Syntax == AttributeSyntax::OAuth) return true;
+  if constexpr (Syntax == AttributeSyntax::ClosedQuotes) return true;
   return !name.empty();
 }
 

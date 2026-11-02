@@ -9,14 +9,9 @@
 
 #include "platform/tc002/contract/MicrophoneStream.h"
 #include "platform/tc002/contract/SupervisorProtocol.h"
+#include "platform/tc002/runtime/SampleHistory.h"
 
 namespace awtrix::tc002 {
-
-constexpr uint32_t kDmaHalfSamples = 24;
-
-constexpr uint32_t roundUpToDmaHalf(uint32_t samples) {
-  return (samples + kDmaHalfSamples - 1) / kDmaHalfSamples * kDmaHalfSamples;
-}
 
 struct MicrophoneMark {
   int epoch = 0;
@@ -72,7 +67,7 @@ class MicrophoneHub {
   void tick(int64_t now);
   void hold(bool held);
   void close();
-  MicrophoneMark mark() const { return {state_ == State::Streaming ? epoch_ : 0, nextUpstreamSample_}; }
+  MicrophoneMark mark() const { return {state_ == State::Streaming ? epoch_ : 0, history_.next()}; }
   bool live(MicrophoneMark mark) const { return state_ == State::Streaming && mark.epoch == epoch_; }
 
   bool active() const { return state_ != State::Idle && (state_ != State::Probing || anyWanted()); }
@@ -104,6 +99,7 @@ class MicrophoneHub {
   void finish(int id, ConsumerState& consumer, std::string error);
   void support(int id, int epoch, bool available);
   void answer(int id, int epoch, StreamEvent event);
+  void deliverAudio(const StreamEvent& upstream);
   void flush();
   bool anyWanted() const;
 
@@ -111,12 +107,11 @@ class MicrophoneHub {
   Deliver tap_;
   std::map<int, ConsumerState> consumers_;
   std::vector<std::pair<int, StreamEvent>> outbox_, delivering_;
+  StreamEvent audio_;
+  std::vector<std::pair<int, int>> audioTargets_;
   State state_ = State::Idle;
   bool held_ = false;
-  uint32_t nextUpstreamSample_ = 0;
-  std::vector<int16_t> ring_;
-  std::size_t ringHead_ = 0;
-  uint32_t ringCount_ = 0;
+  SampleHistory history_{kRingSamples};
   int epoch_ = 0, nextId_ = 1;
   int64_t now_ = 0, stateAt_ = 0, keepaliveAt_ = 0, lingerUntil_ = -1;
 };

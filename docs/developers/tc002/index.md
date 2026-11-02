@@ -268,15 +268,18 @@ The TC002 code of the runtime is in `src/platform/tc002/runtime/` unless noted:
 | `Tc002ClockApp`, `Tc002StatusApp` | the TC002's clock (registered as `Time`, five faces by `clockFace`) and status page |
 | `Tc002Speaker`, `src/platform/tc002/audio/` | the speaker behind the engine's tone and PCM sinks: melodies, MP3 and radio over descriptor 104 |
 | `MicrophoneInput` | the audio visualisation's microphone input: snapshots, or the hub's stream while it runs ([Microphone](microphone.md)) |
-| `MicrophoneHub` | shares the continuous microphone stream between Voice, the wake word and the voice module ([Microphone hub](microphone.md#microphone-hub)) |
-| `src/platform/tc002/voice/` | Home Assistant Voice ([Home Assistant Voice](ha-voice.md)), the scripts' `import voice` and the assistant router that hands every trigger to Voice or an app ([Voice module](voice-module.md)) |
+| `MicrophoneHub`, `SampleHistory` | shares the continuous microphone stream between Voice, the wake word and the voice module, and holds its last second ([Microphone hub](microphone.md#microphone-hub)) |
+| `src/platform/tc002/voice/` | Home Assistant Voice ([Home Assistant Voice](ha-voice.md)), the scripts' `import voice` and the assistant router that hands every trigger to Voice or an app ([Voice module](voice-module.md)). `VoiceStack` puts them together for `LinuxRuntime` |
 | `src/platform/tc002/wake/` | the wake word that starts the voice assistant, and the speech end detection ([Wake word](wake-word.md)) |
 | `Tc002BootIntro`, `BootIntroWide`, `BootInfoWide`, `TerminalFont` | the power-on intro timed by the boot sound, then the info screen with the version and the address, both in the 3x5 terminal font |
 | `tls/` (`src/platform/linux/tls/`) | the one TLS layer: the policy the `--hardened` listener and the MQTT client use, the public CA store every HTTPS client verifies against ([CA certificates](ca-certificates.md)), broker trust with pinned fingerprints and `/api/v1/mqtt/tls`, and the `--hardened` server identity |
 | `LinuxLanLogin`, `LinuxScriptHttp`, `LinuxMqttTls` (`src/platform/linux/`) | the web login as on the ESP32, the scripts' HTTP worker, the MQTT TLS transport |
+| `net::RequestRunner` (`src/platform/linux/net/HttpClient.h`) | what `LinuxScriptHttp` and the voice module's `net::TransferQueue` share: filling keys, the rule that a filled request follows no redirect, and the deadline that ends a request at its budget ([Parts](voice-module.md#parts)) |
+| `net/UrlPolicy.h` (`src/platform/linux/net/`) | where a key or a sign-in may go: `splitHosts`, `validHost`, `hostOf` and `urlRefusal`, for `@secret` and `@oauth` |
 | `secrets/` (`src/platform/linux/secrets/`) | a script's API keys: `SecretSpec` reads the `@secret` lines, `SecretService` keeps and fills the values ([Key filling](voice-module.md#key-filling)), `SecretApi` is `/api/v1/secrets`, `SecretScripting` is `import secret` |
-| `posix::PrivateStore` (`src/platform/posix/`) | one small file of mode 0600 per name, in a folder of mode 0700. `SecretService` keeps its values in one, `script-secrets` |
-| `host::fromOwnPage` (`src/platform/linux/host/`) | the check for a change only the device's own web page may make: a marker header with the value `1` and an `Origin` matching `Host`. `/api/v1/secrets` uses it with `X-Awtrix-Secret` |
+| `script::PerScriptStores` (`src/platform/linux/script/PerScriptStore.h`) | the stores that belong to a script's source, keys and sign-ins. `LinuxRuntime` tells the one list when a source is saved or removed, at start (`dropStale`) and at a factory reset (`eraseAll`) |
+| `posix::PrivateStore` (`src/platform/posix/`) | one small file of mode 0600 per name, in a folder of mode 0700. `SecretService` keeps its values in one, `script-secrets`. `keepOnly` removes every name that is no record's own, so a leftover of an interrupted save keeps no value |
+| `host::refuseForeign` (`src/platform/linux/host/OwnPage.h`) | the one refusal, `403 forbiddenOrigin`, for a change only the device's own web page may make: a marker header with the value `1` and an `Origin` matching `Host` (`fromOwnPage`). The routes of `/api/v1/secrets` (`X-Awtrix-Secret`), `/api/v1/oauth` (`X-Awtrix-OAuth`) and `/api/v1/voice` (`X-Awtrix-Voice`) go through it |
 
 The web UI is the ESP32's `webui/index.html`, served minified and gzip-encoded from the release. It
 is one file for both platforms: it asks the device what it can do and shows no TC002-only notices.
@@ -555,7 +558,7 @@ the res squashfs with the loader and `loop.ko` takes 2.57 MB, which leaves a slo
 release image takes about 2.8 MB.
 
 - Uploads (icons, MP3s, scripts) are refused when they would leave less than 1 MiB free
-  (`kTc002UploadReserveBytes`). Settings may use that reserve, and script stores may use free space
+  (`uploadReserveBytes` in `Tc002Target`). Settings may use that reserve, and script stores may use free space
   down to a quarter of it.
 - A web update takes no space on `/data`: the runtime refuses an image larger than the slot, whose
   capacity the daemon reports in its `hello` ("the firmware image takes X MB, the clock holds
@@ -736,6 +739,10 @@ The TC002 follows the ESP32 model of
   `aicwf_dbg_level=0`.
 - The vendor Bluetooth setup is disabled. AWTRIX NG offers an on-demand BLE service for trusted
   Berry scripts. Its capabilities and encryption requirements are in the [BLE guide](../../guides/ble.md).
+- Other web pages keep access by decision: `host::refuseForeign` guards only its own routes. Without a
+  web login, a page in a browser on the same network can change scripts and app settings, and with
+  that reach API keys and the microphone. The user docs say so and tell the reader to set a login. A
+  key is protected from network parties, not from other installed scripts, which share one VM.
 
 **The vendor app.** It starts only with the knob held at power-on or for a pending vendor update,
 and `secure-vendor` keeps it offline. The reset key (5 s) restores the Ulanzi firmware and wipes

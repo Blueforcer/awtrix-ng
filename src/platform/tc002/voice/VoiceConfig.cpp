@@ -19,7 +19,7 @@ bool namesApp(const std::string& assistant) {
   return assistant.compare(0, kAssistantAppPrefix.size(), kAssistantAppPrefix) == 0;
 }
 bool validAssistant(const std::string& assistant) {
-  return assistant == kHomeAssistant ||
+  return assistant == kAssistantOff || assistant == kHomeAssistant ||
          (namesApp(assistant) && api::isValidAppName(assistant.substr(kAssistantAppPrefix.size())));
 }
 bool safe(std::string_view text) {
@@ -40,12 +40,25 @@ bool boolField(const api::JsonReader& r, const char* name, bool& value) {
   const auto member = api::memberValue(r, name);
   return !api::present(member) || member.asBool(value);
 }
+bool enabledField(const api::JsonReader& r, std::string& assistant) {
+  const auto member = api::memberValue(r, "enabled");
+  bool enabled = false;
+  if (!api::present(member)) return true;
+  if (!member.asBool(enabled)) return false;
+  assistant = enabled ? kHomeAssistant : kAssistantOff;
+  return true;
+}
+bool switchedOff(std::string_view json) {
+  bool enabled = true;
+  return api::memberValue(api::JsonReader(json), "enabled").asBool(enabled) && !enabled;
+}
 std::string serialize(const Config& c, bool secret) {
   std::string out;
   api::JsonWriter w(out);
-  w.beginObject()
-      .member("enabled", c.enabled)
-      .member("wakeWord", c.wakeWord)
+  w.beginObject();
+  if (!secret) w.member("enabled", c.assistant == kHomeAssistant);
+  w.member("wakeWord", c.wakeWord)
+      .member("wakeSensitivity", wake::wakeSensitivityName(c.wakeSensitivity))
       .member("assistant", c.assistant)
       .member("url", c.url)
       .member("pipeline", c.pipeline)
@@ -60,8 +73,11 @@ const char* applyConfig(std::string_view json, Config& c) {
   if (json.size() > 8192 || !api::isWellFormed(json)) return "";
   api::JsonReader r(json);
   if (!r.isObject()) return "";
-  if (!boolField(r, "enabled", c.enabled)) return "enabled";
+  if (!enabledField(r, c.assistant)) return "enabled";
   if (!boolField(r, "wakeWord", c.wakeWord)) return "wakeWord";
+  std::string sensitivity{wake::wakeSensitivityName(c.wakeSensitivity)};
+  if (!stringField(r, "wakeSensitivity", sensitivity, 8) || !wake::parseWakeSensitivity(sensitivity, c.wakeSensitivity))
+    return "wakeSensitivity";
   if (!stringField(r, "assistant", c.assistant, 68) || !validAssistant(c.assistant)) return "assistant";
   if (!stringField(r, "url", c.url, 512)) return "url";
   if (!stringField(r, "token", c.token, 4096)) return "token";
@@ -78,7 +94,6 @@ const char* applyConfig(std::string_view json, Config& c) {
   if (!c.url.empty() && !parseOrigin(c.url, endpoint)) return "url";
   if (!c.token.empty() && !safe(c.token)) return "token";
   if (!c.pipeline.empty() && !safe(c.pipeline)) return "pipeline";
-  if (c.enabled && (c.url.empty() || c.token.empty())) return "enabled";
   return nullptr;
 }
 }  // namespace
@@ -118,10 +133,12 @@ bool ttsTarget(const Config& config, std::string_view url,
   target.assign(url);
   return true;
 }
-bool sameConnection(const Config& a, const Config& b) {
-  Config other = b;
-  other.wakeWord = a.wakeWord;
-  return serialize(a, true) == serialize(other, true);
+bool onlyWakeChanged(const Config& before, const Config& after) {
+  Config others = after;
+  others.wakeWord = before.wakeWord;
+  others.wakeSensitivity = before.wakeSensitivity;
+  const std::string saved = serialize(before, true);
+  return saved == serialize(others, true) && saved != serialize(after, true);
 }
 ConfigStore::ConfigStore(std::string directory)
     : directory_(std::move(directory)) {}
@@ -140,6 +157,7 @@ bool ConfigStore::load() {
   Config next;
   if (!posix::readText(path, json, 8192) || applyConfig(json, next))
     return false;
+  if (next.assistant == kHomeAssistant && switchedOff(json)) next.assistant = kAssistantOff;
   replace(std::move(next));
   return true;
 }
@@ -150,8 +168,6 @@ bool ConfigStore::update(std::string_view json, Rejection& rejection) {
     rejection.message = *field == '\0' ? "expected an object"
                         : std::string_view(field) == "url"
                             ? "address only, no path"
-                        : std::string_view(field) == "enabled"
-                            ? "needs address and token"
                             : "invalid value";
     return false;
   }

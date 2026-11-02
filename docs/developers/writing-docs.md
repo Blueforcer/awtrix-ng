@@ -103,6 +103,8 @@ puts on the display:
   deletes pictures no marker uses. The build fails until every marked example has its picture.
 - Before a release: `python3 tools/docs/panels.py --check`. A renderer change does not change an
   example, so only this run finds pictures that no longer match.
+- An example the host cannot run, such as one with `import voice`, gets no marker. Its picture is a
+  plain image in `docs/assets/`, rendered with `panel_host` and `panel_svg` from the same `draw()`.
 
 ## Reader test
 

@@ -10,7 +10,7 @@ namespace awtrix::tc002 {
 // epoch; capturedMs is the MCU tick at the validating checkpoint (wraps at
 // 2^32).
 constexpr unsigned kStreamBlockSamples = 480;
-constexpr int64_t kStreamKeepaliveMs = 150, kStreamLeaseMs = 500, kStreamAnswerMs = 2000;
+constexpr int64_t kStreamKeepaliveMs = 150, kStreamLeaseMs = 2000, kStreamAnswerMs = 2000;
 inline constexpr char kStreamNoAnswer[] = "microphone did not answer";
 inline constexpr char kStreamUnavailable[] = "the microphone stream needs the MCU extension";
 struct StreamEvent {

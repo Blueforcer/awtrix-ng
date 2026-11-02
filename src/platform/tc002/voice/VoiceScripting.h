@@ -13,7 +13,7 @@
 #include "platform/tc002/runtime/MicrophoneHub.h"
 #include "platform/tc002/voice/AssistantRouter.h"
 #include "platform/tc002/voice/ClipStore.h"
-#include "platform/tc002/voice/VoiceCapture.h"
+#include "platform/tc002/voice/VoiceRecorder.h"
 #include "platform/tc002/voice/VoiceSpeaker.h"
 #include "platform/tc002/voice/VoiceStatus.h"
 #include "platform/tc002/voice/VoiceTransfers.h"
@@ -42,69 +42,46 @@ class VoiceScripting : public script::ScriptExtension, public AssistantRouter::M
   VoiceScripting& operator=(const VoiceScripting&) = delete;
 
   std::vector<std::string> modules() const override { return {Module::kName}; }
-  std::vector<std::string> hooks() const override { return {"on_voice"}; }
+  std::vector<std::string> hooks() const override { return {kHook}; }
   void install(script::ScriptExtensionHost& host) override;
   void tick(script::ScriptExtensionHost& host, const RenderCtx* ctx) override;
   void forget(script::ScriptExtensionHost& host, const std::string& app) override;
   void hidden(script::ScriptExtensionHost& host, const std::string& app) override;
   bool holds(const std::string& app) const override;
 
-  void receive(const StreamEvent& event, int64_t now) { capture_.receive(event, now); }
+  void receive(const StreamEvent& event, int64_t now) { recorder_.receive(event, now); }
   void update(int64_t now);
+  void shutdown() { transfers_.stop(); }
   bool busy() const override { return static_cast<bool>(voiceChannel_); }
-  bool starting() const override { return pendingCapture_.has_value() || capture_.starting(); }
+  bool starting() const override { return recorder_.starting(); }
   void trigger(const std::string& app, const std::string& name, MicrophoneMark mark) override;
   bool triggered() const override { return trigger_ && !trigger_->delivered; }
   void dropTrigger() override;
   void beginFrame(script::ScriptExtensionHost& host, const std::string& app) override;
 
-  int record(const std::string& app, const wake::EndpointSettings& settings, bool fromTrigger);
-  void stop(const std::string& app);
+  int record(const std::string& app, const wake::EndpointSettings& settings, bool fromTrigger) {
+    return recorder_.record(app, settings, fromTrigger);
+  }
+  void stop(const std::string& app) { recorder_.stop(app); }
   void cancel(const std::string& app);
   int play(const std::string& app, ClipId clip);
   void release(const std::string& app, ClipId clip) { clips_.releaseReady(app, clip); }
-  const char* state(const std::string& app) const;
-  uint8_t level(const std::string& app) const;
-  int send(const std::string& app, VoiceTransfers::SendData data, const VoiceTransfers::SendOptions& options);
-  int fetch(const std::string& app, const std::string& url, const std::string& method, std::string body,
-            const std::string& headers, uint32_t timeoutSec);
+  const char* state(const std::string& app) const { return recorder_.state(app); }
+  uint8_t level(const std::string& app) const { return recorder_.level(app); }
+  int send(const std::string& app, VoiceTransfers::SendData data, const VoiceTransfers::Options& options);
+  int fetch(const std::string& app, std::string body, const VoiceTransfers::Options& options);
 
  private:
-  enum class EventKind { Record, Play, Send, Fetch };
-  struct Event {
-    std::string app;
-    EventKind kind;
-    int number = 0, status = 0;
-    ClipId clip = 0;
-    uint32_t ms = 0;
-    std::optional<std::string> text;
-  };
-  struct PendingCapture {
-    wake::EndpointSettings settings;
-    int64_t since = 0;
-  };
   struct Trigger {
     std::string app, name;
     MicrophoneMark mark;
     bool drawn = false, delivered = false;
   };
-  static Event outcome(std::string app, EventKind kind, int number, int status);
-  static Event delivery(std::string app, EventKind kind, int number, ClipId clip, uint32_t ms, std::string format);
-  static const char* eventName(EventKind kind);
-  static std::string eventNumbers(const Event& event);
-  static bool transferEvent(const Event& event);
-  static Event eventOf(VoiceTransfers::Done done);
-  void queue(Event event);
-  void cancelEvent(Event& event);
+  void queue(VoiceEvent event);
+  void cancelEvent(VoiceEvent& event);
   MicrophoneMark takeMark(const std::string& app);
   void dropTriggerOf(const std::string& app);
-  void startCapture(const wake::EndpointSettings& settings, MicrophoneMark from, int64_t now);
-  void deliverRecording(uint32_t ms);
-  void endRecording(int status);
-  void clearRecording();
-  void endPlayback(bool heard);
   void deliverTrigger(script::ScriptExtensionHost& host, const RenderCtx* ctx);
-  void stopAudio(const std::string& app);
   bool voiceChannelWanted() const;
   bool musicWanted() const;
   bool claimVoiceChannel();
@@ -125,14 +102,9 @@ class VoiceScripting : public script::ScriptExtension, public AssistantRouter::M
   Services services_;
   ClipStore clips_;
   VoiceTransfers transfers_;
-  VoiceCapture capture_;
-  std::deque<Event> events_;
-  std::string recordApp_, playApp_;
-  ClipId recordClip_ = 0;
-  std::optional<PendingCapture> pendingCapture_;
+  VoiceRecorder recorder_;
+  std::deque<VoiceEvent> events_;
   std::optional<Trigger> trigger_;
-  int recordNumber_ = 0, playNumber_ = 0;
-  bool playing_ = false;
   posix::Hold voiceChannel_, music_;
 };
 

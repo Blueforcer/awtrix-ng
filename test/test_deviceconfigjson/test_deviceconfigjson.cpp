@@ -161,6 +161,43 @@ static void test_the_whole_table_round_trips() {
   TEST_ASSERT_EQUAL_STRING(dump(src).c_str(), dump(back).c_str());
 }
 
+void test_a_saved_zone_on_a_changed_rule_moves_to_the_current_one() {
+  const char* const zones[][3] = {
+      {"America/Winnipeg", "CST6CDT,M3.2.0,M11.1.0", "EST5"},
+      {"America/Vancouver", "PST8PDT,M3.2.0,M11.1.0", "MST7"},
+      {"America/Edmonton", "MST7MDT,M3.2.0,M11.1.0", "CST6"},
+      {"America/Inuvik", "MST7MDT,M3.2.0,M11.1.0", "CST6"},
+      {"Africa/Casablanca", "<+01>-1", "<+00>0"},
+      {"Africa/El_Aaiun", "<+01>-1", "<+00>0"},
+  };
+  for (const auto& zone : zones) {
+    DeviceConfig c;
+    c.tzName = zone[0];
+    c.tz = zone[1];
+    c.refreshTzRule();
+    TEST_ASSERT_EQUAL_STRING(zone[2], c.tz.c_str());
+    TEST_ASSERT_EQUAL_STRING(zone[0], c.tzName.c_str());
+  }
+}
+
+void test_a_zone_with_its_own_rule_stays_untouched() {
+  const char* const zones[][2] = {
+      {"America/Winnipeg", "EST5"},
+      {"America/Winnipeg", "CST6CDT,M3.2.0,M11.2.0"},
+      {"America/Chicago", "CST6CDT,M3.2.0,M11.1.0"},
+      {"America/Denver", "MST7MDT,M3.2.0,M11.1.0"},
+      {"Europe/Berlin", "CET-1CEST,M3.5.0,M10.5.0/3"},
+      {"", "<+01>-1"},
+  };
+  for (const auto& zone : zones) {
+    DeviceConfig c;
+    c.tzName = zone[0];
+    c.tz = zone[1];
+    c.refreshTzRule();
+    TEST_ASSERT_EQUAL_STRING(zone[1], c.tz.c_str());
+  }
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_reply_exposes_configurable_panel_fields);
@@ -173,5 +210,7 @@ int main(int, char**) {
   RUN_TEST(test_enum_fields_travel_by_name);
   RUN_TEST(test_panel_color_order_travels_by_name);
   RUN_TEST(test_the_whole_table_round_trips);
+  RUN_TEST(test_a_saved_zone_on_a_changed_rule_moves_to_the_current_one);
+  RUN_TEST(test_a_zone_with_its_own_rule_stays_untouched);
   return UNITY_END();
 }

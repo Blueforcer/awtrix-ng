@@ -8,6 +8,7 @@
 namespace awtrix::tc002 {
 namespace {
 constexpr const char* kRefused = "supervisor link refused";
+constexpr const char* kStalled = "microphone stream stalled";
 }
 
 MicrophonePort MicrophoneHub::Consumer::port() const {
@@ -87,30 +88,18 @@ void MicrophoneHub::receive(const StreamEvent& e, int64_t now) {
     case StreamEvent::Kind::Started:
       if (state_ != State::Starting) break;
       state_ = State::Streaming;
-      nextUpstreamSample_ = 0;
-      ring_.assign(kRingSamples, 0);
-      ringHead_ = 0;
-      ringCount_ = 0;
+      stateAt_ = now;
+      history_.open();
       for (auto& [id, consumer] : consumers_)
         if (consumer.wanted) begin(id, consumer);
       break;
     case StreamEvent::Kind::Audio:
       if (state_ != State::Streaming) break;
+      stateAt_ = now;
       if (tap_) tap_(e, now);
-      if (const bool gap = e.firstSample != nextUpstreamSample_; gap) ringCount_ = 0;
-      for (const int16_t sample : e.samples) {
-        ring_[ringHead_] = sample;
-        ringHead_ = (ringHead_ + 1) % kRingSamples;
-      }
-      ringCount_ = static_cast<uint32_t>(
-          std::min<std::size_t>(std::size_t{ringCount_} + e.samples.size(), kRingSamples));
-      for (const auto& [id, consumer] : consumers_) {
-        if (!consumer.started) continue;
-        StreamEvent audio = e;
-        audio.firstSample = e.firstSample - consumer.firstUpstreamSample;
-        answer(id, consumer.epoch, std::move(audio));
-      }
-      nextUpstreamSample_ = e.firstSample + static_cast<uint32_t>(e.samples.size());
+      history_.append(e.firstSample, e.samples);
+      flush();
+      deliverAudio(e);
       break;
     case StreamEvent::Kind::Ended:
       endUpstream(e.error);
@@ -131,14 +120,12 @@ void MicrophoneHub::tick(int64_t now) {
       if (now - stateAt_ >= kStreamAnswerMs) endUpstream(kStreamNoAnswer);
       break;
     case State::Starting:
-      if (now - stateAt_ >= kStreamAnswerMs) {
-        up(StreamControl::Stop);
-        endUpstream(kStreamNoAnswer);
-        break;
-      }
-      [[fallthrough]];
     case State::Streaming:
-      if (lingerUntil_ >= 0 && now >= lingerUntil_) {
+      if (now - stateAt_ >= kStreamAnswerMs) {
+        const char* const error = state_ == State::Starting ? kStreamNoAnswer : kStalled;
+        up(StreamControl::Stop);
+        endUpstream(error);
+      } else if (lingerUntil_ >= 0 && now >= lingerUntil_) {
         lingerUntil_ = -1;
         stopUpstream();
       } else if (now - keepaliveAt_ >= kStreamKeepaliveMs) {
@@ -182,7 +169,7 @@ void MicrophoneHub::startFrom(int id, MicrophoneMark mark) {
 }
 
 bool MicrophoneHub::up(StreamControl::Operation operation) {
-  return send_ && send_(encodeStreamControl({epoch_, operation}));
+  return send_(encodeStreamControl({epoch_, operation}));
 }
 
 void MicrophoneHub::openUpstream(bool knownAvailable) {
@@ -218,8 +205,7 @@ void MicrophoneHub::endUpstream(const std::string& error) {
   const bool stopRequested = state_ == State::Stopping;
   state_ = State::Idle;
   lingerUntil_ = -1;
-  std::vector<int16_t>().swap(ring_);
-  ringCount_ = 0;
+  history_.release();
   if (stopRequested) {
     if (anyWanted()) openUpstream(true);
     return;
@@ -239,15 +225,10 @@ void MicrophoneHub::answerProbes(bool available) {
 }
 
 void MicrophoneHub::begin(int id, ConsumerState& consumer) {
-  uint32_t back = 0;
-  if (consumer.startMark.epoch == epoch_) {
-    const uint32_t behind = nextUpstreamSample_ - consumer.startMark.sample;
-    const bool markInPast = behind < 0x80000000u;
-    if (markInPast) back = std::min(roundUpToDmaHalf(behind), ringCount_);
-  }
+  const uint32_t back = consumer.startMark.epoch == epoch_ ? history_.backTo(consumer.startMark.sample) : 0;
   consumer.startMark = {};
   consumer.started = true;
-  consumer.firstUpstreamSample = nextUpstreamSample_ - back;
+  consumer.firstUpstreamSample = history_.next() - back;
   consumer.renewedAt = now_;
   StreamEvent started;
   started.kind = StreamEvent::Kind::Started;
@@ -257,9 +238,7 @@ void MicrophoneHub::begin(int id, ConsumerState& consumer) {
     StreamEvent held;
     held.kind = StreamEvent::Kind::Audio;
     held.firstSample = done;
-    held.samples.resize(count);
-    const std::size_t at = (ringHead_ + kRingSamples - back + done) % kRingSamples;
-    for (uint32_t i = 0; i < count; ++i) held.samples[i] = ring_[(at + i) % kRingSamples];
+    held.samples = history_.read(back - done, count);
     answer(id, consumer.epoch, std::move(held));
     done += count;
   }
@@ -268,7 +247,7 @@ void MicrophoneHub::begin(int id, ConsumerState& consumer) {
 void MicrophoneHub::finish(int id, ConsumerState& consumer, std::string error) {
   StreamEvent ended;
   ended.kind = StreamEvent::Kind::Ended;
-  if (consumer.started) ended.firstSample = nextUpstreamSample_ - consumer.firstUpstreamSample;
+  if (consumer.started) ended.firstSample = history_.next() - consumer.firstUpstreamSample;
   ended.error = std::move(error);
   consumer.wanted = consumer.started = false;
   answer(id, consumer.epoch, std::move(ended));
@@ -286,11 +265,30 @@ void MicrophoneHub::answer(int id, int epoch, StreamEvent event) {
   outbox_.emplace_back(id, std::move(event));
 }
 
+void MicrophoneHub::deliverAudio(const StreamEvent& upstream) {
+  audioTargets_.clear();
+  for (const auto& [id, consumer] : consumers_)
+    if (consumer.started) audioTargets_.emplace_back(id, consumer.epoch);
+  if (audioTargets_.empty()) return;
+  audio_.kind = StreamEvent::Kind::Audio;
+  audio_.capturedMs = upstream.capturedMs;
+  audio_.hostAtMs = upstream.hostAtMs;
+  audio_.samples = upstream.samples;
+  for (const auto& [id, epoch] : audioTargets_) {
+    const auto it = consumers_.find(id);
+    if (it == consumers_.end() || !it->second.started || it->second.epoch != epoch) continue;
+    audio_.epoch = epoch;
+    audio_.firstSample = upstream.firstSample - it->second.firstUpstreamSample;
+    const Deliver deliver = it->second.deliver;
+    deliver(audio_, now_);
+  }
+}
+
 void MicrophoneHub::flush() {
   delivering_.swap(outbox_);
   for (auto& [id, event] : delivering_) {
     auto it = consumers_.find(id);
-    if (it == consumers_.end() || !it->second.deliver) continue;
+    if (it == consumers_.end()) continue;
     const Deliver deliver = it->second.deliver;
     deliver(event, now_);
   }

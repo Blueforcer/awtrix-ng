@@ -16,7 +16,7 @@ namespace awtrix::tc002::voice {
 
 class VoiceCapture {
  public:
-  enum class Outcome { Recorded, Silence, Failed };
+  enum class Outcome { Recorded, Silence, NoRoom, Failed };
   struct Result {
     Outcome outcome = Outcome::Failed;
     uint32_t ms = 0;
@@ -36,7 +36,7 @@ class VoiceCapture {
   void stop();
   void cancel();
   bool starting() const {
-    return microphone_.phase() == MicrophoneClient::Phase::Probing ||
+    return microphone_.phase() == MicrophoneClient::Phase::Opening ||
            microphone_.phase() == MicrophoneClient::Phase::Starting;
   }
   uint8_t level() const { return recording() ? level_ : 0; }

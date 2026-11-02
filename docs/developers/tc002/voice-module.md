@@ -21,17 +21,21 @@ example `no voice activity model`.
 
 | Part | File | Role |
 |---|---|---|
-| Module | `VoiceScripting` | The script extension: the Berry source of `import voice`, its natives, the `on_voice` hook and the results it delivers. It owns the rules: who may record and play, the limits, the voice channel and the music hold. `LinuxRuntime::composeExtensions` builds it. |
-| Capture | `VoiceCapture`, `WavWriter` | A consumer of the [microphone hub](microphone.md#microphone-hub). One recording at a time, from a mark or from now, into a WAV file (PCM16 mono, 16 kHz). The [endpointer](wake-word.md#speech-end-detection) ends it. |
-| Clips | `ClipStore` | The clips of all apps as files in a private folder in RAM, `/tmp/awtrix-clips-<pid>-XXXXXX` (`posix::PrivateTemporaryDirectory`, mode 0700). It first removes the folders of runtimes that no longer run, and removes its own with its files at the end. A clip is reserved before its file is written and usable after `commit()`. A reservation must fit into `MemAvailable` beyond the 4 MB the runtime keeps free (`MemoryRoom`, `kKeepFreeBytes`, the same margin as sounds from a URL). |
+| Stack | `VoiceStack` | The microphone input, the [microphone hub](microphone.md#microphone-hub) and its consumers, Voice, the wake word, this module and the router as one object. `LinuxRuntime` composes it, ticks it and stops it. |
+| API | `VoiceApi` | `/api/v1/voice` and `/api/v1/voice/start`, over Voice and the router, so Voice calls nothing above it. |
+| Module | `VoiceScripting` | The script extension: the Berry source of `import voice`, its natives, the `on_assistant` hook and the results it delivers, one `VoiceEvent` type for all of them. It owns the voice channel and the music hold. `VoiceStack::composeScripting` builds it. |
+| Recorder | `VoiceRecorder` | Who may record and play: the one recording and the one playback of all apps, the wait for a quiet speaker, the clip a recording fills. It reaches the voice channel and the trigger's mark through hooks of the module. |
+| Capture | `VoiceCapture`, `WavWriter` | A consumer of the [microphone hub](microphone.md#microphone-hub), through `MicrophoneClient`. One recording at a time, from a mark or from now, into a WAV file (PCM16 mono, 16 kHz). The [endpointer](wake-word.md#speech-end-detection) ends it. |
+| Clips | `ClipStore` | The clips of all apps as files in a private folder in RAM, `/tmp/awtrix-clips-<pid>-XXXXXX` (`posix::PrivateTemporaryDirectory`, mode 0700). Its creator holds a lock on the folder (`flock`), which the kernel drops when the process ends, so a folder nobody holds is stale, whatever its name says. A supervised runtime sweeps such folders at start (`ClipStore::removeLeftovers` in `VoiceStack`), also without a store. The store removes its own folder with its files at the end. A clip is reserved before its file is written and usable after `commit()`. A reservation must fit into `MemAvailable` beyond the 4 MB the runtime keeps free (`MemoryRoom`, `kKeepFreeBytes`, the same margin as sounds from a URL). A recording reserves with `promise()`: it checks once and then writes without looking, so every later check (`fits()`) counts what is promised until the clip is committed or released. |
 | Speaker | `VoiceSpeaker`, `Tc002VoiceSpeaker` | The speaker as the module and Home Assistant Voice see it: claim the voice channel, hold the music, quiet, play, stop, finished, heard. |
-| Transfers | `VoiceTransfers` | The module's `send` and `fetch`. It checks a script's options, builds the request, reserves a download's clip and commits it when the file is WAV or MP3, and hands each result to the module with its status. |
-| Transfer queue | `net::TransferQueue` | HTTP requests of named owners on one worker thread, started by the first request, one after the other, with a limit per owner and a cancel per owner. An upload keeps its answer through `net::sendFiltered`, the filter of the script `http`. Its body (`net::RequestBody`) can stream a mapped file (`posix::MappedFile`) between two texts, so a clip goes out without a copy in memory. A download runs through `net::exchange`, which sees the status and the `Content-Type` before the body. It writes each block to its file as it arrives, asks a room hook before the body and before each block, and its check runs on the finished file. Nothing in it is voice-specific. |
+| Transfers | `VoiceTransfers` | The module's `send` and `fetch`. It checks a script's options, builds the request, answers `FULL` when body and answer would not fit ([Limits](#limits)), reserves a download's clip and commits it when the file is WAV or MP3, and hands each result to the module with its status. |
+| Transfer queue | `net::TransferQueue` | HTTP requests of named owners on one worker thread, one after the other, with a limit per owner and a cancel per owner. The first request starts the thread through `posix::startThread`: when the system has no thread left, the request is refused and the script gets `BUSY`. `VoiceStack::stopTransfers` stops the queue at shutdown, next to `scriptHttp_.stop()`, so nothing queued goes out during a save or a factory reset. An upload keeps its answer through `net::sendFiltered`, the filter of the script `http`. Its body (`net::RequestBody`) can stream a mapped file (`posix::MappedFile`) between two texts, so a clip goes out without a copy in memory. A download runs through `net::exchange`, which sees the status and the `Content-Type` before the body. It writes each block to its file as it arrives. `net::RoomWatch`, shared with `net::FileDownload`, asks a room hook before the body and before each block, and notes `ENOSPC` on a write. The queue's check runs on the finished file. Nothing in it is voice-specific. |
+| Requests | `net::RequestRunner` | The sequence `net::TransferQueue` and `LinuxScriptHttp` share: fill the keys, split the URL, configure a client, watch its socket, run the request. A filled request follows no redirect. One short-lived deadline thread per request shuts the socket when the budget runs out, which also ends a slow upload and a TLS handshake. An exception ends the request with status 0. |
 | Keys | `secrets::Service` | Fills [`{secret:key}`](#key-filling) on the way out. It is in `src/platform/linux/secrets/` and knows nothing of voice. |
 | Forms | `net::buildMultipart` | A `multipart/form-data` body from fields and one file: a head and a tail that go around the file's bytes. The boundary is random and checked against the parts. |
 | Voice channel | `Tc002AudioSink::claimVoiceChannel()` | A move-only `posix::Hold`, empty while another holder has the channel. |
 | Music hold | `Tc002AudioSink::holdMusic()` | A move-only `posix::Hold`. While any holder lives, the station and a script's music loop wait; the loop starts over afterwards. Nothing else is refused or stopped. |
-| Assistant | `AssistantRouter` | Every trigger goes to the assistant the Voice settings name: Home Assistant Voice, or an app. It sees Voice and the module through two small interfaces (`AssistantRouter::Voice`, `AssistantRouter::Module`) and the engine through ports. It also ticks the knob's hold, holds the hub and gates the wake word. `LinuxRuntime::composeAssistant` builds it. |
+| Assistant | `AssistantRouter` | Every trigger goes to the assistant the Voice settings name: nobody, Home Assistant Voice or an app. It sees Voice and the module through two small interfaces (`AssistantRouter::Voice`, `AssistantRouter::Module`) and the engine through ports. It also ticks the knob's hold, holds the hub and gates the wake word. `VoiceStack::composeRouter` builds it from the ports of `LinuxRuntime::composeAssistant`. |
 
 The Berry side keeps each callback under a number: recordings, playbacks and transfers each count
 up across all apps. So a `play` that replaces another, or a `cancel` followed by a new `record`,
@@ -40,11 +44,11 @@ tick, at most 32 per tick. What a callback starts waits for the next tick.
 
 ## A trigger
 
-The `assistant` setting names who answers: `ha` or `app:<name>`
+The `assistant` setting names who answers: `off`, `ha` or `app:<name>`
 ([Credentials and configuration API](ha-voice.md#credentials-and-configuration-api)). Four
 triggers go through `AssistantRouter::start()`:
 
-| Trigger | Name in `on_voice` | Mark |
+| Trigger | Name in `on_assistant` | Mark |
 |---|---|---|
 | [Wake word](wake-word.md) | `wake` | the detection's position in the stream (`markOf`) |
 | Knob held for 500 ms | `knob` | the hub's current position (`mark()`) |
@@ -52,12 +56,14 @@ triggers go through `AssistantRouter::start()`:
 | `POST /api/v1/voice/start` | `api` | the hub's current position |
 
 `mark()` has epoch 0 when no stream runs. Nothing starts during the boot intro, an update or setup
-mode, and `blockNavigation` stops the knob only. With Home Assistant as the assistant, the trigger
+mode, and `blockNavigation` stops the knob only. With `off`, no trigger starts anything and nothing is
+logged. With Home Assistant as the assistant, the trigger
 starts Voice (`VoiceRuntime::begin`, [Operation](ha-voice.md#operation)). With an app:
 
 1. `startable()` checks that the app is installed with `@needs voice`, is neither a module
    nor headless, is a script app and is switched on. The module must be idle, no trigger may wait,
-   the app may hold nothing, and Home Assistant Voice must be idle. Otherwise the log says
+   the app may hold nothing, Home Assistant Voice must be idle and the clock must not be speaking.
+   Otherwise the log says
    `voice: assistant app <name> unavailable` and nothing starts.
 2. The runtime opens the app with `switchApp` (`{"name": "<name>", "fast": true}`). It starts an
    `@ondemand` app as a session and ends another session. A refusal writes
@@ -67,8 +73,8 @@ starts Voice (`VoiceRuntime::begin`, [Operation](ha-voice.md#operation)). With a
    (`trigger()`).
 4. While the trigger waits, the runtime holds the hub, so the stream and its last second stay.
 5. The app's first frame marks the trigger as drawn (`beginFrame`). The script tick after that frame
-   calls `on_voice(trigger)`. A call inside `beginFrame()` would run in the render's binding scope
-   and blank that first frame.
+   calls `on_assistant(trigger)`. A call inside `beginFrame()` would run in the render's binding
+   scope and blank that first frame.
 6. `voice.record()` starts from the trigger by default (`from: 'trigger'`). A mark of the running
    stream (`MicrophoneHub::live`) starts the recording at once: the hub replays its held audio from
    the mark, then the live stream. A mark further back than the held second starts at the oldest held
@@ -76,10 +82,12 @@ starts Voice (`VoiceRuntime::begin`, [Operation](ha-voice.md#operation)). With a
    starts like one from now and waits for a quiet speaker. A mark serves one recording; the next one
    starts from now.
 7. If the app does not draw within 3 s, the trigger lapses: `voice: assistant app <name> did not
-   show`.
+   show`. The 3 s stand still while something covers the app, a notification or a mirrored display,
+   because a script draws no frame behind it. A lapse ends the `@ondemand` session the trigger opened,
+   so the panel goes back to the rotation. A session that was open before the trigger stays.
 
 Hiding or removing the app drops its trigger and its mark, and so does the end of the interaction
-(`dropTrigger()`), also when `on_voice` started no recording.
+(`dropTrigger()`), also when `on_assistant` started no recording.
 
 ### Panel and music during an interaction
 
@@ -87,9 +95,10 @@ An interaction runs from the trigger until one of these:
 
 - the trigger lapses after 3 s,
 - the app leaves the panel,
-- the app has held nothing for 10 s (`holds()`: no recording, playback, transfer or undelivered
-  result).
+- for 10 s the app has held nothing (`holds()`: no recording, playback, transfer or undelivered
+  result) and the clock has not spoken.
 
+An `@ondemand` session the trigger opened keeps the interaction for as long as it is on the panel.
 Meanwhile the runtime's music hold keeps the station and the music loop waiting, so the music does
 not come back between question and answer. The app's own speech still plays. At the end, the runtime
 switches the panel off again if it was off at the trigger and is still on, and lets go of its hold.
@@ -108,21 +117,27 @@ together. Only the app on the panel may record.
 - It fails when the stream ends or skips audio, when the microphone does not answer within 2 s, or
   when it has not ended 2 s after its limit (`max`), counted from the start of its stream, because
   audio stopped arriving. The callback then gets `BUSY`, and the log
-  `voice: recording failed: <reason>`.
-- `voice.level()` is the loudness of the latest block, 0 at −60 dBFS and below, 255 at full scale,
-  and 0 when the app does not record.
+  `voice: recording failed: <reason>`. A temporary file system that is full (`ENOSPC`) gives `FULL`
+  instead.
+- `voice.level()` is the loudness of the latest block with its mean removed (`pcmRms`, the same
+  measure as Voice's overlay), 0 at −60 dBFS and below, 255 at full scale, and 0 when the app does not
+  record.
 
 **Speaker.** The voice channel (`claimVoiceChannel()`) has one holder at a time: Home Assistant
 Voice or the module. A claim fails while the other one holds it. While it is held, the station and
 a script's music loop wait and every other sound is refused, local speech included.
 
 - The module holds the voice channel while it records (also while it waits for a quiet speaker) or
-  plays, and until those results are delivered. A `play` from the record callback keeps the claim
-  without a gap.
+  plays, and until those results are due. It lets go right before a callback when nothing else wants
+  the channel, so `sound.*` works from a `record` or `play` callback. A `play` or `record` in the
+  callback claims it again. Music waits until the callbacks have returned, so a station does not
+  restart between a recording and the `play` after it.
 - One playback runs at a time. A new `play` replaces the running one, whose callback gets `false`.
   A clip plays like Voice's answer: as an alert, WAV PCM16 or MP3.
-- While a transfer of any app runs, or its result waits, the module holds the music instead of the
-  voice channel. Local speech (`sound.play({'speech': …})`) and other one-shots then play.
+- While a transfer of the app on the panel runs, or its result waits, the module holds the music
+  instead of the voice channel. Local speech (`sound.play({'speech': …})`) and other one-shots then
+  play. A transfer of an app in the background leaves the music alone. An interaction holds the music
+  by itself.
 - The module and Home Assistant Voice exclude each other through the claim. Voice also starts only
   while the module is not busy (`busy()`: it holds the voice channel), and the module records and
   plays only while Voice is not busy. A transfer holds only the music, so Voice may run during it.
@@ -138,9 +153,12 @@ a script's music loop wait and every other sound is refused, local speech includ
 - Removing or unloading the app cancels everything it started, deletes all its clips and drops its
   callbacks.
 - The garbage collector releases a clip the script dropped (`deinit`). `deinit` never raises. A release
-  names the app and the clip id, because the collector may run while another app is the caller. Clip
-  ids are random numbers below 2^63, so an app cannot guess another app's clips, and a release reaches
-  only a finished clip, never one a recording or download still fills.
+  names the app and the clip id, because the collector may run while another app is the caller. So the
+  release is private to the module: its source keeps `_voice_release` in a local and removes the
+  global, and no script can call it. Clip ids are random numbers below 2^63, and a release reaches only
+  a finished clip, never one a recording or download still fills.
+- `voice.record`, `voice.send` and `voice.fetch` that come back `FULL` run the collector and try once
+  more, so clips nobody holds any more make room. A clip the script still holds keeps counting.
 - `voice.cancel()` ends the app's recording, playback and transfers, also results already polled
   but not yet delivered. Recordings and transfers get `CANCELLED`, a running playback `false`.
 
@@ -151,44 +169,62 @@ a script's music loop wait and every other sound is refused, local speech includ
 | Recording options | `silence` 300 to 3000 ms (800), `wait` 1 to 15 s (5), `max` 1 to 30 s (15), `from` `'trigger'` or `'now'` (`'trigger'`) |
 | Clips | 4 and 4 MB per app (`ClipStore::kClipsPerApp`, `kBytesPerApp`). A recording reserves its WAV header plus (`max` + one 30 ms model step) × 32 bytes. A download reserves 2 MB until it ends. Every reservation and every block of a download must leave 4 MB of `MemAvailable` free. |
 | Clip length | `clip.ms` is exact for recordings and 0 for downloads |
-| Transfers | 2 per app, queued or running. All apps share one worker. |
+| Transfers | 2 per app, queued or running. All apps share one worker, so a long transfer delays the others. |
 | `voice.send` | a clip or a string. A clip goes as a form by default: field `file`, file name `speech.wav` or `speech.mp3`, at most 16 further fields. With `as: 'raw'` the clip is the body, with its own type unless a header names one. A form with a `Content-Type` header is `BAD`. A string is the body, as `application/json` unless a header names a type, and `as`, `field` and `fields` do not apply. POST by default, the answer kept and capped as for `http` (8 KB by default). |
-| Transfer time | `timeout`, 1 to 120 whole seconds, 30 for `send` and 15 for `fetch`. It is the budget from connecting to the last byte and also the socket's read limit, so a service may take all of it before its first byte. The connection itself has 3 s. |
-| `voice.fetch` | status 200 only. WAV or MP3 by `Content-Type` (`audio/mpeg`, `audio/wav`, `audio/x-wav` or `application/octet-stream`) and by its bytes, at most 2 MB. Redirects only for a GET without a filled key. POST when a `body` is given. |
+| Transfer time | `timeout`, 1 to 120 whole seconds, 30 for `send` and 15 for `fetch`. It is the budget from connecting to the last byte and also the socket's read limit, so a service may take all of it before its first byte. It starts when the worker takes the transfer, not when the script asks. The connection itself has 3 s. A name lookup (`getaddrinfo`) can neither be cancelled nor is it covered: the deadline can only shut the socket opened after it. |
+| Memory for a transfer | `FULL` unless twice the body and twice the answer cap (`kCopiesHeld`) fit (`ClipStore::fits`), and unless the bodies of all transfers stay within 4 MB (`kBodyBytesAcrossApps`). A body with a placeholder (`RequestBody::fillable`) also needs room for its filled copy, the body and `net::kMaxFillGrowth`, because the worker builds it next to the original. A clip's bytes are mapped and do not count. A script whose cap does not fit gets `FULL`, not a smaller cap. |
+| `voice.fetch` | status 200 only. WAV or MP3 by `Content-Type` (`audio/mpeg`, `audio/mp3`, `audio/wav`, `audio/wave`, `audio/x-wav` or `application/octet-stream`) and by its bytes, at most 2 MB. Redirects only for a GET without a filled key. POST when a `body` is given. |
 | Results | 32 per script tick |
-| Interaction | 3 s for the app to draw. It ends 10 s after the app last held something. |
+| Interaction | 3 s for the app to draw, standing still while it is covered. It ends 10 s after the app last held something and the clock last spoke, or when a session it opened leaves the panel. |
 
 ## Key filling
 
-A script writes [`{secret:key}`](../../guides/scripting/network.md#api-keys) into a header value or
-the path or query of a URL. It stays a plain string in the VM. The transports fill it through one
-hook, `net::FillRequest`, a function of owner, URL and headers that answers a `net::RequestFill`.
-`LinuxRuntime` binds it to `secrets::Service::fill`.
+A script writes [`{secret:key}`](../../guides/scripting/network.md#api-keys) into a header value, the
+path or query of a URL, or a text body. It stays a plain string in the VM. The transports fill it
+through one hook, `net::FillRequest`, a function of owner, URL, headers and body that answers a
+`net::RequestFill`.
+`LinuxRuntime` binds it to `secrets::Service::fill`. `net::RequestRunner` calls it on the transport's
+worker, before it splits the URL.
 
-| Transport | Where it calls the hook | On a refusal |
-|---|---|---|
-| `LinuxScriptHttp` (`http.*`) | on its worker, before it splits the URL | no request; the callback gets `nil` and status 0 |
-| `net::TransferQueue` (`voice.send`, `voice.fetch`) | in `perform()`, on its worker | no request; the result has status 0 |
+| Transport | On a refusal |
+|---|---|
+| `LinuxScriptHttp` (`http.*`) | no request; the callback gets `nil` and status 0 |
+| `net::TransferQueue` (`voice.send`, `voice.fetch`) | no request; the result has status 0 |
 
 The hook takes the owner the transport recorded when the script asked, not the current script. It
 answers one of three:
 
 - `Unchanged`: no placeholder. The transport sends the request as it is.
-- `Filled`: URL and headers hold the values. The transport turns redirects off, so a key never
-  follows one. `TransferQueue` splits the filled URL again.
-- `Refused`: URL and headers stay as they were. The debug log names the app, the reason and the host,
-  never the URL or a value.
+- `Filled`: URL, headers and a text body hold the values. `RequestRunner` turns redirects off, so a
+  key never follows one.
+- `Refused`: URL, headers and body stay as they were. The debug log names the app, the reason and the
+  host, never the URL, the body or a value.
 
 A placeholder is checked before it is filled, against the `Secret` from the app's header: the key
-must be declared and set, `script::urlRefusal` must allow the URL (`https://`, or `http://` to
-`net::isPrivateHost`, no user information, `hosts=` if given), and in the URL it must be in the path or
-query. `isPrivateHost` judges the literal host without DNS. A placeholder in the scheme, host, port
-or user information already fails `net::splitUrl` when the script asks, so `http.*` answers `nil`, 0
-and the module `BAD`.
+must be declared and set, `net::urlRefusal` (`net/UrlPolicy.h`) must allow the URL (`https://`, or
+`http://` to `net::isPrivateHost`, no user information, a host `hosts=` lists; an empty list allows
+nothing), and in the URL it must be in the path or query. `isPrivateHost` judges the literal host
+without DNS. A placeholder in the scheme,
+host, port or user information makes the URL invalid: the module answers `BAD` when the script asks
+(`net::validUrl`), and in `http.*` the hook refuses, so `nil`, 0. Both transports hand the hook the
+whole URL, so a placeholder in a fragment is refused as well.
 
-`VoiceTransfers` splits the URL when the script asks and hands the queue origin and target. A
-fragment is gone at that point, so a placeholder in a fragment never reaches the hook: the request
-goes out without it. In `http.*` the hook sees the whole URL and refuses.
+`secret.allows(key, url)` runs `Service::allows`, the same checks without filling anything, so it
+answers what a fill would do. It takes no value out of the service.
+
+A value goes into a header or a body as it is, and percent-encoded into a URL. `Service::fill` fills
+the body last and only when everything else passed, so it needs no second copy of a body it might
+refuse. A filled text may grow by `net::kMaxFillGrowth` (4 KiB), otherwise the reason is `size`: a
+placeholder of 10 bytes can stand for 512, and `http.*` has no memory check of its own. A body with a
+mapped file is a clip, and neither it nor the form fields around it are filled, because
+`net::buildMultipart` chose the boundary for what the parts held before.
+
+`Service::set` refuses a control character in a value, the rule of a script's header value
+(`script::headerValueChar`). At start, `dropStale` removes a record only for a name no record can
+have, so a leftover temporary file of an interrupted save keeps no value, for a file above the limit
+or a record it cannot parse, and when the script is confirmed gone or no longer declares it. A script
+source that cannot be read is a third answer of the source port: nothing is erased, nothing is sent
+and the next read decides.
 
 ## Status values
 
@@ -199,11 +235,11 @@ deliver the server's status otherwise, or 0 when no server answered.
 | Constant | Value | When |
 |---|---|---|
 | `voice.SILENCE` | −1 | A recording heard nothing within `wait`, or `voice.stop()` came before any audio. |
-| `voice.BUSY` | −2 | The app is not shown, Voice is busy, another recording runs, there is no voice activity model or no clip folder, or the recording failed. Also a third transfer of the app. |
+| `voice.BUSY` | −2 | The app is not shown, Voice is busy, another recording runs, there is no voice activity model or no clip folder, or the recording failed. Also a third transfer of the app, or a worker thread that cannot start. |
 | `voice.CANCELLED` | −3 | `voice.cancel()`, or the app was hidden while it recorded. |
-| `voice.FULL` | −4 | The new clip would exceed the app's 4 clips or 4 MB, or leave less than 4 MB of the clock's memory free. Also a download that runs out of memory. |
+| `voice.FULL` | −4 | The new clip would exceed the app's 4 clips or 4 MB, or leave less than 4 MB of the clock's memory free. Also a recording or download that runs out of memory or finds the temporary file system full, a `voice.send` or `voice.fetch` whose body and answer cap do not fit twice into the memory above those 4 MB, with a placeholder also the filled copy, and a body that takes the bodies of all waiting transfers over 4 MB. |
 | `voice.GONE` | −5 | `voice.send` with a clip that was released, for example because the app was hidden. |
-| `voice.BAD` | −6 | An option out of range or of the wrong type, a bad URL, method or header, an `as` other than `form` or `raw`, a 17th form field, a `Content-Type` header for a form, a negative `keep`, a `timeout` outside 1 to 120 or not whole, `data` neither a clip nor a string. Also a `fetch` answer 200 that is no WAV or MP3, or larger than 2 MB. |
+| `voice.BAD` | −6 | An option out of range or of the wrong type, a bad URL, method or header, an `as` other than `form` or `raw`, a 17th form field, a `Content-Type` header for a form, a negative `keep`, a `timeout` outside 1 to 120 or not whole, `data` neither a clip nor a string. Also a `fetch` answer 200 of another type, no WAV or MP3, or larger than 2 MB. |
 
 `voice.play()` returns `false` when the clip is not the app's, Voice is busy or the speaker cannot
 play it. Its callback gets whether the clip was heard.
@@ -212,17 +248,17 @@ play it. Its callback gets whether the clip was heard.
 
 | Test | Covers |
 |---|---|
-| `tests/tc002/runtime/test_voice_scripting.cpp` (`tc002-voice-scripting`) | the module from scripts: record and play, refusals, `SILENCE`, stop or cancel followed by `record` in one turn, the wait for a quiet speaker and its 1 s limit, a recording from the trigger that starts at once at its mark, a mark that ends with the interaction or with its stream, clips released by the garbage collector, `FULL` and `level`, record, send and fetch in a row against a local server, the options and limits of `send`, the statuses of `fetch`, `cancel` reaching results already polled, transfers that go on after hiding, the music hold during transfers, a module destroyed mid-recording, `FULL` when memory runs short for a recording or a download, the model read per recording, a release of a clip a download fills, `on_voice` after the first frame |
-| `test_voice_capture.cpp` (`tc002-voice-capture`, also on qemu-arm) | a recording on the hub: a sentence of the voice pack, silence, a start from a mark compared sample by sample, stop and cancel, a stalled stream, a microphone that never answers, the model read for each recording and freed after it (it prints the load time), the level |
-| `test_clip_store.cpp` (`tc002-clip-store`) | the WAV header, the limits per app and of memory, random ids, commit and release (by the module, by a script only when finished), folders of a crashed runtime |
-| `test_microphone_hub.cpp` (`tc002-microphone-hub`) | marks and whether they are live, the held second and starts from a mark |
+| `tests/tc002/runtime/test_voice_scripting.cpp` (`tc002-voice-scripting`) | the module from scripts: record and play, `sound.*` from their callbacks, refusals, `SILENCE`, stop or cancel followed by `record` in one turn, the wait for a quiet speaker and its 1 s limit, a recording from the trigger that starts at once at its mark, a mark that ends with the interaction or with its stream, clips released by the garbage collector and no script releasing one, dropped clips making room, `FULL` and `level`, record, send and fetch in a row against a local server, the options and limits of `send`, the statuses of `fetch` and every accepted type, `cancel` reaching results already polled, transfers that go on after hiding, the music hold during transfers, only for the visible app, transfers ending at shutdown, a module destroyed mid-recording, `FULL` when memory runs short for a recording, a download, a body or an answer, the model read per recording, a release of a clip a download fills, `on_assistant` after the first frame |
+| `test_voice_capture.cpp` (`tc002-voice-capture`, also on qemu-arm) | a recording on the hub: a sentence of the voice pack, silence, a start from a mark compared sample by sample, stop and cancel, a stalled stream, a microphone that never answers, the model read for each recording and freed after it, the level |
+| `test_clip_store.cpp` (`tc002-clip-store`) | the WAV header, the limits per app and of memory, promises, random ids, commit and release (by the module, by a script only when finished), folders of a crashed runtime |
+| `test_microphone_hub.cpp` (`tc002-microphone-hub`), `test_sample_history.cpp` (`tc002-sample-history`), `tests/tc002/contract/test_microphone_client.cpp` (`tc002-microphone-client`) | marks and whether they are live, the held second and starts from a mark, a stream that stalls, the client's phases |
 | `test_audio_sink.cpp` (`tc002-audio-sink`) | the voice channel's one holder; the music hold: speech plays while it holds, a second holder, a moved hold |
-| `test_assist_session.cpp` (`tc002-assist-session`) | the `assistant` setting: default, valid and refused names, a change drops the Home Assistant connection, a restart keeps it |
+| `test_assist_session.cpp` (`tc002-assist-session`) | the `assistant` setting: default, valid and refused names, a change drops the Home Assistant connection, a restart keeps it; `enabled` both ways; every older file shape; `wakeSensitivity`; `error` over a retry and `lastError` after a failed request |
 | `tests/linux/test_transfer_queue.cpp`, `test_multipart.cpp`, `test_posix_files.cpp`, `test_file_download.cpp` | the transfer queue (limits, cancel, redirects, files of cancelled downloads and of results never polled, a download out of room, uploads streamed from a file, no thread before the first transfer), the form builder, the private temporary folder, mapped files, a body streamed around a mapped file |
-| `test_assistant_router.cpp` (`tc002-assistant-router`) | the router with fakes for Voice and the module: every trigger name and its mark (the wake word on the smoke model), the refusals and their log lines, the panel, the music hold and the trigger's mark over an interaction (3 s, 10 s, the app leaving, a second trigger), the hub hold, when the wake word listens and when it is muted, a frame without allocations, Home Assistant as the assistant, the list of assistant apps |
-| `test_voice_runtime.cpp` (`tc002-voice-runtime`) | `POST /api/v1/voice/start` (405, 403, 409, 200), `wakeWordAvailable` and `assistantApps` in `GET /api/v1/voice`, a wake word switch that keeps the Home Assistant connection while any other change drops it |
-| `webui/test/voice-card.test.js` | the assistant choice in the web UI |
-| `tests/linux/test_secret_spec.cpp`, `test_secret_service.cpp`, `test_secret_api.cpp`, `test_secret_script.cpp`, `test_secret_contract.py`, `test_script_http.cpp` | the `@secret` lines, what is filled and what refused, `/api/v1/secrets`, `secret.has()`, the keys in a running runtime, the hook in `LinuxScriptHttp` |
+| `test_assistant_router.cpp` (`tc002-assistant-router`) | the router with fakes for Voice and the module: every trigger name and its mark (the wake word on the shipped model), the refusals and their log lines, the panel, the music hold and the trigger's mark over an interaction (3 s, 10 s, the app leaving, a second trigger), speech and a session keeping it, a covered panel, a lapse ending the session, the hub hold, when the wake word listens and when it is muted, the level reaching the listener, `off` blocking every trigger, a frame without allocations, Home Assistant as the assistant, the list of assistant apps, why the app cannot answer |
+| `test_voice_runtime.cpp` (`tc002-voice-runtime`) | `POST /api/v1/voice/start` (405, 403, 409, 200), `wakeWordAvailable`, `wakeListening`, `assistantApps` and `state` and `error` of the chosen assistant in `GET /api/v1/voice`, `off` connecting nothing and keeping the data, a wake word or sensitivity change that keeps the Home Assistant connection while any other change drops it |
+| `webui/test/voice-card.test.js` | the assistant choice, its status and rows in the web UI |
+| `tests/linux/test_secret_spec.cpp`, `test_secret_service.cpp`, `test_secret_api.cpp`, `test_secret_script.cpp`, `test_secret_contract.py`, `test_script_http.cpp` | the `@secret` lines, what is filled and what refused, `/api/v1/secrets`, `secret.has()`, `secret.allows()`, the keys in a running runtime, the hook in `LinuxScriptHttp` |
 
 ## Related
 

@@ -3,7 +3,6 @@
 namespace awtrix::tc002::wake {
 namespace {
 constexpr uint64_t kSamplesPerMs = WakeFrontend::kSamplesPerMs;
-constexpr uint32_t kNoCooloffMs = 0, kNoWarmupMs = 0;
 }
 
 void EndpointTimer::start(const EndpointSettings& settings) {
@@ -36,7 +35,7 @@ Endpoint EndpointTimer::finish(Endpoint kind) {
 bool Endpointer::load(std::string_view model, std::string& error) { return stream_.load(model, error); }
 
 bool Endpointer::configure(float cutoff, std::size_t window, std::string& error) {
-  return window_.configure({cutoff, window, kNoCooloffMs, kNoWarmupMs}, error);
+  return window_.configure(cutoff, window, error);
 }
 
 void Endpointer::start(const EndpointSettings& settings) {
@@ -48,9 +47,7 @@ void Endpointer::start(const EndpointSettings& settings) {
 Endpoint Endpointer::next(const int16_t*& samples, std::size_t& count) {
   uint8_t probability = 0;
   while (!timer_.done() && stream_.next(samples, count, probability)) {
-    WakeEvent unused;
-    const bool voice = window_.push(probability, stream_.position(), unused);
-    const Endpoint kind = timer_.step(voice, stream_.position());
+    const Endpoint kind = timer_.step(window_.push(probability), stream_.position());
     if (kind != Endpoint::None) return kind;
   }
   return Endpoint::None;

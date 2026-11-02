@@ -973,6 +973,47 @@ void testAccessPointFallbackWithoutAddress() {
   removeTree(root);
 }
 
+// The address of the network before says nothing about the new one, so a new network without
+// DHCP still ends in the setup access point. The address controller clears it on the signal.
+void testOtherNetworkNeedsItsOwnAddress() {
+  const std::string root = makeRoot("ap-other-network");
+  storeProfile(root, "Home");
+  Harness h(root, true);
+  h.system->interface = true;
+  h.system->stock = false;
+  int replaced = 0;
+  h.state.onNetworkReplaced([&] {
+    ++replaced;
+    auto network = h.state.network();
+    network.ipv4.clear();
+    h.state.setNetwork(network);
+  });
+  auto network = h.state.network();
+  network.ipv4 = "192.0.2.7";
+  h.state.setNetwork(network);
+  h.system->supplicant.status = "wpa_state=COMPLETED\nssid=Home\n";
+  check(h.service->start(h.now), "start associated station with an address");
+  h.run(1000);
+  check(h.network().link == WifiLink::Connected, "joined the first network");
+  check(h.service->setCredentials({"Home", ""}), "same network again");
+  h.run(1500);
+  check(replaced == 0 && h.network().ipv4 == "192.0.2.7", "the same network keeps its address");
+  h.system->supplicant.status = "wpa_state=COMPLETED\nssid=Home\n";
+  h.system->supplicant.event("<3>CTRL-EVENT-CONNECTED - Connection completed");
+  h.run(1000);
+  h.system->supplicant.status = "wpa_state=SCANNING\n";
+  check(h.service->setCredentials({"Other", "password2"}), "another network saved");
+  h.run(1500);
+  check(replaced == 1 && h.network().ssid == "Other", "another network announces the change");
+  h.system->supplicant.status = "wpa_state=COMPLETED\nssid=Other\n";
+  h.system->supplicant.event("<3>CTRL-EVENT-CONNECTED - Connection completed");
+  h.run(29000);
+  check(h.network().link == WifiLink::Connected, "the new network gets thirty seconds for an address");
+  h.run(2000);
+  check(h.network().link == WifiLink::AccessPoint, "a new network without DHCP restores the setup access point");
+  removeTree(root);
+}
+
 void testAccessPointWaitsForLatestCredentials() {
   const std::string root = makeRoot("ap-pending");
   Harness h(root, true);
@@ -1388,6 +1429,7 @@ int main() {
   testAccessPointFallbackAndRetry();
   testAccessPointNameAndReadiness();
   testAccessPointFallbackWithoutAddress();
+  testOtherNetworkNeedsItsOwnAddress();
   testAccessPointWaitsForLatestCredentials();
   testSetupAccessPointOnRequest();
   testDisconnectsAreLogged();

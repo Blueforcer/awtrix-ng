@@ -179,8 +179,8 @@ follow the link. In the editor, **Ctrl-.** lists every call.
 | [Reading a Modbus device](../modbus.md) | `modbus.readHoldingRegisters()` `modbus.readInputRegisters()` `modbus.readCoils()` `modbus.readDiscreteInputs()` |
 <!-- only tc002 -->
 | [Talking to a line-based service](../tcp.md) | `tcp.connect()` `tcp.send()` `tcp.close()` |
-| [Keeping an API key out of the script](network.md#api-keys) | a `# @secret` line, then `{secret:key}` and `secret.has()` |
-| [Recording and playing voice](../voice-scripts.md) | `voice.record()` `voice.send()` `voice.fetch()` `voice.play()`, and `on_voice()` to answer the knob and "Hey AWTRIX" |
+| [Keeping an API key out of the script](network.md#api-keys) | a `# @secret` line, then `{secret:key}`, `secret.has()` and `secret.allows()` |
+| [Recording and playing voice](../voice-scripts.md) | `voice.record()` `voice.send()` `voice.fetch()` `voice.play()`, and `on_assistant()` to answer the knob and "Hey AWTRIX" |
 | [Signing in to a service](../oauth.md) | a `# @oauth` line, then `oauth.ready()` `oauth.get()` `oauth.post()` `oauth.request()` |
 | [Checksums and signatures](../hashing.md#hashing) | `crypto.sha256()` `crypto.hmac_sha256()` `crypto.pbkdf2_hmac_sha256()` `crypto.random()` |
 | [Mining Bitcoin](../hashing.md#proof-of-work) | `crypto.mine()` `crypto.mine_stop()` `crypto.mine_rate()` `crypto.mine_best()` |
@@ -404,7 +404,7 @@ them.
 | `on_button_event(btn, event)` | a press, hold or release of a button your app took. See [Button events](time-buttons-sensors.md#button-events) | no |
 <!-- only tc002 -->
 | `on_knob(event)` | the knob was turned or pressed while your app is shown. Return `true` to take it. See [The knob](time-buttons-sensors.md#the-knob) | no |
-| `on_voice(trigger)` | your app is the voice assistant and was just opened. `trigger` is `"wake"`, `"knob"`, `"mqtt"` or `"api"`. See [Voice in scripts](../voice-scripts.md#answer-the-knob-and-wake-word) | no |
+| `on_assistant(trigger)` | your app is the voice assistant and was just opened. `trigger` is `"wake"`, `"knob"`, `"mqtt"` or `"api"`. See [Voice in scripts](../voice-scripts.md#answer-the-knob-and-wake-word) | no |
 <!-- /only -->
 | `should_show()` | the rotation moves on to your app. Return `false` to skip this turn. See [Skip a turn](several-apps.md#sitting-a-round-out) | no |
 | `duration()` | your app appears. Return milliseconds to set how long it stays. See [Stay longer](several-apps.md#setting-your-own-dwell-time) | no |

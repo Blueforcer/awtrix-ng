@@ -207,6 +207,19 @@ void scriptStateRetriesAfterWriteFailure() {
   CHECK(value == "def tick() return 1 end");
 }
 
+void savedSourceTellsMissingFromUnreadable() {
+  Fixture fixture;
+  awtrix::ScriptStore<host::ScriptFiles> store;
+  CHECK(host::ScriptFiles::savedSource("clock") == std::string());
+  CHECK(host::ScriptFiles::savedSource("../outside") == std::string());
+  store.save("clock", "def tick() return 1 end");
+  CHECK(host::ScriptFiles::savedSource("clock") == std::string("def tick() return 1 end"));
+  const auto source = fs::u8path(host::hostPath("/SCRIPTS/clock.ax"));
+  CHECK(fs::remove(source));
+  CHECK(fs::create_directory(source));
+  CHECK(!host::ScriptFiles::savedSource("clock").has_value());
+}
+
 void scriptQuotaFailureKeepsLatestValues() {
   Fixture fixture;
   awtrix::ScriptStore<host::ScriptFiles> store;
@@ -229,6 +242,33 @@ void scriptQuotaFailureKeepsLatestValues() {
   CHECK(value == "def tick() return 2 end");
   CHECK(host::readFile(host::hostPath("/SCRIPTS/clock.store.json"), value));
   CHECK(value == "{\"count\":2}");
+}
+
+void scriptSourceOnDiskIsReported() {
+  Fixture fixture;
+  awtrix::ScriptStore<host::ScriptFiles> store;
+  std::vector<std::string> onDisk;
+  store.onSourceWritten([&onDisk](const std::string& name) { onDisk.push_back(*host::ScriptFiles::savedSource(name)); });
+  store.save("first", "def tick() return 1 end");
+  CHECK(onDisk == std::vector<std::string>({"def tick() return 1 end"}));
+  store.remove("first");
+
+  const auto fill = host::hostPath("/full.bin");
+  CHECK(host::writeFile(fill, std::string(host::kFsTotalBytes, 'x')));
+  store.save("clock", "def tick() return 2 end");
+  store.flush();
+  CHECK(onDisk.size() == 1);
+  CHECK(fs::remove(fs::u8path(fill)));
+  store.flush();
+  CHECK(onDisk == std::vector<std::string>({"def tick() return 1 end", "def tick() return 2 end"}));
+  store.remove("clock");
+
+  CHECK(host::writeFile(fill, std::string(host::kFsTotalBytes, 'x')));
+  store.save("clock", "def tick() return 3 end");
+  store.remove("clock");
+  CHECK(fs::remove(fs::u8path(fill)));
+  store.flush();
+  CHECK(onDisk.size() == 2);
 }
 
 void scriptSourcesLeaveTheReserveFree() {
@@ -422,7 +462,9 @@ int main() {
     uploadsLeaveTheReserveFree();
     readersNeverSeePartialReplacement();
     scriptStateRetriesAfterWriteFailure();
+    savedSourceTellsMissingFromUnreadable();
     scriptQuotaFailureKeepsLatestValues();
+    scriptSourceOnDiskIsReported();
     scriptSourcesLeaveTheReserveFree();
     scriptStateLeavesPartOfTheReserveFree();
     scriptStateIsLimitedWithAReserve();

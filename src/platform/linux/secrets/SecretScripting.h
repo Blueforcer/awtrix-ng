@@ -16,6 +16,7 @@ class SecretScripting : public script::ScriptExtension {
 
  private:
   static int has(bvm* vm);
+  static int allows(bvm* vm);
 
   Service& service_;
 };

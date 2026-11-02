@@ -113,6 +113,7 @@ nav:
       - "Buttons<!-- only tc002 -->, knob<!-- /only --> & clock": guides/device-controls.md
       - "Brightness<!-- only esp32 esp32-s3 --> & sensors<!-- /only -->": guides/brightness.md
       - Sound: guides/sounds.md
+      - Speech & voices: guides/speech.md
       - Internet radio: guides/radio.md
       - Power & battery: guides/power.md
       - Gamepad: guides/gamepad.md
@@ -172,6 +173,7 @@ nav:
       - App & notification payload: reference/payload.md
       - Visual reference: reference/visuals.md
       - Song text: reference/songs.md
+      - Voice module: reference/voice.md
       - Device state: reference/device.md
       - Settings: reference/settings.md
       - System configuration: reference/system.md
@@ -205,6 +207,7 @@ nav:
           - Wake word: developers/tc002/wake-word.md
           - Voice module: developers/tc002/voice-module.md
           - Speech: developers/tc002/speech.md
+          - Making a voice pack: developers/tc002/voice-packs.md
           - Tools overview: developers/tc002/tools.md
           - Install tools: developers/tc002/install-tools.md
           - Desktop installer: developers/tc002/desktop-installer.md

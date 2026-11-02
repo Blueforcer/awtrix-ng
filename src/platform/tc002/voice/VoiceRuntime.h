@@ -1,28 +1,17 @@
 #pragma once
-#include <functional>
 #include <string>
-#include <vector>
+#include <string_view>
 
-#include "core/render/Font.h"
 #include "platform/linux/net/FileDownload.h"
 #include "platform/posix/Hold.h"
 #include "platform/tc002/voice/AssistSession.h"
 #include "platform/tc002/voice/AssistantRouter.h"
 #include "platform/tc002/voice/VoiceOverlay.h"
 #include "platform/tc002/voice/VoiceSpeaker.h"
-namespace httplib {
-struct Request;
-struct Response;
-}  // namespace httplib
 namespace awtrix::tc002::voice {
 class VoiceRuntime : public AssistantRouter::Voice {
  public:
-  struct Hooks {
-    std::function<std::vector<std::string>()> assistantApps;
-    std::function<bool()> startAssistant;
-  };
-  VoiceRuntime(std::string directory, VoiceSpeaker& speaker, MicrophonePort microphone,
-               bool wakeWordAvailable, Hooks hooks);
+  VoiceRuntime(std::string directory, VoiceSpeaker& speaker, MicrophonePort microphone);
   ~VoiceRuntime() override;
   void tick(int64_t now, bool allowed);
   bool begin(int64_t now) override;
@@ -33,21 +22,33 @@ class VoiceRuntime : public AssistantRouter::Voice {
     cancel();
     return config_.erase();
   }
+  bool off() const override { return config_.get().assistant == kAssistantOff; }
   bool homeAssistant() const override { return config_.get().assistant == kHomeAssistant; }
   const std::string& assistantApp() const override { return config_.assistantApp(); }
   // Off means the knob's long press does nothing: no session is started.
   bool ready() const override {
-    return config_.get().enabled && !pendingStart_ && !errorFeedback_ && session_.ready();
+    return homeAssistant() && !pendingStart_ && !errorFeedback_ && session_.ready();
   }
   bool wakeWord() const override { return config_.get().wakeWord; }
+  wake::WakeSensitivity wakeSensitivity() const override { return config_.get().wakeSensitivity; }
   bool busy() const override {
     return pendingStart_ || errorFeedback_ || session_.busy();
   }
   bool starting() const override { return pendingStart_ || session_.starting(); }
-  bool draw(Canvas& canvas, const GfxFont& font, int64_t now);
-  bool handle(const httplib::Request& request, httplib::Response& response);
+  void draw(Canvas& canvas, int64_t now);
+  const ConfigStore& config() const { return config_; }
+  const AssistSession& session() const { return session_; }
+  bool loaded() const { return loaded_; }
+  bool updateConfig(std::string_view json, ConfigStore::Rejection& rejection);
 
  private:
+  void connectIfDue(const Config& config, int64_t now);
+  void pumpSocket(int64_t now);
+  void startPending(int64_t now);
+  void pollDownload(int64_t now);
+  void finishPlayback(int64_t now);
+  void releaseVoiceChannel(int64_t now);
+  void removePlaybackFile();
   void stopSpeaker();
   ConfigStore config_;
   VoiceSpeaker& speaker_;
@@ -61,8 +62,6 @@ class VoiceRuntime : public AssistantRouter::Voice {
   int64_t feedbackUntil_ = 0;
   bool errorFeedback_ = false;
   bool loaded_ = false, playing_ = false, pendingStart_ = false;
-  const bool wakeWordAvailable_;
-  const Hooks hooks_;
   std::string playbackPath_;
   posix::Hold voiceChannel_;
 };

@@ -60,28 +60,33 @@ end
 return Echo()
 ```
 
+![The display shows PRESS](../assets/voice-echo.svg){ .awx-panel loading=lazy }
+
+The display shows `PRESS`, then `TALK` while it listens and `BACK` while it plays.
+
 ## How it behaves
 
-- **A call returns at once.** Your [callback](scripting/index.md#callbacks) runs once, a little
-  later. The display never waits.
-- **A clip is audio the clock holds for your app.** Your script gets a small object with `ms`, the
-  length, and `kind`, `wav` or `mp3`. It cannot read the sound itself. It can send the clip or play
-  it.
-- **A recording ends by itself** when the speaker stops talking, when nobody starts talking, or at
-  its longest allowed length.
-- **Only the app on the display can record.** Hiding your app stops its recording and its playback
-  and deletes its finished clips. A send or fetch that is running goes on.
-- **Your app stays on the display** while it records, plays, sends or fetches.
-- **While it records or plays, other sounds are refused and music waits.** While it only sends or
-  fetches, music waits, and speech and other sounds still play.
+A call returns at once, and your [callback](scripting/index.md#callbacks) runs once, a little later,
+so the display never waits. A clip is audio the clock holds for your app: a small object with `ms`,
+the length (0 for a download), and `kind`, `wav` or `mp3`, that your script can send or play but not
+read. A recording ends by itself when the speaker stops talking, when nobody starts talking, or at
+its longest allowed length. Only the app on the display can record, and it
+[keeps its turn](display.md#apps-take-turns) while it records, plays, sends or fetches. Hiding it
+stops its recording and its playback and deletes its finished clips, while a running send or fetch
+goes on. While it records or plays, other sounds are refused and music waits.
+
+!!! note "Set a web login"
+    Without a [web login](../reference/http.md#authentication), any web page opened in a browser on
+    the same network can change scripts and app settings on the clock, and with that reach API keys
+    and the microphone. Set a login.
 
 ## Answer the knob and "Hey AWTRIX" {#answer-the-knob-and-wake-word}
 
-To let your app answer instead of Home Assistant, give it an `on_voice(trigger)` method and start
-the recording there:
+To let your app answer instead of Home Assistant, give it an `on_assistant(trigger)` method and
+start the recording there:
 
 ```berry
-  def on_voice(trigger)
+  def on_assistant(trigger)
     voice.record({}, / clip, status -> self.heard(clip, status))
   end
 ```
@@ -103,9 +108,9 @@ Then:
    [Choose the assistant](voice.md#choose-the-assistant).
 3. End the app with `rotation.close()` when the answer is done.
 
-The clock opens the app, and `on_voice()` runs right after its first frame. Draw from state your app
-already has, so that first frame shows something. A recording started there begins at the moment of
-the trigger, so the words right after "Hey AWTRIX" are not lost.
+The clock opens the app, and `on_assistant()` runs right after its first frame. Draw from state your
+app already has, so that first frame shows something. A recording started there begins at the
+moment of the trigger, so the words right after "Hey AWTRIX" are not lost.
 
 ## Record what someone says
 
@@ -114,7 +119,7 @@ voice.record({'silence': 1200, 'max': 20}, / clip, status -> self.heard(clip, st
 ```
 
 The callback gets `clip` and the status `200`, or `nil` and one of the
-[status values](#status-values). The options are optional:
+[status values](../reference/voice.md#status-values). The options are optional:
 
 | Option | Meaning | Allowed | Default |
 |---|---|---|---|
@@ -153,7 +158,7 @@ The clip goes out as a form, the way a browser uploads a file: in the field `fil
 For a service that wants the sound as the whole request, add `'as': 'raw'`. The request then says
 `audio/wav` or `audio/mpeg`, unless your headers name another `Content-Type`.
 
-`{secret:key}` is filled in by the clock. See
+`{secret:key}` is filled in by the clock, in `headers` and in the address, not in `fields`. See
 [Keep an API key out of your script](scripting/network.md#api-keys).
 
 ## Ask a service that takes its time {#slow-services}
@@ -170,7 +175,8 @@ voice.send(json.dump(request), url,
 
 The text is the body of the request, sent as `application/json` unless your headers name another
 `Content-Type`. `as`, `field` and `fields` do not apply. `timeout` is how many seconds the whole
-request may take, also while it waits for the first byte.
+request may take, also while it waits for the first byte. Connecting has its own limit of 3 seconds.
+For a service that wants its key in the body, write `{secret:key}` in the text.
 
 ## Fetch audio and play it
 
@@ -181,8 +187,10 @@ voice.fetch(url, {'body': json.dump(request),
             / clip, status -> self.on_audio(clip, status))
 ```
 
-With a `body` the request is a `POST`, without one a `GET`. Only an answer with status 200 that
-holds WAV or MP3 becomes a clip. Any other answer gives `nil` and its status.
+With a `body` the request is a `POST`, without one a `GET`. `{secret:key}` works in the `body` too.
+Only an answer with status 200 that holds
+WAV or MP3 and names an [accepted type](../reference/limits.md#voice-in-scripts) becomes a clip. Any
+other answer gives `nil` and a [status](../reference/voice.md#status-values).
 
 ```berry
   def on_audio(clip, status)
@@ -194,6 +202,26 @@ holds WAV or MP3 becomes a clip. Any other answer gives `nil` and its status.
 `voice.play()` returns `false` when it cannot start. Otherwise your callback runs once the sound has
 ended, with `true`, or with `false` when it was stopped or replaced by another `voice.play()`. The
 clip plays at the [alert volume](sounds.md#volume).
+
+## Play other sounds around it
+
+This section shows which other sounds can play while your app uses voice.
+
+The callbacks of `voice.record()` and `voice.play()` can use `sound.*`, so your app can say something
+right after a recording:
+
+```berry
+  def heard(clip, status)
+    if clip == nil
+      sound.play({'speech': "I heard nothing"})
+      return
+    end
+    voice.play(clip, / heard -> self.finished())
+  end
+```
+
+While a send or fetch runs and your app is on the display, music waits, and speech and other sounds
+still play. A send or fetch of an app in the background leaves the music alone.
 
 ## A complete assistant
 
@@ -212,10 +240,10 @@ play it. Any service that speaks the OpenAI format works. Pick the app as descri
 # @config  stt_model  text "Speech model"   default="gpt-4o-mini-transcribe" help="The model of that service"
 # @config  chat_url   text "Chat address"   default="https://api.openai.com/v1/chat/completions" help="Answers your question"
 # @config  chat_model text "Chat model"     default="gpt-4o-mini" help="The model of that service"
-# @config  tts_url    text "Voice address"  default="https://api.openai.com/v1/audio/speech" help="Reads the answer aloud"
-# @config  tts_model  text "Voice model"    default="gpt-4o-mini-tts" help="The model of that service"
+# @config  tts_url    text "Reply address"  default="https://api.openai.com/v1/audio/speech" help="Reads the answer aloud"
+# @config  tts_model  text "Reply model"    default="gpt-4o-mini-tts" help="The model of that service"
 # @config  tts_voice  text "Voice"          default="alloy" help="The voice of that service"
-# @secret  key label="API key" help="Goes to all three addresses. Leave it empty for a service without a key"
+# @secret  key label="OpenAI key" help="A local service needs none" hosts=api.openai.com
 
 import json
 import voice
@@ -231,7 +259,7 @@ class Ask
     self.until = now_ms() + 10000
   end
 
-  def on_voice(trigger)
+  def on_assistant(trigger)
     self.listen('trigger')
   end
 
@@ -250,9 +278,9 @@ class Ask
     if self.until > 0 && now_ms() >= self.until rotation.close() end
   end
 
-  def headers(typed)
+  def headers(url, typed)
     var out = typed ? {'Content-Type': 'application/json'} : {}
-    if secret.has('key') out['Authorization'] = 'Bearer {secret:key}' end
+    if secret.allows('key', url) out['Authorization'] = 'Bearer {secret:key}' end
     return out
   end
 
@@ -268,8 +296,9 @@ class Ask
     if turn != self.turn return end
     if clip == nil return self.fail(status) end
     self.show("...", 0xFFFFFF, 0)
-    var opts = {'fields': {'model': store.get('stt_model')}, 'headers': self.headers(false)}
-    voice.send(clip, store.get('stt_url'), opts, / body, code -> self.transcribed(turn, body, code))
+    var url = store.get('stt_url')
+    var opts = {'fields': {'model': store.get('stt_model')}, 'headers': self.headers(url, false)}
+    voice.send(clip, url, opts, / body, code -> self.transcribed(turn, body, code))
   end
 
   def transcribed(turn, body, status)
@@ -279,8 +308,9 @@ class Ask
     var question = isinstance(data, map) ? data.find('text') : nil
     if question == nil || question == '' return self.fail(voice.SILENCE) end
     var request = {'model': store.get('chat_model'), 'messages': [{'role': 'user', 'content': question}]}
-    var opts = {'cap': 16384, 'timeout': 120, 'headers': self.headers(true)}
-    voice.send(json.dump(request), store.get('chat_url'), opts, / answer, code -> self.answered(turn, answer, code))
+    var url = store.get('chat_url')
+    var opts = {'cap': 16384, 'timeout': 120, 'headers': self.headers(url, true)}
+    voice.send(json.dump(request), url, opts, / answer, code -> self.answered(turn, answer, code))
   end
 
   def answered(turn, answer, status)
@@ -295,8 +325,9 @@ class Ask
     self.show(reply, 0xFFFFFF, 0)
     var request = {'model': store.get('tts_model'), 'voice': store.get('tts_voice'), 'input': reply,
                    'response_format': 'mp3'}
-    var opts = {'body': json.dump(request), 'timeout': 60, 'headers': self.headers(true)}
-    voice.fetch(store.get('tts_url'), opts, / clip, code -> self.fetched(turn, clip, code))
+    var url = store.get('tts_url')
+    var opts = {'body': json.dump(request), 'timeout': 60, 'headers': self.headers(url, true)}
+    voice.fetch(url, opts, / clip, code -> self.fetched(turn, clip, code))
   end
 
   def fetched(turn, clip, status)
@@ -341,80 +372,32 @@ return Ask()
 
 Ten seconds after the answer the app closes. A press on the knob before that asks the next question.
 
+The key goes only to `api.openai.com`. `headers()` adds it where `secret.allows()` says it may go, so a
+local service works without a key. For another service, change `hosts=` and enter the key again.
+
 ## Good to know
 
 - **A refused call runs your callback before the call returns.** Set your state first, as `listen()`
   does above, and only then call `voice.record()`, `voice.send()` or `voice.fetch()`.
-- **A question can overtake an older one.** `voice.cancel()` still delivers `voice.CANCELLED` to the
-  old callback. Count your questions, as `turn` does above, and ignore answers to an older one.
-- **A clip does not outlive the hidden app.** Hide it, and `voice.send()` with an old clip answers
-  `voice.GONE`. Do not keep clips in a member beyond what you are doing with them.
+- **The callback of a cancelled question still runs, with `voice.CANCELLED`.** Count your questions,
+  as `turn` does above, and ignore answers to an older one.
+- **`voice.send()` with a clip from before your app was hidden answers `voice.GONE`.** Keep a clip in
+  a member only while you are using it.
 - **A third `voice.send()` or `voice.fetch()` at the same time answers `voice.BUSY`.** Send the next
   one from the callback of the last.
-- **A local service with a name needs `.local` to get a key over `http://`.** See
+- **A local service with a name needs `.local` to get a key over `http://`.** Write the `.local` name
+  or the IP address, also in `hosts=`, as described in
   [Where a key may go](scripting/network.md#where-a-key-may-go).
 
 ## Details
 
-### Calls
-
-| Call | Does |
-|---|---|
-| `voice.record(opts, cb)` | records. `opts` may be `nil`. `cb(clip, status)` |
-| `voice.stop()` | ends the recording now. The callback gets what it has |
-| `voice.level()` | the loudness of the running recording, 0 to 255, otherwise 0 |
-| `voice.state()` | `'idle'`, `'recording'` or `'playing'` |
-| `voice.send(data, url, opts, cb)` | sends a clip or a text. `opts` may be `nil`. `cb(body, status)` |
-| `voice.fetch(url, opts, cb)` | downloads WAV or MP3 into a clip. `opts` may be `nil`. `cb(clip, status)` |
-| `voice.play(clip, done?)` | plays a clip and returns whether it started. `done(heard)` |
-| `voice.cancel()` | ends your app's recording, playback, sends and fetches |
-
-A callback that is not a function, `opts` that is not a map or anything but a clip for `voice.play()`
-raises `value_error`. `voice.send()` with anything but a clip or a text answers `voice.BAD`.
-
-Options of `voice.send`:
-
-| Option | Meaning | Default |
-|---|---|---|
-| `as` | for a clip: `'form'` or `'raw'` | `'form'` |
-| `field` | for a form: the name of the clip's field | `'file'` |
-| `fields` | for a form: a map of further text fields, at most 16 | none |
-| `method` | the HTTP method | `POST` |
-| `headers` | a map of names to values. A form takes no `Content-Type` of yours | none |
-| `find`, `keep`, `cap` | as in [`http`](scripting/network.md#http-calls) | |
-| `timeout` | whole seconds for the whole request, also while it waits for the first byte, 1–120 | 30 |
-
-Options of `voice.fetch`:
-
-| Option | Meaning | Default |
-|---|---|---|
-| `body` | the text to send | none |
-| `method` | the HTTP method | `POST` with a `body`, else `GET` |
-| `headers` | a map of names to values | none |
-| `timeout` | whole seconds for the whole request, also while it waits for the first byte, 1–120 | 15 |
-
-Only a `GET` without a key follows redirects.
-
-### Status values
-
-`voice.send` and `voice.fetch` give the HTTP status of the answer. `0` means no server answered, or
-the clock refused to send a [key](scripting/network.md#api-keys). A recording gives `200`. The
-negative values are constants of the module:
-
-| Constant | Value | Means |
-|---|---|---|
-| `voice.SILENCE` | -1 | nobody spoke within `wait`, or `voice.stop()` came before any sound |
-| `voice.BUSY` | -2 | the app is not shown, the assistant is busy, another recording runs or the recording failed. Also a third send or fetch of the app |
-| `voice.CANCELLED` | -3 | `voice.cancel()`, or the app was hidden while it recorded |
-| `voice.FULL` | -4 | the clip would not fit into the [limits](../reference/limits.md#voice-in-scripts), or the clock is short of memory |
-| `voice.GONE` | -5 | `voice.send` with a clip that was released |
-| `voice.BAD` | -6 | an option out of range or of the wrong type, a bad address, method or header. Also a `voice.fetch` answer with status 200 that is neither WAV nor MP3 |
-
-Every limit is in [Limits](../reference/limits.md#voice-in-scripts).
+[Voice module](../reference/voice.md) lists every call, option and status value, and
+[Limits](../reference/limits.md#voice-in-scripts) every limit.
 
 ## Related
 
 - [Voice assistant](voice.md): choose who answers, and the Assistant app
+- [Voice module](../reference/voice.md): every call, option and status value
 - [Network](scripting/network.md): `http`, and API keys with `@secret`
 - [Sound & music](scripting/sound.md): `sound.play()`, speech and music
 - [Sharing a script](scripting/sharing.md#what-your-script-asks-of-the-clock): `@needs`

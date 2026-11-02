@@ -28,7 +28,6 @@ class Vault {
   bool save(const std::string& app, const Record& record);
   bool erase(const std::string& app) { return store_.erase(app); }
   bool eraseAll() { return store_.eraseAll(); }
-  // Erases every record keep() turns down, and every file that is no readable record.
   void keepOnly(const std::function<bool(const Record& record)>& keep);
 
  private:

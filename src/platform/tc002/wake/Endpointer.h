@@ -6,7 +6,7 @@
 #include <string_view>
 
 #include "platform/tc002/wake/ModelStream.h"
-#include "platform/tc002/wake/WakeDetector.h"
+#include "platform/tc002/wake/ProbabilityWindow.h"
 
 namespace awtrix::tc002::wake {
 
@@ -38,11 +38,11 @@ class Endpointer {
   bool configure(float cutoff, std::size_t window, std::string& error);
   void start(const EndpointSettings& settings);
   Endpoint next(const int16_t*& samples, std::size_t& count);
-  uint64_t stepMs() const { return stream_.model() ? stream_.model()->frames() * WakeFrontend::kStepMs : 0; }
+  uint64_t stepMs() const { return stream_.model()->frames() * WakeFrontend::kStepMs; }
 
  private:
   ModelStream stream_;
-  WakeWindow window_;
+  ProbabilityWindow window_;
   EndpointTimer timer_;
 };
 

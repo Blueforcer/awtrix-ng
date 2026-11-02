@@ -69,6 +69,7 @@ void DeviceConfig::load() {
   AWTRIX_CFG_FIELDS(X)
 #undef X
   p.end();
+  refreshTzRule();
 }
 
 bool DeviceConfig::save() const {

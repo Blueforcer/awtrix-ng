@@ -4,10 +4,12 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <utility>
 
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/posix/Files.h"
+#include "platform/posix/StartThread.h"
 
 namespace awtrix::net {
 namespace {
@@ -24,21 +26,32 @@ void dropOwned(std::deque<Entry>& entries, const std::string& owner, Drop drop) 
   }
 }
 
+TransferResult resultFor(const TransferRequest& request) {
+  TransferResult result;
+  result.owner = request.owner;
+  result.id = request.id;
+  return result;
 }
 
-TransferQueue::TransferQueue(std::size_t perOwner, FillRequest fill) : perOwner_(perOwner), fill_(std::move(fill)) {}
+}
 
-TransferQueue::~TransferQueue() {
+TransferQueue::TransferQueue(std::size_t perOwner, FillRequest fill)
+    : perOwner_(perOwner), requests_(std::move(fill)) {}
+
+TransferQueue::~TransferQueue() { stop(); }
+
+void TransferQueue::stop() {
   {
     std::lock_guard<std::mutex> lock(mutex_);
     stopping_ = true;
     queue_.clear();
-    interrupt_.interrupt();
+    requests_.interrupt();
   }
   ready_.notify_all();
   if (worker_.joinable()) worker_.join();
   for (const TransferResult& result : results_)
     if (!result.file.empty()) ::unlink(result.file.c_str());
+  results_.clear();
 }
 
 bool TransferQueue::start(TransferRequest request) {
@@ -46,8 +59,8 @@ bool TransferQueue::start(TransferRequest request) {
   const auto queued = std::count_if(queue_.begin(), queue_.end(),
                                     [&](const TransferRequest& r) { return r.owner == request.owner; });
   if (stopping_ || static_cast<std::size_t>(queued) + (runs(request.owner) ? 1 : 0) >= perOwner_) return false;
+  if (!worker_.joinable() && !posix::startThread(worker_, [this] { run(); })) return false;
   queue_.push_back(std::move(request));
-  if (!worker_.joinable()) worker_ = std::thread([this] { run(); });
   ready_.notify_one();
   return true;
 }
@@ -58,7 +71,7 @@ std::vector<int> TransferQueue::cancel(const std::string& owner) {
   if (runs(owner)) {
     dropped.push_back(runningId_);
     cancelled_ = true;
-    interrupt_.interrupt();
+    requests_.interrupt();
   }
   dropOwned(queue_, owner, [&](const TransferRequest& request) { dropped.push_back(request.id); });
   dropOwned(results_, owner, [&](const TransferResult& result) {
@@ -93,7 +106,7 @@ void TransferQueue::run() {
       runningOwner_ = request.owner;
       runningId_ = request.id;
       cancelled_ = false;
-      interrupt_.rearm();
+      requests_.rearm();
     }
     TransferResult result = perform(request);
     std::lock_guard<std::mutex> lock(mutex_);
@@ -108,38 +121,38 @@ void TransferQueue::run() {
 }
 
 TransferResult TransferQueue::perform(TransferRequest& request) {
-  TransferResult result;
-  result.owner = request.owner;
-  result.id = request.id;
-  std::string url = request.origin + request.target;
-  const RequestFill filled = fill_ ? fill_(request.owner, url, request.headers) : RequestFill::Unchanged;
-  if (filled == RequestFill::Refused || (filled == RequestFill::Filled && !splitUrl(url, request.origin, request.target)))
-    return result;
-  httplib::Client client(request.origin);
+  TransferResult result = resultFor(request);
   ClientLimits limits;
   limits.timeoutMs = request.timeoutMs;
   limits.ioTimeoutSec = static_cast<int>((request.timeoutMs + 999) / 1000);
-  limits.followRedirects = request.followRedirects && filled == RequestFill::Unchanged;
-  configure(client, limits);
-  interrupt_.watch(client);
-  if (request.download) {
-    download(client, request, result);
-  } else {
+  limits.followRedirects = request.followRedirects;
+  const bool finished = requests_.run(request.owner, std::move(request.url), request.headers, request.body, limits,
+                                      [&](httplib::Client& client, const std::string& target) {
+    if (request.download) {
+      download(client, target, request, result);
+      return;
+    }
     FilteredAnswer answer =
-        sendFiltered(client, request.method, request.target, std::move(request.body), request.headers, request.filter);
+        sendFiltered(client, request.method, target, std::move(request.body), request.headers, request.filter);
     result.status = answer.status;
     result.ok = answer.ok;
     result.body = std::move(answer.body);
-  }
-  interrupt_.release();
-  return result;
+  });
+  if (finished) return result;
+  if (request.download) ::unlink(request.download->path.c_str());
+  return resultFor(request);
 }
 
-void TransferQueue::download(httplib::Client& client, TransferRequest& request, TransferResult& result) {
+void TransferQueue::download(httplib::Client& client, const std::string& target, TransferRequest& request,
+                             TransferResult& result) {
   const TransferDownload& wanted = *request.download;
   posix::UniqueFd file(::open(wanted.path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600));
-  if (!file.valid()) return;
+  if (!file.valid()) {
+    result.noRoom = errno == ENOSPC;
+    return;
+  }
   bool refused = false;
+  RoomWatch room(wanted.room);
   ResponseState state;
   const BodyPolicy policy{wanted.maxBytes,
                           [&](int status, const std::string& contentType) {
@@ -147,14 +160,12 @@ void TransferQueue::download(httplib::Client& client, TransferRequest& request, 
                                       (wanted.acceptType && !wanted.acceptType(contentType));
                             return !refused;
                           },
-                          [&](std::size_t more) {
-                            result.noRoom = wanted.room && !wanted.room(more);
-                            return !result.noRoom;
-                          }};
-  const auto response = exchange(client, request.method, request.target, std::move(request.body), request.headers,
+                          [&](std::size_t more) { return room.fits(more); }};
+  const auto response = exchange(client, request.method, target, std::move(request.body), request.headers,
                                  policy, state, [&](const char* bytes, std::size_t count) {
-    return posix::writeAll(file.get(), bytes, count);
+    return room.write(file.get(), bytes, count);
   });
+  result.noRoom = room.noRoom();
   if (response) result.status = response->status;
   else if (refused || state.tooLarge || result.noRoom) result.status = state.status;
   const bool written = ::close(file.release()) == 0;

@@ -6,15 +6,16 @@
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
 #include "core/net/Url.h"
+#include "core/script/HttpHeaders.h"
 #include "platform/linux/net/UrlEncode.h"
-#include "platform/linux/script/HeaderAttributes.h"
+#include "platform/linux/net/UrlPolicy.h"
 #include "system/Log.h"
 
 namespace awtrix::secrets {
 namespace {
 
-constexpr std::string_view kPlaceholder = "{secret:";
-constexpr std::string_view kForbidden("\r\n\0", 3);
+using net::kPlaceholder;
+constexpr std::size_t kMaxRecord = 32768;
 
 struct Stored {
   std::string key;
@@ -87,23 +88,32 @@ bool placeholdersInTarget(const std::string& url) {
   return fragment == std::string::npos || url.find(kPlaceholder, fragment) == std::string::npos;
 }
 
+const char* refusalFor(std::string_view key, const std::optional<Spec>& spec, const Values& values,
+                       const std::string& url) {
+  const Secret* secret = spec ? spec->find(key) : nullptr;
+  if (!secret) return "unknown";
+  const char* refusal = nullptr;
+  if (!allows(*secret, url, &refusal)) return refusal;
+  return find(values, key) ? nullptr : "empty";
+}
+
 const char* substitute(std::string& text, bool encode, const std::optional<Spec>& spec, const Values& values,
                        const std::string& url) {
+  std::size_t at = text.find(kPlaceholder);
+  if (at == std::string::npos) return nullptr;
   std::string out;
+  out.reserve(text.size() + net::kMaxFillGrowth);
   std::size_t from = 0;
-  for (std::size_t at = text.find(kPlaceholder); at != std::string::npos; at = text.find(kPlaceholder, from)) {
+  for (; at != std::string::npos; at = text.find(kPlaceholder, from)) {
     const std::size_t begin = at + kPlaceholder.size();
     const std::size_t end = text.find('}', begin);
     if (end == std::string::npos) return "unknown";
     const std::string_view key = std::string_view(text).substr(begin, end - begin);
-    const Secret* secret = spec ? spec->find(key) : nullptr;
-    if (!secret) return "unknown";
-    const char* refusal = nullptr;
-    if (!allows(*secret, url, &refusal)) return refusal;
-    const Stored* stored = find(values, key);
-    if (!stored) return "empty";
-    out.append(text, from, at - from).append(encode ? net::percentEncoded(stored->value) : stored->value);
+    if (const char* refusal = refusalFor(key, spec, values, url)) return refusal;
+    const std::string& value = find(values, key)->value;
+    out.append(text, from, at - from).append(encode ? net::percentEncoded(value) : value);
     from = end + 1;
+    if (out.size() > from + net::kMaxFillGrowth) return "size";
   }
   out.append(text, from, std::string::npos);
   text = std::move(out);
@@ -112,8 +122,8 @@ const char* substitute(std::string& text, bool encode, const std::optional<Spec>
 
 }
 
-Service::Service(posix::PrivateStore& store, std::function<std::string(const std::string& app)> source)
-    : store_(store), source_(std::move(source)) {}
+Service::Service(std::string directory, script::SourceReader source)
+    : store_(std::move(directory), kMaxRecord), source_(std::move(source)) {}
 
 Status Service::status(const std::string& app) {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -124,7 +134,7 @@ Status Service::status(const std::string& app) {
   const Values values = current(store_, app, parsed.spec);
   if (parsed.spec)
     for (const Secret& secret : parsed.spec->secrets)
-      status.keys.push_back({secret.key, secret.label, secret.help, find(values, secret.key) != nullptr});
+      status.keys.push_back({secret.key, secret.label, secret.help, secret.hosts, find(values, secret.key) != nullptr});
   return status;
 }
 
@@ -144,7 +154,7 @@ bool Service::set(const std::string& app, const std::vector<std::pair<std::strin
     const char* problem = nullptr;
     if (!secret) problem = "unknown key";
     else if (value.size() > kMaxValue) problem = "value too long";
-    else if (value.find_first_of(kForbidden) != std::string::npos) problem = "invalid value";
+    else if (!std::all_of(value.begin(), value.end(), script::headerValueChar)) problem = "invalid value";
     if (problem) {
       error = problem;
       return false;
@@ -163,10 +173,18 @@ bool Service::has(const std::string& app, const std::string& key) {
   return find(current(store_, app, parsedLocked(app).spec), key) != nullptr;
 }
 
-net::RequestFill Service::fill(const std::string& app, std::string& url, net::RequestHeaders& headers) {
+bool Service::allows(const std::string& app, const std::string& key, const std::string& url) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  const Parsed& parsed = parsedLocked(app);
+  return placeholdersInTarget(url) && !refusalFor(key, parsed.spec, current(store_, app, parsed.spec), url);
+}
+
+net::RequestFill Service::fill(const std::string& app, std::string& url, net::RequestHeaders& headers,
+                               net::RequestBody& body) {
   const bool inUrl = url.find(kPlaceholder) != std::string::npos;
+  const bool inBody = body.fillable();
   const auto marked = [](const auto& header) { return header.second.find(kPlaceholder) != std::string::npos; };
-  if (!inUrl && std::none_of(headers.begin(), headers.end(), marked)) return net::RequestFill::Unchanged;
+  if (!inUrl && !inBody && std::none_of(headers.begin(), headers.end(), marked)) return net::RequestFill::Unchanged;
   std::lock_guard<std::mutex> lock(mutex_);
   const Parsed& parsed = parsedLocked(app);
   const Values values = current(store_, app, parsed.spec);
@@ -176,8 +194,9 @@ net::RequestFill Service::fill(const std::string& app, std::string& url, net::Re
       inUrl && !placeholdersInTarget(url) ? "host" : substitute(filledUrl, true, parsed.spec, values, url);
   for (auto header = filled.begin(); !reason && header != filled.end(); ++header)
     reason = substitute(header->second, false, parsed.spec, values, url);
+  if (!reason && inBody) reason = substitute(body.head, false, parsed.spec, values, url);
   if (reason) {
-    const std::string host = script::hostOf(url);
+    const std::string host = net::hostOf(url);
     logdbg("secret: %s refused (%s) for %s", app.c_str(), reason, host.empty() ? "?" : host.c_str());
     return net::RequestFill::Refused;
   }
@@ -193,7 +212,10 @@ void Service::dropStale() {
   store_.keepOnly([this, &kept](const std::string& json) {
     std::string app;
     Values values;
-    if (!parse(json, app, values) || !parsedLocked(app).spec) return false;
+    if (!parse(json, app, values)) return false;
+    const Parsed& parsed = parsedLocked(app);
+    if (parsed.unread) return true;
+    if (!parsed.spec) return false;
     kept.push_back(app);
     return true;
   });
@@ -219,20 +241,22 @@ bool Service::eraseAll() {
 }
 
 const Service::Parsed& Service::parsedLocked(const std::string& app) {
-  static const Parsed kNone;
+  static const Parsed kNone, kUnread{std::nullopt, {}, true};
   const auto cached = specs_.find(app);
   if (cached != specs_.end()) return cached->second;
-  const std::string source = source_(app);
-  if (source.empty()) return kNone;
+  const std::optional<std::string> source = source_(app);
+  if (!source) return kUnread;
+  if (source->empty()) return kNone;
   Parsed parsed;
-  parsed.spec = parseSpec(source, &parsed.invalid);
+  parsed.spec = parseSpec(*source, &parsed.invalid);
   return specs_.emplace(app, std::move(parsed)).first->second;
 }
 
 void Service::pruneLocked(const std::string& app) {
+  const Parsed& parsed = parsedLocked(app);
+  if (parsed.unread) return;
   const Values stored = loaded(store_, app);
-  const std::optional<Spec>& spec = parsedLocked(app).spec;
-  const Values kept = spec ? bound(*spec, stored) : Values{};
+  const Values kept = parsed.spec ? bound(*parsed.spec, stored) : Values{};
   if (kept.size() != stored.size()) save(store_, app, kept);
 }
 

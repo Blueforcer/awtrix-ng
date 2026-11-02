@@ -14,6 +14,15 @@
 //  AWTRIX local patch, 2026-10-04: a client accepts response status and
 //  header lines that end in a bare LF, and Shoutcast's "ICY 200 OK" as
 //  HTTP/1.0.
+//  AWTRIX local patch, 2026-11-01: a client's max timeout that has run out
+//  waits no more instead of reaching poll as a negative timeout, and it also
+//  limits the wait to write.
+//  AWTRIX local patch, 2026-11-01: a client parses response status lines and
+//  redirect locations by hand instead of with std::regex, whose recursion per
+//  character overran a thread's stack, and refuses a port above 65535.
+//  AWTRIX local patch, 2026-11-01: a server route ".*" matches without
+//  std::regex, for the same reason: a request path of 1024 bytes crashed the
+//  process. It still refuses a path holding CR or LF, as ".*" does.
 
 #ifndef CPPHTTPLIB_HTTPLIB_H
 #define CPPHTTPLIB_HTTPLIB_H
@@ -954,6 +963,12 @@ public:
 
 private:
   std::regex regex_;
+};
+
+// AWTRIX: what ".*" matches, without std::regex.
+class MatchAllMatcher final : public MatcherBase {
+public:
+  bool match(Request &request) const override;
 };
 
 ssize_t write_headers(Stream &strm, const Headers &headers);
@@ -6081,8 +6096,22 @@ inline void calc_actual_timeout(time_t max_timeout_msec, time_t duration_msec,
   auto actual_timeout_msec =
       (std::min)(max_timeout_msec - duration_msec, timeout_msec);
 
+  // AWTRIX: poll would take a negative timeout as no limit at all.
+  if (actual_timeout_msec < 0) { actual_timeout_msec = 0; }
+
   actual_timeout_sec = actual_timeout_msec / 1000;
   actual_timeout_usec = (actual_timeout_msec % 1000) * 1000;
+}
+
+// AWTRIX: a client's max timeout also limits the wait to write.
+inline ssize_t select_write_within_max(const Stream &strm, socket_t sock,
+                                       time_t max_timeout_msec, time_t sec,
+                                       time_t usec) {
+  if (max_timeout_msec > 0) {
+    calc_actual_timeout(max_timeout_msec, strm.duration(), sec, usec, sec,
+                        usec);
+  }
+  return select_write(sock, sec, usec);
 }
 
 // Socket stream implementation
@@ -6118,7 +6147,8 @@ inline bool SocketStream::wait_readable() const {
 }
 
 inline bool SocketStream::wait_writable() const {
-  return select_write(sock_, write_timeout_sec_, write_timeout_usec_) > 0 &&
+  return select_write_within_max(*this, sock_, max_timeout_msec_,
+                                 write_timeout_sec_, write_timeout_usec_) > 0 &&
          is_socket_alive(sock_);
 }
 
@@ -6327,6 +6357,11 @@ inline bool RegexMatcher::match(Request &request) const {
   return std::regex_match(request.path, request.matches, regex_);
 }
 
+inline bool MatchAllMatcher::match(Request &request) const {
+  request.path_params.clear();
+  return request.path.find_first_of("\r\n") == std::string::npos;
+}
+
 } // namespace detail
 
 // HTTP server implementation
@@ -6342,7 +6377,9 @@ inline Server::~Server() = default;
 
 inline std::unique_ptr<detail::MatcherBase>
 Server::make_matcher(const std::string &pattern) {
-  if (pattern.find("/:") != std::string::npos) {
+  if (pattern == ".*") {
+    return detail::make_unique<detail::MatchAllMatcher>();
+  } else if (pattern.find("/:") != std::string::npos) {
     return detail::make_unique<detail::PathParamsMatcher>(pattern);
   } else {
     return detail::make_unique<detail::RegexMatcher>(pattern);
@@ -7598,6 +7635,101 @@ inline void ClientImpl::close_socket(Socket &socket) {
   socket.sock = INVALID_SOCKET;
 }
 
+namespace detail {
+
+// AWTRIX: a status line may end in a bare LF, and Shoutcast's "ICY" counts as HTTP/1.0.
+inline bool parse_status_line(const char *text, Response &res) {
+  std::string line(text);
+  if (line.empty() || line.back() != '\n') { return false; }
+  line.pop_back();
+  if (!line.empty() && line.back() == '\r') { line.pop_back(); }
+
+  size_t code = 9;
+  if (line.compare(0, 4, "ICY ") == 0) {
+    code = 4;
+  } else if (line.compare(0, 9, "HTTP/1.0 ") != 0 &&
+             line.compare(0, 9, "HTTP/1.1 ") != 0) {
+    return false;
+  }
+
+  const auto after = code + 3;
+  if (line.size() < after) { return false; }
+  auto status = 0;
+  for (auto i = code; i < after; i++) {
+    if (line[i] < '0' || line[i] > '9') { return false; }
+    status = status * 10 + (line[i] - '0');
+  }
+  if (line.size() > after && line[after] != ' ') { return false; }
+
+  auto reason = line.size() > after ? line.substr(after + 1) : std::string();
+  if (reason.find_first_of("\r\n") != std::string::npos) { return false; }
+
+  res.version = code == 4 ? std::string("HTTP/1.0") : line.substr(0, 8);
+  res.status = status;
+  res.reason = std::move(reason);
+  return true;
+}
+
+struct LocationParts {
+  std::string scheme, host, path, query;
+  int port = -1;
+};
+
+// AWTRIX: [scheme:][//host[:port]][path][?query][#fragment]; false for a port above 65535.
+inline bool parse_location(const std::string &location, LocationParts &parts) {
+  size_t at = 0;
+  if (location.compare(0, 6, "https:") == 0) {
+    parts.scheme = "https";
+    at = 6;
+  } else if (location.compare(0, 5, "http:") == 0) {
+    parts.scheme = "http";
+    at = 5;
+  }
+
+  if (location.compare(at, 2, "//") == 0) {
+    const auto start = at + 2;
+    auto end = std::string::npos;
+    if (location.compare(start, 1, "[") == 0) {
+      end = location.find_first_not_of("0123456789abcdefABCDEF:", start + 1);
+      if (end != std::string::npos && end > start + 1 && location[end] == ']') {
+        parts.host = location.substr(start + 1, end - start - 1);
+        end++;
+      } else {
+        end = std::string::npos;
+      }
+    }
+    if (end == std::string::npos) {
+      end = (std::min)(location.find_first_of(":/?#", start), location.size());
+      parts.host = location.substr(start, end - start);
+    }
+    if (!parts.host.empty()) {
+      at = end;
+      if (location.compare(at, 1, ":") == 0) {
+        auto digit = at + 1;
+        auto port = 0;
+        for (; digit < location.size() && location[digit] >= '0' &&
+               location[digit] <= '9';
+             digit++) {
+          port = port * 10 + (location[digit] - '0');
+          if (port > 65535) { return false; }
+        }
+        if (digit > at + 1) {
+          parts.port = port;
+          at = digit;
+        }
+      }
+    }
+  }
+
+  const auto query = (std::min)(location.find_first_of("?#", at), location.size());
+  const auto fragment = (std::min)(location.find('#', query), location.size());
+  parts.path = location.substr(at, query - at);
+  parts.query = location.substr(query, fragment - query);
+  return location.find_first_of("\r\n", fragment) == std::string::npos;
+}
+
+} // namespace detail
+
 inline bool ClientImpl::read_response_line(Stream &strm, const Request &req,
                                            Response &res) const {
   std::array<char, 2048> buf{};
@@ -7606,29 +7738,16 @@ inline bool ClientImpl::read_response_line(Stream &strm, const Request &req,
 
   if (!line_reader.getline(CPPHTTPLIB_HEADER_MAX_LENGTH, true)) { return false; }
 
-  // AWTRIX: a response status line may end in a bare LF, and Shoutcast's "ICY" counts as HTTP/1.0.
-  thread_local const std::regex re("(HTTP/1\\.[01]|ICY) (\\d{3})(?: (.*?))?\r?\n");
-  const auto version = [](const std::csub_match &v) {
-    return v == "ICY" ? std::string("HTTP/1.0") : std::string(v);
-  };
-
-  std::cmatch m;
-  if (!std::regex_match(line_reader.ptr(), m, re)) {
+  if (!detail::parse_status_line(line_reader.ptr(), res)) {
     return req.method == "CONNECT";
   }
-  res.version = version(m[1]);
-  res.status = std::stoi(std::string(m[2]));
-  res.reason = std::string(m[3]);
 
   // Ignore '100 Continue'
   while (res.status == StatusCode::Continue_100) {
     if (!line_reader.getline(CPPHTTPLIB_HEADER_MAX_LENGTH, true)) { return false; } // CRLF
     if (!line_reader.getline(CPPHTTPLIB_HEADER_MAX_LENGTH, true)) { return false; } // next response line
 
-    if (!std::regex_match(line_reader.ptr(), m, re)) { return false; }
-    res.version = version(m[1]);
-    res.status = std::stoi(std::string(m[2]));
-    res.reason = std::string(m[3]);
+    if (!detail::parse_status_line(line_reader.ptr(), res)) { return false; }
   }
 
   return true;
@@ -7841,24 +7960,19 @@ inline bool ClientImpl::redirect(Request &req, Response &res, Error &error) {
   auto location = res.get_header_value("location");
   if (location.empty()) { return false; }
 
-  thread_local const std::regex re(
-      R"((?:(https?):)?(?://(?:\[([a-fA-F\d:]+)\]|([^:/?#]+))(?::(\d+))?)?([^?#]*)(\?[^#]*)?(?:#.*)?)");
-
-  std::smatch m;
-  if (!std::regex_match(location, m, re)) { return false; }
+  detail::LocationParts parts;
+  if (!detail::parse_location(location, parts)) { return false; }
 
   auto scheme = is_ssl() ? "https" : "http";
 
-  auto next_scheme = m[1].str();
-  auto next_host = m[2].str();
-  if (next_host.empty()) { next_host = m[3].str(); }
-  auto port_str = m[4].str();
-  auto next_path = m[5].str();
-  auto next_query = m[6].str();
+  auto next_scheme = parts.scheme;
+  auto next_host = parts.host;
+  auto next_path = parts.path;
+  auto next_query = parts.query;
 
   auto next_port = port_;
-  if (!port_str.empty()) {
-    next_port = std::stoi(port_str);
+  if (parts.port >= 0) {
+    next_port = parts.port;
   } else if (!next_scheme.empty()) {
     next_port = next_scheme == "https" ? 443 : 80;
   }
@@ -9249,7 +9363,8 @@ inline bool SSLSocketStream::wait_readable() const {
 }
 
 inline bool SSLSocketStream::wait_writable() const {
-  return select_write(sock_, write_timeout_sec_, write_timeout_usec_) > 0 &&
+  return select_write_within_max(*this, sock_, max_timeout_msec_,
+                                 write_timeout_sec_, write_timeout_usec_) > 0 &&
          is_socket_alive(sock_) && !is_ssl_peer_could_be_closed(ssl_, sock_);
 }
 

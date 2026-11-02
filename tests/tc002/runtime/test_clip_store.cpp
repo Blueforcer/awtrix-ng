@@ -103,6 +103,24 @@ void memory(const std::string& folder) {
   check(unknown.reserve("A", 1) == 0, "memory that cannot be read refuses every clip");
 }
 
+void promises(const std::string& folder) {
+  uint64_t free = 1000 + 1500;
+  ClipStore store(folder, available(free));
+  const ClipId recording = store.promise("A", 1000);
+  require(recording != 0, "a writer that checks nothing is promised its bytes");
+  check(store.fits(500) && !store.fits(501), "they are not there for anyone else");
+  check(store.reserve("B", 501) == 0 && store.promise("B", 501) == 0, "nor for another clip");
+  check(store.commit(recording, 100, ClipKind::Wav), "the writer is done");
+  check(store.fits(1500) && !store.fits(1501), "and the room of what it did not write is back");
+  const ClipId cancelled = store.promise("A", 1000);
+  store.release("A", cancelled);
+  check(store.fits(1500), "a clip released while it is written gives its promise back");
+  const ClipId checked = store.reserve("A", 1000);
+  check(checked != 0 && store.fits(1500), "a writer that checks for room on its way promises nothing");
+  const ClipId overrun = store.promise("A", 1000);
+  check(!store.commit(overrun, 2000, ClipKind::Wav) && store.fits(1500), "a clip that ran over its promise ends it");
+}
+
 void commitAndRelease(const std::string& parent) {
   std::string folder;
   {
@@ -114,9 +132,9 @@ void commitAndRelease(const std::string& parent) {
     std::ofstream(path, std::ios::binary) << std::string(80, 'x');
     store.releaseReady("A", id);
     check(exists(path) && !store.path(id).empty(), "a script cannot release a clip still being filled");
-    require(store.commit(id, 80, 5, ClipKind::Wav), "a clip within its reservation becomes ready");
+    require(store.commit(id, 80, ClipKind::Wav), "a clip within its reservation becomes ready");
     const Clip* clip = store.find("A", id);
-    check(clip && clip->bytes == 80 && clip->ms == 5 && clip->kind == ClipKind::Wav,
+    check(clip && clip->bytes == 80 && clip->kind == ClipKind::Wav,
           "it keeps size, length and kind");
     check(store.find("B", id) == nullptr, "another app does not find it");
     store.release("B", id);
@@ -130,11 +148,11 @@ void commitAndRelease(const std::string& parent) {
     store.release("A", reserved);
     check(!exists(reservedPath) && store.path(reserved).empty(), "the module releases a reservation with its file");
     const ClipId big = store.reserve("A", 100);
-    check(!store.commit(big, 101, 1, ClipKind::Mp3) && store.path(big).empty(),
+    check(!store.commit(big, 101, ClipKind::Mp3) && store.path(big).empty(),
           "a clip that outgrew its reservation is released");
     const ClipId ready = store.reserve("A", 10), pending = store.reserve("A", 10);
     std::ofstream(store.path(ready)) << "x";
-    store.commit(ready, 1, 0, ClipKind::Wav);
+    store.commit(ready, 1, ClipKind::Wav);
     store.releaseReady("A");
     check(store.path(ready).empty() && !store.path(pending).empty(),
           "releaseReady keeps the clips still being filled");
@@ -155,6 +173,12 @@ void staleFolders(const std::string& parent) {
   check(!exists(stale), "a new store removes the folder a crashed one left behind");
   const std::string own = parent + "/awtrix-clips-" + std::to_string(::getpid()) + "-";
   check(store.ready() && store.path(store.reserve("A", 10)).rfind(own, 0) == 0, "and makes its own beside it");
+
+  const std::string reused = own + "d4E5f6";
+  require(::mkdir(reused.c_str(), 0700) == 0, "a folder whose creator's process id runs another process now");
+  ClipStore::removeLeftovers(parent);
+  check(!exists(reused), "goes too, and without a new store");
+  check(exists(store.path(store.reserve("A", 10)).substr(0, own.size() + 6)), "a running store keeps its folder");
 }
 
 }
@@ -165,6 +189,7 @@ int main() {
   wavFile(folder);
   limits(folder);
   memory(folder);
+  promises(folder);
   commitAndRelease(folder);
   staleFolders(folder);
   ::rmdir(folder);

@@ -5,14 +5,12 @@
 
 namespace awtrix::tc002::wake {
 
+static_assert(WakeModel::kFeatures == WakeFrontend::kChannels, "the model takes the frontend's channels");
+
 bool ModelStream::load(std::string_view bytes, std::string& error) {
   std::unique_ptr<WakeModel> model =
     WakeModel::load(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), error);
   if (!model) return false;
-  if (!model->outputIsUint8() || model->outputSize() != 1) {
-    error = "the model needs one uint8 output";
-    return false;
-  }
   for (std::size_t k = 0; k < quantized_.size(); ++k) {
     const float q = std::nearbyint(static_cast<float>(k) / model->inputScale()) +
                     static_cast<float>(model->inputZeroPoint());

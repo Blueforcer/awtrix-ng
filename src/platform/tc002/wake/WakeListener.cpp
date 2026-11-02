@@ -15,10 +15,7 @@ static_assert(kMicrophonePcmRate == WakeFrontend::kSampleRate, "the detector tak
 constexpr uint32_t kCooloffMs = 1000, kWarmupMs = 1000;
 constexpr std::array<int64_t, 5> kBackoffMs{1000, 2000, 5000, 10000, 30000};
 
-}
-
-std::unique_ptr<WakeListener> WakeListener::open(const std::string& modelPath, MicrophonePort microphone,
-                                                 std::unique_ptr<posix::Executor> worker, std::string& error) {
+std::unique_ptr<WakeDetector> readDetector(const std::string& modelPath, std::string& error) {
   ModelFiles files;
   if (!readModelFiles(modelPath, files, error)) return nullptr;
   auto detector = std::make_unique<WakeDetector>();
@@ -27,12 +24,25 @@ std::unique_ptr<WakeListener> WakeListener::open(const std::string& modelPath, M
     error = files.settingsPath + ": " + error;
     return nullptr;
   }
-  return std::unique_ptr<WakeListener>(new WakeListener(std::move(detector), std::move(microphone), std::move(worker)));
+  return detector;
 }
 
-WakeListener::WakeListener(std::unique_ptr<WakeDetector> detector, MicrophonePort microphone,
+}
+
+std::unique_ptr<WakeListener> WakeListener::open(const std::string& modelPath, MicrophonePort microphone,
+                                                 std::unique_ptr<posix::Executor> worker, std::string& error) {
+  auto detector = readDetector(modelPath, error);
+  if (!detector) return nullptr;
+  return std::unique_ptr<WakeListener>(
+      new WakeListener(modelPath, std::move(detector), std::move(microphone), std::move(worker)));
+}
+
+WakeListener::WakeListener(std::string modelPath, std::unique_ptr<WakeDetector> detector, MicrophonePort microphone,
                            std::unique_ptr<posix::Executor> worker)
-    : microphone_(std::move(microphone)), detector_(std::move(detector)), worker_(std::move(worker)) {}
+    : modelPath_(std::move(modelPath)),
+      microphone_(std::move(microphone)),
+      detector_(std::move(detector)),
+      worker_(std::move(worker)) {}
 
 WakeListener::~WakeListener() {
   cancel();
@@ -48,8 +58,13 @@ std::optional<WakeHeard> WakeListener::tick(int64_t now, Listen listen) {
     heard.swap(heard_);
   }
   muted_ = listen != Listen::On;
+  if (listen != Listen::Off) wantedAt_ = now;
   if (microphone_.phase() == MicrophoneClient::Phase::Idle) {
-    if (listen != Listen::Off && now >= retryAt_) microphone_.open(now);
+    if (listen == Listen::Off) {
+      if (now - wantedAt_ >= kModelOffMs) unloadDetector();
+    } else if (now >= retryAt_ && loadDetector(now)) {
+      microphone_.open(now);
+    }
   } else if (listen == Listen::Off) {
     microphone_.stop(now);
   }
@@ -59,6 +74,28 @@ std::optional<WakeHeard> WakeListener::tick(int64_t now, Listen listen) {
   return heard.back();
 }
 
+bool WakeListener::loadDetector(int64_t now) {
+  if (detector_) return true;
+  std::string error;
+  auto detector = readDetector(modelPath_, error);
+  if (!detector) {
+    if (error != error_) logf("wake word: %s", error.c_str());
+    error_ = error;
+    retryAt_ = now + kBackoffMs.back();
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  detector_ = std::move(detector);
+  return true;
+}
+
+void WakeListener::unloadDetector() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (draining_ || !blocks_.empty()) return;
+  detector_.reset();
+  spareSamples_.clear();
+}
+
 void WakeListener::receive(const StreamEvent& event, int64_t now) {
   const MicrophoneClient::Report kind = microphone_.receive(event, now);
   switch (kind) {
@@ -66,8 +103,9 @@ void WakeListener::receive(const StreamEvent& event, int64_t now) {
       restart(event.firstSample);
       [[fallthrough]];
     case MicrophoneClient::Report::Audio:
-      return queue({event.samples, false, event.firstSample, muted_});
+      return queueAudio(event);
     case MicrophoneClient::Report::None:
+    case MicrophoneClient::Report::Available:
     case MicrophoneClient::Report::Unavailable:
     case MicrophoneClient::Report::Started:
     case MicrophoneClient::Report::Ended:
@@ -89,6 +127,7 @@ void WakeListener::apply(MicrophoneClient::Report report, int64_t now) {
     case MicrophoneClient::Report::Stopped:
       return restart(0);
     case MicrophoneClient::Report::None:
+    case MicrophoneClient::Report::Available:
     case MicrophoneClient::Report::Audio:
     case MicrophoneClient::Report::Gap:
       return;
@@ -111,6 +150,19 @@ void WakeListener::failed(int64_t now) {
 
 void WakeListener::restart(uint32_t origin) { queue({{}, true, origin}); }
 
+void WakeListener::queueAudio(const StreamEvent& event) {
+  std::vector<int16_t> samples;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!spareSamples_.empty()) {
+      samples = std::move(spareSamples_.back());
+      spareSamples_.pop_back();
+    }
+  }
+  samples = event.samples;
+  queue({std::move(samples), false, event.firstSample, muted_, sensitivity_});
+}
+
 void WakeListener::queue(Block block) {
   bool idle = false;
   {
@@ -122,7 +174,10 @@ void WakeListener::queue(Block block) {
     blocks_.push_back(std::move(block));
     idle = !std::exchange(draining_, true);
   }
-  if (idle) worker_->post([this] { drain(); });
+  if (idle && !worker_->post([this] { drain(); })) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    draining_ = false;
+  }
 }
 
 void WakeListener::drain() {
@@ -137,9 +192,11 @@ void WakeListener::drain() {
       lock.lock();
       continue;
     }
+    detector_->setSensitivity(block.sensitivity);
     const auto heard = detector_->feed(block.samples.data(), block.samples.size());
     lock.lock();
     if (heard && !block.muted) heard_.push_back({heard->score, detectorOrigin_ + static_cast<uint32_t>(heard->sample)});
+    if (spareSamples_.size() < kQueueBlocks) spareSamples_.push_back(std::move(block.samples));
   }
   draining_ = false;
 }

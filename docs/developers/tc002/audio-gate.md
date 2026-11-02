@@ -49,7 +49,7 @@ stream with an error; nothing is repaired or retried silently.
 
 - The MCU stops acquisition by itself when no valid keepalive arrives for 1 s. Invalid or stale
   input cannot renew that lease.
-- The daemon ends a stream whose consumer did not renew within 500 ms. A stream has no length
+- The daemon ends a stream whose consumer did not renew within 2 s. A stream has no length
   limit of its own; each consumer bounds its own capture.
 - A stop must complete within 1.5 s, otherwise the daemon aborts the stream.
 

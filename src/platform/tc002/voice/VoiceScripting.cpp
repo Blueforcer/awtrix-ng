@@ -6,25 +6,24 @@
 
 #include "berry.h"
 #include "core/script/BerryVM.h"
-#include "platform/posix/Sequence.h"
-#include "system/Log.h"
+
+extern "C" void be_gc_collect(bvm* vm);
 
 namespace awtrix::tc002::voice {
 namespace {
 
-constexpr const char* kSource = R"BERRY(
+constexpr const char* kSourceStart = R"BERRY(
 import global
 import string
 var m = module('voice')
-m.SILENCE = -1
-m.BUSY = -2
-m.CANCELLED = -3
-m.FULL = -4
-m.GONE = -5
-m.BAD = -6
+)BERRY";
+
+constexpr const char* kSource = R"BERRY(
 var recs = {}
 var plays = {}
 var calls = {}
+var release = _voice_release
+global.undef('_voice_release')
 
 class voice_clip
   var id, ms, kind, app
@@ -34,7 +33,7 @@ class voice_clip
     self.kind = kind
     self.app = _native_app()
   end
-  def deinit() _voice_release(self.app, self.id) end
+  def deinit() release(self.app, self.id) end
 end
 
 var numbers = def (text)
@@ -147,7 +146,19 @@ end
 return m
 )BERRY";
 
-constexpr int64_t kQuietWaitMs = 1000;
+struct StatusName {
+  const char* name;
+  int status;
+};
+constexpr StatusName kStatusNames[] = {{"SILENCE", kSilence}, {"BUSY", kBusy}, {"CANCELLED", kCancelled},
+                                       {"FULL", kFull},       {"GONE", kGone}, {"BAD", kBad}};
+
+std::string moduleSource() {
+  std::string source = kSourceStart;
+  for (const StatusName& entry : kStatusNames)
+    source += std::string("m.") + entry.name + " = " + std::to_string(entry.status) + "\n";
+  return source + kSource;
+}
 
 struct Range {
   bint low, high;
@@ -171,6 +182,27 @@ std::optional<bool> triggerOption(bvm* vm, int index) {
   return std::nullopt;
 }
 
+const char* eventName(VoiceEvent::Kind kind) {
+  switch (kind) {
+    case VoiceEvent::Kind::Record: return "record";
+    case VoiceEvent::Kind::Play: return "play";
+    case VoiceEvent::Kind::Send: return "send";
+    case VoiceEvent::Kind::Fetch: return "fetch";
+  }
+  return "";
+}
+
+std::string eventNumbers(const VoiceEvent& event) {
+  const std::string head = std::to_string(event.number) + " " + std::to_string(event.status);
+  switch (event.kind) {
+    case VoiceEvent::Kind::Play: return head;
+    case VoiceEvent::Kind::Send: return head + (event.body ? " 1" : " 0");
+    case VoiceEvent::Kind::Record:
+    case VoiceEvent::Kind::Fetch: return head + " " + std::to_string(event.clip) + " " + std::to_string(event.ms);
+  }
+  return head;
+}
+
 VoiceScripting& self(bvm* vm) { return *static_cast<VoiceScripting*>(script::BerryVM::nativeSelf(vm)); }
 const std::string& caller() { return script::ScriptExtensionHost::caller(); }
 std::string bytes(bvm* vm, int index) {
@@ -181,13 +213,25 @@ VoiceTransfers::SendData sendData(bvm* vm, int index) {
   return bytes(vm, index);
 }
 
+template <class Attempt>
+int withRoomOfDroppedClips(bvm* vm, Attempt attempt) {
+  const int result = attempt();
+  if (result != kFull) return result;
+  be_gc_collect(vm);
+  return attempt();
+}
+
 }
 
 VoiceScripting::VoiceScripting(Services services)
     : services_(std::move(services)),
       clips_(services_.clipDirectory, MemoryRoom(services_.availableMemory, kKeepFreeBytes)),
-      transfers_(clips_, MemoryRoom(services_.availableMemory, kKeepFreeBytes), services_.fillRequest),
-      capture_(services_.microphone, services_.startFrom, services_.voiceActivityModel) {}
+      transfers_(clips_, services_.fillRequest),
+      recorder_(clips_, {services_.microphone, services_.startFrom, services_.live, services_.speaker,
+                         services_.assistantBusy, services_.visible, services_.clock, services_.voiceActivityModel,
+                         [this] { return claimVoiceChannel(); },
+                         [this](const std::string& app) { return takeMark(app); },
+                         [this](VoiceEvent event) { queue(std::move(event)); }}) {}
 
 void VoiceScripting::install(script::ScriptExtensionHost& host) {
   host.defineNative("_voice_record", &VoiceScripting::nRecord, this);
@@ -199,77 +243,33 @@ void VoiceScripting::install(script::ScriptExtensionHost& host) {
   host.defineNative("_voice_state", &VoiceScripting::nState, this);
   host.defineNative("_voice_send", &VoiceScripting::nSend, this);
   host.defineNative("_voice_fetch", &VoiceScripting::nFetch, this);
-  host.defineModule(Module::kName, kSource);
+  host.defineModule(Module::kName, moduleSource());
 }
 
-VoiceScripting::Event VoiceScripting::outcome(std::string app, EventKind kind, int number, int status) {
-  Event event{};
-  event.app = std::move(app);
-  event.kind = kind;
-  event.number = number;
-  event.status = status;
-  return event;
-}
+void VoiceScripting::queue(VoiceEvent event) { events_.push_back(std::move(event)); }
 
-VoiceScripting::Event VoiceScripting::delivery(std::string app, EventKind kind, int number, ClipId clip, uint32_t ms,
-                                               std::string format) {
-  Event event = outcome(std::move(app), kind, number, kOk);
-  event.clip = clip;
-  event.ms = ms;
-  event.text = std::move(format);
-  return event;
-}
-
-const char* VoiceScripting::eventName(EventKind kind) {
-  switch (kind) {
-    case EventKind::Record: return "record";
-    case EventKind::Play: return "play";
-    case EventKind::Send: return "send";
-    case EventKind::Fetch: return "fetch";
-  }
-  return "";
-}
-
-std::string VoiceScripting::eventNumbers(const Event& event) {
-  const std::string head = std::to_string(event.number) + " " + std::to_string(event.status);
-  switch (event.kind) {
-    case EventKind::Play: return head;
-    case EventKind::Send: return head + (event.text ? " 1" : " 0");
-    case EventKind::Record:
-    case EventKind::Fetch: return head + " " + std::to_string(event.clip) + " " + std::to_string(event.ms);
-  }
-  return head;
-}
-
-bool VoiceScripting::transferEvent(const Event& event) {
-  return event.kind == EventKind::Send || event.kind == EventKind::Fetch;
-}
-
-VoiceScripting::Event VoiceScripting::eventOf(VoiceTransfers::Done done) {
-  const EventKind kind = done.kind == VoiceTransfers::Kind::Send ? EventKind::Send : EventKind::Fetch;
-  Event event = outcome(std::move(done.app), kind, done.number, done.status);
-  event.clip = done.clip;
-  event.text = std::move(done.text);
-  return event;
-}
-
-void VoiceScripting::queue(Event event) { events_.push_back(std::move(event)); }
-
-void VoiceScripting::cancelEvent(Event& event) {
-  if (event.kind == EventKind::Play) return;
+void VoiceScripting::cancelEvent(VoiceEvent& event) {
+  if (event.kind == VoiceEvent::Kind::Play) return;
   clips_.release(event.app, event.clip);
   event.status = kCancelled;
   event.clip = 0;
   event.ms = 0;
-  event.text.reset();
+  event.format.clear();
+  event.body.reset();
 }
 
 void VoiceScripting::tick(script::ScriptExtensionHost& host, const RenderCtx* ctx) {
+  posix::Hold musicDuringCallback;
   for (std::size_t due = std::min<std::size_t>(events_.size(), kPerTick); due > 0 && !events_.empty(); --due) {
-    Event event = std::move(events_.front());
+    VoiceEvent event = std::move(events_.front());
     events_.pop_front();
-    if (!host.deliver(event.app, Module::kName, "_voice_dispatch", eventName(event.kind), eventNumbers(event),
-                      event.text.value_or(""), ctx) &&
+    if (voiceChannel_ && !voiceChannelWanted()) {
+      if (!musicDuringCallback) musicDuringCallback = services_.speaker->holdMusic();
+      voiceChannel_.reset();
+    }
+    const std::string& text = event.body ? *event.body : event.format;
+    if (!host.deliver(event.app, Module::kName, "_voice_dispatch", eventName(event.kind), eventNumbers(event), text,
+                      ctx) &&
         event.clip)
       clips_.release(event.app, event.clip);
   }
@@ -278,143 +278,49 @@ void VoiceScripting::tick(script::ScriptExtensionHost& host, const RenderCtx* ct
 }
 
 void VoiceScripting::update(int64_t now) {
-  if (pendingCapture_ && (services_.speaker->quiet() || now - pendingCapture_->since >= kQuietWaitMs)) {
-    const wake::EndpointSettings settings = pendingCapture_->settings;
-    pendingCapture_.reset();
-    startCapture(settings, {}, now);
-  }
-  capture_.tick(now);
-  if (const auto result = capture_.take()) {
-    if (result->outcome == VoiceCapture::Outcome::Failed)
-      logf("voice: recording failed: %s", result->error.c_str());
-    if (result->outcome == VoiceCapture::Outcome::Recorded &&
-        clips_.commit(recordClip_, result->bytes, result->ms, ClipKind::Wav))
-      deliverRecording(result->ms);
-    else
-      endRecording(result->outcome == VoiceCapture::Outcome::Silence ? kSilence : kBusy);
-  }
-  while (std::optional<VoiceTransfers::Done> done = transfers_.poll()) queue(eventOf(std::move(*done)));
-  if (playing_ && services_.speaker->finished()) endPlayback(services_.speaker->heard());
-}
-
-int VoiceScripting::record(const std::string& app, const wake::EndpointSettings& settings, bool fromTrigger) {
-  if (!services_.visible(app) || services_.assistantBusy() || !recordApp_.empty() || !clips_.ready()) return kBusy;
-  std::string error;
-  if (!capture_.prepare(error)) {
-    logf("voice: recording failed: %s", error.c_str());
-    return kBusy;
-  }
-  const ClipId clip = clips_.reserve(app, capture_.maxBytes(settings));
-  if (!clip || !claimVoiceChannel()) {
-    if (clip) clips_.release(app, clip);
-    capture_.cancel();
-    return clip ? kBusy : kFull;
-  }
-  const MicrophoneMark mark = takeMark(app);
-  recordApp_ = app;
-  recordClip_ = clip;
-  recordNumber_ = posix::nextInSequence(recordNumber_);
-  if (fromTrigger && services_.live(mark))
-    startCapture(settings, mark, services_.clock());
-  else
-    pendingCapture_ = PendingCapture{settings, services_.clock()};
-  return recordNumber_;
+  recorder_.update(now);
+  while (std::optional<VoiceEvent> done = transfers_.poll()) queue(std::move(*done));
 }
 
 MicrophoneMark VoiceScripting::takeMark(const std::string& app) {
   return trigger_ && trigger_->app == app ? std::exchange(trigger_->mark, {}) : MicrophoneMark{};
 }
 
-void VoiceScripting::startCapture(const wake::EndpointSettings& settings, MicrophoneMark from, int64_t now) {
-  if (!capture_.start(clips_.path(recordClip_), settings, from, now)) endRecording(kBusy);
-}
-
-void VoiceScripting::deliverRecording(uint32_t ms) {
-  queue(delivery(recordApp_, EventKind::Record, recordNumber_, recordClip_, ms, clipFormat(ClipKind::Wav).extension));
-  clearRecording();
-}
-
-void VoiceScripting::endRecording(int status) {
-  clips_.release(recordApp_, recordClip_);
-  queue(outcome(recordApp_, EventKind::Record, recordNumber_, status));
-  clearRecording();
-}
-
-void VoiceScripting::clearRecording() {
-  capture_.cancel();
-  recordApp_.clear();
-  recordClip_ = 0;
-  pendingCapture_.reset();
-}
-
-void VoiceScripting::stop(const std::string& app) {
-  if (recordApp_.empty() || recordApp_ != app) return;
-  if (pendingCapture_)
-    endRecording(kSilence);
-  else
-    capture_.stop();
-}
-
-void VoiceScripting::stopAudio(const std::string& app) {
-  if (!recordApp_.empty() && recordApp_ == app) endRecording(kCancelled);
-  if (playing_ && playApp_ == app) {
-    services_.speaker->stop();
-    endPlayback(false);
-  }
-}
-
 void VoiceScripting::cancel(const std::string& app) {
-  for (Event& event : events_)
+  for (VoiceEvent& event : events_)
     if (event.app == app) cancelEvent(event);
-  stopAudio(app);
-  for (VoiceTransfers::Done& done : transfers_.cancel(app)) queue(eventOf(std::move(done)));
+  recorder_.end(app);
+  for (VoiceEvent& done : transfers_.cancel(app)) queue(std::move(done));
 }
 
-int VoiceScripting::play(const std::string& app, ClipId id) {
-  const Clip* clip = clips_.find(app, id);
-  if (!clip || services_.assistantBusy() || !services_.speaker->available()) return 0;
-  if (playing_) {
-    services_.speaker->stop();
-    endPlayback(false);
-  }
-  if (!claimVoiceChannel()) return 0;
-  if (!services_.speaker->play(clip->path)) {
-    releaseVoiceChannel();
-    return 0;
-  }
-  playing_ = true;
-  playApp_ = app;
-  playNumber_ = posix::nextInSequence(playNumber_);
-  return playNumber_;
-}
-
-void VoiceScripting::endPlayback(bool heard) {
-  queue(outcome(playApp_, EventKind::Play, playNumber_, heard ? 1 : 0));
-  playing_ = false;
-  playApp_.clear();
+int VoiceScripting::play(const std::string& app, ClipId clip) {
+  const int number = recorder_.play(app, clip);
+  if (!number) releaseVoiceChannel();
+  return number;
 }
 
 int VoiceScripting::send(const std::string& app, VoiceTransfers::SendData data,
-                         const VoiceTransfers::SendOptions& options) {
+                         const VoiceTransfers::Options& options) {
   const int number = transfers_.send(app, std::move(data), options);
   updateMusic();
   return number;
 }
 
-int VoiceScripting::fetch(const std::string& app, const std::string& url, const std::string& method,
-                          std::string body, const std::string& headers, uint32_t timeoutSec) {
-  const int number = transfers_.fetch(app, url, method, std::move(body), headers, timeoutSec);
+int VoiceScripting::fetch(const std::string& app, std::string body, const VoiceTransfers::Options& options) {
+  const int number = transfers_.fetch(app, std::move(body), options);
   updateMusic();
   return number;
 }
 
 bool VoiceScripting::voiceChannelWanted() const {
-  return !recordApp_.empty() || playing_ ||
-         std::any_of(events_.begin(), events_.end(), [](const Event& e) { return !transferEvent(e); });
+  return recorder_.active() ||
+         std::any_of(events_.begin(), events_.end(), [](const VoiceEvent& e) { return !e.transfer(); });
 }
 
 bool VoiceScripting::musicWanted() const {
-  return !transfers_.empty() || std::any_of(events_.begin(), events_.end(), transferEvent);
+  return transfers_.holdsAny(services_.visible) ||
+         std::any_of(events_.begin(), events_.end(),
+                     [this](const VoiceEvent& e) { return e.transfer() && services_.visible(e.app); });
 }
 
 bool VoiceScripting::claimVoiceChannel() {
@@ -436,20 +342,9 @@ void VoiceScripting::settleSpeaker() {
   releaseVoiceChannel();
 }
 
-const char* VoiceScripting::state(const std::string& app) const {
-  if (!recordApp_.empty() && recordApp_ == app) return "recording";
-  if (playing_ && playApp_ == app) return "playing";
-  return "idle";
-}
-
-uint8_t VoiceScripting::level(const std::string& app) const {
-  return !recordApp_.empty() && recordApp_ == app ? capture_.level() : 0;
-}
-
 bool VoiceScripting::holds(const std::string& app) const {
-  return (!recordApp_.empty() && recordApp_ == app) || (playing_ && playApp_ == app) ||
-         transfers_.holds(app) ||
-         std::any_of(events_.begin(), events_.end(), [&](const Event& event) { return event.app == app; });
+  return recorder_.holds(app) || transfers_.holds(app) ||
+         std::any_of(events_.begin(), events_.end(), [&](const VoiceEvent& event) { return event.app == app; });
 }
 
 void VoiceScripting::trigger(const std::string& app, const std::string& name, MicrophoneMark mark) {
@@ -470,11 +365,11 @@ void VoiceScripting::deliverTrigger(script::ScriptExtensionHost& host, const Ren
   if (!triggered() || !trigger_->drawn) return;
   trigger_->delivered = true;
   const std::string app = trigger_->app, name = trigger_->name;
-  host.deliver(app, "on_voice", name, ctx);
+  host.deliver(app, kHook, name, ctx);
 }
 
 void VoiceScripting::hidden(script::ScriptExtensionHost&, const std::string& app) {
-  stopAudio(app);
+  recorder_.end(app);
   clips_.releaseReady(app);
   dropTriggerOf(app);
 }
@@ -483,8 +378,9 @@ void VoiceScripting::forget(script::ScriptExtensionHost& host, const std::string
   cancel(app);
   clips_.forget(app);
   dropTriggerOf(app);
-  events_.erase(std::remove_if(events_.begin(), events_.end(), [&](const Event& event) { return event.app == app; }),
-                events_.end());
+  events_.erase(
+      std::remove_if(events_.begin(), events_.end(), [&](const VoiceEvent& event) { return event.app == app; }),
+      events_.end());
   host.call("_voice_drop", app, "");
   settleSpeaker();
 }
@@ -498,7 +394,9 @@ int VoiceScripting::nRecord(bvm* vm) {
                                   max = rangeOption(vm, 3, kMaxMs, defaults.maxMs);
     const std::optional<bool> fromTrigger = triggerOption(vm, 4);
     if (silence && wait && max && fromTrigger)
-      status = self(vm).record(caller(), {*silence, *wait, *max}, *fromTrigger);
+      status = withRoomOfDroppedClips(vm, [&] {
+        return self(vm).record(caller(), {*silence, *wait, *max}, *fromTrigger);
+      });
   }
   be_pushint(vm, status);
   be_return(vm);
@@ -542,7 +440,7 @@ int VoiceScripting::nSend(bvm* vm) {
       be_isint(vm, 9) && be_isint(vm, 10)) {
     const std::optional<uint32_t> timeout = rangeOption(vm, 11, kTimeoutSec, kSendTimeoutSec);
     if (timeout) {
-      VoiceTransfers::SendOptions options;
+      VoiceTransfers::Options options;
       options.url = be_tostring(vm, 2);
       options.method = be_tostring(vm, 3);
       options.headers = be_tostring(vm, 4);
@@ -553,7 +451,7 @@ int VoiceScripting::nSend(bvm* vm) {
       options.keep = static_cast<int>(be_toint(vm, 9));
       options.cap = static_cast<int>(be_toint(vm, 10));
       options.timeoutSec = *timeout;
-      result = self(vm).send(caller(), sendData(vm, 1), options);
+      result = withRoomOfDroppedClips(vm, [&] { return self(vm).send(caller(), sendData(vm, 1), options); });
     }
   }
   be_pushint(vm, result);
@@ -564,9 +462,14 @@ int VoiceScripting::nFetch(bvm* vm) {
   int result = kBad;
   if (be_top(vm) >= 5 && be_isstring(vm, 1) && be_isstring(vm, 2) && be_isstring(vm, 3) && be_isstring(vm, 4)) {
     const std::optional<uint32_t> timeout = rangeOption(vm, 5, kTimeoutSec, kFetchTimeoutSec);
-    if (timeout)
-      result = self(vm).fetch(caller(), be_tostring(vm, 1), be_tostring(vm, 2), bytes(vm, 3), be_tostring(vm, 4),
-                              *timeout);
+    if (timeout) {
+      VoiceTransfers::Options options;
+      options.url = be_tostring(vm, 1);
+      options.method = be_tostring(vm, 2);
+      options.headers = be_tostring(vm, 4);
+      options.timeoutSec = *timeout;
+      result = withRoomOfDroppedClips(vm, [&] { return self(vm).fetch(caller(), bytes(vm, 3), options); });
+    }
   }
   be_pushint(vm, result);
   be_return(vm);

@@ -409,10 +409,10 @@ details.appgrp:not([open]){gap:0}
 .appcfg .ctl :is(input[type=text],select,.days,.inheritcolor){width:100%}
 .appcfg .days{justify-content:flex-start}
 .appcfg .cfgsection{border-bottom:1px solid var(--brd2)}
-.appcfg .cfgsection>summary{display:flex;align-items:center;gap:10px;min-height:48px;padding:10px 0;cursor:pointer;list-style:none}
-.appcfg .cfgsection>summary::-webkit-details-marker{display:none}
-.appcfg .cfgsection>summary .ic{width:16px;height:16px;color:var(--dim);transform:rotate(-90deg);transition:transform .14s}
-.appcfg .cfgsection[open]>summary .ic{transform:rotate(0deg)}
+.cfgsection>summary{display:flex;align-items:center;gap:10px;min-height:48px;padding:10px 0;cursor:pointer;list-style:none}
+.cfgsection>summary::-webkit-details-marker{display:none}
+.cfgsection>summary .ic{width:16px;height:16px;color:var(--dim);transform:rotate(-90deg);transition:transform .14s}
+.cfgsection[open]>summary .ic{transform:rotate(0deg)}
 .appcfg .cfggrp{font-size:13px;font-weight:600;margin:0}
 .appcfg .cfgrows{padding-left:26px}
 .inheritcolor{display:grid;grid-template-columns:minmax(0,1fr) 86px;align-items:center;gap:10px}

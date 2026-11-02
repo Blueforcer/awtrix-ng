@@ -33,6 +33,7 @@ void DeviceConfig::load() {
   if (!host::readFile(host::hostPath("/device.json"), blob) || blob.empty()) return;
   if (!api::isWellFormed(blob)) return;
   applyRead(api::JsonReader(blob));
+  refreshTzRule();
 }
 
 bool DeviceConfig::save() const {

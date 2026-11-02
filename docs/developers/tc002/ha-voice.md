@@ -19,14 +19,20 @@ Assistant ([Voice module](voice-module.md)).
 
 The web UI shows **System → Voice assistant** only where `/api/v1/capabilities` reports
 `"voice": true`, that is on a supervised TC002 with a speaker. Its first row, **Assistant**, picks
-Home Assistant or one of the apps in `assistantApps` and saves at once. The Wake word switch shows
-for both. The other rows show only for Home Assistant: the connection state, the Voice switch, the
-Home Assistant address (for example `http://homeassistant.local:8123`), a long-lived access token,
-the Assist pipeline, which must have both STT (speech-to-text) and TTS (text-to-speech), and the
-room device. An empty pipeline follows Home Assistant's preferred pipeline. **Save and connect**
-saves and switches Voice on. The Voice switch saves at once; off closes the Home Assistant
-connection, and neither the knob's long press nor the wake word then starts a request. The Wake
-word switch saves at once as well. HTTPS verifies the certificate chain and host name against the
+Off, Home Assistant or one of the apps in `assistantApps` and saves at once. Off closes the Home
+Assistant connection and keeps its data, and no trigger then starts anything. Below it, for any choice
+but Off, **Status** shows `error`, or `state` with `lastError` as a note. **Wake word** and
+**Sensitivity** save at once and show once the assistant is set up; a note replaces the help while
+`wakeWord` is on, no request runs and `wakeListening` is false. An app also gets a link to the Apps tab.
+
+**Home Assistant settings** shows only for Home Assistant, open while the address or token is missing
+or the connection fails and closed once it is connected, unless the user opened it. Address (for
+example `http://homeassistant.local:8123`) and long-lived access token go together with **Connect**,
+which stores both and reconnects; the page reduces the address to its origin first. Once a connection
+listed them, **HA assistant** picks an Assist pipeline with both STT (speech-to-text) and TTS
+(text-to-speech), and **Room device** takes the device. Both save at once. An empty pipeline follows
+Home Assistant's preferred pipeline. No field changes the target, and neither does **Remove** next to
+the token. Voice connects while the target is `ha` and both an address and a token are set. HTTPS verifies the certificate chain and host name against the
 runtime's CA store; there is no insecure TLS option. After a failure the runtime reconnects at most
 every 10 s.
 
@@ -53,7 +59,7 @@ MQTT and the API open the app instead ([A trigger](voice-module.md#a-trigger)).
 - Turning the knob during an interaction changes neither brightness nor volume. Turning a pressed
   knob before activation cancels the pending hold.
 - A long press is consumed: its release never becomes a click. Another request needs a fresh press.
-- With Voice off, the microphone is never captured for Voice. The local audio visualisation is a
+- With another target than `ha`, the microphone is never captured for Voice. The local audio visualisation is a
   separate feature and cannot switch Voice on.
 
 The answer is an alert and plays at the alert volume, as MP3 (MPEG-1, 2 or 2.5 Layer III, 8 to
@@ -87,7 +93,10 @@ wake word's stream instead of waiting for a new one.
 
 **Runtime.** `KnobGesture` arbitrates the knob before the settings panel or Voice sees it.
 `AssistSession` is a state machine on the render thread with injected transport, capture and
-playback ports. `WebSocket` (`WebSocket.cpp`) is a WebSocket client on plain sockets and OpenSSL,
+playback ports. Its capture goes through `MicrophoneClient`
+([microphone hub](microphone.md#microphone-hub)): it only asks whether the stream exists while it
+connects, starts without another probe at `stt-start`, and fails its pipeline on a gap or an end
+nobody asked for. `WebSocket` (`WebSocket.cpp`) is a WebSocket client on plain sockets and OpenSSL,
 with DNS, TCP, TLS and socket I/O on its own worker thread; TLS peers are checked against the
 runtime's CA store (`--ca-file`, `tls/TlsTrust`), the store every HTTPS client uses.
 `net::FileDownload` (`platform/linux/net`) fetches the answer on another worker, at most 2 MiB
@@ -104,7 +113,7 @@ and run a partial command. A clean microphone end is required before EOF is sent
 | Limit | Value |
 |---|---|
 | capture length | 60 s |
-| consumer keepalive / consumer lease | 150 ms / 500 ms |
+| consumer keepalive / consumer lease | 150 ms / 2 s |
 | stop deadline | 1.5 s |
 | Home Assistant processing | 30 s |
 | TTS answer | 2 MiB, same-origin `/api/tts_proxy/` URLs only, no redirects |
@@ -122,23 +131,35 @@ reset erases the private configuration. TTS temporary files live in a private di
 Voice never writes microphone audio to a file. The recordings of the
 [voice module](voice-module.md) are clips in RAM.
 
-`GET /api/v1/voice` returns the redacted configuration (`config`), the session `state`, an `error`
-code, `wakeWordAvailable` (the runtime loaded a wake word; the web UI shows the Wake word switch
-only then), `assistantApps` and the bounded list of Home Assistant `pipelines`. `assistantApps`
-names the installed scripts whose `@needs` names `voice` and that are neither modules nor headless,
-switched on or off; the web UI offers them under **Assistant**. The error codes are `connectionLost`,
-`tokenRejected`, `haError`, `pipelineIncomplete`, `nothingUnderstood`, `audioTooSlow`, `timeout`,
-`microphoneFailed`, `playbackFailed`, `microphoneUpdate` (the MCU does not offer the stream yet) and
-`configUnavailable`; the web UI shows each as a few words. `POST /api/v1/voice` saves the supplied
-fields (`assistant`, `url`, `token`, `pipeline`, `device`, `enabled`, `wakeWord`) and reconnects,
-unless only `wakeWord` changed: that leaves the connection and a running request alone.
+`GET /api/v1/voice` returns the redacted configuration (`config`), `state`, the codes `error` and
+`lastError`, `wakeWordAvailable` (the runtime loaded a wake word; the web UI shows the Wake word rows
+only then), `wakeListening` (`AssistantRouter::listening`, the condition that subscribes the listener),
+`assistantApps` and the bounded list of Home Assistant `pipelines`. `assistantApps`
+names the installed scripts whose `@needs` names `voice`, whose source holds `on_assistant` and that
+are neither modules nor headless, switched on or off; the web UI offers them under **Assistant**. With
+an app as the target, `state` is
+`ready` or `error`, and `error` comes from `AssistantRouter::appProblem`: `appMissing`, `appOff` or
+`appBroken`. Otherwise `state` is the session's. `AssistSession` keeps two reasons apart, by whether
+the session was busy when it failed. `error` is what blocks the assistant: `connectionLost` (also no
+answer while connecting), `tokenRejected`, `haError`, `pipelineIncomplete`, `microphoneUpdate` (the MCU
+does not offer the stream yet) or `configUnavailable`. It survives `connecting`, so a retry does not
+hide it, and goes with `Ready`. `lastError` is why the last request failed, one of the session's codes
+including `nothingUnderstood`, `audioTooSlow`, `timeout`, `microphoneFailed` and `playbackFailed`. The
+reconnect after a failed request keeps it. It goes with the next `begin`, after
+`AssistSession::kLastErrorMs` (five minutes) or with `cancel`. The web UI has a label and a fix for
+every code. `POST /api/v1/voice` saves the supplied
+fields (`assistant`, `url`, `token`, `pipeline`, `device`, `enabled`, `wakeWord`, `wakeSensitivity`)
+and reconnects, unless only `wakeWord` or `wakeSensitivity` changed: that leaves the connection and a
+running request alone.
 
-`assistant` names who answers the knob, the wake word, MQTT and the API: `ha` (the default, also for
-a file without the field) or `app:<name>`. The name must be a valid app name: 1 to 32 of `A-Z`,
+`assistant` names who answers the knob, the wake word, MQTT and the API: `off` (the default), `ha` or
+`app:<name>`. It is the only stored state. `enabled` is not written to the file. Reading, it is true for
+`ha`. Writing `false` sets `off` and `true` sets `ha`, whatever the target was; `assistant` wins when a
+request has both. `ConfigStore::load` reads files of older versions: `enabled: false` with `ha` or
+without `assistant` is `off`, `enabled: true` without `assistant` is `ha`, and an app target stays. The name must be a valid app name: 1 to 32 of `A-Z`,
 `a-z`, `0-9`, `_` and `-`, and not `active`, `next`, `previous` or `order`. Anything else answers
-`422` with the field `assistant`. With an app, Voice keeps no connection to Home Assistant whatever
-`enabled` says, and every trigger opens the app. `enabled: true` still needs an address and a token.
-A change of `assistant` drops a running connection like any other change.
+`422` with the field `assistant`. With an app, Voice keeps no connection to Home Assistant, and every
+trigger opens the app. A change of `assistant` drops a running connection like any other change.
 
 A non-empty `device` is sent as `device_id` with every `assist_pipeline/run`; Home Assistant takes
 the area of that device as the room for area-aware sentences and ignores an unknown ID. An omitted
@@ -152,8 +173,8 @@ accepted the token; the next GET reports that. The user reference is
 ### Start from the API
 
 `POST /api/v1/voice/start` is the API trigger: it starts the assistant the settings name, as the
-knob's hold does, and an app gets `on_voice('api')`. It takes no body and follows the header rule
-of `POST /api/v1/voice`: `X-Awtrix-Voice: 1` and a matching `Origin`/`Host` pair. It answers with
+knob's hold does, and an app gets `on_assistant('api')`. It takes no body and follows the header
+rule of `POST /api/v1/voice`: `X-Awtrix-Voice: 1` and a matching `Origin`/`Host` pair. It answers with
 `Cache-Control: no-store`:
 
 | Status | Answer |
@@ -161,7 +182,7 @@ of `POST /api/v1/voice`: `X-Awtrix-Voice: 1` and a matching `Origin`/`Host` pair
 | 200 | `{"ok":true}`: Voice started a request, or the app opened |
 | 403 | `forbiddenOrigin`: the header or the origin does not match |
 | 405 | `methodNotAllowed`, `allowed: POST`: another method |
-| 409 | `voiceUnavailable`, `assistant not ready`: nothing started. Voice is off, not connected or busy, a script records or plays, the app cannot start ([A trigger](voice-module.md#a-trigger), step 1), or the boot intro, an update or setup mode runs |
+| 409 | `voiceUnavailable`, `assistant not ready`: nothing started. The assistant is off, Voice is not connected or busy, a script records or plays, the app cannot start ([A trigger](voice-module.md#a-trigger), step 1), or the boot intro, an update or setup mode runs |
 
 The user reference is
 [`POST /api/v1/voice/start`](../../reference/http.md#post-apiv1voicestart).
@@ -178,8 +199,8 @@ eight-block queue with its reserved terminal slot, and callbacks from an exited 
 is reused by its replacement. `test_voice_on_hub.cpp` runs a session on the microphone hub against a
 fake daemon: joining a stream that a second consumer keeps, the end of a capture, cancelling,
 starting while the hub stops its stream, and an upstream failure that ends both consumers.
-`test_assist_session.cpp` also covers the `assistant` setting. `webui/test/voice-card.test.js`
-checks the assistant choice and that every error code the firmware reports has a translation in the
+`test_assist_session.cpp` also covers the `assistant` setting, `enabled` in both directions, every
+older file shape and which reason a failure leaves, for how long. `webui/test/voice-card.test.js` checks the setup from scratch, every state, the assistant choice and that every error code the firmware reports has a label and a fix in the
 web UI.
 
 Changes to the stream require [hardware qualification](audio-gate.md#qualification-before-changing-the-stream-path). An end-to-end check

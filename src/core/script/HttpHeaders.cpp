@@ -47,8 +47,7 @@ bool nameIsToken(const std::string& n) {
 
 bool valueIsClean(const std::string& v) {
   for (const char c : v) {
-    const unsigned char u = static_cast<unsigned char>(c);
-    if (u < 0x20 || u == 0x7f) return false;
+    if (!headerValueChar(c)) return false;
   }
   return true;
 }

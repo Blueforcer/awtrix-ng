@@ -523,5 +523,5 @@ you do not have to type them again when you switch MQTT back on.
   broker and discovery field.
 - [Device state](../reference/device.md): what `<P>/state/device` contains.
 <!-- only tc002 -->
-- [Home Assistant Voice](voice.md): talk to Assist through your clock.
+- [Voice assistant](voice.md): talk to Assist through your clock.
 <!-- /only -->

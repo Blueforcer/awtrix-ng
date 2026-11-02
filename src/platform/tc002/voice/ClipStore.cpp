@@ -9,6 +9,10 @@ namespace awtrix::tc002::voice {
 
 constexpr char kFolderPrefix[] = "awtrix-clips";
 
+void ClipStore::removeLeftovers(const std::string& directory) {
+  posix::removeStaleTemporaryDirectories(directory, kFolderPrefix);
+}
+
 ClipStore::ClipStore(const std::string& directory, MemoryRoom memory)
     : folder_(directory, kFolderPrefix), memory_(std::move(memory)) {}
 
@@ -20,13 +24,27 @@ ClipId ClipStore::reserve(const std::string& app, std::size_t bytes) {
     ++count;
     used += entry.second.bytes;
   }
-  if (count >= kClipsPerApp || bytes > kBytesPerApp - used || !memory_.fits(bytes)) return 0;
+  if (count >= kClipsPerApp || bytes > kBytesPerApp - used || !fits(bytes)) return 0;
   const ClipId id = unusedId();
   Clip& clip = clips_[id];
   clip.app = app;
   clip.path = folder_.path() + "/" + std::to_string(id);
   clip.bytes = bytes;
   return id;
+}
+
+ClipId ClipStore::promise(const std::string& app, std::size_t bytes) {
+  const ClipId id = reserve(app, bytes);
+  if (id) {
+    clips_[id].promised = bytes;
+    promised_ += bytes;
+  }
+  return id;
+}
+
+void ClipStore::keepPromise(Clip& clip) {
+  promised_ -= clip.promised;
+  clip.promised = 0;
 }
 
 ClipId ClipStore::unusedId() {
@@ -41,15 +59,15 @@ std::string ClipStore::path(ClipId id) const {
   return it == clips_.end() ? std::string() : it->second.path;
 }
 
-bool ClipStore::commit(ClipId id, std::size_t bytes, uint32_t ms, ClipKind kind) {
+bool ClipStore::commit(ClipId id, std::size_t bytes, ClipKind kind) {
   const auto it = clips_.find(id);
   if (it == clips_.end() || it->second.ready) return false;
   if (bytes > it->second.bytes) {
     erase(it);
     return false;
   }
+  keepPromise(it->second);
   it->second.bytes = bytes;
-  it->second.ms = ms;
   it->second.kind = kind;
   it->second.ready = true;
   return true;
@@ -69,23 +87,25 @@ void ClipStore::releaseReady(const std::string& app, ClipId id) {
   if (find(app, id)) erase(clips_.find(id));
 }
 
-void ClipStore::releaseReady(const std::string& app) {
+template <class Gone>
+void ClipStore::eraseIf(Gone gone) {
   for (auto it = clips_.begin(); it != clips_.end();) {
     const auto next = std::next(it);
-    if (it->second.app == app && it->second.ready) erase(it);
+    if (gone(it->second)) erase(it);
     it = next;
   }
+}
+
+void ClipStore::releaseReady(const std::string& app) {
+  eraseIf([&app](const Clip& clip) { return clip.app == app && clip.ready; });
 }
 
 void ClipStore::forget(const std::string& app) {
-  for (auto it = clips_.begin(); it != clips_.end();) {
-    const auto next = std::next(it);
-    if (it->second.app == app) erase(it);
-    it = next;
-  }
+  eraseIf([&app](const Clip& clip) { return clip.app == app; });
 }
 
 void ClipStore::erase(std::map<ClipId, Clip>::iterator it) {
+  keepPromise(it->second);
   ::unlink(it->second.path.c_str());
   clips_.erase(it);
 }

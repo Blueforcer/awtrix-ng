@@ -40,6 +40,7 @@ using awtrix::test::require;
 using tc002::StreamControl;
 using tc002::StreamEvent;
 using tc002::voice::VoiceScripting;
+using tc002::voice::VoiceTransfers;
 
 namespace {
 
@@ -78,6 +79,14 @@ struct Speaker final : tc002::voice::VoiceSpeaker {
   bool finished() const override { return done; }
   bool heard() const override { return true; }
 };
+
+VoiceTransfers::Options getting(const std::string& url) {
+  VoiceTransfers::Options options;
+  options.url = url;
+  options.method = "GET";
+  options.timeoutSec = 15;
+  return options;
+}
 
 std::string recorder(const std::string& opts) {
   return "import voice\n"
@@ -142,13 +151,14 @@ std::string assistant(const std::string& origin) {
 }
 
 const char* const kListener =
-    "import voice\nclass App\nvar log\ndef init() self.log = '' end\n"
-    "def on_voice(trigger) self.log += trigger + ';' voice.record({}, def (c, s) self.log += 'rec ' + str(s) + ';' end) end\n"
-    "def draw() pixel(0, 0, 0xFFFFFF) end\ndef check() return self.log + voice.state() end\nend\nreturn App()";
+    "import voice\nclass App\nvar log, drawn\ndef init() self.log = '' self.drawn = '' end\n"
+    "def on_assistant(trigger) self.log += trigger + ';' voice.record({}, def (c, s) self.log += 'rec ' + str(s) + ';' end) end\n"
+    "def draw() self.drawn = 'drawn ' end\n"
+    "def check() return self.drawn + self.log + voice.state() end\nend\nreturn App()";
 
 const char* const kBystander =
     "import voice\nclass App\nvar log\ndef init() self.log = '' end\n"
-    "def on_voice(trigger) self.log += trigger + ';' end\n"
+    "def on_assistant(trigger) self.log += trigger + ';' end\n"
     "def draw() end\ndef check() return self.log + voice.state() end\nend\nreturn App()";
 
 const std::string kAnswer = tc002::voice::wavHeader(160, 16000) + std::string(320, '\0');
@@ -280,8 +290,8 @@ struct Rig {
         return true;
       },
       model,
-      [this](const std::string& owner, std::string& url, net::RequestHeaders& headers) {
-        return fill ? fill(owner, url, headers) : net::RequestFill::Unchanged;
+      [this](const std::string& owner, std::string& url, net::RequestHeaders& headers, net::RequestBody& body) {
+        return fill ? fill(owner, url, headers, body) : net::RequestFill::Unchanged;
       }});
   AppRegistry registry;
   script::ScriptServices services;
@@ -363,6 +373,30 @@ void recordsAndPlays() {
   check(!rig.speaker.owned && !rig.module->holds("S") && !rig.module->busy(), "then everything is free again");
   rig.module->hidden(*rig.extensions, "S");
   check(files(rig.folder.path) == 0, "a hidden app loses its clips");
+}
+
+void callbacksFindTheVoiceChannelFree() {
+  {
+    Rig rig;
+    require(rig.install("S", app("voice.record({'from': 'now'}, self.note('rec'))")), "the script loads");
+    rig.stream();
+    rig.sentence();
+    check(rig.log() == "rec 200 wav;idle" && rig.speaker.holds == "own music -own -music ",
+          "the callback runs with the voice channel free, and the music waits until it returned: " + rig.speaker.holds);
+  }
+  {
+    Rig rig;
+    require(rig.install("S", recorder("{'from': 'now'}")), "the script loads");
+    rig.stream();
+    rig.sentence();
+    check(rig.speaker.owned && rig.speaker.holds == "own music -own own -music ",
+          "a play in the callback claims the channel again: " + rig.speaker.holds);
+    rig.speaker.holds.clear();
+    rig.speaker.done = true;
+    rig.frame();
+    check(!rig.speaker.owned && rig.speaker.holds == "music -own -music ",
+          "and the done callback finds it free too: " + rig.speaker.holds);
+  }
 }
 
 void refusals() {
@@ -539,7 +573,7 @@ void markEndsWithTheInteraction() {
   other.port()({1, StreamControl::Start});
   rig.stream();
   rig.play(noise(300, -60, 4));
-  require(rig.install("S", kBystander), "an app whose on_voice does not record");
+  require(rig.install("S", kBystander), "an app whose on_assistant does not record");
   rig.frame();
   rig.module->trigger("S", "wake", rig.hub.mark());
   rig.draw();
@@ -653,6 +687,39 @@ void garbageCollection() {
   check(files(rig.folder.path) == 0, "the collector releases the dropped clip through its deinit");
 }
 
+void noScriptReleasesAClip() {
+  Rig rig;
+  require(rig.install("S", "import voice\nimport global\nclass App\nvar log\n"
+                           "def init() self.log = str(global.contains('_voice_release')) end\n"
+                           "def draw() end\ndef check() return self.log end\nend\nreturn App()"),
+          "the script loads");
+  check(rig.log() == "false", "the release of a clip is out of a script's reach: " + rig.log());
+}
+
+void droppedClipsMakeRoom() {
+  const std::string dropper =
+      "import voice\nclass App\nvar log, ballast\ndef init() self.log = '' self.ballast = bytes(2000000) end\n"
+      "def go() voice.record({'from': 'now'}, def (c, s)\n"
+      "  self.log += str(s) + ';'\n"
+      "  if c != nil self.go() end\n"
+      "end) end\n"
+      "def setup() self.go() end\n"
+      "def draw() if voice.level() > 0 voice.stop() end end\n"
+      "def check() return self.log end\nend\nreturn App()";
+  Rig rig;
+  require(rig.install("S", dropper), "the script loads");
+  rig.stream();
+  const std::size_t rounds = 3 * tc002::voice::ClipStore::kClipsPerApp;
+  std::string expected;
+  for (std::size_t round = 0; round < rounds; ++round) expected += "200;";
+  for (uint32_t block = 0; block < 100 && rig.log().size() < expected.size(); ++block) {
+    rig.play(noise(30, -20, 10 + block));
+    rig.draw();
+  }
+  check(rig.log().rfind(expected, 0) == 0,
+        "a clip nobody holds any more does not count against the next one: " + rig.log());
+}
+
 void deliveryFails() {
   Rig rig;
   require(rig.install("S", app("voice.record({'from': 'now'}, self.note('rec'))")), "the script loads");
@@ -661,6 +728,31 @@ void deliveryFails() {
   rig.sentence();
   check(rig.log() == "idle" && files(rig.folder.path) == 0 && !rig.module->busy(),
         "a clip whose app no longer runs when it arrives is released: " + rig.log());
+}
+
+void aBrokenAppKeepsNoClip() {
+  {
+    Rig rig;
+    require(rig.install("S", "import voice\nclass App\ndef setup() voice.record({'from': 'now'}, def (c, s)\n"
+                             "  raise 'value_error', 'boom'\nend) end\ndef draw() end\nend\nreturn App()"),
+            "the script loads");
+    rig.stream();
+    rig.sentence();
+    check(!rig.host.errorOf("S").empty() && files(rig.folder.path) == 0,
+          "a callback that fails breaks its app and its clip goes: " + std::to_string(files(rig.folder.path)));
+  }
+  {
+    Rig rig;
+    require(rig.install("S", "import voice\nclass App\ndef setup() voice.record({'from': 'now'}, def (c, s) end) end\n"
+                             "def draw() raise 'value_error', 'boom' end\nend\nreturn App()"),
+            "the script loads");
+    rig.stream();
+    rig.draw();
+    require(!rig.host.errorOf("S").empty(), "drawing broke the app");
+    rig.sentence();
+    check(files(rig.folder.path) == 0,
+          "an app that breaks while it records loses the recording: " + std::to_string(files(rig.folder.path)));
+  }
 }
 
 void fullAndLevel() {
@@ -702,7 +794,7 @@ void assistantRoundTrip() {
   check(rig.module->holds("S") && rig.speaker.played.size() == 1, "the answer plays and holds the app");
   rig.speaker.done = true;
   check(rig.until("done;idle"), "it ends: " + rig.log());
-  check(rig.speaker.holds == "own music -own own -music -own " && !rig.module->busy(),
+  check(rig.speaker.holds == "own music -own music -music own -music music -own -music " && !rig.module->busy(),
         "the module owns the voice channel while it records and plays and holds the music in between: " +
             rig.speaker.holds);
 }
@@ -764,13 +856,16 @@ void aStringIsTheBody() {
   loopback.server.Put("/echo", echo);
   loopback.listen();
   Rig rig;
-  rig.fill = [](const std::string&, std::string&, net::RequestHeaders& headers) {
+  rig.fill = [](const std::string&, std::string&, net::RequestHeaders& headers, net::RequestBody& body) {
     for (auto& header : headers) {
       if (header.second != "{secret:k}") continue;
       header.second = "s3cret";
       return net::RequestFill::Filled;
     }
-    return net::RequestFill::Unchanged;
+    const std::size_t at = body.head.find("{secret:k}");
+    if (at == std::string::npos) return net::RequestFill::Unchanged;
+    body.head.replace(at, 10, "s3cret");
+    return net::RequestFill::Filled;
   };
   const std::string url = "'" + loopback.origin + "/echo'";
   const struct {
@@ -783,6 +878,7 @@ void aStringIsTheBody() {
       {"'x'", "{'as': 'raw', 'fields': {'a': 'b'}}", "POST application/json  [x]"},
       {"'x'", "{'method': 'PUT'}", "PUT application/json  [x]"},
       {"'x'", "{'headers': {'X-Key': '{secret:k}'}}", "POST application/json s3cret [x]"},
+      {"'{\"k\":\"{secret:k}\"}'", "nil", "POST application/json  [{\"k\":\"s3cret\"}]"},
       {"'{\"text\":\"hello\"}'", "{'find': '\"text\":', 'keep': 14}", "\"text\":\"hello\""},
   };
   for (const auto& one : sent) {
@@ -944,6 +1040,34 @@ void fetchStatuses() {
             rig.log());
 }
 
+void everyAudioTypeDownloads() {
+  const std::string mp3(reinterpret_cast<const char*>(mp3vectors::ksine_mono_64k_mp3),
+                        sizeof mp3vectors::ksine_mono_64k_mp3);
+  Loopback loopback;
+  loopback.server.Get("/mp3", [&mp3](const httplib::Request& request, httplib::Response& response) {
+    response.set_content(mp3, request.get_param_value("type"));
+  });
+  loopback.server.Get("/wav", [](const httplib::Request& request, httplib::Response& response) {
+    response.set_content(kAnswer, request.get_param_value("type"));
+  });
+  loopback.server.Get("/other", [](const httplib::Request&, httplib::Response& response) {
+    response.set_content(kAnswer, "text/plain");
+  });
+  loopback.listen();
+  const auto fetch = [&](const std::string& path) {
+    Rig rig;
+    require(rig.install("S", app("voice.fetch('" + loopback.origin + path + "', nil, self.note('got'))")),
+            "the script loads");
+    check(rig.until("got "), "the download ends: " + rig.log());
+    return rig.log();
+  };
+  for (const char* type : {"audio/mpeg", "audio/mp3", "application/octet-stream"})
+    check(fetch(std::string("/mp3?type=") + type) == "got 200 mp3;idle", std::string("an MP3 may come as ") + type);
+  for (const char* type : {"audio/wav", "audio/wave", "audio/x-wav", "application/octet-stream"})
+    check(fetch(std::string("/wav?type=") + type) == "got 200 wav;idle", std::string("a WAV may come as ") + type);
+  check(fetch("/other") == "got -6;idle", "anything else is refused");
+}
+
 void transfersFillTheirHeaders() {
   Loopback loopback;
   std::mutex mutex;
@@ -958,7 +1082,7 @@ void transfersFillTheirHeaders() {
   loopback.listen();
   Rig rig;
   std::string asked;
-  rig.fill = [&asked](const std::string& owner, std::string& url, net::RequestHeaders& headers) {
+  rig.fill = [&asked](const std::string& owner, std::string& url, net::RequestHeaders& headers, net::RequestBody&) {
     for (auto& header : headers) {
       if (header.second != "{secret:k}") continue;
       asked = owner + " " + url;
@@ -981,6 +1105,34 @@ void transfersFillTheirHeaders() {
         "the module's transfers fill URL and headers for the app that asked, and only the filled one is sent");
 }
 
+void aFetchFillsItsBody() {
+  Loopback loopback;
+  std::mutex mutex;
+  std::vector<std::string> bodies;
+  loopback.server.Post("/wav", [&](const httplib::Request& request, httplib::Response& response) {
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      bodies.push_back(request.body);
+    }
+    response.set_content(kAnswer, "audio/wav");
+  });
+  loopback.listen();
+  Rig rig;
+  rig.fill = [](const std::string&, std::string&, net::RequestHeaders&, net::RequestBody& body) {
+    const std::size_t at = body.head.find("{secret:k}");
+    if (at == std::string::npos) return net::RequestFill::Refused;
+    body.head.replace(at, 10, "s3cret");
+    return net::RequestFill::Filled;
+  };
+  require(rig.install("S", app("voice.fetch('" + loopback.origin + "/wav', {'body': '{\"k\":\"{secret:k}\"}'}, "
+                               "self.note('got'))")),
+          "the script loads");
+  check(rig.until("got "), "the download ends: " + rig.log());
+  check(rig.log() == "got 200 wav;idle", "the download arrives: " + rig.log());
+  std::lock_guard<std::mutex> lock(mutex);
+  check(bodies == std::vector<std::string>{"{\"k\":\"s3cret\"}"}, "the server sees the filled body");
+}
+
 void forgetDuringTransfer() {
   Gate gate;
   Loopback loopback;
@@ -993,7 +1145,7 @@ void forgetDuringTransfer() {
     check(rig.speaker.music && rig.module->holds("S"), "a running download holds the music and the app");
     rig.host.remove("S");
     check(!rig.speaker.music && !rig.module->holds("S"), "removing the app lets the music go");
-    check(rig.module->fetch("S", slow, "GET", "", "", 15) > 0 && rig.module->fetch("S", slow, "GET", "", "", 15) > 0,
+    check(rig.module->fetch("S", "", getting(slow)) > 0 && rig.module->fetch("S", "", getting(slow)) > 0,
           "and the clip its download reserved: two more downloads fit in its 4 MB");
   }
   gate.open = true;
@@ -1008,7 +1160,7 @@ void cancelReachesPolledResults() {
   const std::string gated = "voice.fetch('" + loopback.origin + "/gate', nil, ";
   const auto finishDownloads = [&](Rig& rig) {
     gate.open = true;
-    require(rig.module->fetch("T", loopback.origin + "/later", "GET", "", "", 15) > 0, "a download of another app");
+    require(rig.module->fetch("T", "", getting(loopback.origin + "/later")) > 0, "a download of another app");
     require(later.reached(), "it reaches the server, so the downloads queued before it have ended");
   };
   {
@@ -1042,7 +1194,7 @@ void cancelReachesTakenResults() {
                                  "self.note('second'))")),
             "a script starts two downloads");
     gate.open = true;
-    require(rig.module->fetch("T", loopback.origin + "/later", "GET", "", "", 15) > 0, "a download of another app");
+    require(rig.module->fetch("T", "", getting(loopback.origin + "/later")) > 0, "a download of another app");
     require(later.reached(), "it reaches the server, so both downloads have ended");
     rig.module->update(rig.now);
     check(rig.module->holds("S"), "results not yet delivered still hold the app");
@@ -1076,7 +1228,7 @@ void transfersRunOn() {
     rig.frame();
     check(rig.log() == "third -4;first -3;second -3;idle" && !rig.module->holds("S"),
           "voice.cancel() ends them with CANCELLED: " + rig.log());
-    check(rig.module->fetch("S", loopback.origin + "/slow", "GET", "", "", 15) > 0,
+    check(rig.module->fetch("S", "", getting(loopback.origin + "/slow")) > 0,
           "and releases the clips they reserved");
   }
   gate.open = true;
@@ -1098,6 +1250,52 @@ void transfersHoldTheMusic() {
   check(rig.until("fetch 200 wav;"), "the download ends: " + rig.log());
   check(rig.speaker.holds == "music -music ",
         "its callback runs without the voice channel, and the music plays again after it: " + rig.speaker.holds);
+}
+
+void onlyTheVisibleAppHoldsTheMusic() {
+  Gate gate;
+  Loopback loopback;
+  loopback.answerAfter("/slow", gate);
+  loopback.listen();
+  {
+    Rig rig;
+    check(rig.module->fetch("T", "", getting(loopback.origin + "/slow")) > 0, "an app in the background downloads");
+    require(gate.reached(), "it reaches the server");
+    rig.frame();
+    check(!rig.speaker.music && rig.module->holds("T"), "the music plays on beside its transfer");
+    check(rig.module->fetch("S", "", getting(loopback.origin + "/slow")) > 0, "the app on the panel downloads");
+    check(rig.speaker.music, "its transfer holds the music, for the round of its assistant");
+    rig.module->cancel("S");
+    rig.frame();
+    check(!rig.speaker.music, "and lets it go");
+    rig.module->cancel("T");
+  }
+  gate.open = true;
+}
+
+void shutdownEndsTransfers() {
+  Gate gate;
+  std::atomic<int> requests{0};
+  Loopback loopback;
+  loopback.server.Get("/slow", [&](const httplib::Request&, httplib::Response& response) {
+    ++requests;
+    gate.pass();
+    response.set_content(kAnswer, "audio/wav");
+  });
+  loopback.listen();
+  {
+    Rig rig;
+    const std::string url = loopback.origin + "/slow";
+    check(rig.module->fetch("S", "", getting(url)) > 0 && rig.module->fetch("S", "", getting(url)) > 0,
+          "one download runs and one waits");
+    require(gate.reached(), "the first reaches the server");
+    rig.module->shutdown();
+    gate.open = true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    check(requests == 1, "the one that waited never goes out: " + std::to_string(requests));
+    check(rig.module->fetch("T", "", getting(url)) == tc002::voice::kBusy, "and no new one starts");
+    rig.module->shutdown();
+  }
 }
 
 void destructionLetsGo() {
@@ -1124,7 +1322,7 @@ void destructionLetsGo() {
                                                    vadPath,
                                                    {}});
     check(module.record("S", {800, 5000, 15000}, false) > 0 &&
-              module.fetch("S", loopback.origin + "/slow", "GET", "", "", 15) > 0 && speaker.owned && speaker.music,
+              module.fetch("S", "", getting(loopback.origin + "/slow")) > 0 && speaker.owned && speaker.music,
           "a recording owns the voice channel and a download holds the music");
   }
   check(!speaker.owned && !speaker.music, "a module that goes away lets go of both: " + speaker.holds);
@@ -1152,6 +1350,60 @@ void memoryRoom() {
     check(rig.log() == "fetch -4;idle" && files(rig.folder.path) == 0,
           "a download that runs out of memory is FULL and leaves no file: " + rig.log());
   }
+  {
+    Rig rig;
+    const std::string url = loopback.origin + "/gate";
+    rig.available = kKeepFreeBytes + 2 * 1024 * 1024 + 1000;
+    check(rig.module->record("S", {800, 5000, 15000}, false) > 0, "a recording starts beside just room for a download");
+    check(rig.module->fetch("S", "", getting(url)) == tc002::voice::kFull,
+          "what the recording may still write is not there for the download");
+    rig.module->cancel("S");
+    check(rig.module->fetch("S", "", getting(url)) > 0, "without the recording it fits");
+    rig.module->cancel("S");
+  }
+}
+
+void bodiesAndAnswersMustFit() {
+  Gate gate;
+  Loopback loopback;
+  loopback.server.Post("/gate", [&gate](const httplib::Request&, httplib::Response&) { gate.pass(); });
+  loopback.listen();
+  constexpr std::size_t kMegabyte = 1024 * 1024;
+  VoiceTransfers::Options options;
+  options.url = loopback.origin + "/gate";
+  options.method = "POST";
+  options.timeoutSec = 30;
+  options.cap = 1000;
+  {
+    Rig rig;
+    const std::string body(10000, 'x');
+    rig.available = kKeepFreeBytes + 2 * (body.size() + 1000) - 1;
+    check(rig.module->send("S", body, options) == tc002::voice::kFull,
+          "a string must fit twice beside its answer, twice too, and the memory kept free");
+    rig.available = kKeepFreeBytes + 2 * (body.size() + 1000);
+    const int running = rig.module->send("S", body, options);
+    check(running > 0, "exactly that much is enough: " + std::to_string(running));
+    rig.available = uint64_t{1} << 40;
+    require(gate.reached(), "the first send runs");
+    check(rig.module->send("S", std::string(4 * kMegabyte - body.size(), 'x'), options) > 0,
+          "bodies may wait up to 4 MB across all apps");
+    check(rig.module->send("T", "x", options) == tc002::voice::kFull, "a byte more is FULL");
+    rig.module->cancel("S");
+    check(rig.module->send("T", std::string(4 * kMegabyte, 'x'), options) > 0, "a cancelled transfer gives its room back");
+    rig.module->cancel("T");
+  }
+  {
+    Rig rig;
+    const std::string body = "{secret:k}" + std::string(10000, 'x');
+    const uint64_t needed = 2 * (body.size() + 1000) + body.size() + net::kMaxFillGrowth;
+    rig.available = kKeepFreeBytes + needed - 1;
+    check(rig.module->send("S", body, options) == tc002::voice::kFull,
+          "a string with a placeholder must also fit its filled copy");
+    rig.available = kKeepFreeBytes + needed;
+    check(rig.module->send("S", body, options) > 0, "exactly that much is enough");
+    rig.module->cancel("S");
+  }
+  gate.open = true;
 }
 
 void modelPerRecording() {
@@ -1198,7 +1450,7 @@ void releaseOnlyReady() {
   }
 }
 
-void onVoice() {
+void onAssistant() {
   Rig rig;
   require(rig.install("S", kListener), "the listener loads");
   rig.frame();
@@ -1209,11 +1461,11 @@ void onVoice() {
   rig.frame();
   check(rig.module->triggered() && rig.log() == "idle", "another app's frame leaves the trigger waiting");
   rig.draw();
-  check(rig.canvas.getPixel(0, 0) == 0xFFFFFFu, "the app's first frame after the trigger draws as the app");
-  check(rig.module->triggered() && rig.log() == "idle", "on_voice waits for the script tick after that frame");
+  check(rig.log() == "drawn idle", "the app's first frame after the trigger draws as the app");
+  check(rig.module->triggered(), "on_assistant waits for the script tick after that frame");
   rig.frame();
-  check(!rig.module->triggered() && rig.log() == "wake;recording",
-        "on_voice names the trigger on the next tick, and the app records: " + rig.log());
+  check(!rig.module->triggered() && rig.log() == "drawn wake;recording",
+        "on_assistant names the trigger on the next tick, and the app records: " + rig.log());
   rig.module->trigger("S", "api", {});
   rig.module->hidden(*rig.extensions, "S");
   check(!rig.module->triggered(), "hiding the app drops its trigger");
@@ -1233,6 +1485,7 @@ int main(int argc, char** argv) {
   voice = awtrix::speech::ModelVoice::create(model, error);
   require(voice != nullptr, error);
   recordsAndPlays();
+  callbacksFindTheVoiceChannelFree();
   refusals();
   failedRecording();
   noClipFolder();
@@ -1248,7 +1501,10 @@ int main(int argc, char** argv) {
   deliveriesPerTick();
   anMp3TravelsAsMp3();
   garbageCollection();
+  noScriptReleasesAClip();
+  droppedClipsMakeRoom();
   deliveryFails();
+  aBrokenAppKeepsNoClip();
   fullAndLevel();
   assistantRoundTrip();
   sendOptions();
@@ -1258,16 +1514,21 @@ int main(int argc, char** argv) {
   theBudgetCoversTheFirstByte();
   refusedRequests();
   fetchStatuses();
+  everyAudioTypeDownloads();
   transfersFillTheirHeaders();
+  aFetchFillsItsBody();
   forgetDuringTransfer();
   cancelReachesPolledResults();
   cancelReachesTakenResults();
   transfersRunOn();
   transfersHoldTheMusic();
+  onlyTheVisibleAppHoldsTheMusic();
+  shutdownEndsTransfers();
   destructionLetsGo();
   memoryRoom();
+  bodiesAndAnswersMustFit();
   modelPerRecording();
   releaseOnlyReady();
-  onVoice();
+  onAssistant();
   return awtrix::test::finish("tc002-voice-scripting");
 }

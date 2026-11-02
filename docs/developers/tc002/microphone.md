@@ -132,20 +132,23 @@ consumer speaks the protocol of `contract/MicrophoneStream.h` as it would to the
 own epochs. Its sample positions are its own and start at 0 with its stream. Like the daemon, the
 hub never answers inside a control call. The answer arrives on its next `receive()` or `tick()`.
 
-The wake word listener and `VoiceCapture` speak it through `MicrophoneClient`
-(`contract/MicrophoneClient.h`). The client counts the epochs, probes and then starts, sends a
-keepalive every 150 ms, and checks that the positions follow on. Each probe, start and stop gets 2 s
-(`kStreamAnswerMs`) for its answer. An unanswered probe or start is stopped and reported as ended
-with `microphone did not answer`, an unanswered stop counts as done. It reports unavailable,
-started, audio, a gap, an end nobody asked for and a stop it asked for. Home Assistant Voice keeps
-its own handling of the protocol, because it probes only to learn whether the stream exists and
-fails its pipeline on any irregularity.
+The wake word listener, `VoiceCapture` and Home Assistant Voice speak it through `MicrophoneClient`
+(`contract/MicrophoneClient.h`). The client counts the epochs, sends a keepalive every 150 ms, and
+checks that the positions follow on. `open()` probes and then starts, as the listener and
+`VoiceCapture` do. Home Assistant Voice takes the two steps apart: `probe()` and `probeAgain()` only
+ask whether the stream exists and have no deadline, and `start()` starts without a probe. The probe
+of `open()`, a start and a stop each get 2 s (`kStreamAnswerMs`) for their answer. An unanswered probe
+or start is stopped and reported as ended with `microphone did not answer`, an unanswered stop counts
+as done. The client reports available or unavailable, started, audio, a gap, an end nobody asked for
+and a stop it asked for.
 
 - **Upstream.** The hub probes and starts the daemon's stream once, under its own epoch, and renews
   the daemon's lease with a keepalive every 150 ms. The daemon must answer a probe or a start within
   2 s. While the hub has a stream, it answers a consumer's probe itself.
-- **Consumer lease.** Each consumer must renew its stream within 500 ms. A consumer that does not
-  gets an end with the error `consumer lease expired`, and the others stream on.
+- **Consumer lease.** Each consumer must renew its stream within 2 s (`kStreamLeaseMs`). A consumer
+  that does not gets an end with the error `consumer lease expired`, and the others stream on. The
+  daemon gives the hub the same 2 s, so a short stall of the main loop, such as the compile of an
+  `@ondemand` assistant, ends nothing.
 - **Linger.** Once the upstream stream runs, it runs on for 1 s after the last consumer stops. A
   consumer that starts within that second joins it. If the last consumer stops while the stream is
   still starting, the hub stops it at once. A start while the upstream stream stops starts a new one
@@ -155,9 +158,10 @@ fails its pipeline on any irregularity.
   voice module starts. A starting or running stream then
   stays open without a consumer until the capture joins it, and lingers from the release. A hold
   opens no stream.
-- **Lead-in.** While a stream runs, the hub holds its last second in memory: 16 008 samples, 667 DMA
-  halves of 24, because every block and position of the stream is a whole number of halves. It
-  overwrites them continuously, drops them when the stream ends and writes none to a file.
+- **Lead-in.** While a stream runs, `SampleHistory` (`runtime/SampleHistory.h`) holds its last second
+  in memory: 16 008 samples, 667 DMA halves of 24, because every block and position of the stream is a
+  whole number of halves. The hub overwrites them continuously, drops them when the stream ends and
+  writes none to a file.
   `mark()` names the sample after the latest block, `markOf()` turns a consumer's own position into
   a mark, and `startFrom()` makes a consumer's next start begin at a mark, or at the oldest held
   sample when the mark lies further back. A mark between two halves, such as the position of a wake
@@ -168,20 +172,25 @@ fails its pipeline on any irregularity.
 - **Gaps and failures.** A jump in the upstream sample position reaches each consumer as a jump in
   its own position. An upstream error, an MCU without the stream or a missing answer ends every
   consumer that wants a stream with that error. So does a supervisor link that refuses the hub's
-  probe or start. The hub does not retry. Each consumer decides when to try again.
+  probe or start. A stream that delivers no audio for 2 s (`kStreamAnswerMs`), for example because the
+  daemon revoked it, is asked to stop and ends every such consumer with `microphone stream stalled`.
+  The runtime polls the link before it ticks the hub, so audio queued during a long frame counts
+  first. The hub does not retry. Each consumer decides when to try again.
 
 A consumer attaches with `attach()` and gets a `MicrophoneHub::Consumer` handle. The handle gives
-its `port()`, `startFrom()` and `markOf()`, and detaches the consumer when it is destroyed.
-`LinuxRuntime::composeScriptServices` builds the hub and attaches the wake word and Voice;
-`composeExtensions` attaches the voice module. The runtime keeps their handles. `pollSupervisor`
-passes every `microphoneStreamEvent` to the hub. `tickVoice` ticks the hub every frame, also while idle, before
-Voice, the voice module and the wake word. `LinuxRuntime::stop` closes it (`close()`), which stops the
-upstream stream at once, without lingering. From a consumer's start until the upstream stream has ended,
-the hub is active (`active()`) and `MicrophoneInput` requests no snapshots. A probe alone leaves
+its `port()`, `startFrom()` and `markOf()`, and detaches the consumer when it is destroyed. A block
+reaches its consumers by reference, with each consumer's epoch and position filled in, so a consumer
+that keeps samples copies them. `VoiceStack` (`voice/VoiceStack.h`) owns the hub and the handles: its
+constructor attaches the wake word and Voice, and `composeScripting` attaches the voice module.
+`receive()` passes every `microphoneStreamEvent` to the hub. `tick()` ticks the hub every frame, also
+while idle, before Voice, the voice module and the wake word. `stop()` closes it (`close()`), which
+stops the upstream stream at once, without lingering. From a consumer's start until the upstream
+stream has ended, the hub is active (`active()`) and `MicrophoneInput` requests no snapshots. A probe alone leaves
 the snapshots running. Every upstream audio block also goes to `MicrophoneInput`, which gathers the
 windows for `music.level()`, `music.bands()` and `music.pitch()` from it.
-`tests/tc002/runtime/test_microphone_hub.cpp` covers the hub, `test_voice_on_hub.cpp` a Voice
-session on it, and `test_voice_capture.cpp` a recording of the voice module.
+`tests/tc002/runtime/test_microphone_hub.cpp` covers the hub, `test_sample_history.cpp` its held
+second, `tests/tc002/contract/test_microphone_client.cpp` the client, `test_voice_on_hub.cpp` a Voice
+session on the hub, and `test_voice_capture.cpp` a recording of the voice module.
 
 ## Adding an input or a consumer
 

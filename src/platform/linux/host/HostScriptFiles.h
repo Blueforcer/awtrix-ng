@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <map>
+#include <optional>
 #include <set>
 
 #include "persistence/Filesystem.h"
@@ -24,6 +26,15 @@ class ScriptFiles {
   static void remove(const std::string& path) {
     std::error_code error;
     std::filesystem::remove(std::filesystem::u8path(hostPath(path)), error);
+  }
+  static std::optional<std::string> savedSource(const std::string& name) {
+    std::string source;
+    if (!scriptfiles::nameIsSafe(name) || read(scriptfiles::sourcePath(name), source)) return source;
+    std::error_code error;
+    const auto file = std::filesystem::symlink_status(
+        std::filesystem::u8path(hostPath(scriptfiles::sourcePath(name))), error);
+    if (file.type() == std::filesystem::file_type::not_found) return std::string();
+    return std::nullopt;
   }
   static void forEachName(const scriptfiles::NameVisitor& visit) {
     namespace stdfs = std::filesystem;
@@ -66,11 +77,16 @@ class ScriptFiles {
     return false;
   }
   static void saveSource(const std::string&, const std::string&) {}
+  void onSourceWritten(std::function<void(const std::string& name)> written) { sourceWritten_ = std::move(written); }
   void flushSources() {
     for (auto it = sources_.begin(); it != sources_.end();) {
-      if (sourceFits(it->second.size()) && writeUpload(hostPath(scriptfiles::sourcePath(it->first)), it->second))
-        it = sources_.erase(it);
-      else ++it;
+      if (!sourceFits(it->second.size()) || !writeUpload(hostPath(scriptfiles::sourcePath(it->first)), it->second)) {
+        ++it;
+        continue;
+      }
+      const std::string name = it->first;
+      it = sources_.erase(it);
+      if (sourceWritten_) sourceWritten_(name);
     }
   }
 
@@ -129,6 +145,7 @@ class ScriptFiles {
   }
 
   std::map<std::string, std::string> sources_;
+  std::function<void(const std::string& name)> sourceWritten_;
   std::set<std::string> refusedStores_, refusedSources_, oversizedStores_;
   std::map<std::string, FailedWrite> failedStores_;
 };

@@ -25,9 +25,7 @@
 #include "platform/linux/LinuxAdminSecurity.h"
 #include "platform/linux/LinuxMemory.h"
 #include "platform/linux/tls/TlsTrust.h"
-#include "platform/posix/WorkerThread.h"
 #include "platform/tc002/contract/RuntimeContract.h"
-#include "platform/tc002/contract/tc002_layout.h"
 #include "platform/tc002/runtime/BootIntroWide.h"
 #include "platform/tc002/runtime/MusicPitch.h"
 #include "platform/tc002/voice/VoiceMqtt.h"
@@ -37,13 +35,7 @@
 namespace awtrix {
 namespace {
 
-// A script's saved source, "" when there is none. Reads the file, which any thread may do.
-std::string savedSource(const std::string& name) {
-  std::string source;
-  if (!ScriptStore<host::ScriptFiles>::readSavedSource(name, source))
-    source.clear();
-  return source;
-}
+std::filesystem::path privateRoot() { return std::filesystem::u8path(host::dataDir()).parent_path(); }
 
 class SpeakerBootSound final : public BootSoundClock {
  public:
@@ -224,7 +216,7 @@ int LinuxRuntime::composeEngine() {
   if (o_.speakerRequested) {
     speaker_ = std::make_unique<Tc002Speaker>(engine(), audio_, Tc002Speaker::kDescriptor);
     if (!o_.speechVoice.empty()) {
-      const auto uploaded = std::filesystem::u8path(host::dataDir()).parent_path() / "speech" / "voice.atts";
+      const auto uploaded = privateRoot() / "speech" / "voice.atts";
       voicePacks_.emplace(o_.speechVoice, uploaded.string(), target_->uploadReserveBytes,
                           [this](std::shared_ptr<speech::SpeechVoice> voice) {
                             speaker_->setSpeechVoice(std::move(voice));
@@ -338,54 +330,29 @@ void LinuxRuntime::composeScriptServices() {
   scriptIcon_.setPanelSize(o_.width, o_.height);
   scriptIcon_.setRemoteImages(&*remoteImages_);
   scriptServices_.instructionLimit = target_->scriptInstructionLimit;
-  microphone_.emplace([this, supervised](std::string request) { return supervised && link_.send(std::move(request)); });
-  microphoneHub_.emplace([this](std::string control) { return link_.send(std::move(control)); },
-                         [this](const tc002::StreamEvent& block, int64_t now) {
-                           microphone_->streamed(block.samples.data(), block.samples.size(), block.firstSample, now);
-                         });
-  if (supervised && speaker_) {
-    if (!o_.wakeWord.empty()) {
-      std::string error;
-      auto microphone = microphoneHub_->attach([this](const tc002::StreamEvent& e, int64_t now) {
-        if (wake_) wake_->receive(e, now);
-      });
-      wake_ = tc002::wake::WakeListener::open(o_.wakeWord, microphone.port(), std::make_unique<posix::WorkerThread>(),
-                                              error);
-      if (wake_) wakeMicrophone_ = std::move(microphone);
-      else logf("wake word: %s", error.c_str());
-    }
-    voiceSpeaker_.emplace(*speaker_);
-    const auto privateDirectory = std::filesystem::u8path(host::dataDir()).parent_path() / "voice-private";
-    voiceMicrophone_ = microphoneHub_->attach([this](const tc002::StreamEvent& e, int64_t now) {
-      if (voice_) voice_->receive(e, now);
-    });
-    voice_ = std::make_unique<tc002::voice::VoiceRuntime>(privateDirectory.string(), *voiceSpeaker_,
-      voiceMicrophone_.port(), wake_ != nullptr,
-      tc002::voice::VoiceRuntime::Hooks{[this] { return assistantRouter_->apps(); }, [this] {
-        return assistantRouter_->start(tc002::voice::VoiceTrigger::Api, monotonicMs());
-      }});
-  }
-  const auto privateRoot = std::filesystem::u8path(host::dataDir()).parent_path();
-  const auto scriptNames = [] { return ScriptStore<host::ScriptFiles>::savedNames(); };
-  oauthVault_.emplace((privateRoot / "script-private").string());
+  voice_.emplace(tc002::voice::VoiceStack::Setup{[this](std::string message) { return link_.send(std::move(message)); },
+                                                 supervised, speaker_.get(), o_.wakeWord,
+                                                 (privateRoot() / "voice-private").string()});
+  oauthVault_.emplace((privateRoot() / "script-private").string());
   oauthService_.emplace(
-      *oauthVault_, [this](const oauth::HttpCall& call) { return oauthTransport_(call); }, savedSource,
-      [] { return monotonicMs(); });
+      *oauthVault_, [this](const oauth::HttpCall& call) { return oauthTransport_(call); },
+      host::ScriptFiles::savedSource, [] { return monotonicMs(); });
   oauthService_->setInterrupt([this] { oauthTransport_.interrupt(); });
   oauthScripting_.emplace(*oauthService_);
-  oauthApi_.emplace(*oauthService_, scriptNames);
-  secretStore_.emplace((privateRoot / "script-secrets").string(), secrets::Service::kMaxRecord);
-  secrets_.emplace(*secretStore_, savedSource);
+  oauthApi_.emplace(*oauthService_, SavedScripts::savedNames);
+  secrets_.emplace((privateRoot() / "script-secrets").string(), host::ScriptFiles::savedSource);
   secretScripting_.emplace(*secrets_);
-  secretApi_.emplace(*secrets_, scriptNames);
+  secretApi_.emplace(*secrets_, SavedScripts::savedNames);
+  scriptStores_.add(*oauthService_);
+  scriptStores_.add(*secrets_);
   // Script sign-in exists as the script host does: decided once, at start.
   httpOptions_.platformHandler = [this, scripting = cfg_.scriptingEnabled](const httplib::Request& request,
                                                                           httplib::Response& response) {
     if (scripting && (oauthApi_->handle(request, response) || secretApi_->handle(request, response))) return true;
     if (voicePacks_ && voicePacks_->handle(request, response)) return true;
-    return voice_ && voice_->handle(request, response);
+    return voice_->handle(request, response);
   };
-  analysis_.emplace(speaker_.get(), supervised ? &*microphone_ : nullptr);
+  analysis_.emplace(speaker_.get(), supervised ? &voice_->microphone() : nullptr);
   app_->configureScripts(scriptServices_);
   scriptServices_.audioStats = [this](int64_t now, bool onScreen, awtrix::audio::FrameStats& out) {
     return analysis_->analysis(static_cast<audio::AnalysisSource>(engine().state().settings().musicSource), now,
@@ -441,23 +408,12 @@ void LinuxRuntime::composeExtensions() {
     x.list.push_back(x.audio.get());
     x.list.push_back(&x.crypto);
     x.list.push_back(&x.tcp);
-    if (voice_) {
-      scriptMicrophone_ = microphoneHub_->attach([this](const tc002::StreamEvent& e, int64_t now) {
-        if (extensions_.voice) extensions_.voice->receive(e, now);
-      });
-      x.voice = std::make_unique<tc002::voice::VoiceScripting>(tc002::voice::VoiceScripting::Services{
-          scriptMicrophone_.port(),
-          [this](tc002::MicrophoneMark mark) { scriptMicrophone_.startFrom(mark); },
-          [this](tc002::MicrophoneMark mark) { return microphoneHub_->live(mark); },
-          &*voiceSpeaker_, [this] { return voice_->busy(); },
-          [this](const std::string& app) { return engine().currentAppId() == app; },
-          [] { return monotonicMs(); }, TC002_VOLATILE_DIR, readMemAvailable, o_.vad, fillSecrets()});
-      x.list.push_back(x.voice.get());
-    }
+    if (auto* scripting = voice_->composeScripting(
+            {[this](const std::string& app) { return engine().currentAppId() == app; }, o_.vad, fillSecrets()}))
+      x.list.push_back(scripting);
     x.list.push_back(&*oauthScripting_);
     x.list.push_back(&*secretScripting_);
-    oauthService_->dropStale();
-    secrets_->dropStale();
+    scriptStores_.dropStale();
     oauthService_->begin();
   }
   x.gamepadApi = std::make_unique<ble::GamepadApi>(bleService_ ? &bleService_->gamepad() : nullptr,
@@ -480,21 +436,25 @@ void LinuxRuntime::composeExtensions() {
 }
 
 void LinuxRuntime::composeAssistant() {
-  if (!voice_) return;
-  assistantRouter_.emplace(
-      tc002::voice::AssistantRouter::Ports{
-          [this] { return voiceAllowedNow(); },
-          [this](const std::string& app) { return scripts_ ? scripts_->metaOf(app) : nullptr; },
-          [] { return ScriptStore<host::ScriptFiles>::savedNames(); },
-          [this](const std::string& app) { return engine().isScriptApp(app) && engine().isEnabled(app); },
-          [this](const std::string& json, DispatchDetail& detail) { return engine().switchApp(json, detail); },
-          [this](const std::string& app) { return engine().currentAppId() == app; },
-          [this] { return engine().state().runtime().matrixOff; },
-          [this](bool on) { scriptServices_.application->setDisplayPower(on); },
-          [this] { quickSettings_->dismiss(); },
-          [this] { return speaker_->holdMusic(); }},
-      tc002::voice::AssistantRouter::Parts{*voice_, extensions_.voice.get(), knobGesture_, *microphoneHub_,
-                                           wake_.get(), wakeMicrophone_});
+  tc002::voice::AssistantRouter::Ports ports;
+  ports.allowed = [this] { return voiceAllowedNow(); };
+  ports.meta = [this](const std::string& app) { return scripts_ ? scripts_->metaOf(app) : nullptr; };
+  ports.scripts = SavedScripts::savedNames;
+  ports.source = [this](const std::string& app, std::string& out) { return store_.readSource(app, out); };
+  ports.runnable = [this](const std::string& app) { return engine().isScriptApp(app) && engine().isEnabled(app); };
+  ports.switchedOff = [this](const std::string& app) { return !engine().isEnabled(app); };
+  ports.failed = [this](const std::string& app) { return scripts_ && !scripts_->errorOf(app).empty(); };
+  ports.switchApp = [this](const std::string& json, DispatchDetail& detail) { return engine().switchApp(json, detail); };
+  ports.shown = [this](const std::string& app) { return engine().currentAppId() == app; };
+  ports.covered = [this] { return engine().hasNotification() || mirror_.mirror().active(); };
+  ports.speaking = [this] { return speaker_->speaking(); };
+  ports.inSession = [this](const std::string& app) { return engine().sessionApp() == app; };
+  ports.endSession = [this] { engine().endSession(); };
+  ports.panelOff = [this] { return engine().state().runtime().matrixOff; };
+  ports.setPanelPower = [this](bool on) { scriptServices_.application->setDisplayPower(on); };
+  ports.dismissQuickSettings = [this] { quickSettings_->dismiss(); };
+  ports.holdMusic = [this] { return speaker_->holdMusic(); };
+  voice_->composeRouter(std::move(ports));
 }
 
 void LinuxRuntime::composePlatformRoutes() {
@@ -526,18 +486,13 @@ void LinuxRuntime::startScripts() {
     std::uint64_t available = 0;
     return readMemAvailable(available) ? static_cast<std::size_t>(available) : std::size_t{0};
   };
+  if (cfg_.scriptingEnabled)
+    store_.onSourceWritten([this](const std::string& name) { scriptStores_.sourceSaved(name); });
   scriptSlots_.begin(*app_, scriptServices_, cfg_.scriptingEnabled,
-      [this, enabled = cfg_.scriptingEnabled](const std::string& name, const std::string& source) {
-        store_.save(name, source);
-        if (!enabled) return;
-        oauthService_->sourceSaved(name);
-        secrets_->sourceSaved(name);
-      },
+      [this](const std::string& name, const std::string& source) { store_.save(name, source); },
       [this, enabled = cfg_.scriptingEnabled](const std::string& name) {
         store_.remove(name);
-        if (!enabled) return;
-        oauthService_->sourceRemoved(name);
-        secrets_->sourceRemoved(name);
+        if (enabled) scriptStores_.sourceRemoved(name);
       });
   scripts_ = scriptSlots_.host();
   if (!scripts_) return;
@@ -577,7 +532,7 @@ int LinuxRuntime::startServices() {
   std::fflush(stdout);
   startBootIntro();
   knobRouter_.emplace(Tc002KnobRouter::Targets{engine(), cfg_, buttons_, *webhook_, extensions_.knob.get(),
-                                               knobGesture_, *quickSettings_, voice_.get(), [this] {
+                                               voice_->gesture(), *quickSettings_, voice_->runtime(), [this] {
     if (!o_.supervised) return;
     logf("wifi: select held during the intro, asking for the setup hotspot");
     if (!link_.send(tc002::encodeSetupAccessPoint())) logf("wifi: the supervisor channel refused the request");
@@ -617,10 +572,10 @@ void LinuxRuntime::bindPlatformCommands() {
     });
   }
   if (o_.supervised) mqttEntities_.push_back(kChargingEntity);
-  if (voice_) mqttEntities_.push_back(tc002::voice::kStartButton);
+  if (voice_->available()) mqttEntities_.push_back(tc002::voice::kStartButton);
   mqtt_.setPlatformCommands([this](const std::string& topic, const std::string&, std::string& result) {
-    return voice_ && tc002::voice::handleMqtt(topic, [this] {
-      return assistantRouter_->start(tc002::voice::VoiceTrigger::Mqtt, monotonicMs());
+    return voice_->available() && tc002::voice::handleMqtt(topic, [this] {
+      return voice_->start(tc002::voice::VoiceTrigger::Mqtt);
     }, result);
   }, mqttEntities_.data(), mqttEntities_.size());
 }
@@ -638,12 +593,12 @@ bool LinuxRuntime::voiceAllowedNow() const {
 float LinuxRuntime::audioPitch(int64_t now, bool onScreen) {
   return tc002::musicPitch(static_cast<audio::AnalysisSource>(engine().state().settings().musicSource), now,
                            speaker_ ? &speaker_->playbackPitch() : nullptr,
-                           o_.supervised ? &*microphone_ : nullptr, onScreen);
+                           o_.supervised ? &voice_->microphone() : nullptr, onScreen);
 }
 
 net::FillRequest LinuxRuntime::fillSecrets() {
-  return [this](const std::string& owner, std::string& url, net::RequestHeaders& headers) {
-    return secrets_->fill(owner, url, headers);
+  return [this](const std::string& owner, std::string& url, net::RequestHeaders& headers, net::RequestBody& body) {
+    return secrets_->fill(owner, url, headers, body);
   };
 }
 

@@ -5,7 +5,6 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
@@ -196,7 +195,7 @@ void noAnswer() {
 
 std::string outcome(const std::optional<VoiceCapture::Result>& result) {
   if (!result) return "no result";
-  const char* names[] = {"Recorded", "Silence", "Failed"};
+  const char* names[] = {"Recorded", "Silence", "NoRoom", "Failed"};
   return std::string(names[static_cast<int>(result->outcome)]) + " (" + result->error + ")";
 }
 
@@ -257,6 +256,15 @@ void writeFailure() {
         "a recording whose file cannot grow fails: " + outcome(result));
 }
 
+void aFullFileSystem() {
+  Rig rig;
+  require(rig.capture.start("/dev/full", {800, 5000, 15000}, {}, rig.now), "a recording on a full file system starts");
+  const std::optional<VoiceCapture::Result> result = rig.capture.take();
+  check(result && result->outcome == VoiceCapture::Outcome::NoRoom && result->error == "could not write the recording",
+        "and ends at once with no room: " + outcome(result));
+  check(!rig.capture.take(), "it reports that once");
+}
+
 void modelComesAndGoes() {
   namespace fs = std::filesystem;
   const fs::path dir = fs::temp_directory_path() / ("voice-capture-model-" + std::to_string(::getpid()));
@@ -270,10 +278,7 @@ void modelComesAndGoes() {
   const fs::path settings = fs::path(source).replace_extension(".json");
   fs::copy_file(source, dir / source.filename());
   fs::copy_file(settings, dir / settings.filename());
-  const auto begun = std::chrono::steady_clock::now();
   require(rig.capture.prepare(error), error);
-  const std::chrono::duration<double, std::milli> loading = std::chrono::steady_clock::now() - begun;
-  std::printf("model load: %.2f ms\n", loading.count());
   require(rig.capture.start(rig.path, {800, 5000, 15000}, {}, rig.now), "a recording starts with the model");
   rig.stream();
   rig.play(noise(300, -60, 9));
@@ -313,6 +318,7 @@ int main(int argc, char** argv) {
   stalledStream();
   streamFailures();
   writeFailure();
+  aFullFileSystem();
   modelComesAndGoes();
   level();
   return awtrix::test::finish("tc002-voice-capture");

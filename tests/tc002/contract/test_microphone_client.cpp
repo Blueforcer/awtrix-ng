@@ -56,7 +56,7 @@ void opensAndStreams() {
   Rig rig;
   rig.client.open(rig.now);
   check(rig.sent.size() == 1 && rig.sent[0].operation == StreamControl::Probe && rig.sent[0].epoch == 1 &&
-            rig.client.phase() == Phase::Probing,
+            rig.client.phase() == Phase::Opening,
         "open probes under the first epoch");
   check(rig.receive(rig.event(StreamEvent::Kind::Support)) == Report::None &&
             rig.sent.back().operation == StreamControl::Start && rig.client.phase() == Phase::Starting,
@@ -160,6 +160,60 @@ void endings() {
   check(rig.sent.size() == before + 1, "a second cancel sends nothing");
 }
 
+void aProbeStartsNothing() {
+  Rig rig;
+  rig.client.probe();
+  const int epoch = rig.sent.back().epoch;
+  check(rig.sent.back().operation == StreamControl::Probe && rig.client.epoch() == epoch &&
+            rig.client.phase() == Phase::Probing,
+        "a probe asks");
+  check(rig.receive(rig.event(StreamEvent::Kind::Support)) == Report::Available && rig.sent.size() == 1,
+        "its answer starts nothing");
+  check(rig.receive(rig.event(StreamEvent::Kind::Support, false)) == Report::Unavailable,
+        "and every later answer counts");
+  rig.client.probeAgain();
+  check(rig.sent.back().operation == StreamControl::Probe && rig.sent.back().epoch == epoch,
+        "asking again keeps the epoch");
+  check(rig.receive(rig.event(StreamEvent::Kind::Ended)) == Report::None &&
+            rig.receive(rig.event(StreamEvent::Kind::Started)) == Report::None,
+        "a probe knows no stream");
+  rig.now += 100000;
+  check(rig.client.tick(rig.now) == Report::None && rig.sent.size() == 2, "and has no deadline and no keepalive");
+  rig.client.cancel();
+  check(rig.sent.size() == 2 && rig.receive(rig.event(StreamEvent::Kind::Support)) == Report::None,
+        "cancelling it sends nothing, and later answers are ignored");
+}
+
+void aStartNeedsNoProbe() {
+  Rig rig;
+  rig.client.probe();
+  const int probed = rig.client.epoch();
+  rig.client.start(rig.now);
+  check(rig.sent.back().operation == StreamControl::Start && rig.sent.back().epoch != probed &&
+            rig.client.capturing() && !rig.client.started(),
+        "a start opens a new epoch");
+  check(rig.receive(rig.event(StreamEvent::Kind::Started)) == Report::Started && rig.client.started(),
+        "the stream starts");
+  rig.client.tick(rig.now + tc002::kStreamKeepaliveMs);
+  check(rig.sent.back().operation == StreamControl::Keepalive, "and is kept alive from the start on");
+}
+
+void aStopRemembersWhetherTheStreamStarted() {
+  Rig never;
+  never.client.start(never.now);
+  never.client.stop(never.now);
+  check(never.sent.back().operation == StreamControl::Stop && !never.client.capturing(), "the stop goes out");
+  check(never.receive(never.event(StreamEvent::Kind::Ended)) == Report::Stopped && !never.client.started(),
+        "the end of a stream that never started");
+
+  Rig late;
+  late.client.start(late.now);
+  late.client.stop(late.now);
+  check(late.receive(late.event(StreamEvent::Kind::Started)) == Report::None,
+        "a start already on its way reports nothing");
+  check(late.receive(late.event(StreamEvent::Kind::Ended)) == Report::Stopped && late.client.started(), "but it counts");
+}
+
 }
 
 int main() {
@@ -168,6 +222,9 @@ int main() {
   keepalives();
   answerDeadline();
   endings();
+  aProbeStartsNothing();
+  aStartNeedsNoProbe();
+  aStopRemembersWhetherTheStreamStarted();
   check(posix::nextInSequence(1) == 2 && posix::nextInSequence(INT_MAX) == 1,
         "epochs and serial numbers count up and wrap to 1");
   return awtrix::test::finish("tc002-microphone-client");

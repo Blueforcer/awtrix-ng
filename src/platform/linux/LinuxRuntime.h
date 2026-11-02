@@ -55,6 +55,7 @@
 #include "platform/linux/script/CryptoScripting.h"
 #include "platform/linux/script/ExtensionHost.h"
 #include "platform/linux/script/KnobScripting.h"
+#include "platform/linux/script/PerScriptStore.h"
 #include "platform/linux/script/TcpScripting.h"
 #include "platform/linux/secrets/SecretApi.h"
 #include "platform/linux/secrets/SecretScripting.h"
@@ -62,8 +63,6 @@
 #include "platform/linux/tls/BrokerTrust.h"
 #include "platform/linux/tls/BrokerTrustApi.h"
 #include "platform/tc002/audio/AudioScripting.h"
-#include "platform/tc002/runtime/MicrophoneHub.h"
-#include "platform/tc002/runtime/MicrophoneInput.h"
 #include "platform/tc002/runtime/SupervisedRuntime.h"
 #include "platform/tc002/runtime/Tc002Activation.h"
 #include "platform/tc002/runtime/Tc002ActivationApi.h"
@@ -79,12 +78,7 @@
 #include "platform/tc002/runtime/Tc002Target.h"
 #include "platform/tc002/runtime/Tc002Update.h"
 #include "platform/tc002/speech/VoicePacks.h"
-#include "platform/tc002/voice/AssistantRouter.h"
-#include "platform/tc002/voice/KnobGesture.h"
-#include "platform/tc002/voice/Tc002VoiceSpeaker.h"
-#include "platform/tc002/voice/VoiceRuntime.h"
-#include "platform/tc002/voice/VoiceScripting.h"
-#include "platform/tc002/wake/WakeListener.h"
+#include "platform/tc002/voice/VoiceStack.h"
 #include "system/MonotonicClock.h"
 #include "transport/mqtt/MqttService.h"
 #include "transport/net/DiscoveryService.h"
@@ -128,7 +122,6 @@ class LinuxRuntime {
     std::unique_ptr<ble::GamepadApi> gamepadApi;
     linux_script::CryptoScripting crypto{[] { return monotonicMs(); }};
     linux_script::TcpScripting tcp;
-    std::unique_ptr<tc002::voice::VoiceScripting> voice;
     std::unique_ptr<layout::LayoutScripting> layout;
     std::unique_ptr<tc002::AudioScripting> audio;
     std::unique_ptr<script::KnobScripting> knob;
@@ -172,6 +165,8 @@ class LinuxRuntime {
 
   static inline volatile std::sig_atomic_t stopping_ = 0;
 
+  using SavedScripts = ScriptStore<host::ScriptFiles>;
+
   LinuxOptions o_;
   Tc002Target tc002Target_;
   LinuxTargetPolicy headlessTarget_;
@@ -209,7 +204,6 @@ class LinuxRuntime {
   layout::Resources layoutResources_;
   std::optional<layout::LayoutPayload> layoutPayload_;
   std::unique_ptr<Tc002Speaker> speaker_;
-  std::optional<tc002::voice::Tc002VoiceSpeaker> voiceSpeaker_;
   std::optional<speech::VoicePacks> voicePacks_;
   std::optional<SupervisedRuntime> supervision_;
   std::optional<Tc002QuickSettings> quickSettings_;
@@ -226,28 +220,22 @@ class LinuxRuntime {
   MqttService mqtt_;
   std::unique_ptr<net::IHostResolver> resolver_;
   std::optional<PlatformDescriptor> platform_;
-  ScriptStore<host::ScriptFiles> store_;
+  SavedScripts store_;
   ScriptIcon scriptIcon_;
   ScriptMqttBridge scriptMqtt_;
   script::ScriptServices scriptServices_;
-  std::optional<tc002::MicrophoneInput> microphone_;
-  std::optional<tc002::MicrophoneHub> microphoneHub_;
-  tc002::MicrophoneHub::Consumer wakeMicrophone_, voiceMicrophone_, scriptMicrophone_;
-  tc002::voice::KnobGesture knobGesture_;
-  std::unique_ptr<tc002::voice::VoiceRuntime> voice_;
-  std::unique_ptr<tc002::wake::WakeListener> wake_;
   oauth::HttplibTransport oauthTransport_;
   std::optional<oauth::Vault> oauthVault_;
   std::optional<oauth::Service> oauthService_;
   std::optional<oauth::OAuthScripting> oauthScripting_;
   std::optional<oauth::Api> oauthApi_;
-  std::optional<posix::PrivateStore> secretStore_;
   std::optional<secrets::Service> secrets_;
   std::optional<secrets::SecretScripting> secretScripting_;
   std::optional<secrets::Api> secretApi_;
+  script::PerScriptStores scriptStores_;
+  std::optional<tc002::voice::VoiceStack> voice_;
   std::optional<audio::AnalysisRouter> analysis_;
   Extensions extensions_;
-  std::optional<tc002::voice::AssistantRouter> assistantRouter_;
   script::ScriptSlots scriptSlots_;
   script::ScriptHost* scripts_ = nullptr;
   std::unique_ptr<script::ExtensionHost> scriptExtensions_;

@@ -19,7 +19,7 @@ void LinuxScriptHttp::stop() {
     queue_.clear();
     // Also shuts a socket the worker opens only after this, so a slow header or body cannot
     // postpone process shutdown.
-    interrupt_.interrupt();
+    requests_.interrupt();
     ready_.notify_all();
   }
   if (worker_.joinable()) worker_.join();
@@ -29,8 +29,7 @@ bool LinuxScriptHttp::request(const script::HttpRequest& req) {
     script::modbus::Read read;
     if (req.method != "GET" || !script::modbus::parse(req.url, read)) return false;
   } else {
-    std::string origin, target;
-    if (!net::splitUrl(req.url, origin, target)) return false;
+    if (!net::validUrl(req.url)) return false;
   }
   std::lock_guard<std::mutex> lock(mutex_);
   if (stopping_ || !worker_.joinable()) return false;
@@ -50,7 +49,7 @@ void LinuxScriptHttp::run() {
       ready_.wait(lock, [this] { return stopping_ || !queue_.empty(); });
       if (stopping_) return;
       job = std::move(queue_.front()); queue_.pop_front();
-      interrupt_.rearm();
+      requests_.rearm();
     }
     script::HttpRequest& req = job.request;
     script::HttpResult result;
@@ -90,20 +89,16 @@ void LinuxScriptHttp::run() {
       if (result_) result_(std::move(result));
       continue;
     }
-    const net::RequestFill filled = fill_ ? fill_(job.owner, req.url, req.headers) : net::RequestFill::Unchanged;
-    std::string origin, path;
-    net::splitUrl(req.url, origin, path);
-    httplib::Client client(origin);
     const std::string method = req.method.empty() ? "GET" : req.method;
     // Redirects are followed for reads only, as on the ESP32: a POST is never sent twice.
     const bool reading = method == "GET" || method == "HEAD";
-    net::configure(client, {script::kHttpTimeoutMs, 3, reading && filled == net::RequestFill::Unchanged});
-    interrupt_.watch(client);
     net::FilteredAnswer answer;
-    if (filled != net::RequestFill::Refused)
-      answer = net::sendFiltered(client, method, path, std::move(req.body), req.headers,
+    net::RequestBody body(std::move(req.body));
+    requests_.run(job.owner, std::move(req.url), req.headers, body, {script::kHttpTimeoutMs, 3, reading},
+                  [&](httplib::Client& client, const std::string& target) {
+      answer = net::sendFiltered(client, method, target, std::move(body), req.headers,
                                  {req.find, req.keep, req.maxBytes});
-    interrupt_.release();
+    });
     result.status = answer.status;
     result.ok = answer.ok;
     result.body = std::move(answer.body);

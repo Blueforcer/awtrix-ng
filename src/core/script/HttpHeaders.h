@@ -16,6 +16,11 @@ using HttpHeaders = std::vector<std::pair<std::string, std::string>>;
 // character on purpose: a value holding one is rejected instead of splitting into two headers.
 constexpr char kHeaderSeparator = '\x1f';
 
+constexpr bool headerValueChar(char c) {
+  const auto u = static_cast<unsigned char>(c);
+  return u >= 0x20 && u != 0x7f;
+}
+
 bool normalizeMethod(const std::string& in, std::string& out);
 
 bool headerAllowed(const std::string& name);

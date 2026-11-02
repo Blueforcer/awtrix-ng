@@ -1,5 +1,5 @@
 // A port of TensorFlow Lite Micro's microfrontend (tensorflow/lite/experimental/microfrontend/lib,
-// Copyright The TensorFlow Authors, Apache-2.0) for the one configuration pymicro_features 2.0.2 sets.
+// Copyright The TensorFlow Authors, Apache-2.0).
 #include "platform/tc002/wake/WakeFrontend.h"
 
 #include <algorithm>
@@ -21,22 +21,22 @@ constexpr int kPcanSnrBits = 12;
 constexpr int kPcanOutputBits = 6;
 constexpr int kLogScaleShift = 6;
 constexpr int kFilterbankBits = 12;
-constexpr int mostSignificantBit32(uint32_t value) { return value ? 1 + mostSignificantBit32(value >> 1) : 0; }
-constexpr int kCorrectionBits =
-    mostSignificantBit32(static_cast<uint32_t>(WakeFft::kSize)) - 1 - kFilterbankBits / 2;
+constexpr int msb32(uint32_t n) { return n == 0 ? 0 : 32 - __builtin_clz(n); }
+constexpr int kCorrectionBits = msb32(static_cast<uint32_t>(WakeFft::kSize)) - 1 - kFilterbankBits / 2;
 constexpr int kSnrShift = kPcanGainBits - kCorrectionBits - kPcanSnrBits;
 constexpr int kChannelCount = static_cast<int>(WakeFrontend::kChannels) + 1;
+constexpr int kBins = static_cast<int>(WakeFft::kHalf) + 1;
 
 constexpr bool tablesFit() {
   if (sizeof(tables::kWindow) / sizeof(int16_t) != WakeFrontend::kWindowSamples) return false;
   if (sizeof(tables::kChannelStarts) / sizeof(int16_t) != kChannelCount) return false;
   if (sizeof(tables::kGainLut) / sizeof(int16_t) != 125) return false;
   for (int c = 0; c < kChannelCount; ++c) {
-    if (tables::kChannelStarts[c] + tables::kWidths[c] > 2 * 257) return false;
+    if (tables::kChannelStarts[c] + tables::kWidths[c] > kBins) return false;
     if (tables::kWeightStarts[c] + tables::kWidths[c] > int(sizeof(tables::kWeights) / sizeof(int16_t)))
       return false;
   }
-  return tables::kStartIndex > 0 && tables::kEndIndex <= 257;
+  return tables::kStartIndex > 0 && tables::kEndIndex <= kBins;
 }
 static_assert(tablesFit(), "WakeFrontendTables.h does not fit the frontend");
 
@@ -54,10 +54,7 @@ constexpr uint16_t kLogLut[] = {
   3186, 3084, 2981, 2875, 2768, 2659, 2549, 2437, 2323, 2207, 2090, 1971, 1851, 1729, 1605, 1480, 1353,
   1224, 1094, 963,  830,  695,  559,  421,  282,  142,  0,    0};
 
-int msb32(uint32_t n) { return n == 0 ? 0 : 32 - __builtin_clz(n); }
 int msb64(uint64_t n) { return n == 0 ? 0 : 64 - __builtin_clzll(n); }
-
-int16_t narrow(int32_t v) { return static_cast<int16_t>(v); }
 
 int16_t wideDynamic(uint32_t x, const int16_t* lut) {
   if (x <= 2) return lut[x];
@@ -78,13 +75,15 @@ uint32_t pcanShrink(uint32_t x) {
   return (x >> (kPcanSnrBits - kPcanOutputBits)) - (1u << kPcanOutputBits);
 }
 
-uint16_t sqrt32(uint32_t num) {
+template <typename Word, Word kMost>
+uint32_t squareRoot(Word num) {
+  constexpr int kBits = 8 * sizeof(Word);
   if (num == 0) return 0;
-  uint32_t res = 0;
-  int maxBit = 32 - msb32(num);
+  Word res = 0;
+  int maxBit = kBits - msb64(num);
   maxBit |= 1;
-  uint32_t bit = 1u << (31 - maxBit);
-  int iterations = (31 - maxBit) / 2 + 1;
+  Word bit = Word{1} << (kBits - 1 - maxBit);
+  int iterations = (kBits - 1 - maxBit) / 2 + 1;
   while (iterations--) {
     if (num >= res + bit) {
       num -= res + bit;
@@ -94,28 +93,13 @@ uint16_t sqrt32(uint32_t num) {
     }
     bit >>= 2u;
   }
-  if (num > res && res != 0xFFFF) ++res;
-  return static_cast<uint16_t>(res);
+  if (num > res && res != kMost) ++res;
+  return static_cast<uint32_t>(res);
 }
 
 uint32_t sqrt64(uint64_t num) {
-  if ((num >> 32) == 0) return sqrt32(static_cast<uint32_t>(num));
-  uint64_t res = 0;
-  int maxBit = 64 - msb64(num);
-  maxBit |= 1;
-  uint64_t bit = 1ull << (63 - maxBit);
-  int iterations = (63 - maxBit) / 2 + 1;
-  while (iterations--) {
-    if (num >= res + bit) {
-      num -= res + bit;
-      res = (res >> 1u) + bit;
-    } else {
-      res >>= 1u;
-    }
-    bit >>= 2u;
-  }
-  if (num > res && res != 0xFFFFFFFFull) ++res;
-  return static_cast<uint32_t>(res);
+  if ((num >> 32) == 0) return squareRoot<uint32_t, 0xFFFF>(static_cast<uint32_t>(num));
+  return squareRoot<uint64_t, 0xFFFFFFFF>(num);
 }
 
 uint32_t log2Fraction(uint32_t x, uint32_t log2x) {
@@ -167,6 +151,13 @@ bool WakeFrontend::next(const int16_t*& samples, std::size_t& count, Frame& fram
 }
 
 void WakeFrontend::compute(Frame& frame) {
+  const int shift = window();
+  fft_.run(fftInput_, spectrum_);
+  filterbank();
+  features(shift, frame);
+}
+
+int WakeFrontend::window() {
   std::array<int16_t, kWindowSamples> windowed;
   int16_t maxAbs = 0;
   for (std::size_t i = 0; i < kWindowSamples; ++i) {
@@ -183,8 +174,10 @@ void WakeFrontend::compute(Frame& frame) {
   for (std::size_t i = 0; i < WakeFft::kSize; ++i) {
     fftInput_[i] = i < kWindowSamples ? narrow(static_cast<uint16_t>(windowed[i]) << shift) : 0;
   }
-  fft_.run(fftInput_, spectrum_);
+  return shift;
+}
 
+void WakeFrontend::filterbank() {
   for (int i = tables::kStartIndex; i < tables::kEndIndex; ++i) {
     const int32_t real = spectrum_[i].r, imag = spectrum_[i].i;
     energy_[i] = static_cast<uint32_t>(real * real) + static_cast<uint32_t>(imag * imag);
@@ -203,7 +196,9 @@ void WakeFrontend::compute(Frame& frame) {
     weightSum = unweightSum;
     unweightSum = 0;
   }
+}
 
+void WakeFrontend::features(int shift, Frame& frame) {
   for (std::size_t i = 0; i < kChannels; ++i) {
     const uint32_t signal = sqrt64(work_[i + 1]) >> shift;
     const uint32_t smoothing = (i & 1) == 0 ? kEvenSmoothing : kOddSmoothing;
@@ -216,11 +211,9 @@ void WakeFrontend::compute(Frame& frame) {
     const uint32_t floor =
       static_cast<uint32_t>((uint64_t{signal} * kMinSignalRemaining) >> kNoiseReductionBits);
     const uint32_t subtracted = (scaledUp - estimate) >> kSmoothingBits;
-    signal_[i] = subtracted > floor ? subtracted : floor;
-  }
-  for (std::size_t i = 0; i < kChannels; ++i) {
+    const uint32_t reduced = subtracted > floor ? subtracted : floor;
     const uint32_t gain = static_cast<uint32_t>(int32_t{wideDynamic(estimate_[i], tables::kGainLut)});
-    const uint32_t snr = static_cast<uint32_t>((uint64_t{signal_[i]} * gain) >> kSnrShift);
+    const uint32_t snr = static_cast<uint32_t>((uint64_t{reduced} * gain) >> kSnrShift);
     uint32_t value = pcanShrink(snr) << kCorrectionBits;
     value = value > 1 ? logScaled(value) : 0;
     frame[i] = static_cast<uint16_t>(value < 0xFFFF ? value : 0xFFFF);

@@ -5,6 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -22,6 +23,7 @@ namespace awtrix::net {
 // "http(s)://host[:port]" with the scheme in lower case, and the path with its query; false for
 // anything else.
 bool splitUrl(const std::string& url, std::string& origin, std::string& target);
+bool validUrl(const std::string& url);
 
 struct ClientLimits {
   // From connecting to the last byte, redirects included; zero permits an endless stream.
@@ -39,8 +41,8 @@ void configure(httplib::Client& client, const ClientLimits& limits);
 using BodyReceiver = std::function<bool(const char*, std::size_t)>;
 using RequestHeaders = std::vector<std::pair<std::string, std::string>>;
 
-enum class RequestFill { Unchanged, Filled, Refused };
-using FillRequest = std::function<RequestFill(const std::string& owner, std::string& url, RequestHeaders& headers)>;
+constexpr std::string_view kPlaceholder = "{secret:";
+constexpr std::size_t kMaxFillGrowth = 4096;
 
 struct RequestBody {
   RequestBody() = default;
@@ -49,10 +51,16 @@ struct RequestBody {
   RequestBody(std::string before, std::shared_ptr<const posix::MappedFile> mapped, std::string after)
       : head(std::move(before)), file(std::move(mapped)), tail(std::move(after)) {}
 
+  bool fillable() const { return !file && head.find(kPlaceholder) != std::string::npos; }
+
   std::string head;
   std::shared_ptr<const posix::MappedFile> file;
   std::string tail;
 };
+
+enum class RequestFill { Unchanged, Filled, Refused };
+using FillRequest = std::function<RequestFill(const std::string& owner, std::string& url, RequestHeaders& headers,
+                                              RequestBody& body)>;
 
 constexpr std::size_t kMaxAnswerBytes = 1024 * 1024;
 
@@ -67,10 +75,22 @@ struct BodyPolicy {
   // available space; it must not reserve it twice.
   std::function<bool(std::size_t)> room;
 };
+class RoomWatch {
+ public:
+  explicit RoomWatch(const std::function<bool(std::size_t)>& room) : room_(room) {}
+
+  bool fits(std::size_t more);
+  bool write(int fd, const char* bytes, std::size_t count);
+  bool noRoom() const { return noRoom_; }
+
+ private:
+  const std::function<bool(std::size_t)>& room_;
+  bool noRoom_ = false;
+};
+
 struct ResponseState {
   int status = 0;
   std::string contentType;
-  std::size_t announcedBytes = 0;
   std::size_t receivedBytes = 0;
   bool tooLarge = false;
 };
@@ -124,6 +144,22 @@ class SocketInterrupt {
   std::mutex mutex_;
   int socket_ = -1;
   bool interrupted_ = false;
+};
+
+class RequestRunner {
+ public:
+  using Task = std::function<void(httplib::Client& client, const std::string& target)>;
+
+  explicit RequestRunner(FillRequest fill) : fill_(std::move(fill)) {}
+
+  bool run(const std::string& owner, std::string url, RequestHeaders& headers, RequestBody& body, ClientLimits limits,
+           const Task& task);
+  void interrupt() { interrupt_.interrupt(); }
+  void rearm() { interrupt_.rearm(); }
+
+ private:
+  const FillRequest fill_;
+  SocketInterrupt interrupt_;
 };
 
 }

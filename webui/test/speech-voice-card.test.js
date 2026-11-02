@@ -1,4 +1,4 @@
-/* Speech voice card: capability gating, the active voice, upload, back to the built-in voice and a test line.
+/* Clock voice card: capability gating, the active voice, upload, back to the built-in voice and a test line.
    Run: node speech-voice-card.test.js */
 const { boot, goto, flush } = require(process.env.HARNESS || './harness');
 const assert = require('node:assert/strict');

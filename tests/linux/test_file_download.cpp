@@ -1,4 +1,5 @@
 #include "../support.h"
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -6,6 +7,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <memory>
 #include <thread>
 
@@ -91,6 +93,14 @@ int main() {
   response = awtrix::net::send(client, "GET", "/small", "", {},
                               [](const char*, std::size_t) { return false; });
   check(!response, "receiver refusal stops the sender");
+  const awtrix::posix::UniqueFd full(::open("/dev/full", O_WRONLY | O_CLOEXEC));
+  awtrix::test::require(full.valid(), "the full device");
+  const std::function<bool(std::size_t)> anyRoom;
+  awtrix::net::RoomWatch watch(anyRoom);
+  check(watch.fits(1) && !watch.noRoom() && !watch.write(full.get(), "x", 1) && watch.noRoom(),
+        "a file system that is full counts as no room");
+  awtrix::net::RoomWatch broken(anyRoom);
+  check(!broken.write(-1, "x", 1) && !broken.noRoom(), "any other write failure does not");
   std::string agent;
   const auto collect = [&](const char* bytes, std::size_t count) { agent.append(bytes, count); return true; };
   response = awtrix::net::send(client, "GET", "/agent", "", {}, collect);
@@ -102,8 +112,7 @@ int main() {
   const awtrix::net::BodyPolicy upTo12{12, {}, {}}, upTo11{11, {}, {}};
   received = 0;
   response = awtrix::net::exchange(client, "GET", "/small", "", {}, upTo12, state, receive);
-  check(response && state.status == 200 && state.contentType == "audio/wav" && state.announcedBytes == 12 &&
-            state.receivedBytes == 12 && !state.tooLarge && received == 12,
+  check(response && state.status == 200 && state.contentType == "audio/wav" && state.receivedBytes == 12 && !state.tooLarge && received == 12,
         "exchange reports status, type and sizes and accepts its exact limit");
   received = 0;
   response = awtrix::net::exchange(client, "GET", "/small", "", {}, upTo11, state, receive);

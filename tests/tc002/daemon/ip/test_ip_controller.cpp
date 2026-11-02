@@ -336,6 +336,33 @@ void testLifecycle() {
   check(controller.stopped() && platform.spawned.size() == 6, "stopped without a restart");
 }
 
+void testReplacedNetwork() {
+  DeviceState state;
+  FakePlatform platform;
+  IpController controller(state, controllerOptions(), platform, IpTiming(), quietSntp());
+  int64_t now = 1000;
+  check(controller.start(now), "start");
+  setLink(state, WifiLink::Connected);
+  controller.onTime(now);
+  const pid_t client = controller.dhcpClient();
+  controller.handleRecord(bound("192.0.2.57"), now);
+  check(state.network().ipv4 == "192.0.2.57", "address on the first network");
+
+  setLink(state, WifiLink::Connecting);
+  state.networkReplaced();
+  controller.onTime(now);
+  check(!controller.leaseApplied() && state.network().ipv4.empty() && platform.fakeKernel.addressesOn(3) == 0,
+        "another network drops the address without the grace period");
+  check(platform.signalled(client, SIGTERM, true), "and stops the client of the old network");
+  check(controller.onChildExit(client, 0, now) && controller.dhcpClient() < 0 && platform.spawned.size() == 1,
+        "no client until the new link is up");
+
+  setLink(state, WifiLink::Connected);
+  controller.onTime(now);
+  check(platform.spawned.size() == 2 && !hasArgument(platform.spawned.back(), "-r"),
+        "the new network starts a client that asks for no old address");
+}
+
 void testResolverNotBound() {
   DeviceState state;
   FakePlatform platform;
@@ -513,6 +540,9 @@ void testStaticAddress() {
         "static address published, the gateway answers DNS");
   controller.handleRecord(bound("192.0.2.77"), 20);
   check(state.network().ipv4 == "192.0.2.50", "stray DHCP records ignored");
+  state.networkReplaced();
+  controller.onTime(30);
+  check(state.network().ipv4 == "192.0.2.50" && platform.spawned.empty(), "a static address stays on another network");
 
   auto changed = fixedAddress("192.0.2.60");
   changed.dns1 = "9.9.9.9";
@@ -781,6 +811,7 @@ void testAccessPointFailures() {
 
 int main() {
   testLifecycle();
+  testReplacedNetwork();
   testResolverNotBound();
   testCapturedLeaseExpiry();
   testClientOutputLogged();

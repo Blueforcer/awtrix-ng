@@ -6,6 +6,7 @@
 #include "core/StrCase.h"
 #include "core/script/ScriptMeta.h"
 #include "platform/linux/net/PrivateHost.h"
+#include "platform/linux/net/UrlPolicy.h"
 #include "platform/linux/script/HeaderAttributes.h"
 
 namespace awtrix::secrets {
@@ -16,7 +17,6 @@ constexpr std::size_t kMaxKey = 24;
 constexpr std::size_t kMaxLabel = 48;
 constexpr std::size_t kMaxHelp = 96;
 constexpr std::size_t kMaxHosts = 8;
-constexpr const char* kHostCount = "@secret: hosts needs 1-8 hosts";
 
 bool validKey(const std::string& key) {
   if (key.empty() || key.size() > kMaxKey) return false;
@@ -40,24 +40,18 @@ const char* parseLine(const std::string& line, Secret& out) {
     } else if (name == "help" && a->hasValue) {
       out.help = a->value;
     } else if (name == "hosts" && a->hasValue) {
-      out.hosts = script::splitHosts(a->value);
-      if (out.hosts.empty()) return kHostCount;
+      out.hosts = net::splitHosts(a->value);
     } else {
       return "@secret: unknown attribute";
     }
   }
   if (out.label.size() > kMaxLabel) return "@secret: label too long";
   if (out.help.size() > kMaxHelp) return "@secret: help too long";
-  if (out.hosts.size() > kMaxHosts) return kHostCount;
-  if (!std::all_of(out.hosts.begin(), out.hosts.end(), script::validHost)) return "@secret: bad host";
+  if (out.hosts.empty() || out.hosts.size() > kMaxHosts) return "@secret: hosts needs 1-8 hosts";
+  if (!std::all_of(out.hosts.begin(), out.hosts.end(), net::validHost)) return "@secret: bad host";
   std::sort(out.hosts.begin(), out.hosts.end());
   out.hosts.erase(std::unique(out.hosts.begin(), out.hosts.end()), out.hosts.end());
   return nullptr;
-}
-
-std::optional<Spec> fail(std::string* error, const char* message) {
-  if (error) *error = message;
-  return std::nullopt;
 }
 
 }
@@ -69,24 +63,21 @@ const Secret* Spec::find(std::string_view key) const {
 
 std::optional<Spec> parseSpec(const std::string& source, std::string* error) {
   if (error) error->clear();
-  std::vector<std::string> lines;
-  script::forEachHeaderTag(source, [&](const std::string& tag, const std::string& value, int) {
-    if (tag == "secret") lines.push_back(value);
-  });
+  const std::vector<std::string> lines = script::headerLines(source, "secret");
   if (lines.empty()) return std::nullopt;
-  if (lines.size() > kMaxSecrets) return fail(error, "@secret: at most 4 lines");
+  if (lines.size() > kMaxSecrets) return script::specFailure(error, "@secret: at most 4 lines");
   Spec spec;
   for (const std::string& line : lines) {
     Secret secret;
-    if (const char* problem = parseLine(line, secret)) return fail(error, problem);
-    if (spec.find(secret.key)) return fail(error, "@secret: key declared twice");
+    if (const char* problem = parseLine(line, secret)) return script::specFailure(error, problem);
+    if (spec.find(secret.key)) return script::specFailure(error, "@secret: key declared twice");
     spec.secrets.push_back(std::move(secret));
   }
   return spec;
 }
 
 bool allows(const Secret& secret, const std::string& url, const char** reason) {
-  const char* refusal = script::urlRefusal(url, secret.hosts, net::isPrivateHost);
+  const char* refusal = net::urlRefusal(url, secret.hosts, net::isPrivateHost);
   if (reason) *reason = refusal;
   return !refusal;
 }

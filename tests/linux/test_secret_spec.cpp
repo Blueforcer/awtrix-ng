@@ -27,7 +27,7 @@ int main() {
   const auto spec = secrets::parseSpec(
       "# @name Assistant\n"
       "# @secret key label=\"API key\" help=\"Your OpenAI API key\" hosts=api.openai.com,API.Groq.com\n"
-      "# @secret org\n"
+      "# @secret org hosts=org.test\n"
       "class App end\n",
       &error);
   check(spec.has_value() && error.empty(), "the header parses: " + error);
@@ -37,7 +37,8 @@ int main() {
   check(key && key->hosts == std::vector<std::string>{"api.groq.com", "api.openai.com"},
         "hosts in lower case and sorted");
   const secrets::Secret* org = spec ? spec->find("org") : nullptr;
-  check(org && org->label.empty() && org->help.empty() && org->hosts.empty(), "a key alone is a whole line");
+  check(org && org->label.empty() && org->help.empty() && org->hosts == std::vector<std::string>{"org.test"},
+        "a key and its hosts are a whole line");
   const auto repeated = secrets::parseSpec("# @secret k hosts=b.test,A.test,a.test\n");
   check(repeated && repeated->secrets[0].hosts == std::vector<std::string>{"a.test", "b.test"}, "a repeat counts once");
   check(spec && !spec->find("Key") && !spec->find("missing"), "keys are found as written");
@@ -54,15 +55,16 @@ int main() {
   check(!secrets::parseSpec("class A end\n# @secret key\n", &error) && error.empty(),
         "a line after the code is no header line");
 
-  check(secrets::parseSpec("# @secret a\n# @secret b\n# @secret c\n# @secret d\n").has_value(), "four lines");
-  check(!secrets::parseSpec("# @secret a\n# @secret b\n# @secret c\n# @secret d\n# @secret e\n", &error) &&
-            error == "@secret: at most 4 lines",
+  const std::string four = "# @secret a hosts=t\n# @secret b hosts=t\n# @secret c hosts=t\n# @secret d hosts=t\n";
+  check(secrets::parseSpec(four).has_value(), "four lines");
+  check(!secrets::parseSpec(four + "# @secret e hosts=t\n", &error) && error == "@secret: at most 4 lines",
         "a fifth line: " + error);
-  check(!secrets::parseSpec("# @secret a\n# @secret a label=x\n", &error) && error == "@secret: key declared twice",
+  check(!secrets::parseSpec("# @secret a hosts=t\n# @secret a label=x hosts=t\n", &error) &&
+            error == "@secret: key declared twice",
         "a key twice: " + error);
 
   for (const char* good : {"_key", "a", "Key2", "abcdefghijklmnopqrstuvwx", "_0"})
-    check(secrets::parseSpec(std::string("# @secret ") + good + "\n").has_value(), std::string("key ") + good);
+    check(secrets::parseSpec(std::string("# @secret ") + good + " hosts=t\n").has_value(), std::string("key ") + good);
   for (const char* bad : {"", "1key", "abcdefghijklmnopqrstuvwxy", "my-key", "key.x", "k\xc3\xa9y", "label=x",
                           "\"quoted key\""})
     check(refused(bad, "@secret: bad key"), std::string("bad key ") + bad);
@@ -72,19 +74,24 @@ int main() {
   check(refused("key other", "@secret: unknown attribute"), "a second bare word");
   check(refused("key label=\"open", "@secret: unterminated quote"), "an open quote");
   check(secrets::parseSpec("# @secret key label=\"" + std::string(48, 'l') + "\" help=\"" + std::string(96, 'h') +
-                           "\"\n")
+                           "\" hosts=t\n")
             .has_value(),
         "label and help at their limits");
   check(refused("key label=\"" + std::string(49, 'l') + "\"", "@secret: label too long"), "a label too long");
   check(refused("key help=\"" + std::string(97, 'h') + "\"", "@secret: help too long"), "a help too long");
 
-  for (const char* host : {"a.test/x", "a.test:443", "user@a.test", "\"a.test b.test\""})
+  for (const char* host : {"a.test/x", "a.test:443", "user@a.test", "\"a.test b.test\"", "a.test?x", "a.test#x",
+                           "b\xc3\xa4" "d.test", "[fd00::1", "[zz::1]", "[]", "fd00::1"})
     check(refused(std::string("key hosts=") + host, "@secret: bad host"), std::string("bad host ") + host);
-  check(refused("key hosts=", "@secret: hosts needs 1-8 hosts"), "hosts= without a host");
+  for (const char* line : {"key", "key label=x help=y", "key hosts=", "key hosts=,"})
+    check(refused(line, "@secret: hosts needs 1-8 hosts"), std::string("no host: ") + line);
+  check(secrets::parseSpec("# @secret key hosts=[fd00::1],[::1]\n").has_value(), "an IPv6 address in brackets");
   check(secrets::parseSpec("# @secret key hosts=1.t,2.t,3.t,4.t,5.t,6.t,7.t,8.t\n").has_value(), "eight hosts");
   check(refused("key hosts=1.t,2.t,3.t,4.t,5.t,6.t,7.t,8.t,9.t", "@secret: hosts needs 1-8 hosts"), "nine hosts");
 
-  if (key && org) {
+  const auto local = secrets::parseSpec("# @secret local hosts=192.168.1.5,printer.local,[::1]\n");
+  if (key && local) {
+    const secrets::Secret& near = local->secrets[0];
     check(refusedFor(*key, "https://api.openai.com/v1/chat/completions") == "allowed", "a listed host");
     check(refusedFor(*key, "https://API.OpenAI.com/v1") == "allowed", "the host match ignores case");
     check(refusedFor(*key, "https://api.groq.com:443/v1") == "allowed", "the second host, with a port");
@@ -93,14 +100,14 @@ int main() {
     check(refusedFor(*key, "https://evil.example/?u=https://api.openai.com") == "host", "another host");
     check(refusedFor(*key, "https://api.openai.com.evil.example/") == "host", "a suffix trick");
     check(refusedFor(*key, "https://user:pass@api.openai.com/") == "host", "user information");
-    check(refusedFor(*org, "https://any.example/x") == "allowed", "without hosts= any https host");
-    check(refusedFor(*org, "http://any.example/x") == "http", "without hosts= plain http stays private");
-    check(refusedFor(*org, "http://192.168.1.5:8080/x") == "allowed", "plain http to a private address");
-    check(refusedFor(*org, "http://printer.local/x") == "allowed", "plain http to a .local name");
-    check(refusedFor(*org, "http://[::1]/x") == "allowed", "plain http to IPv6 loopback");
-    check(refusedFor(*org, "http://user@192.168.1.5/x") == "host", "plain http with user information");
-    check(refusedFor(*key, "http://192.168.1.5/x") == "host", "hosts= holds for a private address too");
-    check(refusedFor(*org, "https://user@any.example/x") == "host", "without hosts= no user information");
+    check(refusedFor(near, "http://192.168.1.5:8080/x") == "allowed", "plain http to a listed private address");
+    check(refusedFor(near, "http://printer.local/x") == "allowed", "plain http to a listed .local name");
+    check(refusedFor(near, "http://[::1]/x") == "allowed", "plain http to a listed IPv6 loopback");
+    check(refusedFor(near, "https://printer.local/x") == "allowed", "https to a listed private host");
+    check(refusedFor(near, "http://user@192.168.1.5/x") == "host", "plain http with user information");
+    check(refusedFor(near, "http://10.0.0.1/x") == "host", "hosts= holds for a private address too");
+    check(refusedFor(*key, "http://192.168.1.5/x") == "host", "a private address that is not listed");
+    check(refusedFor(secrets::Secret{}, "https://any.example/x") == "host", "without a host nothing is allowed");
   }
   return awtrix::test::finish("linux-secret-spec");
 }

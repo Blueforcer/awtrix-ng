@@ -15,11 +15,37 @@ void MicrophoneClient::enter(Phase phase, int64_t now) {
   phaseAt_ = now;
 }
 
-void MicrophoneClient::open(int64_t now) {
+void MicrophoneClient::renew() {
   epoch_ = posix::nextInSequence(epoch_);
   error_.clear();
-  enter(Phase::Probing, now);
+  started_ = false;
+}
+
+void MicrophoneClient::requestStart(int64_t now) {
+  enter(Phase::Starting, now);
+  keepaliveAt_ = now;
+  send(StreamControl::Start);
+}
+
+void MicrophoneClient::open(int64_t now) {
+  renew();
+  enter(Phase::Opening, now);
   send(StreamControl::Probe);
+}
+
+void MicrophoneClient::probe() {
+  renew();
+  probeAgain();
+}
+
+void MicrophoneClient::probeAgain() {
+  phase_ = Phase::Probing;
+  send(StreamControl::Probe);
+}
+
+void MicrophoneClient::start(int64_t now) {
+  renew();
+  requestStart(now);
 }
 
 void MicrophoneClient::stop(int64_t now) {
@@ -28,6 +54,7 @@ void MicrophoneClient::stop(int64_t now) {
     case Phase::Stopping:
       return;
     case Phase::Probing:
+    case Phase::Opening:
       cancel();
       return;
     case Phase::Starting:
@@ -39,7 +66,7 @@ void MicrophoneClient::stop(int64_t now) {
 }
 
 void MicrophoneClient::cancel() {
-  if (phase_ != Phase::Idle && phase_ != Phase::Stopping) send(StreamControl::Stop);
+  if (phase_ != Phase::Idle && phase_ != Phase::Probing && phase_ != Phase::Stopping) send(StreamControl::Stop);
   phase_ = Phase::Idle;
 }
 
@@ -47,18 +74,19 @@ MicrophoneClient::Report MicrophoneClient::receive(const StreamEvent& event, int
   if (phase_ == Phase::Idle || event.epoch != epoch_) return Report::None;
   switch (event.kind) {
     case StreamEvent::Kind::Support:
-      if (phase_ != Phase::Probing) return Report::None;
+      if (phase_ == Phase::Probing) return event.available ? Report::Available : Report::Unavailable;
+      if (phase_ != Phase::Opening) return Report::None;
       if (!event.available) {
         phase_ = Phase::Idle;
         error_ = kStreamUnavailable;
         return Report::Unavailable;
       }
-      enter(Phase::Starting, now);
-      keepaliveAt_ = now;
-      send(StreamControl::Start);
+      requestStart(now);
       return Report::None;
     case StreamEvent::Kind::Started:
+      if (phase_ == Phase::Stopping) started_ = true;
       if (phase_ != Phase::Starting) return Report::None;
+      started_ = true;
       enter(Phase::Streaming, now);
       expected_ = 0;
       return Report::Started;
@@ -69,6 +97,7 @@ MicrophoneClient::Report MicrophoneClient::receive(const StreamEvent& event, int
       return gap ? Report::Gap : Report::Audio;
     }
     case StreamEvent::Kind::Ended: {
+      if (phase_ == Phase::Probing) return Report::None;
       const bool asked = phase_ == Phase::Stopping;
       phase_ = Phase::Idle;
       error_ = event.error;
@@ -81,13 +110,14 @@ MicrophoneClient::Report MicrophoneClient::receive(const StreamEvent& event, int
 MicrophoneClient::Report MicrophoneClient::tick(int64_t now) {
   switch (phase_) {
     case Phase::Idle:
+    case Phase::Probing:
       return Report::None;
     case Phase::Stopping:
       if (now - phaseAt_ < kStreamAnswerMs) return Report::None;
       phase_ = Phase::Idle;
       error_.clear();
       return Report::Stopped;
-    case Phase::Probing:
+    case Phase::Opening:
     case Phase::Starting:
       if (now - phaseAt_ < kStreamAnswerMs) break;
       cancel();
@@ -96,7 +126,7 @@ MicrophoneClient::Report MicrophoneClient::tick(int64_t now) {
     case Phase::Streaming:
       break;
   }
-  if (phase_ != Phase::Probing && now - keepaliveAt_ >= kStreamKeepaliveMs) {
+  if (phase_ != Phase::Opening && now - keepaliveAt_ >= kStreamKeepaliveMs) {
     keepaliveAt_ = now;
     send(StreamControl::Keepalive);
   }

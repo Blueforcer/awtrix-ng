@@ -112,6 +112,11 @@ AWTRIX answers `403 forbiddenOrigin` and changes nothing:
 
 When the web login is on, it is checked first.
 
+<!-- only tc002 -->
+Everything else stays open to other pages until you set a [web login](#authentication). That includes
+scripts and app settings, and with those a page can reach API keys and the microphone.
+<!-- /only -->
+
 ## Content-Type
 
 Send `Content-Type: application/json` with every JSON body. See
@@ -1536,8 +1541,9 @@ These routes hold the keys. The web UI uses them in the
 [capabilities](#get-apiv1capabilities) say `"secret": true`, which needs scripting switched on.
 
 No route ever returns a key. Every change needs the header `X-Awtrix-Secret: 1` and an `Origin`
-header naming the device, as the device's own web UI sends them. This keeps other web pages from
-changing a key. Answers are never cached.
+header naming the device, as the device's own web UI sends them. This keeps other web pages off these
+routes. The scripts and settings around a key need a [web login](#cross-origin). Answers are never
+cached.
 
 #### GET /api/v1/secrets
 
@@ -1552,7 +1558,7 @@ One script's keys.
 **Response:** `200`:
 
 ```json
-{"keys": [{"key": "key", "label": "API key", "help": "Your OpenAI key", "set": true}]}
+{"keys": [{"key": "key", "label": "API key", "help": "Your OpenAI key", "set": true, "hosts": ["api.openai.com"]}]}
 ```
 
 | Key | Meaning |
@@ -1561,9 +1567,11 @@ One script's keys.
 | `label` | the name of the field, `""` when the line has none |
 | `help` | the line of explanation, `""` when the line has none |
 | `set` | a value is saved |
+| `hosts` | the only hosts the key may be sent to, 1 to 8 |
 
 When an `@secret` line is invalid, the answer is `200` `{"invalid": "@secret: bad key"}` with the
-reason instead.
+reason instead, and no key can be saved. A line without `hosts=` answers
+`{"invalid": "@secret: hosts needs 1-8 hosts"}`.
 
 #### PUT /api/v1/secrets/{name}
 
@@ -1591,7 +1599,7 @@ Erases one key. **Response:** `200` `{"ok":true}`, also when it was not set.
 | 403 | `forbiddenOrigin`: not sent from the device's own web UI |
 | 404 | `notFound`, `no @secret line`: no such script, or it has no `@secret` line. `unknown route`: a name that cannot be a script, or a path after the key |
 | 405 | `methodNotAllowed`: `allowed: GET`, `allowed: GET, PUT` or `allowed: DELETE` |
-| 422 | `validationFailed`: `unknown key`, a key the script does not declare. `value too long`, over 512 bytes. `invalid value`, a line break or a zero byte. `values must be strings`. `storage failed`. For an invalid `@secret` line, the reason |
+| 422 | `validationFailed`: `unknown key`, a key the script does not declare. `value too long`, over 512 bytes. `invalid value`, a control character such as a line break or a tab. `values must be strings`. `storage failed`. For an invalid `@secret` line, the reason |
 
 The `404` comes first: a script without an `@secret` line answers it to every method, before `405`
 and `403`.
@@ -2018,7 +2026,7 @@ Source keys, exactly one per object:
 | `song` | [song text](songs.md) | the synthesizer (`audio.song`) |
 <!-- /only -->
 <!-- only tc002 -->
-| `speech` | text, 1 to 512 bytes | the clock's voice, once a voice is installed (`audio.speech`). How it reads text: [Speech](../guides/sounds.md#speech) |
+| `speech` | text, 1 to 512 bytes | the clock's voice, once a voice is installed (`audio.speech`). How it reads text: [Speech](../guides/speech.md#how-the-clock-reads-text) |
 <!-- /only -->
 <!-- only esp32 esp32-s3 -->
 | `track` | integer 1–2999 | a DFPlayer track (`audio.track`) |
@@ -3272,7 +3280,7 @@ curl -X DELETE http://<awtrix-ip>/api/v1/mqtt/tls/ca
 
 ### GET /api/v1/voice {#apiv1voice}
 
-Reads the [voice assistant](../guides/voice.md) settings and the Home Assistant connection state.
+Reads the [voice assistant](../guides/voice.md) settings and whether the assistant is ready.
 
 This route, `POST` below and [`POST /api/v1/voice/start`](#post-apiv1voicestart) exist only while
 [capabilities](#get-apiv1capabilities) say `"voice": true`. Otherwise they answer `404`.
@@ -3283,18 +3291,21 @@ This route, `POST` below and [`POST /api/v1/voice/start`](#post-apiv1voicestart)
 
 | Key | Type | Meaning |
 |---|---|---|
-| `config.assistant` | string | who answers the knob, the wake word, MQTT and [`/api/v1/voice/start`](#post-apiv1voicestart): `ha` for Home Assistant, `app:<name>` for that app |
-| `config.enabled` | boolean | Home Assistant Voice is switched on. It counts only while `config.assistant` is `ha` |
+| `config.assistant` | string | who answers the knob, the wake word, MQTT and [`/api/v1/voice/start`](#post-apiv1voicestart): `off` for nobody, `ha` for Home Assistant, `app:<name>` for that app |
+| `config.enabled` | boolean | `true` while `config.assistant` is `ha`, otherwise `false` |
 | `config.wakeWord` | boolean | saying "Hey AWTRIX" starts the assistant |
+| `config.wakeSensitivity` | string | how easily the clock hears the wake word: `low`, `normal` or `high` |
 | `config.url` | string | the Home Assistant address, `""` when none is set |
 | `config.pipeline` | string | the chosen Assist pipeline ID, `""` for Home Assistant's default |
 | `config.device` | string | the Home Assistant device ID whose area is the clock's room, `""` when none is set |
 | `config.tokenSet` | boolean | an access token is saved. The token itself is never returned |
-| `state` | string | `offline`, `connecting`, `ready`, `starting`, `listening`, `processing`, `speaking` or `error` |
-| `error` | string | why the last attempt failed, as a code such as `tokenRejected`. `""` when all is well. The web UI shows each code as a sentence |
+| `state` | string | with `ha`: `offline`, `connecting`, `ready`, `starting`, `listening`, `processing`, `speaking` or `error`. With an app: `ready` or `error`. With `off`: `offline` |
+| `error` | string | what stops the assistant now, as a code such as `tokenRejected`. It stays while the clock tries again and goes once the clock is connected. `""` when nothing does. With an app: `appMissing` (not installed or cannot answer), `appOff` (switched off on the **Apps** tab) or `appBroken` (the script has an error) |
+| `lastError` | string | why the last request failed, as a code such as `nothingUnderstood`. The assistant stays ready. `""` once the next request starts, after five minutes or when a setting other than the wake word changes |
 | `wakeWordAvailable` | boolean | the clock can hear "Hey AWTRIX". When `false`, `config.wakeWord` does nothing |
-| `assistantApps` | array | the names of the installed apps that can be the assistant: scripts that name `voice` in their [`@needs`](../guides/scripting/sharing.md#what-your-script-asks-of-the-clock), but no modules and no headless scripts. Apps switched off on the **Apps** tab are listed too |
-| `pipelines` | array | Home Assistant's Assist pipelines once connected. `[]` before |
+| `wakeListening` | boolean | the clock listens for "Hey AWTRIX" right now. `false` while the wake word is off, the assistant is off, Home Assistant is not connected or the app cannot answer |
+| `assistantApps` | array | the names of the installed apps that can be the assistant: scripts that name `voice` in their [`@needs`](../guides/scripting/sharing.md#what-your-script-asks-of-the-clock) and have an `on_assistant` method, but no modules and no headless scripts. Apps switched off on the **Apps** tab are listed too |
+| `pipelines` | array | the voice assistants of Home Assistant (its Assist pipelines) once connected. `[]` before |
 
 ```bash
 curl http://<awtrix-ip>/api/v1/voice
@@ -3304,25 +3315,29 @@ curl http://<awtrix-ip>/api/v1/voice
 
 Changes the voice assistant settings.
 
-**Request:** any of `assistant`, `enabled`, `wakeWord`, `url`, `pipeline`, `device`, `token`, or
-`"clearToken": true` to delete the token. Fields you leave out keep their value.
+**Request:** any of `assistant`, `enabled`, `wakeWord`, `wakeSensitivity`, `url`, `pipeline`,
+`device`, `token`, or `"clearToken": true` to delete the token. Fields you leave out keep their value.
 
-* `assistant` is `ha` (the default) or `app:<name>`. The name follows the rules for app names: 1 to
-  32 letters, digits, `_` or `-`, and not `active`, `next`, `previous` or `order`. With an app, the
+* `assistant` is `off` (the default), `ha` or `app:<name>`. The name follows the rules for app names:
+  1 to 32 letters, digits, `_` or `-`, and not `active`, `next`, `previous` or `order`. With an app, the
   clock keeps no connection to Home Assistant, and every start opens that app. An app that is not
   installed, is switched off or cannot answer starts nothing.
+* With `off`, the clock closes its connection to Home Assistant and does not listen for the wake word,
+  and nothing starts the assistant. Address, token, pipeline and device stay saved.
+* With `ha` and no address or no token, the clock stays unconnected.
+* `enabled: false` sets `assistant` to `off`, `enabled: true` sets it to `ha`, whatever it was before.
+  When a request has both fields, `assistant` counts.
 * `device` is a Home Assistant device ID (letters and digits, up to 64), `""` for none.
 * `wakeWord` is `true` or `false`. With `true`, saying "Hey AWTRIX" starts the assistant while it is
   ready.
-
-* `enabled: true` needs an address and a token, also with an app as the assistant.
+* `wakeSensitivity` is `low` (fewer false starts), `normal` (the default) or `high` (hears more easily).
+  A change counts at once.
 * After you change the address, send the token again.
-* With `"enabled": false` and Home Assistant as the assistant, the clock closes its connection to
-  Home Assistant, and neither a long press on the knob nor the wake word starts a request.
 
 This route accepts requests only from the device's own web UI: it needs the header
 `X-Awtrix-Voice: 1` and an `Origin` header naming the device, as a browser sends it. This keeps
-other web pages and scripts from sending your voice to another server.
+other web pages and scripts from changing these settings. The scripts on the clock need a
+[web login](#cross-origin).
 
 **Response:** `200` `{"ok":true}`.
 
@@ -3331,7 +3346,7 @@ other web pages and scripts from sending your voice to another server.
 | Status | Condition |
 |---|---|
 | 403 | `forbiddenOrigin`: not sent from the device's own web UI |
-| 422 | `validationFailed`: `field` names the wrong value: `assistant`, `url`, `token`, `pipeline`, `device`, `enabled` or `wakeWord` |
+| 422 | `validationFailed`: `field` names the wrong value: `assistant`, `url`, `token`, `pipeline`, `device`, `enabled`, `wakeWord` or `wakeSensitivity` |
 | 500 | `internalError`: the settings could not be saved |
 
 ```bash
@@ -3339,7 +3354,7 @@ curl -X POST http://<awtrix-ip>/api/v1/voice \
   -H "Content-Type: application/json" \
   -H "X-Awtrix-Voice: 1" \
   -H "Origin: http://<awtrix-ip>" \
-  -d '{"enabled":false}'
+  -d '{"assistant":"off"}'
 ```
 
 ### POST /api/v1/voice/start
@@ -3361,7 +3376,7 @@ header naming the device.
 |---|---|
 | 403 | `forbiddenOrigin`: not sent from the device's own web UI |
 | 405 | `methodNotAllowed`: a method other than `POST` |
-| 409 | `voiceUnavailable`, `assistant not ready`: nothing started. Home Assistant Voice is off, not connected yet or busy, an app is recording or playing voice, the chosen app cannot start, or the clock shows its start animation, installs an update or is in setup mode |
+| 409 | `voiceUnavailable`, `assistant not ready`: nothing started. The assistant is off, Home Assistant Voice is not connected yet or busy, an app is recording or playing voice, the chosen app cannot start, with an app as the assistant the clock is speaking, or the clock shows its start animation, installs an update or is in setup mode |
 
 ```bash
 curl -X POST http://<awtrix-ip>/api/v1/voice/start \

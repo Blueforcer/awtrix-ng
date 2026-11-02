@@ -5,16 +5,20 @@
 #include <unistd.h>
 
 #include <array>
+#include <cerrno>
 #include <chrono>
+#include <condition_variable>
 #include <cstdlib>
 #include <memory>
 #include <string_view>
+#include <thread>
 
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/tls/TlsTrust.h"
 #include "core/net/Url.h"
 #include "core/script/HttpBodyFilter.h"
 #include "platform/posix/Files.h"
+#include "system/Log.h"
 
 namespace awtrix::net {
 
@@ -24,6 +28,11 @@ bool splitUrl(const std::string& url, std::string& origin, std::string& target) 
   origin = parsed->origin();
   target = parsed->requestTarget();
   return true;
+}
+
+bool validUrl(const std::string& url) {
+  std::string origin, target;
+  return splitUrl(url, origin, target);
 }
 
 void configure(httplib::Client& client, const ClientLimits& limits) {
@@ -82,10 +91,7 @@ httplib::Result exchange(httplib::Client& client, const std::string& method, con
     state.contentType = response.get_header_value("Content-Type");
     if (policy.accept && !policy.accept(state.status, state.contentType)) return false;
     if (!response.has_header("Content-Length")) return true;
-    const uint64_t announced = std::strtoull(response.get_header_value("Content-Length").c_str(), nullptr, 10);
-    if (!fits(announced)) return false;
-    state.announcedBytes = static_cast<std::size_t>(announced);
-    return true;
+    return fits(std::strtoull(response.get_header_value("Content-Length").c_str(), nullptr, 10));
   };
   request.content_receiver = [&](const char* bytes, std::size_t count, uint64_t, uint64_t) {
     if (!fits(count)) return false;
@@ -134,6 +140,17 @@ httplib::Result receive200(httplib::Client& client, const std::string& path,
   return exchange(client, "GET", path, {}, {}, only200, state, receive);
 }
 
+bool RoomWatch::fits(std::size_t more) {
+  noRoom_ = room_ && !room_(more);
+  return !noRoom_;
+}
+
+bool RoomWatch::write(int fd, const char* bytes, std::size_t count) {
+  if (posix::writeAll(fd, bytes, count)) return true;
+  noRoom_ = errno == ENOSPC;
+  return false;
+}
+
 SocketInterrupt::~SocketInterrupt() { release(); }
 
 void SocketInterrupt::watch(httplib::Client& client) {
@@ -173,6 +190,60 @@ void SocketInterrupt::closeCopy() {
   if (socket_ < 0) return;
   ::close(socket_);
   socket_ = -1;
+}
+
+namespace {
+
+class Deadline {
+ public:
+  Deadline(SocketInterrupt& interrupt, int64_t ms) {
+    if (ms <= 0) return;
+    thread_ = std::thread([this, &interrupt, ms] {
+      std::unique_lock<std::mutex> lock(mutex_);
+      if (!changed_.wait_for(lock, std::chrono::milliseconds(ms), [this] { return ended_; })) interrupt.interrupt();
+    });
+  }
+  ~Deadline() {
+    if (!thread_.joinable()) return;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      ended_ = true;
+    }
+    changed_.notify_one();
+    thread_.join();
+  }
+  Deadline(const Deadline&) = delete;
+  Deadline& operator=(const Deadline&) = delete;
+
+ private:
+  std::mutex mutex_;
+  std::condition_variable changed_;
+  bool ended_ = false;
+  std::thread thread_;
+};
+
+}
+
+bool RequestRunner::run(const std::string& owner, std::string url, RequestHeaders& headers, RequestBody& body,
+                        ClientLimits limits, const Task& task) {
+  bool finished = false;
+  try {
+    const RequestFill filled = fill_ ? fill_(owner, url, headers, body) : RequestFill::Unchanged;
+    std::string origin, target;
+    if (filled != RequestFill::Refused && splitUrl(url, origin, target)) {
+      httplib::Client client(origin);
+      limits.followRedirects = limits.followRedirects && filled == RequestFill::Unchanged;
+      configure(client, limits);
+      interrupt_.watch(client);
+      const Deadline deadline(interrupt_, limits.timeoutMs);
+      task(client, target);
+      finished = true;
+    }
+  } catch (...) {
+    logf("http: request failed");
+  }
+  interrupt_.release();
+  return finished;
 }
 
 }

@@ -771,8 +771,10 @@ void test_sink_speech() {
   check(rig.router.play(say("Hello"), sound::Group::Alert, "", detail) == sound::PlayResult::Ok,
         "speech starts");
   check(rig.sink->oneShotPlaying() && rig.router.alertPlaying(), "and counts as playing from its request on");
+  check(rig.sink->speaking(), "the sink knows it is speech");
   check(waitFor([&] { return heard(rig.helper, -1000); }, 2000), "the voice reaches the speaker");
   check(waitFor([&] { return !rig.router.alertPlaying(); }, 3000), "and ends once heard");
+  check(!rig.sink->speaking(), "and that it has ended");
   rig.tick();
   check(rig.router.alertStatus().name == "speech" && !rig.router.alertStatus().playing,
         "the state names speech and shows it ended");
@@ -795,6 +797,7 @@ void test_sink_speech() {
   check(tc002::playClip(rig.sink.get(), rig.router, steadyWav(4000, 1600), detail) == DispatchResult::Ok &&
             waitFor([&] { return voice->cancels == 2; }, 2000),
         "a newer one-shot cancels it");
+  check(!rig.sink->speaking(), "and a clip is not speech");
   check(waitFor([&] { return !rig.router.alertPlaying(); }, 3000), "the clip ends");
 
   check(rig.router.play(say("Long"), sound::Group::App, "talker", detail) == sound::PlayResult::Ok &&

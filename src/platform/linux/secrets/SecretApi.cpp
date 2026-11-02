@@ -27,9 +27,12 @@ std::string statusJson(const Status& status) {
     w.member("invalid", status.invalid);
   } else {
     w.key("keys").beginArray();
-    for (const KeyStatus& k : status.keys)
-      w.beginObject().member("key", k.key).member("label", k.label).member("help", k.help).member("set", k.set)
-          .endObject();
+    for (const KeyStatus& k : status.keys) {
+      w.beginObject().member("key", k.key).member("label", k.label).member("help", k.help).member("set", k.set);
+      w.key("hosts").beginArray();
+      for (const std::string& host : k.hosts) w.value(host);
+      w.endArray().endObject();
+    }
     w.endArray();
   }
   w.endObject();
@@ -89,10 +92,7 @@ bool Api::handle(const httplib::Request& req, httplib::Response& res) {
     sendError(res, 405, "methodNotAllowed", whole ? "allowed: GET, PUT" : "allowed: DELETE");
     return true;
   }
-  if (!host::fromOwnPage(req, "X-Awtrix-Secret")) {
-    sendError(res, 403, "forbiddenOrigin", "only from this device's web page");
-    return true;
-  }
+  if (host::refuseForeign(req, res, "X-Awtrix-Secret")) return true;
 
   std::vector<std::pair<std::string, std::string>> values;
   if (!whole) {

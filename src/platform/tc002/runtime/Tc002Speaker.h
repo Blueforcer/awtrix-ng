@@ -56,6 +56,7 @@ class Tc002Speaker : public audio::IAnalysisSource {
   // The speech voice; a new one speaks from the next speech on.
   std::shared_ptr<speech::SpeechVoice> speechVoice() const { return sink_.voice(); }
   void setSpeechVoice(std::shared_ptr<speech::SpeechVoice> voice) { sink_.setVoice(std::move(voice)); }
+  bool speaking() const { return sink_.speaking(); }
   bool playVoice(const std::string& path) { return sink_.playSystemSound(path, 0); }
   void stopVoice() { sink_.stopSystemSound(); }
   bool voiceFinished() const { return sink_.systemFinished(); }

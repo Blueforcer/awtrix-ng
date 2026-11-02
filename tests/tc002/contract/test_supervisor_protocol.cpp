@@ -263,6 +263,21 @@ int main() {
     message.streamEvent.hostAtMs == 123456, "stream PCM and monotonic timestamp round trip");
   stream.samples.push_back(1);
   check(encodeStreamEvent(stream).empty(), "oversized or partial DMA block rejected");
+  stream.samples.pop_back();
+  constexpr uint32_t kHalves = (uint64_t{1} << 32) / 24 + 1;
+  stream.firstSample = kHalves * 24;
+  check(stream.firstSample % 24 != 0, "the position past the wrap is off the 24 sample grid");
+  check(decodeSupervisorMessage(encodeStreamEvent(stream), message) &&
+        message.type == MessageType::MicrophoneStreamEvent && message.streamEvent.firstSample == stream.firstSample &&
+        message.streamEvent.samples == stream.samples, "audio survives the sample position's wrap");
+  StreamEvent ending;
+  ending.epoch = 42;
+  ending.kind = StreamEvent::Kind::Ended;
+  ending.firstSample = stream.firstSample;
+  ending.error = "stopped";
+  check(decodeSupervisorMessage(encodeStreamEvent(ending), message) &&
+        message.streamEvent.kind == StreamEvent::Kind::Ended && message.streamEvent.firstSample == ending.firstSample &&
+        message.streamEvent.error == "stopped", "the end of a stream survives the wrap");
   check(!decodeSupervisorMessage("{\"v\":2,\"type\":\"microphoneStreamControl\",\"epoch\":0,\"operation\":1}", message),
         "zero stream epoch refused");
   if (failures) return 1;

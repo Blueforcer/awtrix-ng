@@ -65,6 +65,7 @@ target_link_libraries(awtrix_iphone PUBLIC awtrix_ble awtrix_host PRIVATE awtrix
 
 add_executable(awtrix-linux "${LINUX_DIR}/main_linux.cpp" "${LINUX_DIR}/LinuxOptions.cpp"
   "${LINUX_DIR}/LinuxRuntime.cpp" "${LINUX_DIR}/LinuxRuntimeLoop.cpp" "${TC002_RUNTIME_DIR}/Tc002KnobRouter.cpp"
+  "${TC002_DIR}/voice/VoiceStack.cpp"
   "${LINUX_DIR}/LinuxAdminSecurity.cpp" "${LINUX_DIR}/LinuxDeviceFacts.cpp"
   "${LINUX_DIR}/LinuxLanLogin.cpp" "${LINUX_DIR}/LinuxMqttTls.cpp"
   "${LINUX_DIR}/LinuxPerformanceReport.cpp" "${LINUX_DIR}/LinuxScriptHttp.cpp" "${LINUX_DIR}/LinuxButtonWebhook.cpp"

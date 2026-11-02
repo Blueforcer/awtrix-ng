@@ -508,7 +508,9 @@ void WifiService::applyProfile() {
   addressDeadline_ = -1;
   scan_.clearError();
   failures_ = 0;
-  ssid_ = wifi::displaySsid(profile_.ssid);
+  const std::string ssid = wifi::displaySsid(profile_.ssid);
+  if (ssid != ssid_) state_.networkReplaced();
+  ssid_ = ssid;
   rssi_ = 0;
   link_ = WifiLink::Connecting;
   publish();

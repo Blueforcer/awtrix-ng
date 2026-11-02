@@ -58,7 +58,7 @@ bool LinuxRuntime::runFrame() {
   else if (!booting) {
     app_->render(now);
     quickSettings_->draw(app_->canvas(), awtrixFont(), now);
-    if (voice_) voice_->draw(app_->canvas(), awtrixFont(), now);
+    voice_->draw(app_->canvas(), now);
   }
   const int64_t renderEndedUs = performance.now();
   board().show(app_->canvas());
@@ -89,8 +89,7 @@ bool LinuxRuntime::pollSupervisor(int64_t now) {
   const bool open = link_.poll([&](const tc002::SupervisorMessage& message) {
     if (update_ && message.type == tc002::MessageType::Hello) update_->applyHello(message);
     supervision_->apply(message);
-    if (message.type == tc002::MessageType::MicrophonePcm) microphone_->receive(message.microphonePcm, now);
-    if (message.type == tc002::MessageType::MicrophoneStreamEvent) microphoneHub_->receive(message.streamEvent, now);
+    voice_->receive(message, now);
   });
   if (open) return true;
   std::fputs("Supervisor channel closed; stopping\n", stderr);
@@ -108,16 +107,8 @@ bool LinuxRuntime::pollInput(int64_t now) {
 }
 
 void LinuxRuntime::tickVoice(int64_t now) {
-  microphoneHub_->tick(now);
-  const bool voiceAllowed = voiceAllowedNow();
-  const bool knobVoice = voiceAllowed && !engine().state().settings().blockNavigation;
-  if (!knobVoice) knobGesture_.cancel();
-  if (voice_) {
-    voice_->tick(now, voiceAllowed);
-    if (extensions_.voice) extensions_.voice->update(now);
-    assistantRouter_->tick(now, knobVoice);
-  }
-  microphone_->setStreaming(microphoneHub_->active());
+  const bool allowed = voiceAllowedNow();
+  voice_->tick(now, allowed, allowed && !engine().state().settings().blockNavigation);
 }
 
 void LinuxRuntime::tickNetwork(int64_t now) {
@@ -176,13 +167,12 @@ bool LinuxRuntime::persist() {
 
 int LinuxRuntime::stop() {
   performance_->stop();
-  if (voice_) voice_->cancel();
-  if (wake_) wake_->cancel();
-  if (microphoneHub_) microphoneHub_->close();
+  voice_->stop();
   const bool resetAll = system_.resetAll;
   if (!resetAll) persist();
   http_.stop();
   scriptHttp_.stop();
+  voice_->stopTransfers();
   remoteImages_->stop();
   webhook_->stop();
   coverFetch_.stop();
@@ -215,17 +205,12 @@ int LinuxRuntime::stop() {
 }
 
 bool LinuxRuntime::eraseAll(std::error_code& error) {
-  if (voice_ && !voice_->eraseConfig()) {
+  if (!voice_->eraseConfig()) {
     std::fputs("Factory reset could not erase private voice credentials\n", stderr);
     return false;
   }
-  oauthService_->stop();
-  if (!oauthService_->eraseAll()) {
-    std::fputs("Factory reset could not erase script sign-ins\n", stderr);
-    return false;
-  }
-  if (!secrets_->eraseAll()) {
-    std::fputs("Factory reset could not erase script keys\n", stderr);
+  if (!scriptStores_.eraseAll()) {
+    std::fputs("Factory reset could not erase private script data\n", stderr);
     return false;
   }
   // Only the explicitly selected application data directory is erased. Keep

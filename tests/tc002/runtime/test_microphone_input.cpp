@@ -15,6 +15,14 @@ struct Playback : audio::IAnalysisSource {
   bool active = false;
   bool analysis(int64_t, audio::FrameStats& out) override { out = {}; out.level = 123; return active; }
 };
+void streamThreeBlocks(tc002::MicrophoneInput& input, int64_t now) {
+  std::vector<int16_t> block(tc002::kStreamBlockSamples);
+  for (uint32_t first = 0; first < 3 * tc002::kStreamBlockSamples; first += tc002::kStreamBlockSamples) {
+    for (unsigned i = 0; i < block.size(); ++i)
+      block[i] = static_cast<int16_t>(14000 * std::sin((first + i) * 2 * 3.141592653589793 * 1000 / 16000));
+    input.streamed(block.data(), block.size(), first, now);
+  }
+}
 }
 int main() {
   std::vector<std::string> requests;
@@ -152,12 +160,7 @@ int main() {
     tc002::MicrophoneInput streaming([&](std::string data) { sent.push_back(std::move(data)); return true; });
     streaming.setStreaming(true);
     check(!streaming.analysis(1000, stats) && sent.empty(), "while the hub streams, analysis asks for no snapshot");
-    std::vector<int16_t> block(tc002::kStreamBlockSamples);
-    for (uint32_t first = 0; first < 3 * tc002::kStreamBlockSamples; first += tc002::kStreamBlockSamples) {
-      for (unsigned i = 0; i < block.size(); ++i)
-        block[i] = static_cast<int16_t>(14000 * std::sin((first + i) * 2 * 3.141592653589793 * 1000 / 16000));
-      streaming.streamed(block.data(), block.size(), first, 1030);
-    }
+    streamThreeBlocks(streaming, 1030);
     check(streaming.analysis(1040, stats) && stats.bands[reference.bandForHz(1000)] > 200 && sent.empty(),
           "stream blocks gathered into a window feed analysis");
     streaming.setStreaming(false);
@@ -169,12 +172,7 @@ int main() {
     hidden.setStreaming(true);
     hidden.analysis(1000, stats);
     hidden.pitch(1000, true);
-    std::vector<int16_t> block(tc002::kStreamBlockSamples);
-    for (uint32_t first = 0; first < 3 * tc002::kStreamBlockSamples; first += tc002::kStreamBlockSamples) {
-      for (unsigned i = 0; i < block.size(); ++i)
-        block[i] = static_cast<int16_t>(14000 * std::sin((first + i) * 2 * 3.141592653589793 * 1000 / 16000));
-      hidden.streamed(block.data(), block.size(), first, 1400);
-    }
+    streamThreeBlocks(hidden, 1400);
     check(!hidden.heard(1410, stats) && hidden.pitch(1410, false) == 0.f,
           "once no reading may listen, the stream reaches no app");
   }

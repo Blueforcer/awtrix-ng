@@ -234,7 +234,7 @@ cannot be the name of a built-in app such as `Time`. `@name` is only for display
 | `crypto` | lets scripts compute [checksums and signatures and mine](../hashing.md) (`import crypto`) |
 | `layout` | lets scripts prepare text, icon and chart regions |
 | `tcp` | lets scripts [talk TCP](../tcp.md) (`import tcp`) |
-| `voice` | [records and plays voice](../voice-scripts.md) (`import voice`) and can be the voice assistant |
+| `voice` | [records and plays voice](../voice-scripts.md) (`import voice`). With [`on_assistant()`](../voice-scripts.md#answer-the-knob-and-wake-word), the app can be the voice assistant |
 | `secret` | keeps [API keys](network.md#api-keys) for scripts (`import secret`) |
 <!-- /only -->
 

@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -63,7 +64,21 @@ int main() {
   check(!store.save("Big", std::string(65, 'x')) && !store.load("Big", text), "a text above the limit is refused");
   check(store.save("Edge", std::string(64, 'x')) && store.load("Edge", text) && text.size() == 64,
         "a text at the limit is kept");
-  std::ofstream(dir / "planted.json") << std::string(65, 'y');
+  const std::string tooLong = awtrix::posix::sha256Hex("TooLong").substr(0, 32) + ".json";
+  std::ofstream(dir / tooLong) << std::string(65, 'y');
+  const std::string leftover = file + ".tmp.Ab12Cd";
+  std::ofstream(dir / leftover) << "{\"app\":\"left over\"}";
+  std::ofstream(dir / "planted.json") << "{\"app\":\"planted\"}";
+  const std::string shortName = file.substr(1);
+  std::ofstream(dir / shortName) << "{\"app\":\"short\"}";
+  std::string upperName = awtrix::posix::sha256Hex("Upper").substr(0, 32);
+  std::transform(upperName.begin(), upperName.end(), upperName.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+  upperName += ".json";
+  std::ofstream(dir / upperName) << "{\"app\":\"upper\"}";
+
+  const fs::path unreadable = dir / (awtrix::posix::sha256Hex("Unreadable").substr(0, 32) + ".json");
+  fs::create_directory(unreadable);
 
   std::vector<std::string> seen;
   store.keepOnly([&seen](const std::string& content) {
@@ -75,7 +90,12 @@ int main() {
         "keepOnly hands over each readable file's content, which tells the names apart");
   check(store.load("../evil name", text) && !store.load("Spotify", text) && !store.load("Edge", text),
         "only the texts kept stay");
-  check(!fs::exists(dir / "planted.json"), "a file above the limit is no readable text and goes");
+  check(fs::exists(unreadable), "a record that cannot be read now stays");
+  fs::remove(unreadable);
+  check(!fs::exists(dir / tooLong), "a file above the limit is no readable text and goes");
+  check(!fs::exists(dir / leftover), "a leftover of an interrupted save goes, whatever it holds");
+  check(!fs::exists(dir / "planted.json") && !fs::exists(dir / shortName) && !fs::exists(dir / upperName),
+        "a name no record can have goes");
 
   check(store.erase("../evil name") && !store.load("../evil name", text), "erase");
   check(store.save("Spotify", "x") && store.eraseAll() && !fs::exists(dir), "eraseAll removes the directory");

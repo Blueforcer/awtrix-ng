@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Golden fixtures for the TC002 wake-word engine (tests/tc002/runtime/test_wake.cpp).
+import argparse
+import sys
+from pathlib import Path
+
+import numpy as np
+
+DESCRIPTION = """Golden fixtures for the TC002 wake-word engine (tests/tc002/runtime/test_wake.cpp).
 
 The references are the ones the microWakeWord trainer uses: pymicro_features for the features and
 LiteRT's reference kernels (OpResolverType.BUILTIN_REF) for the model. The audio is synthetic and
@@ -9,19 +15,13 @@ integer-only, so the test regenerates it bit for bit instead of storing it:
   <name>.signal.bin    the output bytes of each invoke, the model over the signal's features quantised
                        the trainer's way
   <name>.random.bin    the same over random_frames() int8 frames
-  zoo.tflite           with --zoo, the op coverage model of zoo_model.py, checked like the others
   clip<k>.pcm, clip<k>.features.bin, <name>.clip<k>.bin  the same for each --clip, not for the repo
 
 Each stream starts on a fresh interpreter. Run in a scratch venv:
-  pip install numpy pymicro-features ai-edge-litert flatbuffers soundfile
-  python3 make_golden.py --out tests/tc002/runtime/wake --zoo --model smoke=tests/tc002/runtime/wake/smoke.tflite
+  pip install numpy pymicro-features ai-edge-litert soundfile
+  python3 make_golden.py --out tests/tc002/runtime/wake --model hey_awtrix=assets/tc002/wake/hey_awtrix.tflite \\
+      --model vad=assets/tc002/vad/vad.tflite
 """
-
-import argparse
-import sys
-from pathlib import Path
-
-import numpy as np
 
 RATE = 16000
 CHANNELS = 40
@@ -153,11 +153,10 @@ def input_quantization(path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=DESCRIPTION, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--model", action="append", default=[], metavar="NAME=PATH")
     parser.add_argument("--seconds", type=int, default=SIGNAL_SECONDS)
-    parser.add_argument("--zoo", action="store_true", help="also write and check zoo.tflite")
     parser.add_argument("--clip", type=Path, action="append", default=[],
                         help="a 16 kHz mono WAV, for checks outside the repo")
     args = parser.parse_args()
@@ -180,12 +179,6 @@ def main():
         clips[-1].astype("<u2").tofile(args.out / f"clip{k}.features.bin")
         print(f"clip{k}: {len(clips[-1])} frames")
 
-    if args.zoo:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from zoo_model import zoo_model
-
-        (args.out / "zoo.tflite").write_bytes(zoo_model())
-        args.model.append(f"zoo={args.out / 'zoo.tflite'}")
     for spec in args.model:
         name, _, path = spec.partition("=")
         path = Path(path)

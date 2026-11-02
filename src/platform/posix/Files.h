@@ -60,6 +60,8 @@ class MappedFile {
   bool valid_ = false;
 };
 
+void removeStaleTemporaryDirectories(const std::string& parent, std::string_view prefix);
+
 class PrivateTemporaryDirectory {
  public:
   PrivateTemporaryDirectory(const std::string& parent, std::string_view prefix);
@@ -72,6 +74,7 @@ class PrivateTemporaryDirectory {
 
  private:
   std::string path_;
+  UniqueFd held_;
 };
 
 }

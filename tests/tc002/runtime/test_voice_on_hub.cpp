@@ -71,7 +71,7 @@ struct Rig {
     keeper.port()({1, StreamControl::Stop});
   }
   void connect() {
-    session.connecting({true, false, "http://ha:8123", "secret", "", ""}, now);
+    session.connecting({false, "http://ha:8123", "secret", "", ""}, now);
     frame();
     session.text(R"({"type":"auth_required"})", now);
     session.text(R"({"type":"auth_ok"})", now);
@@ -225,7 +225,7 @@ void upstreamFailureEndsBoth() {
   r.frames(120);
   check(r.listening(), "Voice captures beside the stand-in");
   r.fail("microphone UART frame lost or corrupt");
-  check(r.session.error() == voice::errors::microphoneFailed, "an upstream failure reaches Voice as microphoneFailed");
+  check(r.session.lastError() == voice::errors::microphoneFailed, "an upstream failure reaches Voice as microphoneFailed");
   check(!r.kept.empty() && r.kept.back().kind == StreamEvent::Kind::Ended &&
             r.kept.back().error == "microphone UART frame lost or corrupt",
         "and ends the other consumer with its reason");

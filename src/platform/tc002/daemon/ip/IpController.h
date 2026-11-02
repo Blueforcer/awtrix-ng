@@ -133,7 +133,8 @@ class IpController {
   MdnsResponder mdns_;
   CaptiveDns captiveDns_;
   bool accessPoint_ = false, dhcpServer_ = false;
-  bool started_ = false, stopping_ = false, networkPending_ = false, publishing_ = false, linkUp_ = false;
+  bool started_ = false, stopping_ = false, networkPending_ = false, networkReplaced_ = false, publishing_ = false,
+       linkUp_ = false;
   bool resolverInstalled_ = false;
   std::string resolverError_;
   int64_t resolverRetryAtMs_ = -1;

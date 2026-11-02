@@ -267,6 +267,7 @@ jobs:
           [ "$GITHUB_REF_NAME" = "v$version" ] || { echo "::error::tag $GITHUB_REF_NAME does not match version $version"; exit 1; }
           [ -f "docs/releases/$version.md" ] || { echo "::error::docs/releases/$version.md is missing"; exit 1; }
           grep -q "releases/$version.md" mkdocs.yml || { echo "::error::docs/releases/$version.md is not in the mkdocs.yml nav"; exit 1; }
+          if grep -n -e '-XX' "docs/releases/$version.md" docs/releases/index.md; then echo "::error::the release notes still have no release date"; exit 1; fi
       - name: Fetch what the main run built for this commit
         # The tag publishes the exact files a green run on main built and tested
         # for the same commit: firmware, USB images and the TC002 packages. The

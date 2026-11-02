@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include "platform/linux/LinuxMemory.h"
+#include "platform/posix/StartThread.h"
 #include "platform/tc002/audio/Tc002AudioStream.h"
 #include "platform/tc002/contract/AudioProtocol.h"
 #include "platform/tc002/speech/SpeechSource.h"
@@ -29,11 +30,7 @@ Tc002AudioSink::Tc002AudioSink(CoreEngine& engine, int helperFd, std::shared_ptr
     available_.store(false);
     return;
   }
-  try {
-    thread_ = std::thread([this] { run(); });
-  } catch (...) {
-    available_.store(false);
-  }
+  if (!posix::startThread(thread_, [this] { run(); })) available_.store(false);
 }
 
 Tc002AudioSink::~Tc002AudioSink() {

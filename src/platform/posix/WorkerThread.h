@@ -17,7 +17,7 @@ class WorkerThread final : public Executor {
   WorkerThread(const WorkerThread&) = delete;
   WorkerThread& operator=(const WorkerThread&) = delete;
 
-  void post(std::function<void()> task) override;
+  bool post(std::function<void()> task) override;
 
  private:
   void run();

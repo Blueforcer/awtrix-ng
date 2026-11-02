@@ -23,9 +23,9 @@ bool valid(const StreamEvent& e) {
     case StreamEvent::Kind::Audio:
       return e.error.empty() && !e.samples.empty() &&
              e.samples.size() <= kStreamBlockSamples &&
-             e.samples.size() % 24 == 0 && e.firstSample % 24 == 0;
+             e.samples.size() % 24 == 0;
     case StreamEvent::Kind::Ended:
-      return e.samples.empty() && e.firstSample % 24 == 0;
+      return e.samples.empty();
     case StreamEvent::Kind::Support:
       return e.samples.empty() && e.error.empty() && e.firstSample == 0;
   }

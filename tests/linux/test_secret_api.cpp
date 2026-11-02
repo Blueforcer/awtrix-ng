@@ -22,11 +22,11 @@ const std::string kValue = "sk-VALUE-123";
 struct Rig {
   fs::path root = fs::temp_directory_path() / ("secret-api-" + std::to_string(::getpid()));
   std::map<std::string, std::string> sources = {
-      {"Assistant", "# @secret key label=\"API key\" help=\"Your key\" hosts=api.test\n# @secret org\n"},
+      {"Assistant", "# @secret key label=\"API key\" help=\"Your key\" hosts=api.test\n# @secret org hosts=org.test\n"},
       {"Broken", "# @secret 1bad\n"},
+      {"NoHosts", "# @secret key\n"},
       {"Plain", "class A end\n"}};
-  posix::PrivateStore store{(root / "s").string(), secrets::Service::kMaxRecord};
-  secrets::Service service{store, [this](const std::string& app) {
+  secrets::Service service{(root / "s").string(), [this](const std::string& app) {
                              const auto it = sources.find(app);
                              return it == sources.end() ? std::string() : it->second;
                            }};
@@ -72,7 +72,7 @@ int main() {
   check(rig.send("GET", "/api/v1/secretsx").status == -1, "a longer word is not ours");
 
   httplib::Response res = rig.send("GET", "/api/v1/secrets");
-  check(res.status == 200 && res.body == "{\"apps\":[\"Assistant\",\"Broken\"]}",
+  check(res.status == 200 && res.body == "{\"apps\":[\"Assistant\",\"Broken\",\"NoHosts\"]}",
         "the list names the apps with @secret lines, valid or not: " + res.body);
   check(rig.send("POST", "/api/v1/secrets").status == 405, "the list is read-only");
 
@@ -82,11 +82,15 @@ int main() {
 
   res = rig.send("GET", "/api/v1/secrets/Assistant");
   check(res.status == 200 &&
-            res.body == "{\"keys\":[{\"key\":\"key\",\"label\":\"API key\",\"help\":\"Your key\",\"set\":false},"
-                        "{\"key\":\"org\",\"label\":\"\",\"help\":\"\",\"set\":false}]}",
+            res.body == "{\"keys\":[{\"key\":\"key\",\"label\":\"API key\",\"help\":\"Your key\",\"set\":false,"
+                        "\"hosts\":[\"api.test\"]},"
+                        "{\"key\":\"org\",\"label\":\"\",\"help\":\"\",\"set\":false,\"hosts\":[\"org.test\"]}]}",
         "an app's keys: " + res.body);
   res = rig.send("GET", "/api/v1/secrets/Broken");
   check(res.status == 200 && res.body == "{\"invalid\":\"@secret: bad key\"}", "an invalid line: " + res.body);
+  res = rig.send("GET", "/api/v1/secrets/NoHosts");
+  check(res.status == 200 && res.body == "{\"invalid\":\"@secret: hosts needs 1-8 hosts\"}",
+        "a line without hosts=: " + res.body);
 
   const std::string put = "{\"key\":\"" + kValue + "\"}";
   check(rig.send("PUT", "/api/v1/secrets/Assistant", put, "https://evil.example").status == 403, "a foreign origin");
@@ -111,6 +115,9 @@ int main() {
     check(res.status == 422 && errorCode(res) == "validationFailed", "422: " + body + " -> " + res.body);
   }
   check(rig.send("PUT", "/api/v1/secrets/Broken", "{\"key\":\"x\"}").status == 422, "an invalid line takes nothing");
+  res = rig.send("PUT", "/api/v1/secrets/NoHosts", "{\"key\":\"x\"}");
+  check(res.status == 422 && errorCode(res) == "validationFailed" && !rig.service.has("NoHosts", "key"),
+        "a line without hosts= takes no key: " + res.body);
   for (const std::string& body : {std::string("not json"), std::string("[]"), std::string(""),
                                   std::string(16385, ' ')})
     check(rig.send("PUT", "/api/v1/secrets/Assistant", body).status == 400, "400 for a body that is no object");

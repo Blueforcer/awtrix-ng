@@ -4,6 +4,7 @@
 #include <cmath>
 #include <utility>
 
+#include "platform/tc002/voice/PcmLevel.h"
 #include "platform/tc002/wake/ModelFiles.h"
 
 namespace awtrix::tc002::voice {
@@ -12,12 +13,10 @@ namespace {
 static_assert(kMicrophonePcmRate == wake::WakeFrontend::kSampleRate,
               "the endpointer takes the microphone's PCM as it comes");
 constexpr uint32_t kSamplesPerMs = kMicrophonePcmRate / 1000;
+constexpr const char* kWriteError = "could not write the recording";
 
-uint8_t loudness(const int16_t* samples, std::size_t count) {
-  if (count == 0) return 0;
-  double sum = 0.0;
-  for (std::size_t i = 0; i < count; ++i) sum += static_cast<double>(samples[i]) * samples[i];
-  const double rms = std::sqrt(sum / static_cast<double>(count)) / 32768.0;
+uint8_t loudness(const std::vector<int16_t>& samples) {
+  const double rms = pcmRms(samples.data(), samples.size()) / 32768.0;
   if (rms <= 0.001) return 0;
   const double share = std::min(1.0, (20.0 * std::log10(rms) + 60.0) / 60.0);
   return static_cast<uint8_t>(std::lround(share * 255.0));
@@ -56,11 +55,13 @@ bool VoiceCapture::start(const std::string& path, const wake::EndpointSettings& 
                          int64_t now) {
   std::string error;
   if (active() || !prepare(error)) return false;
+  result_.reset();
   if (!wav_.open(path, kMicrophonePcmRate)) {
     endpointer_.reset();
-    return false;
+    if (!wav_.noRoom()) return false;
+    result_ = Result{Outcome::NoRoom, 0, 0, kWriteError};
+    return true;
   }
-  result_.reset();
   maxMs_ = settings.maxMs;
   endpointer_->start(settings);
   startFrom_(from);
@@ -70,13 +71,13 @@ bool VoiceCapture::start(const std::string& path, const wake::EndpointSettings& 
 }
 
 std::size_t VoiceCapture::maxBytes(const wake::EndpointSettings& settings) const {
-  const std::size_t stepMs = endpointer_ ? static_cast<std::size_t>(endpointer_->stepMs()) : 0;
-  return wavBytes((std::size_t{settings.maxMs} + stepMs) * kSamplesPerMs);
+  return wavBytes((std::size_t{settings.maxMs} + endpointer_->stepMs()) * kSamplesPerMs);
 }
 
 void VoiceCapture::receive(const StreamEvent& event, int64_t now) {
   switch (microphone_.receive(event, now)) {
     case MicrophoneClient::Report::None:
+    case MicrophoneClient::Report::Available:
     case MicrophoneClient::Report::Stopped:
       return;
     case MicrophoneClient::Report::Unavailable:
@@ -95,17 +96,16 @@ void VoiceCapture::receive(const StreamEvent& event, int64_t now) {
 }
 
 void VoiceCapture::record(const std::vector<int16_t>& block) {
-  level_ = loudness(block.data(), block.size());
+  level_ = loudness(block);
   const int16_t* const first = block.data();
   const int16_t* samples = first;
   std::size_t count = block.size();
   for (wake::Endpoint kind; (kind = endpointer_->next(samples, count)) != wake::Endpoint::None;) {
     if (kind == wake::Endpoint::Started) continue;
-    if (!wav_.write(first, static_cast<std::size_t>(samples - first)))
-      return finish(Outcome::Failed, "could not write the recording");
+    if (!wav_.write(first, static_cast<std::size_t>(samples - first))) return finish(Outcome::Failed, kWriteError);
     return finish(kind == wake::Endpoint::Silence ? Outcome::Silence : Outcome::Recorded);
   }
-  if (!wav_.write(first, block.size())) finish(Outcome::Failed, "could not write the recording");
+  if (!wav_.write(first, block.size())) finish(Outcome::Failed, kWriteError);
 }
 
 void VoiceCapture::tick(int64_t now) {
@@ -124,7 +124,6 @@ void VoiceCapture::cancel() {
   if (!active()) return;
   microphone_.cancel();
   wav_.close();
-  level_ = 0;
 }
 
 void VoiceCapture::finish(Outcome outcome, std::string error) {
@@ -133,10 +132,10 @@ void VoiceCapture::finish(Outcome outcome, std::string error) {
   const uint32_t samples = wav_.samples();
   if (!wav_.close() && outcome == Outcome::Recorded) {
     outcome = Outcome::Failed;
-    error = "could not write the recording";
+    error = kWriteError;
   }
+  if (outcome == Outcome::Failed && wav_.noRoom()) outcome = Outcome::NoRoom;
   result_ = Result{outcome, samples / kSamplesPerMs, wavBytes(samples), std::move(error)};
-  level_ = 0;
 }
 
 std::optional<VoiceCapture::Result> VoiceCapture::take() {

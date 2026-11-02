@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
-"""Writes src/platform/tc002/wake/WakeFrontendTables.h: the microfrontend tables the original computes
-in float at start-up (Hann window, mel filterbank, PCAN gain).
-
-Two of them hang on the last bit of a libm result (the top channel ends exactly on 7500 Hz), so they
-are data here, taken from the libm the trainer's pymicro_features ran on: glibc before 2.41 on x86-64,
-whose cosf, log1pf and powf this script calls through ctypes while numpy float32 does the rest step for
-step like the C code (tensorflow/lite/experimental/microfrontend/lib/*_util.cc).
-
-  python3 frontend_tables.py src/platform/tc002/wake/WakeFrontendTables.h
-"""
-
+import argparse
 import ctypes
 import math
 import os
 import sys
 
 import numpy as np
+
+DESCRIPTION = """Writes src/platform/tc002/wake/WakeFrontendTables.h: the microfrontend tables the original computes
+in float at start-up (Hann window, mel filterbank, PCAN gain).
+
+Two of them hang on the last bit of a libm result (the top channel ends exactly on 7500 Hz), so they
+are data here, taken from the libm the trainer's pymicro_features ran on: glibc before 2.41 on x86-64,
+whose cosf, log1pf and powf this script calls through ctypes while numpy float32 does the rest step for
+step like the C code (tensorflow/lite/experimental/microfrontend/lib/*_util.cc).
+"""
 
 f32 = np.float32
 libm = ctypes.CDLL("libm.so.6")
@@ -122,8 +121,9 @@ def array(name, kind, values, per_line=16):
 
 
 def main():
-    if len(sys.argv) != 2:
-        sys.exit(__doc__)
+    parser = argparse.ArgumentParser(description=DESCRIPTION, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("output", help="the header to write")
+    output = parser.parse_args().output
     libc = os.confstr("CS_GNU_LIBC_VERSION") or ""
     major, minor = (int(p) for p in libc.split()[-1].split(".")[:2]) if libc.startswith("glibc") else (0, 0)
     if (major, minor) >= (2, 41) or (major, minor) == (0, 0):
@@ -142,7 +142,7 @@ def main():
         array("kGainLut", "int16_t", pcan()),
         "}\n",
     ])
-    with open(sys.argv[1], "w", encoding="utf-8", newline="\n") as out:
+    with open(output, "w", encoding="utf-8", newline="\n") as out:
         out.write(text)
 
 

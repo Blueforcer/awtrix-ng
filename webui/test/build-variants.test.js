@@ -26,7 +26,7 @@ function asset(name) {
       const fields = [...window.document.querySelectorAll('.frow .key')].map(node => node.textContent);
       assert.equal(fields.includes('musicSource'), full, 'music-source field matches the platform');
       const rules = [...window.document.styleSheets].flatMap(sheet => [...sheet.cssRules]);
-      assert.equal(rules.some(rule => rule.selectorText === '#sec-voice .ctl'), full,
+      assert.equal(rules.some(rule => rule.selectorText?.includes('#sec-voice .ctl')), full,
         'voice styles ship only in the Linux asset');
       assert.equal(html.includes('musicSource'), full, 'music-source controls ship only in the Linux asset');
       assert.equal(html.includes('clockFace'), full, 'clock-face controls ship only in the Linux asset');

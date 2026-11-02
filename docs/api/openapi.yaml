@@ -2022,13 +2022,14 @@ paths:
                     type: array
                     items:
                       type: object
-                      required: [key, label, help, set]
+                      required: [key, label, help, set, hosts]
                       properties:
                         key: {type: string, description: The name the script uses}
                         label: {type: string, description: 'The name of the field, "" when the line has none'}
                         help: {type: string, description: 'The line of explanation, "" when the line has none'}
                         set: {type: boolean, description: A value is saved}
-                  invalid: {type: string, description: Present instead of keys when an @secret line is invalid. The reason.}
+                        hosts: {type: array, minItems: 1, maxItems: 8, items: {type: string}, description: The only hosts the key may be sent to}
+                  invalid: {type: string, description: "Present instead of keys when an @secret line is invalid, for example one without hosts=. The reason."}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -2038,7 +2039,7 @@ paths:
       description: |
         Changes require the device's own Origin and `X-Awtrix-Secret: 1`. An empty string
         erases that key. Keys left out keep their value. A refused request changes nothing.
-        The body is at most 16 KB, a value at most 512 bytes without CR, LF or NUL.
+        The body is at most 16 KB, a value at most 512 bytes without control characters.
       parameters:
         - {$ref: '#/components/parameters/OAuthOrigin'}
         - {$ref: '#/components/parameters/SecretHeader'}
@@ -2651,7 +2652,7 @@ paths:
     description: "Only where capabilities.voice is true. Elsewhere 404."
     get:
       tags: [system]
-      summary: Voice assistant settings and Home Assistant connection
+      summary: Voice assistant settings and whether the assistant is ready
       responses:
         "404": { $ref: "#/components/responses/NotOnThisDevice" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -2661,32 +2662,38 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [config, state, error, wakeWordAvailable, assistantApps, pipelines]
+                required: [config, state, error, lastError, wakeWordAvailable, wakeListening, assistantApps, pipelines]
                 properties:
                   config:
                     type: object
-                    required: [enabled, wakeWord, assistant, url, pipeline, device, tokenSet]
+                    required: [enabled, wakeWord, wakeSensitivity, assistant, url, pipeline, device, tokenSet]
                     properties:
-                      enabled: { type: boolean, description: "Home Assistant Voice is switched on. Counts only while assistant is ha." }
+                      enabled: { type: boolean, description: "true while assistant is ha." }
                       wakeWord: { type: boolean, description: 'Saying "Hey AWTRIX" starts the assistant.' }
-                      assistant: { type: string, pattern: "^(ha|app:[A-Za-z0-9_-]{1,32})$", description: "Who answers the knob, the wake word, MQTT and the API: ha for Home Assistant, app:<name> for an app." }
+                      wakeSensitivity: { type: string, enum: [low, normal, high], description: "How easily the clock hears the wake word." }
+                      assistant: { type: string, pattern: "^(off|ha|app:[A-Za-z0-9_-]{1,32})$", description: "Who answers the knob, the wake word, MQTT and the API: off for nobody, ha for Home Assistant, app:<name> for an app." }
                       url: { type: string, description: "Home Assistant address. \"\" when none is set." }
                       pipeline: { type: string, description: "Assist pipeline ID. \"\" for the default." }
                       device: { type: string, description: "Home Assistant device ID whose area is the room for requests. \"\" when none is set." }
                       tokenSet: { type: boolean, description: The token itself is never returned. }
-                  state: { type: string, enum: [offline, connecting, ready, starting, listening, processing, speaking, error] }
+                  state: { type: string, enum: [offline, connecting, ready, starting, listening, processing, speaking, error], description: "With an app as the assistant ready or error. With off, offline." }
                   error:
                     type: string
                     description: |
-                      Why the last attempt failed. "" when all is well. One of connectionLost, tokenRejected, haError, pipelineIncomplete, nothingUnderstood, audioTooSlow, timeout, microphoneFailed, playbackFailed, microphoneUpdate, configUnavailable. Later versions may add codes.
+                      What stops the assistant now. It stays while the clock tries again and goes once the clock is connected. "" when nothing does. One of connectionLost, tokenRejected, haError, pipelineIncomplete, microphoneUpdate, configUnavailable, appMissing, appOff, appBroken. Later versions may add codes.
+                  lastError:
+                    type: string
+                    description: |
+                      Why the last request failed. The assistant stays ready. "" once the next request starts, after five minutes or when a setting other than the wake word changes. One of connectionLost, haError, pipelineIncomplete, nothingUnderstood, audioTooSlow, timeout, microphoneFailed, playbackFailed. Later versions may add codes.
                   wakeWordAvailable: { type: boolean, description: 'The clock can hear "Hey AWTRIX". When false, config.wakeWord does nothing.' }
-                  assistantApps: { type: array, items: { type: string }, description: "The installed apps that can be the assistant: scripts whose @needs names voice, neither modules nor headless. Disabled apps are listed too." }
-                  pipelines: { type: array, items: { type: object }, description: "Home Assistant's Assist pipelines once connected." }
+                  wakeListening: { type: boolean, description: 'The clock listens for "Hey AWTRIX" right now.' }
+                  assistantApps: { type: array, items: { type: string }, description: "The installed apps that can be the assistant: scripts whose @needs names voice and that have an on_assistant method, neither modules nor headless. Disabled apps are listed too." }
+                  pipelines: { type: array, items: { type: object }, description: "The voice assistants of Home Assistant (its Assist pipelines) once connected." }
     post:
       tags: [system]
       summary: Change the voice assistant settings
       description: |
-        Only from the device's own web page: needs X-Awtrix-Voice: 1 and an Origin matching the device. Left-out fields keep their value. enabled needs an address and a token. A new address needs the token again. With an app as the assistant, the clock keeps no connection to Home Assistant, whatever enabled says.
+        Only from the device's own web page: needs X-Awtrix-Voice: 1 and an Origin matching the device. Left-out fields keep their value. A new address needs the token again. With an app or off as the assistant, the clock keeps no connection to Home Assistant. Off keeps the saved address, token, pipeline and device.
       parameters:
         - { name: X-Awtrix-Voice, in: header, required: true, schema: { type: string, enum: ["1"] } }
       requestBody:
@@ -2696,9 +2703,10 @@ paths:
             schema:
               type: object
               properties:
-                enabled: { type: boolean }
+                enabled: { type: boolean, description: "false sets assistant to off, true sets it to ha, whatever it was before. assistant counts when a request has both." }
                 wakeWord: { type: boolean, description: 'true: saying "Hey AWTRIX" starts the assistant while it is ready.' }
-                assistant: { type: string, pattern: "^(ha|app:[A-Za-z0-9_-]{1,32})$", description: "ha (default) or app:<name>. The name is an app name: not active, next, previous or order. With an app, every trigger opens the app." }
+                wakeSensitivity: { type: string, enum: [low, normal, high], description: "low: fewer false starts. normal (default). high: hears more easily." }
+                assistant: { type: string, pattern: "^(off|ha|app:[A-Za-z0-9_-]{1,32})$", description: "off (default), ha or app:<name>. The name is an app name: not active, next, previous or order. With an app, every trigger opens the app." }
                 url: { type: string, maxLength: 512, description: "Origin only, for example http://homeassistant.local:8123." }
                 pipeline: { type: string, maxLength: 128 }
                 device: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9]*$", description: "Home Assistant device ID. \"\" for none." }
@@ -2722,7 +2730,7 @@ paths:
       tags: [system]
       summary: Start the voice assistant
       description: |
-        Starts the assistant the settings name, as holding the knob does: Home Assistant Voice, or the app in config.assistant, which gets on_voice('api'). No body. Only from the device's own web page: needs X-Awtrix-Voice: 1 and an Origin matching the device.
+        Starts the assistant the settings name, as holding the knob does: Home Assistant Voice, or the app in config.assistant, which gets on_assistant('api'). No body. Only from the device's own web page: needs X-Awtrix-Voice: 1 and an Origin matching the device.
       parameters:
         - { name: X-Awtrix-Voice, in: header, required: true, schema: { type: string, enum: ["1"] } }
       responses:

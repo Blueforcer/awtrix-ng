@@ -14,17 +14,18 @@ add_awtrix_test(NAME tc002-speech-voice SOURCES test_speech_voice.cpp ${TC002_SP
   TIMEOUT 120)
 target_compile_options(tc002-speech-voice-test PRIVATE ${TC002_EXACT_FLOAT_OPTIONS})
 add_awtrix_test(NAME tc002-wake SOURCES test_wake.cpp ${TC002_WAKE_SOURCES} INCLUDES "${PROJECT_SOURCE_DIR}/src"
-  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/wake" vad "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.tflite"
-  "${CMAKE_CURRENT_SOURCE_DIR}/wake" hey_awtrix "${PROJECT_SOURCE_DIR}/assets/tc002/wake/hey_awtrix.tflite"
-  "${CMAKE_CURRENT_SOURCE_DIR}/wake" TIMEOUT 120)
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/wake"
+  hey_awtrix "${PROJECT_SOURCE_DIR}/assets/tc002/wake/hey_awtrix.tflite" "${CMAKE_CURRENT_SOURCE_DIR}/wake"
+  vad "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.tflite" "${CMAKE_CURRENT_SOURCE_DIR}/wake" TIMEOUT 120)
 target_compile_options(tc002-wake-test PRIVATE ${TC002_EXACT_FLOAT_OPTIONS})
 add_awtrix_test(NAME tc002-wake-listener SOURCES test_wake_listener.cpp LIBRARIES tc002_wake_listener
-  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/wake" "${PROJECT_SOURCE_DIR}/assets/tc002/wake/hey_awtrix.tflite" TIMEOUT 30)
+  COMMAND "${PROJECT_SOURCE_DIR}/assets/tc002/wake/hey_awtrix.tflite" TIMEOUT 30)
 add_awtrix_test(NAME tc002-endpointer SOURCES test_endpointer.cpp
   LIBRARIES tc002_wake tc002_wake_files tc002_speech_voice
   COMMAND "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.tflite" "${PROJECT_SOURCE_DIR}/assets/speech/voice.atts"
   TIMEOUT 120)
 add_awtrix_test(NAME tc002-clip-store SOURCES test_clip_store.cpp LIBRARIES tc002_voice_clips)
+add_awtrix_test(NAME tc002-sample-history SOURCES test_sample_history.cpp LIBRARIES tc002_contract)
 add_awtrix_test(NAME tc002-microphone-hub SOURCES test_microphone_hub.cpp LIBRARIES tc002_microphone_hub)
 add_awtrix_test(NAME tc002-voice-capture SOURCES test_voice_capture.cpp
   LIBRARIES tc002_voice_capture tc002_microphone_hub tc002_speech_voice
@@ -45,8 +46,8 @@ add_awtrix_test(NAME tc002-voice-on-hub SOURCES test_voice_on_hub.cpp
   LIBRARIES tc002_voice_session tc002_microphone_hub)
 add_awtrix_test(NAME tc002-voice-runtime SOURCES test_voice_runtime.cpp LIBRARIES tc002_voice)
 add_awtrix_test(NAME tc002-assistant-router SOURCES test_assistant_router.cpp
-  LIBRARIES tc002_voice_router tc002_wake_listener awtrix_host COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/wake"
-  TIMEOUT 60)
+  LIBRARIES tc002_voice_router tc002_wake_listener awtrix_host
+  COMMAND "${PROJECT_SOURCE_DIR}/assets/tc002/wake/hey_awtrix.tflite" TIMEOUT 60)
 add_awtrix_test(NAME tc002-url-sounds SOURCES test_url_sounds.cpp "${TC002_DIR}/audio/UrlSounds.cpp"
   LIBRARIES awtrix_host awtrix_posix TIMEOUT 30)
 add_awtrix_test(NAME tc002-voice-gesture SOURCES test_voice_gesture.cpp

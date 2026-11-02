@@ -24,6 +24,10 @@ class ScriptStore : public script::IScriptFiles, private Files {
     free_.stale();
   }
 
+  void onSourceWritten(std::function<void(const std::string& name)> written) {
+    files().onSourceWritten(std::move(written));
+  }
+
   void remove(const std::string& name) override {
     if (!nameIsSafe(name)) return;
     dirty_.erase(name);
@@ -44,10 +48,6 @@ class ScriptStore : public script::IScriptFiles, private Files {
     if (pending != dirty_.end()) out = pending->second;
     else if (!Files::read(scriptfiles::storePath(name), out)) return false;
     return !out.empty();
-  }
-
-  static bool readSavedSource(const std::string& name, std::string& out) {
-    return nameIsSafe(name) && Files::read(scriptfiles::sourcePath(name), out) && !out.empty();
   }
 
   static std::vector<std::string> savedNames() {

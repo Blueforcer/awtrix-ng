@@ -61,19 +61,16 @@ struct FileDownload::Impl {
       int status = 0;
       if (fd >= 0 && current(g)) {
         ResponseState received;
-        bool noRoom = false;
+        RoomWatch room(limits.room);
         const BodyPolicy policy{limits.maxBytes, [&](int, const std::string&) { return current(g); },
-                                [&](std::size_t more) {
-          noRoom = limits.room && !limits.room(more);
-          return !noRoom;
-        }};
+                                [&](std::size_t more) { return room.fits(more); }};
         auto response = receive200(connection, path, policy, received,
             [&](const char* bytes, std::size_t count) {
-              return current(g) && posix::writeAll(fd, bytes, count);
+              return current(g) && room.write(fd, bytes, count);
             });
         status = received.status;
         if (received.tooLarge) failure = Failure::TooLarge;
-        else if (noRoom) failure = Failure::NoRoom;
+        else if (room.noRoom()) failure = Failure::NoRoom;
         else if (status != 200 && status != 0) failure = Failure::Status;
         else if (response && response->status == 200)
           failure = received.receivedBytes > 0 ? Failure::None : Failure::Empty;

@@ -108,8 +108,9 @@ knob for itself instead, for example to set the volume of what it plays. See
 | Top, amber | [`brightness`](../reference/settings.md#brightness), from 5 % to 100 %. While a mood light is on, it sets the mood light's brightness instead. The icon is a moon up to 25 % and a sun that grows above that. |
 | Bottom, cyan | The master volume, [`volume`](sounds.md#volume), from 0 to 100 %. It sets how loud every sound plays: alerts, apps and the radio. An X next to the speaker means silent, at 0. |
 
-**Hold** the knob for half a second to start the [voice assistant](voice.md): Home Assistant, when
-it is set up, or the app you chose. Otherwise holding does nothing.
+**Hold** the knob for half a second to start the [voice assistant](voice.md): Home Assistant or the
+app you chose. With **Off** as the assistant, or while the assistant is not ready, holding does nothing.
+**Status** under **System → Voice assistant** says why.
 
 The values are saved like any other setting, so the web UI and Home Assistant show them at once.
 The three buttons on top keep their usual jobs.
@@ -193,7 +194,7 @@ and for switching the display off.
 
 - [Scripting guide](scripting/index.md): button handlers in scripts
 <!-- only tc002 -->
-- [Home Assistant Voice](voice.md): talk to Assist with the knob
+- [Voice assistant](voice.md): talk to the clock with the knob
 - [Volume](sounds.md#volume): the master volume the knob sets, and the three groups
 <!-- /only -->
 - [Power & battery](power.md): battery level and display blanking

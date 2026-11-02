@@ -7,8 +7,8 @@ function assert(cond, msg) {
 }
 
 const keys = () => ({ keys: [
-  { key: 'key', label: 'API key', help: 'Your OpenAI key', set: false },
-  { key: 'org', label: '', help: '', set: true }] });
+  { key: 'key', label: 'API key', help: 'Your OpenAI key', set: false, hosts: ['api.openai.com', 'api.test'] },
+  { key: 'org', label: '', help: '', set: true, hosts: ['org.test'] }] });
 
 function device(current) {
   return (method, path, body) => {
@@ -51,7 +51,7 @@ async function openSettings(caps, current, extra = {}) {
 const button = (root, text) => [...root.querySelectorAll('button')].find(b => b.textContent === text);
 
 async function testSection() {
-  const { gear, panel, section, t } = await openSettings({ transitions: [], secret: true }, keys());
+  const { window, gear, panel, section, t } = await openSettings({ transitions: [], secret: true }, keys());
   assert(gear, 'a script with @secret gets a settings button without @config');
   assert(panel && !panel.textContent.includes(t('cfgNone')), 'no "no settings" note next to the keys');
   const box = section();
@@ -65,6 +65,14 @@ async function testSection() {
   assert(inputs[0]?.getAttribute('aria-label') === 'API key' && inputs[1]?.getAttribute('aria-label') === 'org',
     'the label names the field, the key stands in for a missing label');
   assert(box && box.textContent.includes('Your OpenAI key'), 'the help text is shown');
+  assert(box && box.textContent.includes(t('seHosts') + ' api.openai.com, api.test'), 'the hosts of a key are named');
+  assert(box && box.textContent.includes(t('seHosts') + ' org.test'), 'every key names its hosts');
+  assert(box && !/any address/i.test(box.textContent), 'no key can go anywhere');
+  const warnings = box ? [...box.querySelectorAll('.badge.warn')] : [];
+  assert(warnings.length === 1 && warnings[0].textContent === t('seWarn') && t('seWarn') !== 'seWarn',
+    'one warning for the whole section');
+  assert(warnings[0]?.compareDocumentPosition(inputs[0]) === window.Node.DOCUMENT_POSITION_FOLLOWING,
+    'the warning comes before the keys');
   assert(box && [...box.querySelectorAll('button')].filter(b => b.textContent === t('seRemove')).length === 1,
     'only a set key can be removed');
 }
@@ -110,6 +118,7 @@ async function testInvalid() {
   assert(box && box.textContent.includes(t('seInvalid')) && box.textContent.includes('@secret: bad key'),
     'an invalid line is named');
   assert(box && !box.querySelector('input') && !button(box, t('save')), 'and offers nothing to save');
+  assert(box && !box.querySelector('.badge.warn'), 'no warning without a key to enter');
 }
 
 async function testOrderWithConfigAndSignIn() {

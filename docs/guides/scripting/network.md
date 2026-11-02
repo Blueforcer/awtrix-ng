@@ -174,36 +174,41 @@ plain text, so a script for every model has to check for the module first. See
 
 ### The line
 
-`# @secret <key> label="…" help="…" hosts=a,b`, one line per key, at most 4 in a script. Only the key
-is required.
+`# @secret <key> hosts=a,b label="…" help="…"`, one line per key, at most 4 in a script. The key and
+`hosts` are required. A line without `hosts` is invalid, and the settings show why.
 
 | Part | Meaning |
 |---|---|
 | `key` | the name your script uses, as for [`@config`](storage.md#settings-the-user-can-change): a letter or `_` first, then letters, digits and `_`, at most 24 characters |
+| `hosts` | the only hosts the key may go to, 1 to 8, separated by commas: names, IPv4 addresses or IPv6 addresses in brackets, exactly as in the address, for example `api.example.com`, `192.168.1.20` or `[fd00::1]`. The port does not count |
 | `label` | the name of the field, at most 48 characters. Without one, the key is shown |
 | `help` | a line of explanation under the field, at most 96 characters |
-| `hosts` | the only hosts the key may go to, 1 to 8, separated by commas: names or IPv4 addresses, exactly as in the address. The port does not count |
 
 ### Where `{secret:key}` works
 
-Write `{secret:key}` in a header value, or in the path or query of the address. In the address, the
-clock percent-encodes the value.
+Write `{secret:key}` in a header value, in the path or query of the address, or in a text body. In
+the address, the clock percent-encodes the value. In a header and in a body, the value goes in as it
+is.
 
 ```berry
 http.get("https://api.example.com/v1/quote?token={secret:key}", / body, status -> self.on_body(body, status))
+http.post("https://api.example.com/v1/quote", '{"token":"{secret:key}"}', / body, status -> self.on_body(body, status))
 ```
 
 It works in `http.*`, and in [`voice.send` and `voice.fetch`](../voice-scripts.md). Everywhere else,
-it is plain text: in a request body, in a form field, in a header name, and in any other module.
+it is plain text: in a clip, in a form field, in a header name, and in any other module.
+
+The clock looks through the whole body. If text you pass on, for example an answer from a chat
+service, holds `{secret:key}`, the clock fills it in. With an unknown key, it refuses the request.
 
 ### Where a key may go {#where-a-key-may-go}
 
 | Address | The key goes there |
 |---|---|
-| `https://` | yes |
-| `http://` to your own network | yes |
-| any other `http://` | never |
-| another host than `hosts=` lists | never, also with `https://` |
+| `https://` to a host `hosts=` lists | yes |
+| `http://` to a listed host in your own network | yes |
+| `http://` to any other listed host | never |
+| a host `hosts=` does not list | never, also with `https://` |
 
 Your own network means an IPv4 address in `10.x.x.x`, `172.16.x.x` to `172.31.x.x`, `192.168.x.x`,
 `127.x.x.x` or `169.254.x.x`, the IPv6 addresses `[::1]`, `fc00::/7` and `fe80::/10`, and a name
@@ -213,42 +218,52 @@ instead.
 
 Nothing is sent when the clock refuses a key: the key is unknown or not filled in, or the address is
 not allowed. Your callback gets `nil` and status `0`, as without a network. The log shows the reason
-while [`debugMode`](../../reference/system.md#miscellaneous) is on.
-
-A placeholder in the scheme, the host, the port or the user name makes the address itself invalid.
-`http.*` then gets `nil` and status `0`, and `voice.send` and `voice.fetch` get `voice.BAD`. The part
-of an address after `#` is never sent, so a key has no use there.
+while [`debugMode`](../../reference/system.md#miscellaneous) is on. [Limits](../../reference/limits.md#api-keys)
+says what a placeholder does anywhere else in an address.
 
 Once a key is in a request, the request follows no redirect. The answer is then the redirect itself,
 with its status, for example 302. Send such a request straight to the final address.
 
-### Ask whether a key is there
+### Ask about a key
 
-`import secret` gives one call:
+`import secret` gives two calls:
 
 | Call | Does |
 |---|---|
 | `secret.has(key)` | `true` when the key is declared and filled in, otherwise `false` |
+| `secret.allows(key, url)` | `true` when the key is declared and filled in and may go to this address, otherwise `false`, also when `key` or `url` is not a text |
 
-Send the header only when the key is there, and the same app also works with a service that wants no
-key. This is how the [Assistant app](../voice.md#assistant-app) talks to a local server:
+Send the header only when the key may go to the address, and the same app also works with a service
+that wants no key. With one key per service, ask for each key, and send the one that fits. This is how
+the [Assistant app](../voice.md#assistant-app) picks its key, and how it talks to a local server:
 
 ```berry
 var headers = {}
-if secret.has('key') headers['Authorization'] = "Bearer {secret:key}" end
+if secret.allows('key', url) headers['Authorization'] = "Bearer {secret:key}" end
 ```
 
 ### How long a key stays
 
 A key stays until the user removes it, the app is deleted, the clock is reset, or the header changes:
 
-- A changed `hosts=` erases the key, so nobody can send it to a new host by updating the script.
+- A changed `hosts=` erases the key, so nobody can send it to a new host by updating the script. To
+  use a key with another host, change `hosts=` in the app's code and enter the key again.
 - A key whose line disappears is erased.
-- A mistake in any `@secret` line erases all keys of the app when you save it. The settings show the
-  mistake.
+- A mistake in any `@secret` line, also a missing `hosts=`, erases all keys of the app when you save
+  it. The settings show the mistake.
 - A new `label` or `help` keeps the key.
 
 A key is not part of a backup.
+
+### Who can reach a key
+
+A key is protected from others on the network: nobody can read it back, and the clock sends it only
+where the rules above allow. It is not fully protected from other apps you install, because all
+scripts run together on the clock, so install only scripts you trust.
+
+Without a [web login](../../reference/http.md#authentication), any web page opened in a browser on the
+same network can change scripts and app settings on the clock, and with that reach API keys and the
+microphone. Set a login.
 <!-- /only -->
 
 ## Pick one field out of a big answer {#picking-one-field-out-of-a-big-answer}

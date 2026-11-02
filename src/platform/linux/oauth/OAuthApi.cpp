@@ -3,11 +3,11 @@
 #include <optional>
 #include <string_view>
 
-#include "core/api/ApiRouter.h"
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
 #include "persistence/ScriptFiles.h"
 #include "platform/linux/host/ApiPath.h"
+#include "platform/linux/host/HostHttpBody.h"
 #include "platform/linux/host/OwnPage.h"
 #include "platform/linux/host/vendor/httplib.h"
 
@@ -18,14 +18,8 @@ constexpr std::string_view kPrefix = "/api/v1/oauth";
 constexpr std::size_t kMaxBody = 8192;
 constexpr std::size_t kMaxField = 4096;
 
-void sendJson(httplib::Response& res, int status, const std::string& json) {
-  res.status = status;
-  res.set_content(json, "application/json");
-}
-
-void sendError(httplib::Response& res, int status, const char* code, const std::string& message) {
-  sendJson(res, status, api::errorJson(code, message));
-}
+using host_http::sendError;
+using host_http::sendJson;
 
 void writeStatus(api::JsonWriter& w, const std::string& name, const Status& s) {
   w.beginObject()
@@ -96,10 +90,7 @@ bool Api::handle(const httplib::Request& req, httplib::Response& res) {
     sendError(res, 405, "methodNotAllowed", action.empty() ? "allowed: GET, POST, DELETE" : "allowed: POST");
     return true;
   }
-  if (!host::fromOwnPage(req, "X-Awtrix-OAuth")) {
-    sendError(res, 403, "forbiddenOrigin", "only from this device's web page");
-    return true;
-  }
+  if (host::refuseForeign(req, res, "X-Awtrix-OAuth")) return true;
   if (remove) {
     service_.signOut(name);
     sendJson(res, 200, "{\"ok\":true}");
@@ -142,7 +133,7 @@ bool Api::handle(const httplib::Request& req, httplib::Response& res) {
     ok = service_.submitCode(name, *code, *state, error);
     if (ok) sendJson(res, 202, "{\"ok\":true}");
   }
-  if (!ok) sendError(res, 422, "validationFailed", error);
+  if (!ok) sendError(res, 422, "validationFailed", error.c_str());
   return true;
 }
 

@@ -117,7 +117,7 @@ the native tests. They are not present in the ESP32 firmware images.
 | Component | Location | License | Text | Copyright |
 |---|---|---|---|---|
 | [cpp-httplib](https://github.com/yhirose/cpp-httplib) | `src/platform/linux/host/vendor/httplib.h` | MIT | [MIT-cpp-httplib.txt](LICENSES/MIT-cpp-httplib.txt) | (c) 2025 Yuji Hirose |
-| [TensorFlow Lite Micro](https://github.com/tensorflow/tflite-micro) microfrontend and [TensorFlow Lite](https://github.com/tensorflow/tensorflow) reference kernels, ported | `src/platform/tc002/wake/WakeFrontend.cpp`, `WakeFrontendTables.h`, `WakeModel.cpp` | Apache-2.0 | [Apache-2.0.txt](LICENSES/Apache-2.0.txt) | Copyright The TensorFlow Authors |
+| [TensorFlow Lite Micro](https://github.com/tensorflow/tflite-micro) microfrontend and [TensorFlow Lite](https://github.com/tensorflow/tensorflow) reference kernels, ported | `src/platform/tc002/wake/WakeFrontend.cpp`, `WakeFrontendTables.h`, `WakeKernels.cpp`, `WakeLoader.cpp`, `WakeOperators.cpp` | Apache-2.0 | [Apache-2.0.txt](LICENSES/Apache-2.0.txt) | Copyright The TensorFlow Authors |
 | [KISS FFT](https://github.com/mborgerding/kissfft) 1.3.0, 16-bit real FFT, ported | `src/platform/tc002/wake/WakeFft.cpp` | BSD-3-Clause | [BSD-3-Clause-KISS-FFT.txt](LICENSES/BSD-3-Clause-KISS-FFT.txt) | Copyright (c) 2003-2010 Mark Borgerding |
 | [microWakeWord voice activity model](https://github.com/esphome/micro-wake-word-models) v2 (`vad.tflite`, `vad.json`) | `assets/tc002/vad/` | Apache-2.0 | [Apache-2.0.txt](LICENSES/Apache-2.0.txt), [NOTICE](assets/tc002/vad/NOTICE) | Copyright 2024-2026 Open Home Foundation |
 | [Unity](https://github.com/ThrowTheSwitch/Unity) test framework (via PlatformIO) | — | MIT | [MIT-Unity.txt](LICENSES/MIT-Unity.txt) | (c) 2007-2021 Mike Karlesky, Mark VanderVoord, Greg Williams |
@@ -138,7 +138,9 @@ It preserves literal header values, separates trailers from initial headers,
 parses multipart dispositions without recursive regular expressions, rejects
 signed chunk sizes and keeps exception details out of default responses. Its
 client accepts response status and header lines ending in a bare LF and
-Shoutcast's `ICY 200 OK`.
+Shoutcast's `ICY 200 OK`, and its max timeout holds for every wait to read or
+write. It parses status lines and redirect locations without regular
+expressions, and its server matches a `.*` route without one.
 The local patches are recorded in `tools/system/components.json`; the original
 MIT notice is retained.
 

@@ -1,5 +1,5 @@
 // A port of KISS FFT 1.3.0's real FFT (kiss_fftr, kf_work, kf_bfly4; Copyright (c) 2003-2010 Mark
-// Borgerding, BSD-3-Clause) with FIXED_POINT 16, as TensorFlow Lite Micro's microfrontend builds it.
+// Borgerding, BSD-3-Clause).
 #include "platform/tc002/wake/WakeFft.h"
 
 #include <array>
@@ -8,8 +8,11 @@
 namespace awtrix::tc002::wake {
 namespace {
 
-int16_t narrow(int32_t v) { return static_cast<int16_t>(v); }
 int16_t sround(int32_t v) { return narrow((v + (1 << 14)) >> 15); }
+
+WakeFft::Cpx mul(const WakeFft::Cpx& a, const WakeFft::Cpx& b) {
+  return {sround(a.r * b.r - a.i * b.i), sround(a.r * b.i + a.i * b.r)};
+}
 
 struct Twiddles {
   std::array<WakeFft::Cpx, WakeFft::kHalf> full;
@@ -59,8 +62,7 @@ void WakeFft::run(const Input& input, Spectrum& spectrum) {
     fixdiv2(fpnk);
     const Cpx f1k = {narrow(fpk.r + fpnk.r), narrow(fpk.i + fpnk.i)};
     const Cpx f2k = {narrow(fpk.r - fpnk.r), narrow(fpk.i - fpnk.i)};
-    const Cpx& tw = super[k - 1];
-    const Cpx t = {sround(f2k.r * tw.r - f2k.i * tw.i), sround(f2k.r * tw.i + f2k.i * tw.r)};
+    const Cpx t = mul(f2k, super[k - 1]);
     spectrum[k] = {narrow((f1k.r + t.r) >> 1), narrow((f1k.i + t.i) >> 1)};
     spectrum[kHalf - k] = {narrow((f1k.r - t.r) >> 1), narrow((t.i - f1k.i) >> 1)};
   }
@@ -79,9 +81,6 @@ void WakeFft::butterfly(Cpx* out, std::size_t stride, std::size_t m) const {
   auto fixdiv4 = [](Cpx& c) {
     c.r = sround(int32_t{c.r} * (32767 / 4));
     c.i = sround(int32_t{c.i} * (32767 / 4));
-  };
-  auto mul = [](const Cpx& a, const Cpx& b) {
-    return Cpx{sround(a.r * b.r - a.i * b.i), sround(a.r * b.i + a.i * b.r)};
   };
   auto add = [](const Cpx& a, const Cpx& b) { return Cpx{narrow(a.r + b.r), narrow(a.i + b.i)}; };
   auto sub = [](const Cpx& a, const Cpx& b) { return Cpx{narrow(a.r - b.r), narrow(a.i - b.i)}; };

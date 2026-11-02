@@ -1,6 +1,5 @@
 #include "../../support.h"
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -14,9 +13,9 @@
 #include "platform/tc002/wake/WakeDetector.h"
 #include "platform/tc002/wake/WakeFrontend.h"
 #include "platform/tc002/wake/WakeModel.h"
+#include "platform/tc002/wake/WakeSensitivity.h"
 
 using namespace awtrix::tc002::wake;
-using Clock = std::chrono::steady_clock;
 
 namespace {
 
@@ -149,8 +148,7 @@ std::vector<uint8_t> runModel(WakeModel& model, const std::vector<int8_t>& frame
   model.reset();
   for (std::size_t at = 0; at + stride <= frames.size(); at += stride) {
     std::memcpy(model.input(), frames.data() + at, stride);
-    model.invoke();
-    out.insert(out.end(), model.output(), model.output() + model.outputSize());
+    out.push_back(model.invoke());
   }
   return out;
 }
@@ -167,7 +165,7 @@ void checkModel(const std::string& name, const std::vector<uint8_t>& file, const
     const std::vector<uint8_t> got = runModel(*model, frames);
     const std::size_t bad = mismatches(got, expected);
     check(bad == 0, name + ": " + stream + " outputs differ from the reference in " + std::to_string(bad));
-    invokes += expected.size() / model->outputSize();
+    invokes += expected.size();
     wrong += bad;
   };
   const std::vector<int8_t> signalInput = trainerInput(signal, *model);
@@ -180,22 +178,14 @@ void checkModel(const std::string& name, const std::vector<uint8_t>& file, const
     check(values == readU16(clip + ".features.bin"), clip + ": frontend frames differ from pymicro_features");
     compare(("clip" + std::to_string(k)).c_str(), trainerInput(values, *model));
   }
-
-  const std::vector<int8_t> timing = randomFrames(800);
-  const auto start = Clock::now();
-  const std::vector<uint8_t> once = runModel(*model, timing);
-  const double us = std::chrono::duration<double, std::micro>(Clock::now() - start).count() /
-                    static_cast<double>(once.size() / model->outputSize());
-  std::printf("%s: %zu invokes bit-exact (%zu wrong), stride %zu, arena %zu bytes, %.1f us per invoke, "
-              "%.1f us per 10 ms\n", name.c_str(), invokes, wrong, model->frames(), model->arenaBytes(), us,
-              us / static_cast<double>(model->frames()));
+  std::printf("%s: %zu invokes bit-exact (%zu wrong), stride %zu\n", name.c_str(), invokes, wrong, model->frames());
 }
 
 uint64_t invokePosition(std::size_t invoke, std::size_t stride) {
   return WakeFrontend::kWindowSamples + WakeFrontend::kStepSamples * ((invoke + 1) * stride - 1);
 }
 
-void testStream(const std::string& dir, const std::vector<uint8_t>& file, const std::vector<int16_t>& pcm) {
+void testStream(const std::string& reference, const std::vector<uint8_t>& file, const std::vector<int16_t>& pcm) {
   std::string error;
   ModelStream stream;
   const int16_t* samples = pcm.data();
@@ -204,7 +194,7 @@ void testStream(const std::string& dir, const std::vector<uint8_t>& file, const 
   check(!stream.next(samples, count, probability) && count == pcm.size(), "nothing happens without a model");
   const std::string_view bytes(reinterpret_cast<const char*>(file.data()), file.size());
   require(stream.load(bytes, error), "stream: " + error);
-  const std::vector<uint8_t> expected = readFile(dir + "/smoke.signal.bin");
+  const std::vector<uint8_t> expected = readFile(reference);
   const std::size_t stride = stream.model()->frames();
   for (int pass = 0; pass < 2; ++pass) {
     stream.reset();
@@ -223,7 +213,7 @@ void testStream(const std::string& dir, const std::vector<uint8_t>& file, const 
   }
 }
 
-void testDetector(const std::string& dir, const std::vector<uint8_t>& file, const std::vector<int16_t>& pcm) {
+void testDetector(const std::string& reference, const std::vector<uint8_t>& file, const std::vector<int16_t>& pcm) {
   std::string error;
   WakeDetector detector;
   check(!detector.feed(pcm.data(), pcm.size()), "nothing is heard without a model");
@@ -233,13 +223,13 @@ void testDetector(const std::string& dir, const std::vector<uint8_t>& file, cons
   require(detector.configure(config, error), error);
   ModelStream stream;
   require(stream.load(bytes, error), "stream: " + error);
-  WakeWindow window;
-  require(window.configure(config, error), error);
-  const std::vector<uint8_t> expected = readFile(dir + "/smoke.signal.bin");
+  WakeDetector decision;
+  require(decision.configure(config, error), error);
+  const std::vector<uint8_t> expected = readFile(reference);
   std::vector<uint64_t> want;
-  WakeEvent event;
   for (std::size_t i = 0; i < expected.size(); ++i)
-    if (window.push(expected[i], invokePosition(i, stream.model()->frames()), event)) want.push_back(event.sample);
+    if (const auto event = decision.decide(expected[i], invokePosition(i, stream.model()->frames())))
+      want.push_back(event->sample);
   const auto hear = [&] {
     std::vector<uint64_t> heard;
     for (std::size_t at = 0; at + WakeFrontend::kStepSamples <= pcm.size(); at += WakeFrontend::kStepSamples)
@@ -258,13 +248,6 @@ void testDetector(const std::string& dir, const std::vector<uint8_t>& file, cons
   require(detector.configure(config, error), error);
   detector.reset();
   check(hear() == want, "a bad file keeps the model");
-
-  WakeFrontend frontend;
-  std::vector<uint16_t> sink;
-  const auto start = Clock::now();
-  for (int i = 0; i < 4; ++i) sink = features(pcm, 480);
-  const double us = std::chrono::duration<double, std::micro>(Clock::now() - start).count() / (4 * 398);
-  std::printf("frontend: %.1f us per 10 ms frame\n", us);
 }
 
 std::vector<std::size_t> trainerDetections(const std::vector<uint8_t>& raw, double cutoff, std::size_t window,
@@ -295,16 +278,15 @@ void testWindow() {
           raw[i] = (i / 150) % 3 == 1 ? static_cast<uint8_t>(240 + (r >> 28)) : static_cast<uint8_t>(r >> 25);
           if ((r & 0xFF) == 7) raw[i] = 255;
         }
-        WakeWindow decision;
+        WakeDetector decision;
         std::string error;
         require(decision.configure({cutoff, window, cooloffMs}, error), error);
         std::vector<std::size_t> mine;
-        WakeEvent event;
         for (std::size_t i = 0; i < raw.size(); ++i) {
           const uint64_t sample = 480 + 160 * static_cast<uint64_t>(i);
-          if (decision.push(raw[i], sample, event)) {
+          if (const auto event = decision.decide(raw[i], sample)) {
             mine.push_back(i);
-            check(event.sample == sample && event.score >= cutoff, "event fields");
+            check(event->sample == sample && event->score >= cutoff, "event fields");
           }
         }
         const auto expected =
@@ -315,20 +297,92 @@ void testWindow() {
       }
     }
   }
-  WakeWindow decision;
+  WakeDetector decision;
   std::string error;
   require(decision.configure({0.6f, 4, 1000}, error), error);
-  WakeEvent event;
-  for (int i = 0; i < 3; ++i) check(!decision.push(255, 1000 + i, event), "no detection before the window is full");
-  check(decision.push(255, 2000, event) && event.score == 1.0f, "full window fires");
+  for (int i = 0; i < 3; ++i) check(!decision.decide(255, 1000 + i), "no detection before the window is full");
+  const auto full = decision.decide(255, 2000);
+  check(full && full->score == 1.0f, "full window fires");
   check(!decision.configure({-0.1f, 3, 0}, error) && !decision.configure({0.5f, 65, 0}, error),
         "bad configs are refused");
   require(decision.configure({0.6f, 2, 1000, 1000}, error), error);
   bool early = false;
-  for (uint64_t sample = 480; sample < 16000; sample += 480) early |= decision.push(255, sample, event);
+  for (uint64_t sample = 480; sample < 16000; sample += 480) early |= decision.decide(255, sample).has_value();
   check(!early, "nothing fires within the warm-up");
-  check(decision.push(255, 16000, event) && event.sample == 16000, "the first output after the warm-up fires");
+  const auto first = decision.decide(255, 16000);
+  check(first && first->sample == 16000, "the first output after the warm-up fires");
   std::printf("window: %zu configurations match the trainer's streaming detections\n", cases);
+}
+
+bool firesOnSteady(uint8_t probability, WakeSensitivity level) {
+  WakeDetector detector;
+  std::string error;
+  require(detector.configure({0.86f, 3, 0}, error), error);
+  detector.setSensitivity(level);
+  bool fired = false;
+  for (uint64_t sample = 480; sample <= 1920; sample += 480) fired |= detector.decide(probability, sample).has_value();
+  return fired;
+}
+
+std::size_t detections(const std::vector<uint8_t>& probabilities, WakeSensitivity level) {
+  WakeDetector detector;
+  std::string error;
+  require(detector.configure({0.86f, 3, 0}, error), error);
+  detector.setSensitivity(level);
+  std::size_t count = 0;
+  for (std::size_t i = 0; i < probabilities.size(); ++i)
+    count += detector.decide(probabilities[i], (i + 1) * 480).has_value();
+  return count;
+}
+
+void testSensitivity(const std::string& reference) {
+  check(wakeCutoff(0.86f, WakeSensitivity::Normal) == 0.86f, "normal is the model's own value");
+  check(std::fabs(wakeCutoff(0.86f, WakeSensitivity::Low) - 0.92f) < 0.001f, "low needs 0.92 of the shipped model");
+  check(std::fabs(wakeCutoff(0.86f, WakeSensitivity::High) - 0.75f) < 0.001f, "high needs 0.75 of the shipped model");
+  const float low = wakeCutoff(0.97f, WakeSensitivity::Low), high = wakeCutoff(0.97f, WakeSensitivity::High);
+  check(low > 0.97f && low < 1.0f && high < 0.97f && high > 0.9f, "a replaced model keeps three usable levels");
+  check(wakeCutoff(1.0f, WakeSensitivity::High) == 1.0f && wakeCutoff(0.0f, WakeSensitivity::High) == 0.0f,
+        "the levels stay within 0..1");
+
+  struct Case {
+    uint8_t probability;
+    bool low, normal, high;
+  };
+  for (const Case& c : {Case{179, false, false, false}, Case{204, false, false, true}, Case{230, false, true, true},
+                        Case{243, true, true, true}}) {
+    const std::string at = std::to_string(c.probability);
+    check(firesOnSteady(c.probability, WakeSensitivity::Low) == c.low, "low at " + at);
+    check(firesOnSteady(c.probability, WakeSensitivity::Normal) == c.normal, "normal at " + at);
+    check(firesOnSteady(c.probability, WakeSensitivity::High) == c.high, "high at " + at);
+  }
+
+  WakeDetector detector;
+  std::string error;
+  require(detector.configure({0.86f, 3, 0}, error), error);
+  uint64_t sample = 480;
+  for (int i = 0; i < 5; ++i, sample += 480) check(!detector.decide(204, sample), "normal stays silent at 0.80");
+  detector.setSensitivity(WakeSensitivity::High);
+  check(detector.decide(204, sample).has_value(), "a new level counts at once, on the same window");
+  sample += 480;
+  detector.setSensitivity(WakeSensitivity::Normal);
+  check(!detector.decide(204, sample), "and the old one comes back the same way");
+
+  const std::vector<uint8_t> probabilities = readFile(reference);
+  const std::size_t quiet = detections(probabilities, WakeSensitivity::Low),
+                    usual = detections(probabilities, WakeSensitivity::Normal),
+                    eager = detections(probabilities, WakeSensitivity::High);
+  check(quiet <= usual && usual <= eager, "the reference signal fires least on low and most on high");
+  std::printf("sensitivity: %zu low, %zu normal, %zu high over the reference signal\n", quiet, usual, eager);
+
+  WakeSensitivity parsed = WakeSensitivity::Normal;
+  check(parseWakeSensitivity("low", parsed) && parsed == WakeSensitivity::Low && wakeSensitivityName(parsed) == "low",
+        "low reads and writes");
+  check(parseWakeSensitivity("high", parsed) && parsed == WakeSensitivity::High && wakeSensitivityName(parsed) == "high",
+        "high reads and writes");
+  check(parseWakeSensitivity("normal", parsed) && parsed == WakeSensitivity::Normal &&
+            wakeSensitivityName(parsed) == "normal",
+        "normal reads and writes");
+  check(!parseWakeSensitivity("loud", parsed) && parsed == WakeSensitivity::Normal, "other words are refused");
 }
 
 struct Patch {
@@ -355,7 +409,7 @@ void testRefusals(const std::vector<uint8_t>& good) {
   check(!WakeModel::load(nullptr, 0, error) && !error.empty(), "no data is refused");
   const std::vector<uint8_t> garbage(4096, 0xA5);
   check(!WakeModel::load(garbage.data(), garbage.size(), error), "garbage is refused");
-  require(WakeModel::load(good.data(), good.size(), error) != nullptr, "the smoke model loads: " + error);
+  require(WakeModel::load(good.data(), good.size(), error) != nullptr, "the model loads: " + error);
 
   std::size_t truncated = 0, tried = 0;
   for (std::size_t size = 0; size < good.size(); size += size < good.size() - 512 ? 13 : 1) {
@@ -367,7 +421,7 @@ void testRefusals(const std::vector<uint8_t>& good) {
   for (int i = 0; i < 4; ++i) bad[i] = 0xFF;
   check(!WakeModel::load(bad.data(), bad.size(), error), "a root offset past the end is refused");
 
-  for (int code : {28, 32, 6}) {
+  for (int code : {0, 6, 17, 18, 28, 32, 40}) {
     bad = good;
     Patch patch{bad};
     for (std::size_t i = 0; i < 3; ++i) {
@@ -376,10 +430,8 @@ void testRefusals(const std::vector<uint8_t>& good) {
       if (const std::size_t builtin = patch.field(table, 3)) std::memcpy(&bad[builtin], &code, 4);
     }
     const bool refused = !WakeModel::load(bad.data(), bad.size(), error);
-    const std::string want = code == 28  ? "unsupported operator TANH"
-                             : code == 6 ? "unsupported operator DEQUANTIZE"
-                                         : "unsupported custom operator";
-    check(refused && error.find(want) == 0, "unsupported op: got '" + error + "'");
+    check(refused && error.find("unsupported operator " + std::to_string(code)) == 0,
+          "unsupported op: got '" + error + "'");
   }
 
   XorShift rng{0xBADC0DEu};
@@ -403,16 +455,11 @@ void testRefusals(const std::vector<uint8_t>& good) {
 }
 
 int main(int argc, char** argv) {
-  require(argc >= 2, "usage: tc002-wake-test <fixtures> [<name> <model> <golden dir>]...");
+  require(argc >= 5 && (argc - 2) % 3 == 0, "usage: tc002-wake-test <fixtures> <name> <model> <golden dir>...");
   const std::string dir = argv[1];
   const std::vector<int16_t> pcm = synthetic(4);
-  const std::vector<uint8_t> smoke = readFile(dir + "/smoke.tflite");
-  require(!smoke.empty(), dir + "/smoke.tflite");
 
   testFrontend(dir, pcm);
-  const std::vector<uint16_t> signal = readU16(dir + "/signal.features.bin");
-  checkModel("smoke", smoke, dir, signal);
-  checkModel("zoo", readFile(dir + "/zoo.tflite"), dir, signal);
   for (int i = 2; i + 2 < argc; i += 3) {
     const std::string golden = argv[i + 2];
     const std::vector<uint16_t> values = readU16(golden + "/signal.features.bin");
@@ -423,9 +470,12 @@ int main(int argc, char** argv) {
     std::printf("%s: %zu signal frames checked against pymicro_features\n", golden.c_str(), frames);
     checkModel(argv[i], readFile(argv[i + 1]), golden, values);
   }
-  testStream(dir, smoke, pcm);
-  testDetector(dir, smoke, pcm);
+  const std::vector<uint8_t> model = readFile(argv[3]);
+  const std::string reference = std::string(argv[4]) + "/" + argv[2] + ".signal.bin";
+  testStream(reference, model, pcm);
+  testDetector(reference, model, pcm);
   testWindow();
-  testRefusals(smoke);
+  testSensitivity(reference);
+  testRefusals(model);
   return awtrix::test::finish("tc002-wake");
 }

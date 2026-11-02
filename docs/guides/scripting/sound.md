@@ -326,7 +326,7 @@ along.
 ## Speech
 
 A clock with a voice reads text aloud, in English or in the language of an
-[uploaded voice pack](../sounds.md#another-voice-or-language):
+[uploaded voice pack](../speech.md#another-voice-or-language):
 
 ```berry
 # @needs audio.speech
@@ -348,7 +348,7 @@ return TalkingClock()
 ```
 
 - The text is a string. Build it with `str()` and `format()`, as above.
-- The clock reads it as described in [Speech](../sounds.md#speech): up to 512 bytes, numbers and
+- The clock reads it as described in [Speech](../speech.md#how-the-clock-reads-text): up to 512 bytes, numbers and
   times as words, emoji skipped.
 - Speech is a single sound like an MP3. The next sound replaces it, `sound.stop()` stops it, and
   `sound.playing()` is `true` while it speaks.

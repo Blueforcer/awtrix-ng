@@ -123,16 +123,17 @@ int main() {
   {
     const PrivateTemporaryDirectory first(root, "old"), second(root, "old");
     check(!std::filesystem::exists(stale), "a stale private directory of an ended process goes with its files");
+    check(!std::filesystem::exists(alive), "also when its process id has come to name another process");
     check(std::filesystem::exists(shared + "/a") && std::filesystem::exists(deep + "/inner") &&
-              std::filesystem::exists(alive + "/a") && std::filesystem::exists(other + "/a") &&
+              std::filesystem::exists(other + "/a") &&
               std::filesystem::is_symlink(dead + "-p6Q7r8") && std::filesystem::exists(dead + "-s9T0u1x") &&
               std::filesystem::exists(dead + "-v2W3"),
-          "shared or nested directories, running creators, other prefixes, links and other names stay");
+          "shared or nested directories, other prefixes, links and other names stay");
     created = first.path();
     const std::string own = root + "/old-" + std::to_string(::getpid()) + "-";
     check(first.valid() && second.valid() && created.rfind(own, 0) == 0 && created.size() == own.size() + 6 &&
               second.path() != created && std::filesystem::exists(created),
-          "a new directory names its creator and a sibling of the same process stays");
+          "a new directory names its creator and one whose creator still runs stays");
     check(::stat(created.c_str(), &info) == 0 && (info.st_mode & 07777) == 0700, "the new directory is private");
     check(replaceText(created + "/one", "1") && replaceText(created + "/two", "2"), "files in it");
   }

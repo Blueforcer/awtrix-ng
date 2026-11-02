@@ -2,6 +2,8 @@
 
 #include <utility>
 
+#include "platform/posix/StartThread.h"
+
 namespace awtrix::posix {
 
 WorkerThread::~WorkerThread() {
@@ -13,13 +15,14 @@ WorkerThread::~WorkerThread() {
   if (thread_.joinable()) thread_.join();
 }
 
-void WorkerThread::post(std::function<void()> task) {
+bool WorkerThread::post(std::function<void()> task) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (!thread_.joinable() && !startThread(thread_, [this] { run(); })) return false;
     tasks_.push_back(std::move(task));
-    if (!thread_.joinable()) thread_ = std::thread([this] { run(); });
   }
   wake_.notify_one();
+  return true;
 }
 
 void WorkerThread::run() {

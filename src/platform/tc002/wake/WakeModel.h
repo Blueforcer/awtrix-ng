@@ -21,13 +21,7 @@ class WakeModel {
   int8_t* input() { return input_; }
 
   uint8_t invoke();
-  const uint8_t* output() const { return output_; }
-  std::size_t outputSize() const { return outputSize_; }
-  bool outputIsUint8() const { return outputUint8_; }
-
   void reset();
-
-  std::size_t arenaBytes() const { return arena_.size(); }
 
   struct Graph;
 
@@ -41,8 +35,6 @@ class WakeModel {
   std::vector<uint8_t> called_;
   int8_t* input_ = nullptr;
   const uint8_t* output_ = nullptr;
-  std::size_t outputSize_ = 0;
-  bool outputUint8_ = false;
   std::size_t frames_ = 0;
   float inputScale_ = 0.0f;
   int32_t inputZeroPoint_ = 0;

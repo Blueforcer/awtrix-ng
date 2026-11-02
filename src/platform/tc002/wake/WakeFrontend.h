@@ -23,6 +23,9 @@ class WakeFrontend {
 
  private:
   void compute(Frame& frame);
+  int window();
+  void filterbank();
+  void features(int shift, Frame& frame);
 
   std::array<int16_t, kWindowSamples> input_{};
   std::size_t inputUsed_ = 0;
@@ -30,10 +33,9 @@ class WakeFrontend {
   WakeFft::Input fftInput_{};
   WakeFft::Spectrum spectrum_{};
 
-  std::array<uint32_t, 2 * (WakeFft::kHalf + 1)> energy_{};
+  std::array<uint32_t, WakeFft::kHalf + 1> energy_{};
   std::array<uint64_t, kChannels + 1> work_{};
 
-  std::array<uint32_t, kChannels> signal_{};
   std::array<uint32_t, kChannels> estimate_{};
 };
 

@@ -11,6 +11,37 @@ using configfields::Kind;
 using configfields::Row;
 using configfields::kRows;
 
+namespace {
+
+struct ChangedZone {
+  const char* name;
+  const char* oldRule;
+  const char* rule;
+};
+
+// Zones whose rule changed after the WebUI table shipped. A clock only stores the POSIX rule it was
+// handed, so without this a saved zone would keep following the clock changes it had on that day.
+constexpr ChangedZone kChangedZones[] = {
+    {"America/Winnipeg", "CST6CDT,M3.2.0,M11.1.0", "EST5"},
+    {"America/Vancouver", "PST8PDT,M3.2.0,M11.1.0", "MST7"},
+    {"America/Edmonton", "MST7MDT,M3.2.0,M11.1.0", "CST6"},
+    {"America/Inuvik", "MST7MDT,M3.2.0,M11.1.0", "CST6"},
+    {"Africa/Casablanca", "<+01>-1", "<+00>0"},
+    {"Africa/El_Aaiun", "<+01>-1", "<+00>0"},
+};
+
+}
+
+// Matches name and rule together, so a rule written by hand through the API stays as it is.
+void DeviceConfig::refreshTzRule() {
+  for (const ChangedZone& zone : kChangedZones) {
+    if (tzName == zone.name && tz == zone.oldRule) {
+      tz = zone.rule;
+      return;
+    }
+  }
+}
+
 void DeviceConfig::write(api::JsonWriter& w, bool withSecrets) const {
   for (const Row& r : kRows) {
     if ((!withSecrets && r.secret) || !offers(r.need)) continue;

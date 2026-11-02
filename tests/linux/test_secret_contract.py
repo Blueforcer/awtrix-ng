@@ -15,7 +15,8 @@ from runtime import Runtime, eventually
 
 VALUE = "sk-CONTRACT/4711"
 ENCODED = "sk-CONTRACT%2F4711"
-HEADER = '# @secret key label="API key" help="Your key"\n# @headless true\n'
+HOSTS = "127.0.0.1,192.0.2.1"
+HEADER = f'# @secret key label="API key" help="Your key" hosts={HOSTS}\n# @headless true\n'
 PUBLIC = "http://192.0.2.1"
 
 
@@ -36,6 +37,13 @@ class Recorder(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):
+        sent = self.rfile.read(int(self.headers.get("Content-Length", 0))).decode()
+        Recorder.seen.append((self.path, sent))
+        self.send_response(200)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def log_message(self, *_):
         pass
 
@@ -49,12 +57,17 @@ class App
   if self.sent return end
   self.sent = true
   shared.set("has", secret.has("key"))
+  shared.set("allowed", secret.allows("key", "http://127.0.0.1:{port}/header"))
+  shared.set("elsewhere", secret.allows("key", "http://127.0.0.2:{port}/header"))
+  shared.set("public_host", secret.allows("key", "{PUBLIC}/public"))
   var filled = {{"headers": {{"X-Key": "{{secret:key}}"}}}}
   http.get("{PUBLIC}/public", /b,s -> shared.set("public", s), filled)
   http.get("http://127.0.0.1:{port}/header", /b,s -> shared.set("header", s), filled)
   http.get("http://127.0.0.1:{port}/query?k={{secret:key}}", /b,s -> shared.set("query", s))
   http.get("http://127.0.0.1:{port}/moved", /b,s -> shared.set("moved", s), filled)
   http.get("http://127.0.0.1:{port}/plain", /b,s -> shared.set("plain", s), {{"headers": {{"X-Key": "plain"}}}})
+  http.post("http://127.0.0.1:{port}/body", 'k={{secret:key}}', /b,s -> shared.set("body", s))
+  http.post("{PUBLIC}/public-body", 'k={{secret:key}}', /b,s -> shared.set("public_body", s))
  end
 end
 return App()
@@ -89,11 +102,12 @@ def run(runtime, server_port):
     check(key_set(runtime), "new code under the same @secret line keeps the key")
     shared = lambda: {row["key"]: row["value"] for row in runtime.json("GET", "/api/v1/scripts/shared")
                       if row["owner"] == "Keys"}
-    values = eventually(shared, lambda v: len(v) == 6, timeout=40)
-    check(values == {"has": True, "public": 0, "header": 200, "query": 200, "moved": 302, "plain": 200},
+    values = eventually(shared, lambda v: len(v) == 11, timeout=40)
+    check(values == {"has": True, "allowed": True, "elsewhere": False, "public_host": False, "public": 0, "header": 200, "query": 200, "moved": 302, "plain": 200, "body": 200,
+                     "public_body": 0},
           f"what the script saw: {values}")
     check(sorted(Recorder.seen) == sorted([("/header", VALUE), (f"/query?k={ENCODED}", ""), ("/moved", VALUE),
-                                           ("/plain", "plain")]),
+                                           ("/plain", "plain"), ("/body", f"k={VALUE}")]),
           f"plain http carries the key to a private target only, and no redirect follows it: {Recorder.seen}")
 
     for path in ("/api/v1/secrets", "/api/v1/secrets/Keys", "/api/v1/apps/script/Keys", "/api/v1/apps/Keys/config",
@@ -106,10 +120,32 @@ def run(runtime, server_port):
     check(len(files) == 1 and stat.S_IMODE(files[0].stat().st_mode) == 0o600, "one private 0600 file holds it")
     check(stat.S_IMODE(private.stat().st_mode) == 0o700, "the private directory is 0700")
 
+    source = runtime.data / "SCRIPTS" / "Keys.ax"
+    saved = source.read_bytes()
+    runtime.stop()
+    source.unlink()
+    source.mkdir()
+    runtime.start()
+    check(holders(private), "a script that cannot be read at start keeps its key")
+    runtime.stop()
+    source.rmdir()
+    source.write_bytes(saved)
+    runtime.start()
+    check(key_set(runtime), "the key is there again with the script")
+
     runtime.install("Keys", HEADER.replace("API key", "Key").replace("Your key", "Yours") + caller(server_port))
     check(key_set(runtime), "a new label or help keeps the key")
-    runtime.install("Keys", HEADER.replace("help=", "hosts=192.168.1.5 help=") + caller(server_port))
+    runtime.install("Keys", HEADER.replace(HOSTS, "127.0.0.1,192.168.1.5") + caller(server_port))
     check(not key_set(runtime) and not holders(private), "changed hosts= erase the key")
+
+    check(runtime.request("PUT", "/api/v1/secrets/Keys", {"key": VALUE}, headers=own)[0] == 200, "set again")
+    full = runtime.data / "full.bin"
+    full.write_bytes(b"x" * (8 * 1024 * 1024))
+    runtime.install("Keys", HEADER.replace(HOSTS, "127.0.0.1,192.168.1.6") + caller(server_port))
+    check(key_set(runtime), "a new source that waits for room on flash changes nothing yet")
+    full.unlink()
+    eventually(lambda: key_set(runtime), lambda present: not present)
+    check(not holders(private), "changed hosts= erase the key when the source reaches the flash")
 
     check(runtime.request("PUT", "/api/v1/secrets/Keys", {"key": VALUE}, headers=own)[0] == 200, "set again")
     check(runtime.request("DELETE", "/api/v1/secrets/Keys/key", headers=own)[0] == 200 and not key_set(runtime),
@@ -118,6 +154,12 @@ def run(runtime, server_port):
     check(runtime.request("DELETE", "/api/v1/apps/Keys")[0] == 200, "the app is deleted")
     check(runtime.request("GET", "/api/v1/secrets/Keys")[0] == 404 and not holders(private),
           "a deleted app's keys are erased")
+
+    runtime.install("NoHosts", '# @secret key label="API key"\nclass App def loop() end end\nreturn App()\n')
+    check(runtime.json("GET", "/api/v1/secrets/NoHosts") == {"invalid": "@secret: hosts needs 1-8 hosts"},
+          "a line without hosts= is invalid")
+    check(runtime.request("PUT", "/api/v1/secrets/NoHosts", {"key": VALUE}, headers=own)[0] == 422,
+          "and takes no key")
 
 
 def main():

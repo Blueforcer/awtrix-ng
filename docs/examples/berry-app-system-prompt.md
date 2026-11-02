@@ -180,7 +180,7 @@ Define only the methods you need. **Every method costs memory for as long as the
 | `on_button_event(btn, event)` | press and release for a button the app takes; long and repeat for left and right | no |
 | `on_button(btn)` | a button was pressed while the app is on screen; `true` consumes it | no |
 | `on_knob(event)` | TC002 knob while the app is on screen: `left`/`right` per detent, `press`, `long`, `release`; `true` takes it | no |
-| `on_voice(trigger)` | TC002: the app is the voice assistant and was just opened; `trigger` is `wake`, `knob`, `mqtt` or `api` (see *Voice* at the end) | no |
+| `on_assistant(trigger)` | TC002: the app is the voice assistant and was just opened; `trigger` is `wake`, `knob`, `mqtt` or `api` (see *Voice* at the end) | no |
 | `should_show()` | the rotation has reached the app; `false` makes it skip past | no |
 | `duration()` | the rotation has reached the app; return ms to override the dwell | no |
 
@@ -340,9 +340,11 @@ until the line has run through once**; without it the rotation moves on mid-line
 guess a duration for it. The second form takes the columns the text may
 use, for an app that draws something beside it; nothing is painted outside them.
 
-The return value counts completed runs. **Text that fits never runs, so it stays `0` for good**: never
-wait for a count on a line that may fit, compare `text_width()` with the width first. A new text with
-another pixel width starts over at `0`; **a new text of exactly the same pixel width neither restarts
+The return value counts completed runs. **Text that stands still never runs, so the count stays `0` for
+good**: a line whose lit pixels fit, unless `whenFits` is `"scroll"`, and any line while `mode` is
+`"static"`, which the device's own settings can choose. Before you wait for a count, pass
+`{"mode": "wrap"}` and compare `text_ink_width()` with the width, and give the wait a time limit,
+because nothing draws while the panel is off. A new text with another pixel width starts over at `0`; **a new text of exactly the same pixel width neither restarts
 the strip nor resets the count**, so remember the count when the text changes.
 
 ```berry
@@ -1368,10 +1370,11 @@ anything that waits, waits by returning and being called again.
 | Chart values | 16 | extras dropped |
 | Music bands | 32 | a smaller `n` merges neighbours |
 | Regex | 256-byte pattern, 7 capturing groups | the call answers `nil` |
-| Voice clips (TC002) | 4 and 4 MB per app; a running recording counts as `max` at 32 KB/s, a running fetch as 2 MB; 4 MB of system memory stay free | callback gets `voice.FULL` |
+| Voice clips (TC002) | 4 and 4 MB per app; a running recording counts as `max` at 32 KB/s, a running fetch as 2 MB; 4 MB of system memory stay free, and room for a running recording's whole limit | callback gets `voice.FULL` |
 | Voice recording (TC002) | one on the clock, by the app on the panel; `silence` 300-3000 ms (800), `wait` 1-15 s (5), `max` 1-30 s (15) | out of range `voice.BAD`, otherwise `voice.BUSY` |
-| `voice.send`, `voice.fetch` (TC002) | 2 per app, one after another across all apps; `timeout` 1-120 s (30 and 15); 16 form fields; a fetch 2 MB | a third `voice.BUSY`, out of range or oversized `voice.BAD`, no answer in time status `0` |
-| `@secret` (TC002) | 4 lines; key 24 characters, `label` 48, `help` 96, `hosts` 8; a value 512 bytes | one bad line: no key of the app works, and saving erases them |
+| `voice.send`, `voice.fetch` (TC002) | 2 per app, one at a time across all apps, so a long one delays the others; `timeout` 1-120 s (30 and 15), counted from the transfer's turn, with 3 s of it to connect and a name lookup on top; 16 form fields; a fetch 2 MB; string bodies waiting 4 MB across all apps; twice body and `cap` must fit above the 4 MB kept free and a running recording's whole limit | a third `voice.BUSY`, out of range or oversized `voice.BAD`, no room `voice.FULL`, no answer in time status `0` |
+| `@secret` (TC002) | 4 lines; key 24 characters, `label` 48, `help` 96, `hosts` required, 1-8; a value 512 bytes without control characters | one bad line: no key of the app works, and saving erases them |
+| `{secret:key}` (TC002) | a filled URL, header value or body is at most 4 KB longer | nothing is sent, callback gets `(nil, 0)` |
 | Frame budget | 25 ms | nothing is dropped; the whole panel's frame rate falls |
 
 Long computations and accidental infinite loops can hit the instruction limit. Split expensive
@@ -1799,28 +1802,39 @@ Never put a key in `@config`, in `store` or in the source, and never ask for it 
 # @secret key label="API key" help="Your key from example.com" hosts=api.example.com
 ```
 
-- `key` starts with a letter or `_`, then letters, digits and `_`, up to 24 characters. `label`
-  (up to 48), `help` (up to 96) and `hosts` (1-8 names or IPv4 addresses, separated by commas, without
-  a port) are optional.
+- `key` starts with a letter or `_`, then letters, digits and `_`, up to 24 characters. **`hosts` is
+  required**: 1-8 names, IPv4 addresses or IPv6 addresses in brackets, separated by commas, without a
+  port. A line without it is invalid, and no key of the app works. `label` (up to 48) and `help` (up to
+  96) are optional.
 - `# @needs secret` is what warns on other clocks; an `@secret` line alone asks for nothing. The other
   clocks ignore the line and send `{secret:key}` as plain text.
-- **Write `{secret:key}` in a header value, or in the path or query of the URL** (percent-encoded
-  there), of `http.*`, `voice.send` and `voice.fetch`. A request body, a form field, a header name and
-  every other module treat it as plain text.
-- `secret.has(key)` after `import secret` answers a bool, `false` for an undeclared or empty key. Add
-  the header only when it is `true`, so the same app works with a local service without a key.
-- **Where a key may go:** `https://`, and `http://` only to an address written as `10.x`, `172.16.x` to
-  `172.31.x`, `192.168.x`, `127.x`, `169.254.x`, `[::1]`, `fc00::/7`, `fe80::/10` or a name ending in
-  `.local`. Nothing is looked up, so `http://localhost` and `http://nas.fritz.box` do not count. With
-  `hosts=`, only those hosts on top of that.
+- **Write `{secret:key}` in a header value, in the path or query of the URL** (percent-encoded there),
+  **or in a text body** (`http.*`, `voice.send` with a string, `voice.fetch` with `body`). In a header
+  and a body the value goes in as it is. It works in `http.*`, `voice.send` and `voice.fetch`. A clip, a
+  form field, a header name and every other module treat it as plain text. The whole body counts, so
+  text passed on from elsewhere that holds `{secret:` is filled in, or refused with an unknown key.
+- `secret.has(key)` after `import secret` answers a bool, `false` for an undeclared or empty key.
+- `secret.allows(key, url)` answers `true` when the key is declared and set and may go to this URL,
+  `false` for anything else. Add the header only when it is `true`, so the same app works with a local
+  service without a key. With one key per service, ask for each key and send the one that fits.
+- **Where a key may go:** only to the hosts `hosts=` lists, and there over `https://`, or over `http://`
+  when the address is written as `10.x`, `172.16.x` to `172.31.x`, `192.168.x`, `127.x`, `169.254.x`,
+  `[::1]`, `fc00::/7`, `fe80::/10` or a name ending in `.local`. Nothing is looked up, so
+  `http://localhost` and `http://nas.fritz.box` do not count.
 - **Refused** (unknown or empty key, any other address): nothing is sent, the callback gets
   `(nil, 0)`, as without a network. A placeholder in the scheme, host, port or user name makes the URL
-  invalid: `http.*` gets `(nil, 0)`, `voice.send` and `voice.fetch` get `voice.BAD`. Tell the user to
-  check the key and the address.
+  invalid: `http.*` gets `(nil, 0)`, `voice.send` and `voice.fetch` get `voice.BAD`. After `#` nothing
+  is sent, and the callback gets `(nil, 0)`. Tell the user to check the key and the address.
 - A request with a filled key follows no redirect; the callback gets the redirect's status.
 - A saved key stays until the user removes it or the app is removed. Changing `hosts=`, removing the
   line, or a mistake in any `@secret` line erases it when the script is saved; a new `label` or `help`
-  keeps it. It is not in a backup.
+  keeps it. It is not in a backup. To use a key with another host, the user changes `hosts=` in the code
+  and enters the key again.
+- A key is protected from others on the network, not fully from other apps the user installs, because
+  all scripts run together on the clock. **When the app uses a key or the microphone, tell the user to
+  set a web login** (**System** → **Web server**): without one, any web page opened in a browser on the
+  same network can change scripts and app settings on the clock, and with that reach API keys and the
+  microphone.
 
 ## Voice (`import voice`)
 
@@ -1838,12 +1852,13 @@ download) and `kind` (`wav` or `mp3`). The script cannot read the sound, only se
 | `voice.level()` | 0-255, the loudness of the running recording, otherwise 0 |
 | `voice.state()` | `'idle'`, `'recording'` or `'playing'` |
 | `voice.send(data, url, opts, cb)` | `cb(body, status)` as in `http`. `data` is a clip or a string |
-| `voice.fetch(url, opts, cb)` | `cb(clip, status)`, 200 with WAV or MP3 only. `opts`: `body`, `method` (`POST` with a body, else `GET`), `headers`, `timeout` (default 15) |
+| `voice.fetch(url, opts, cb)` | `cb(clip, status)`, 200 with WAV or MP3 only, and a `Content-Type` of `audio/mpeg`, `audio/mp3`, `audio/wav`, `audio/wave`, `audio/x-wav` or `application/octet-stream`. `opts`: `body`, `method` (`POST` with a body, else `GET`), `headers`, `timeout` (default 15) |
 | `voice.play(clip, done?)` | answers whether it started. `done(heard)` runs after it ended; `false` when stopped or replaced |
 | `voice.cancel()` | ends the app's recording, playback, sends and fetches; their callbacks get `voice.CANCELLED` or `false` |
 
 `voice.send` options: `headers`, `method` (`POST`), `find`, `keep`, `cap` as in `http` (5.7), and
-`timeout` in whole seconds, 1-120, default 30, which also covers the wait for the first byte. **A clip**
+`timeout` in whole seconds, 1-120, default 30, which also covers the wait for the first byte.
+Connecting has its own 3 s. **A clip**
 goes as a form: `field` (`file`), `fields` (a map, at most 16), no `Content-Type` of yours; `'as': 'raw'`
 sends it as the whole body. **A string** is the body, as `application/json` unless `headers` names a
 `Content-Type`; `as`, `field` and `fields` do not apply.
@@ -1851,22 +1866,26 @@ sends it as the whole body. **A string** is the body, as `application/json` unle
 Status: an HTTP code, `0` when no server answered or a key was refused, or `voice.SILENCE` (-1, nobody
 spoke), `voice.BUSY` (-2, the app is not shown, the assistant is busy, another recording runs, a third
 send or fetch), `voice.CANCELLED` (-3), `voice.FULL` (-4, clip limits or memory), `voice.GONE` (-5, a
-released clip), `voice.BAD` (-6, a bad option, URL, method or header, or a fetch answer 200 that is
-neither WAV nor MP3).
+released clip), `voice.BAD` (-6, a bad option, URL, method or header, or a fetch answer 200 of another
+type or that is neither WAV nor MP3).
 
 - **Only the app on the panel can record.** Hiding it stops its recording and playback and deletes
   its finished clips; sends and fetches go on. It keeps the panel while it records, plays, sends or
   fetches.
-- While it records or plays, other sounds are refused and music waits. While it only sends or fetches,
-  music waits and `sound.play({'speech': ...})` still plays.
-- **The voice assistant:** the user picks an app with `@needs voice`, neither `@headless` nor
-  `@module`, under **System** → **Voice assistant**. Add `# @ondemand`. The clock opens it, and
-  `on_voice(trigger)` runs after its first frame with `wake`, `knob`, `mqtt` or `api`. A
+- While it records or plays, other sounds are refused and music waits. `sound.*` works again in the
+  record and play callbacks. While it sends or fetches on the panel, music waits and
+  `sound.play({'speech': ...})` still plays. A send or fetch of an app in the background leaves the
+  music alone.
+- **The voice assistant:** the user picks an app with `@needs voice` and an `on_assistant` method,
+  neither `@headless` nor `@module`, under **System** → **Voice assistant**. Add `# @ondemand`. The clock opens it, and
+  `on_assistant(trigger)` runs after its first frame with `wake`, `knob`, `mqtt` or `api`. A
   `voice.record()` there starts at the trigger; a later one starts now. End with `rotation.close()`.
+  A new trigger does nothing while the clock speaks or the app still records, plays, sends or fetches.
 - **The chat step uses `voice.send`, not `http.post`.** `http` gives up after 5 s without a first byte,
   and its one queue serves all apps, so a service that answers slowly belongs on `voice.send`.
-- Most keys for these services go in a header: see *API keys* above. With one `@secret` key for all
-  addresses, every address receives it. Say so when the user mixes services.
+- Most keys for these services go in a header: see *API keys* above. Give each service its own
+  `@secret` line bound to its host and pick the key per URL with `secret.allows(key, url)`. A local
+  service needs no key.
 - A question can overtake an older one, and the old callback still runs: count questions as `turn`
   does below.
 
@@ -1882,10 +1901,10 @@ Record, send, chat, fetch and play, for any service with the OpenAI format:
 # @config  stt_model  text "Speech model"   default="gpt-4o-mini-transcribe" help="The model of that service"
 # @config  chat_url   text "Chat address"   default="https://api.openai.com/v1/chat/completions" help="Answers your question"
 # @config  chat_model text "Chat model"     default="gpt-4o-mini" help="The model of that service"
-# @config  tts_url    text "Voice address"  default="https://api.openai.com/v1/audio/speech" help="Reads the answer aloud"
-# @config  tts_model  text "Voice model"    default="gpt-4o-mini-tts" help="The model of that service"
+# @config  tts_url    text "Reply address"  default="https://api.openai.com/v1/audio/speech" help="Reads the answer aloud"
+# @config  tts_model  text "Reply model"    default="gpt-4o-mini-tts" help="The model of that service"
 # @config  tts_voice  text "Voice"          default="alloy" help="The voice of that service"
-# @secret  key label="API key" help="Goes to all three addresses. Leave it empty for a service without a key"
+# @secret  key label="OpenAI key" help="A local service needs none" hosts=api.openai.com
 
 import json
 import voice
@@ -1901,7 +1920,7 @@ class Ask
     self.until = now_ms() + 10000
   end
 
-  def on_voice(trigger)
+  def on_assistant(trigger)
     self.listen('trigger')
   end
 
@@ -1920,9 +1939,9 @@ class Ask
     if self.until > 0 && now_ms() >= self.until rotation.close() end
   end
 
-  def headers(typed)
+  def headers(url, typed)
     var out = typed ? {'Content-Type': 'application/json'} : {}
-    if secret.has('key') out['Authorization'] = 'Bearer {secret:key}' end
+    if secret.allows('key', url) out['Authorization'] = 'Bearer {secret:key}' end
     return out
   end
 
@@ -1938,8 +1957,9 @@ class Ask
     if turn != self.turn return end
     if clip == nil return self.fail(status) end
     self.show("...", 0xFFFFFF, 0)
-    var opts = {'fields': {'model': store.get('stt_model')}, 'headers': self.headers(false)}
-    voice.send(clip, store.get('stt_url'), opts, / body, code -> self.transcribed(turn, body, code))
+    var url = store.get('stt_url')
+    var opts = {'fields': {'model': store.get('stt_model')}, 'headers': self.headers(url, false)}
+    voice.send(clip, url, opts, / body, code -> self.transcribed(turn, body, code))
   end
 
   def transcribed(turn, body, status)
@@ -1949,8 +1969,9 @@ class Ask
     var question = isinstance(data, map) ? data.find('text') : nil
     if question == nil || question == '' return self.fail(voice.SILENCE) end
     var request = {'model': store.get('chat_model'), 'messages': [{'role': 'user', 'content': question}]}
-    var opts = {'cap': 16384, 'timeout': 120, 'headers': self.headers(true)}
-    voice.send(json.dump(request), store.get('chat_url'), opts, / answer, code -> self.answered(turn, answer, code))
+    var url = store.get('chat_url')
+    var opts = {'cap': 16384, 'timeout': 120, 'headers': self.headers(url, true)}
+    voice.send(json.dump(request), url, opts, / answer, code -> self.answered(turn, answer, code))
   end
 
   def answered(turn, answer, status)
@@ -1965,8 +1986,9 @@ class Ask
     self.show(reply, 0xFFFFFF, 0)
     var request = {'model': store.get('tts_model'), 'voice': store.get('tts_voice'), 'input': reply,
                    'response_format': 'mp3'}
-    var opts = {'body': json.dump(request), 'timeout': 60, 'headers': self.headers(true)}
-    voice.fetch(store.get('tts_url'), opts, / clip, code -> self.fetched(turn, clip, code))
+    var url = store.get('tts_url')
+    var opts = {'body': json.dump(request), 'timeout': 60, 'headers': self.headers(url, true)}
+    voice.fetch(url, opts, / clip, code -> self.fetched(turn, clip, code))
   end
 
   def fetched(turn, clip, status)

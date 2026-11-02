@@ -4,6 +4,8 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
+#include <string>
 #include <vector>
 
 #include "platform/tc002/voice/AssistSession.h"
@@ -31,17 +33,23 @@ struct Rig {
                          },
                          [] {}}};
   explicit Rig(std::string device = "") {
-    session.connecting({true, false, "http://ha:8123", "secret", "", device}, 0);
-    session.receive({1, StreamEvent::Kind::Support, 0, 0, 0, true, {}, {}}, 0);
-    session.text(R"({"type":"auth_required"})", 1);
-    check(sent.back().first.find("secret") != std::string::npos,
-          "authenticate on challenge");
-    session.text(R"({"type":"auth_ok"})", 2);
-    session.text(
-        R"({"id":1,"type":"result","success":true,"result":{"preferred_pipeline":"p","pipelines":[{"id":"p","stt_engine":"stt","tts_engine":"tts"}]}})",
-        3);
+    connect(0, device);
     check(session.ready(), "pipeline validated");
     disconnected = false;
+  }
+  void connect(int64_t now, const std::string& device = "") {
+    session.connecting({false, "http://ha:8123", "secret", "", device}, now);
+    answer(now);
+  }
+  void answer(int64_t now) {
+    session.receive({session.captureEpoch(), StreamEvent::Kind::Support, 0, 0, now, true, {}, {}}, now);
+    session.text(R"({"type":"auth_required"})", now + 1);
+    check(sent.back().first.find("secret") != std::string::npos,
+          "authenticate on challenge");
+    session.text(R"({"type":"auth_ok"})", now + 2);
+    session.text(
+        R"({"id":1,"type":"result","success":true,"result":{"preferred_pipeline":"p","pipelines":[{"id":"p","stt_engine":"stt","tts_engine":"tts"}]}})",
+        now + 3);
   }
   void begin() { check(session.begin(100), "begin"); }
   void stt(bool acknowledge = true, int64_t now = 110) {
@@ -62,8 +70,9 @@ void assistantSetting() {
   check(::mkdtemp(folder) != nullptr, "a private folder");
   {
     ConfigStore store(folder);
-    check(store.load() && store.get().assistant == "ha" && store.assistantApp().empty(),
-          "Home Assistant answers by default");
+    check(store.load() && store.get().assistant == "off" && store.assistantApp().empty(),
+          "nothing answers on a fresh clock");
+    check(store.publicJson().find("\"enabled\":false") != std::string::npos, "and enabled says so");
     ConfigStore::Rejection rejection;
     check(store.update(R"({"assistant":"app:Chat"})", rejection) && store.get().assistant == "app:Chat" &&
               store.assistantApp() == "Chat",
@@ -74,15 +83,157 @@ void assistantSetting() {
       rejection = {};
       check(!store.update(bad, rejection) && rejection.field == "assistant", std::string("refused: ") + bad);
     }
-    Config ha;
-    check(!sameConnection(ha, store.get()), "a change of the assistant is a change of the connection");
+    Config off;
+    Config chosen = store.get();
+    chosen.wakeWord = !off.wakeWord;
+    check(!onlyWakeChanged(off, chosen), "a change of the assistant is a change of the connection");
   }
   ConfigStore again(folder);
   check(again.load() && again.get().assistant == "app:Chat" && again.assistantApp() == "Chat",
         "the setting survives a restart");
-  check(again.erase() && again.assistantApp().empty(), "erasing the settings brings Home Assistant back");
+  check(again.erase() && again.assistantApp().empty() && again.get().assistant == "off",
+        "erasing the settings leaves no assistant");
   ::unlink((std::string(folder) + "/voice.json").c_str());
   ::rmdir(folder);
+}
+void savedFilesKeepTheirMeaning() {
+  struct Shape {
+    const char* file;
+    const char* assistant;
+  };
+  const Shape shapes[] = {
+      {R"({"enabled":false})", "off"},
+      {R"({"enabled":true,"url":"http://ha:8123","token":"t"})", "ha"},
+      {R"({"enabled":false,"assistant":"ha","url":"http://ha:8123","token":"t"})", "off"},
+      {R"({"enabled":true,"assistant":"ha","url":"http://ha:8123","token":"t"})", "ha"},
+      {R"({"enabled":false,"assistant":"app:Chat"})", "app:Chat"},
+      {R"({"enabled":true,"assistant":"app:Chat"})", "app:Chat"},
+      {R"({"assistant":"ha"})", "ha"},
+      {R"({"assistant":"off"})", "off"},
+      {R"({"url":"http://ha:8123"})", "off"},
+  };
+  char folder[] = "/tmp/voice-config-XXXXXX";
+  check(::mkdtemp(folder) != nullptr, "a private folder");
+  const std::string path = std::string(folder) + "/voice.json";
+  for (const Shape& shape : shapes) {
+    std::ofstream(path, std::ios::trunc) << shape.file;
+    ::chmod(path.c_str(), 0600);
+    ConfigStore store(folder);
+    check(store.load() && store.get().assistant == shape.assistant, std::string("loaded: ") + shape.file);
+  }
+  std::ofstream(path, std::ios::trunc) << R"({"enabled":false,"assistant":"ha","url":"http://ha:8123","token":"t"})";
+  ConfigStore store(folder);
+  ConfigStore::Rejection rejection;
+  check(store.load() && store.get().url == "http://ha:8123" && store.get().token == "t",
+        "an assistant switched off keeps its address and token");
+  check(store.update(R"({"pipeline":"p"})", rejection), "saving rewrites the file");
+  std::string saved;
+  std::getline(std::ifstream(path), saved);
+  check(saved.find("enabled") == std::string::npos && saved.find("\"assistant\":\"off\"") != std::string::npos,
+        "one stored field only: " + saved);
+  ConfigStore again(folder);
+  check(again.load() && again.get().assistant == "off", "and it reads back the same");
+  ::unlink(path.c_str());
+  ::rmdir(folder);
+}
+void enabledFollowsTheAssistant() {
+  char folder[] = "/tmp/voice-config-XXXXXX";
+  check(::mkdtemp(folder) != nullptr, "a private folder");
+  ConfigStore store(folder);
+  ConfigStore::Rejection rejection;
+  const auto write = [&](const char* json) {
+    rejection = {};
+    return store.update(json, rejection);
+  };
+  const auto reads = [&](bool enabled) {
+    return store.publicJson().find(enabled ? "\"enabled\":true" : "\"enabled\":false") != std::string::npos;
+  };
+  check(store.load() && write(R"({"url":"http://ha:8123","token":"t"})") && store.get().assistant == "off" && reads(false),
+        "an address and a token switch nothing on");
+  check(write(R"({"enabled":true})") && store.get().assistant == "ha" && reads(true), "enabled true picks Home Assistant");
+  check(write(R"({"enabled":false})") && store.get().assistant == "off" && reads(false), "enabled false picks off");
+  check(store.get().url == "http://ha:8123" && store.get().token == "t", "off keeps address and token");
+  check(write(R"({"assistant":"app:Chat"})") && reads(false), "with an app as the target enabled reads false");
+  check(write(R"({"enabled":true})") && store.get().assistant == "ha" && store.assistantApp().empty(),
+        "enabled true replaces the app");
+  check(write(R"({"assistant":"app:Chat"})") && write(R"({"enabled":false})") && store.get().assistant == "off",
+        "enabled false replaces the app");
+  check(write(R"({"enabled":true,"assistant":"off"})") && store.get().assistant == "off", "assistant wins over true");
+  check(write(R"({"enabled":false,"assistant":"ha"})") && store.get().assistant == "ha", "assistant wins over false");
+  check(write(R"({"enabled":false,"assistant":"app:Chat"})") && store.get().assistant == "app:Chat",
+        "assistant wins for an app");
+  check(!write(R"({"enabled":"yes"})") && rejection.field == "enabled", "enabled is true or false");
+  check(write(R"({"assistant":"ha","clearToken":true})") && store.get().assistant == "ha" && store.get().token.empty(),
+        "removing the token changes no target");
+  check(write(R"({"enabled":true})") && store.get().assistant == "ha", "the target needs no token");
+  check(write(R"({"assistant":"off"})") && store.get().assistant == "off", "off is a valid target");
+  ::unlink((std::string(folder) + "/voice.json").c_str());
+  ::rmdir(folder);
+}
+void aBlockingReasonOutlivesTheRetry() {
+  const Config config{false, "http://ha:8123", "secret", "", ""};
+  {
+    Rig r;
+    r.session.lost(5);
+    check(r.session.error() == "connectionLost" && r.session.lastError().empty(), "a lost idle connection blocks");
+    r.session.connecting(config, 6);
+    check(r.session.state() == AssistSession::State::Connecting && r.session.error() == "connectionLost",
+          "the reason stays while the clock tries again");
+    r.answer(7);
+    check(r.session.ready() && r.session.error().empty(), "and goes once it is connected");
+  }
+  {
+    Rig r;
+    r.session.connecting(config, 10);
+    r.session.text(R"({"type":"auth_invalid"})", 11);
+    check(r.session.state() == AssistSession::State::Error && r.session.error() == "tokenRejected", "a refused token");
+    r.session.connecting(config, 10011);
+    check(r.session.error() == "tokenRejected", "stays named between two tries");
+    r.session.cancel();
+    check(r.session.error().empty(), "a new setting starts clean");
+  }
+  {
+    Rig r;
+    r.session.connecting(config, 1000);
+    r.session.tick(11000);
+    check(r.session.error() == "connectionLost" && r.session.lastError().empty(),
+          "no answer while connecting is no connection, not a slow request");
+  }
+}
+void aFailedRequestLeavesTheClockReady() {
+  {
+    Rig r;
+    r.begin();
+    r.stt();
+    r.session.receive({2, StreamEvent::Kind::Audio, 24, 0, 120, false, std::vector<int16_t>(24), {}}, 120);
+    check(r.session.state() == AssistSession::State::Error && r.session.error().empty() &&
+              r.session.lastError() == "microphoneFailed",
+          "a request that fails names itself without blocking the assistant");
+    r.connect(200);
+    check(r.session.ready() && r.session.error().empty() && r.session.lastError() == "microphoneFailed",
+          "connected again, the reason of the last try stays");
+    check(r.session.begin(300) && r.session.lastError().empty(), "until the next request");
+  }
+  {
+    Rig r;
+    r.begin();
+    r.session.tick(5100);
+    check(r.session.lastError() == "timeout" && r.session.error().empty(), "a slow request is a timeout");
+    r.connect(5200);
+    r.session.tick(305099);
+    check(r.session.lastError() == "timeout", "the reason stays for five minutes");
+    r.session.tick(305100);
+    check(r.session.lastError().empty(), "and then goes");
+  }
+  {
+    Rig r;
+    r.begin();
+    r.stt();
+    r.session.text(R"({"id":2,"type":"event","event":{"type":"error","data":{"code":"stt-no-text-recognized"}}})", 120);
+    check(r.session.lastError() == "nothingUnderstood", "nothing understood is the last try's reason");
+    r.session.cancel();
+    check(r.session.lastError().empty(), "a new setting forgets it");
+  }
 }
 int main() {
   {
@@ -131,9 +282,6 @@ int main() {
     check(!store.update(R"({"url":"http://ha:8123/lovelace"})", error) &&
               error.field == "url",
           "an address with a path names the url field");
-    check(!store.update(R"({"enabled":true,"clearToken":true})", error) &&
-              error.field == "enabled",
-          "voice cannot be on without a token");
     check(store.update(R"({"pipeline":"p1"})", error) &&
               store.get().token == "secret",
           "ordinary edits retain token");
@@ -151,24 +299,50 @@ int main() {
           "the wake word is true or false");
     Config other = store.get();
     other.wakeWord = !other.wakeWord;
-    check(sameConnection(store.get(), other), "the wake word is no connection setting");
-    for (auto change : {+[](Config& c) { c.enabled = !c.enabled; }, +[](Config& c) { c.url += "x"; },
+    check(onlyWakeChanged(store.get(), other), "the wake word is no connection setting");
+    check(!onlyWakeChanged(store.get(), store.get()), "saving the same again is no wake word change");
+    {
+      Config level = store.get();
+      level.wakeSensitivity = wake::WakeSensitivity::High;
+      check(onlyWakeChanged(store.get(), level), "the sensitivity is none either");
+    }
+    check(store.get().wakeSensitivity == wake::WakeSensitivity::Normal &&
+              store.publicJson().find("\"wakeSensitivity\":\"normal\"") != std::string::npos,
+          "the sensitivity starts on normal");
+    check(store.update(R"({"wakeSensitivity":"high"})", error) &&
+              store.get().wakeSensitivity == wake::WakeSensitivity::High &&
+              store.publicJson().find("\"wakeSensitivity\":\"high\"") != std::string::npos,
+          "high is taken");
+    for (const char* bad : {R"({"wakeSensitivity":"loud"})", R"({"wakeSensitivity":1})", R"({"wakeSensitivity":""})"}) {
+      error = {};
+      check(!store.update(bad, error) && error.field == "wakeSensitivity", std::string("refused: ") + bad);
+    }
+    {
+      ConfigStore saved(directory);
+      check(saved.load() && saved.get().wakeSensitivity == wake::WakeSensitivity::High,
+            "the sensitivity survives a restart");
+    }
+    for (auto change : {+[](Config& c) { c.assistant = "off"; }, +[](Config& c) { c.url += "x"; },
                         +[](Config& c) { c.token += "x"; }, +[](Config& c) { c.pipeline += "x"; },
                         +[](Config& c) { c.device += "x"; }}) {
       Config changed = other;
       change(changed);
-      check(!sameConnection(store.get(), changed), "every other setting is one");
+      check(!onlyWakeChanged(store.get(), changed), "every other setting is one");
     }
     ConfigStore stored(directory);
     check(stored.load() && stored.get().wakeWord, "the wake word setting survives a restart");
     check(store.erase(), "factory reset removes secret");
     ConfigStore reloaded(directory);
-    check(reloaded.load() && !reloaded.get().enabled &&
+    check(reloaded.load() && reloaded.get().assistant == "off" &&
               reloaded.get().token.empty(),
-          "reset stays disabled after restart");
+          "reset stays off after restart");
     ::rmdir(directory);
   }
   assistantSetting();
+  savedFilesKeepTheirMeaning();
+  enabledFollowsTheAssistant();
+  aBlockingReasonOutlivesTheRetry();
+  aFailedRequestLeavesTheClockReady();
   {
     Rig r;
     r.begin();
@@ -321,7 +495,7 @@ int main() {
                           "http://ha?x", "http://ha\r\nX:bad", "file://ha", "http://ha:65536",
                           "http://ha:8123@evil", "http://@ha", "http://[1::2::3]", "http://ha#"})
     check(!parseOrigin(bad, e), "reject malformed origin");
-  Config c{true, false, "http://ha:8123", "secret", "", ""};
+  Config c{false, "http://ha:8123", "secret", "", ""};
   check(ttsTarget(c, "http://ha:8123/api/tts_proxy/a.wav", path),
         "same origin TTS");
   for (const auto* bad : {"//other/a", "http://evil/api/tts_proxy/a",

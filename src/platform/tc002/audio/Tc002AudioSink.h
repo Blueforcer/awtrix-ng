@@ -92,6 +92,10 @@ class Tc002AudioSink final : public sound::IToneSink, public sound::IPcmSink {
   bool playFx(const std::string& text);
   bool playSongOnce(const std::string& text, sound::Group group);
   bool speaks() const { return available() && voice() != nullptr; }
+  bool speaking() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return request_.oneShot == Kind::Speech;
+  }
   // The voice that speaks from the next speech on; one already speaking keeps its own. Any thread.
   std::shared_ptr<speech::SpeechVoice> voice() const;
   void setVoice(std::shared_ptr<speech::SpeechVoice> voice);

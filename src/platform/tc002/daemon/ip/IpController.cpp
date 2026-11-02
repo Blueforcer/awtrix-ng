@@ -114,6 +114,9 @@ bool IpController::start(int64_t nowMs) {
   state_.onNetwork([this] {
     if (!publishing_ && !stopping_) networkPending_ = true;
   });
+  state_.onNetworkReplaced([this] {
+    if (!stopping_) networkPending_ = networkReplaced_ = true;
+  });
   networkPending_ = true;
   publish(nowMs);
   return true;
@@ -167,6 +170,8 @@ void IpController::processNetwork(int64_t nowMs) {
   if (resolveHostname()) hostnameChanged(nowMs);
   const bool up = state_.network().link == tc002::WifiLink::Connected;
   const bool ap = state_.network().link == tc002::WifiLink::AccessPoint;
+  const bool replaced = networkReplaced_ && !static_.address;
+  networkReplaced_ = false;
   if (ap != accessPoint_) {
     accessPoint_ = ap;
     linkUp_ = up;
@@ -180,10 +185,13 @@ void IpController::processNetwork(int64_t nowMs) {
     flushOnRestart_ = true;
     if (dhcpPid_ > 0) stopClient(nowMs, true);
     else startWantedClient(nowMs, true);
-  } else if (up != linkUp_) {
-    linkUp_ = up;
-    if (up) linkUp(nowMs);
-    else linkDown(nowMs);
+  } else {
+    if (up != linkUp_) {
+      linkUp_ = up;
+      if (up) linkUp(nowMs);
+      else linkDown(nowMs);
+    }
+    if (replaced) addressingChanged(nowMs);
   }
   publish(nowMs);
 }

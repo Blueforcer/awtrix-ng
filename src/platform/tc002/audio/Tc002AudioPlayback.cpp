@@ -40,6 +40,7 @@ class SkippingSource final : public PcmSource {
 // Called with the sequence number of a one-shot that ended, failed or took over; a system sound
 // requested before it and not yet audible will never start.
 void Tc002AudioSink::systemGone(uint32_t seq) {
+  std::lock_guard<std::mutex> lock(mutex_);
   if (static_cast<int32_t>(seq - systemSeq_.load()) < 0) return;
   SystemStart pending = SystemStart::Pending;
   systemStart_.compare_exchange_strong(pending, SystemStart::Failed);

@@ -20,7 +20,9 @@
 #include "core/script/ScriptMeta.h"
 #include "platform/tc002/runtime/MicrophoneHub.h"
 #include "platform/tc002/voice/AssistantRouter.h"
+#include "platform/tc002/voice/VoiceErrors.h"
 #include "platform/tc002/wake/WakeListener.h"
+#include "platform/tc002/wake/WakeSensitivity.h"
 
 using namespace awtrix;
 using awtrix::test::check;
@@ -34,12 +36,14 @@ using tc002::StreamEvent;
 using tc002::voice::AssistantRouter;
 using tc002::voice::KnobGesture;
 using tc002::voice::VoiceTrigger;
+using tc002::wake::WakeSensitivity;
 
 namespace {
-std::size_t allocations = 0;
+std::size_t allocations = 0, blockAllocations = 0;
 
 void* counted(std::size_t size) noexcept {
   ++allocations;
+  if (size >= tc002::kStreamBlockSamples * sizeof(int16_t)) ++blockAllocations;
   return std::malloc(size ? size : 1);
 }
 
@@ -64,12 +68,16 @@ namespace {
 namespace fs = std::filesystem;
 
 struct FakeVoice final : AssistantRouter::Voice {
-  bool homeAssistantChosen = false, wakeWordOn = true, isReady = false, isBusy = false, isStarting = false;
+  bool assistantOff = false, homeAssistantChosen = false, wakeWordOn = true, isReady = false, isBusy = false,
+       isStarting = false;
   std::string app = "Chat";
   const std::string none;
+  WakeSensitivity sensitivity = WakeSensitivity::Normal;
   unsigned begins = 0;
+  WakeSensitivity wakeSensitivity() const override { return sensitivity; }
+  bool off() const override { return assistantOff; }
   bool homeAssistant() const override { return homeAssistantChosen; }
-  const std::string& assistantApp() const override { return homeAssistantChosen ? none : app; }
+  const std::string& assistantApp() const override { return assistantOff || homeAssistantChosen ? none : app; }
   bool wakeWord() const override { return wakeWordOn; }
   bool ready() const override { return isReady; }
   bool busy() const override { return isBusy; }
@@ -120,13 +128,17 @@ struct Rig {
   KnobGesture gesture;
   FakeVoice voice;
   FakeModule module;
+  AssistantRouter::NoModule noModule;
   bool allowed = true;
   std::map<std::string, script::ScriptMeta> metas{{"Chat", meta("voice")}};
   std::vector<std::string> installed{"Chat"};
-  std::set<std::string> disabled;
+  std::set<std::string> disabled, failing, hookless;
   std::vector<std::string> opened;
   bool openFails = false;
   std::string shown;
+  bool covered = false, speaking = false, onDemand = false;
+  std::string session;
+  unsigned sessionsEnded = 0;
   bool panelOff = false;
   std::vector<bool> power;
   unsigned dismissed = 0;
@@ -161,14 +173,30 @@ struct Rig {
               return it == metas.end() ? nullptr : &it->second;
             },
             [this] { return installed; },
+            [this](const std::string& app, std::string& out) {
+              out = hookless.count(app) ? "class App end" : "def on_assistant(trigger) end";
+              return true;
+            },
             [this](const std::string& app) { return metas.count(app) && !disabled.count(app); },
+            [this](const std::string& app) { return disabled.count(app) != 0; },
+            [this](const std::string& app) { return failing.count(app) != 0; },
             [this](const std::string& json, DispatchDetail& detail) {
               opened.push_back(json);
-              if (!openFails) return DispatchResult::Ok;
+              if (!openFails) {
+                if (onDemand) session = voice.app;
+                return DispatchResult::Ok;
+              }
               detail.message = "no such app";
               return DispatchResult::NotFound;
             },
             [this](const std::string& app) { return shown == app; },
+            [this] { return covered; },
+            [this] { return speaking; },
+            [this](const std::string& app) { return session == app; },
+            [this] {
+              session.clear();
+              ++sessionsEnded;
+            },
             [this] { return panelOff; },
             [this](bool on) {
               power.push_back(on);
@@ -179,7 +207,8 @@ struct Rig {
               ++music;
               return posix::Hold([this] { --music; });
             }},
-        AssistantRouter::Parts{voice, withModule ? &module : nullptr, gesture, hub, wake.get(), wakeMicrophone});
+        AssistantRouter::Parts{voice, withModule ? static_cast<AssistantRouter::Module&>(module) : noModule, gesture,
+                               hub, wake.get(), wakeMicrophone});
     hub.tick(now);
   }
 
@@ -240,7 +269,7 @@ void everyTriggerReachesTheApp() {
   check(rig.start(VoiceTrigger::Api), "the API starts the assistant app");
   check(rig.module.triggers.size() == 1 && rig.module.triggers[0].app == "Chat" &&
             rig.module.triggers[0].name == "api" && same(rig.module.triggers[0].mark, api),
-        "on_voice gets \"api\" and the hub's position at the trigger");
+        "on_assistant gets \"api\" and the hub's position at the trigger");
   check(rig.opened.size() == 1 && rig.opened[0] == R"({"name":"Chat","fast":true})",
         "the app opens at once: " + (rig.opened.empty() ? std::string() : rig.opened[0]));
   check(rig.dismissed == 1 && rig.music == 1, "the quick settings close and the music waits");
@@ -269,10 +298,10 @@ void theWakeWordReachesTheApp(const fs::path& model) {
   rig.keep();
   check(!rig.wakeSent.empty() && rig.wakeSent[0].operation == StreamControl::Probe, "the wake word listens");
   rig.framesUntil([&rig] { return !rig.module.triggers.empty(); }, kWakeWithinMs);
-  require(rig.module.triggers.size() == 1, "the wake word fires on the smoke model");
+  require(rig.module.triggers.size() == 1, "the wake word fires");
   const Triggered& heard = rig.module.triggers[0];
   const MicrophoneMark now = rig.hub.mark();
-  check(heard.app == "Chat" && heard.name == "wake", "on_voice gets \"wake\"");
+  check(heard.app == "Chat" && heard.name == "wake", "on_assistant gets \"wake\"");
   check(heard.mark.epoch == now.epoch && heard.mark.sample > 0 && heard.mark.sample <= now.sample,
         "the mark is the detection's position in the hub's stream");
   rig.frames(1800);
@@ -309,6 +338,19 @@ void theWakeWordIsMuted(const fs::path& model) {
   }
 }
 
+void theClockDoesNotWakeItself(const fs::path& model) {
+  Rig rig(&model);
+  rig.keep();
+  rig.speaking = true;
+  rig.frames(3000);
+  check(rig.module.triggers.empty() && count(rig.wakeSent, StreamControl::Probe) == 1 &&
+            count(rig.wakeSent, StreamControl::Stop) == 0,
+        "the wake word keeps its stream but reports nothing while the clock speaks");
+  rig.speaking = false;
+  rig.framesUntil([&rig] { return !rig.module.triggers.empty(); }, kWakeWithinMs);
+  check(!rig.module.triggers.empty(), "and hears again when the clock is done");
+}
+
 void refusals() {
   struct Case {
     const char* what;
@@ -323,6 +365,7 @@ void refusals() {
       {"a busy voice module", [](Rig& r) { r.module.isBusy = true; }},
       {"a trigger that waits", [](Rig& r) { r.module.waiting = true; }},
       {"an app that holds something", [](Rig& r) { r.module.holding.insert("Chat"); }},
+      {"speech on the speaker", [](Rig& r) { r.speaking = true; }},
       {"a busy Home Assistant Voice", [](Rig& r) { r.voice.isBusy = true; }},
   };
   for (const Case& c : cases) {
@@ -428,6 +471,97 @@ void panelAndMusic() {
   }
 }
 
+void speechKeepsTheInteraction() {
+  Rig rig;
+  rig.panelOff = true;
+  rig.start(VoiceTrigger::Api);
+  rig.shows("Chat");
+  rig.speaking = true;
+  rig.frames(3 * AssistantRouter::kAssistantIdleMs);
+  check(rig.power.size() == 1 && rig.music == 1, "the panel stays on and the radio waits while the clock speaks");
+  rig.speaking = false;
+  rig.frames(AssistantRouter::kAssistantIdleMs - 30);
+  check(rig.power.size() == 1 && rig.music == 1, "and 10 s after");
+  rig.frame();
+  check(rig.power == std::vector<bool>{true, false} && rig.music == 0, "then the interaction ends");
+}
+
+void homeAssistantIgnoresLocalSpeech() {
+  Rig rig;
+  rig.voice.homeAssistantChosen = true;
+  rig.voice.isReady = true;
+  rig.speaking = true;
+  check(rig.start(VoiceTrigger::Api) && rig.voice.begins == 1, "Home Assistant Voice starts as it always did");
+}
+
+void aSessionKeepsTheInteraction() {
+  Rig rig;
+  rig.panelOff = true;
+  rig.onDemand = true;
+  rig.start(VoiceTrigger::Api);
+  rig.shows("Chat");
+  rig.frames(3 * AssistantRouter::kAssistantIdleMs);
+  check(rig.power.size() == 1 && rig.music == 1 && rig.sessionsEnded == 0,
+        "an idle @ondemand app it opened stays on the panel, lit, with the radio waiting");
+  rig.session.clear();
+  rig.shown = "Clock";
+  rig.frame();
+  check(rig.power == std::vector<bool>{true, false} && rig.music == 0, "until its session ends");
+}
+
+void aCoveredPanelStopsTheClock() {
+  Rig rig;
+  rig.onDemand = true;
+  rig.covered = true;
+  check(rig.start(VoiceTrigger::Api) && rig.module.waiting, "a trigger waits behind a notification");
+  rig.frames(3 * AssistantRouter::kShowTimeoutMs);
+  check(rig.module.waiting && rig.module.drops == 0 && rig.sessionsEnded == 0 && rig.music == 1,
+        "as long as the notification lasts");
+  rig.covered = false;
+  rig.frames(AssistantRouter::kShowTimeoutMs - 30);
+  check(rig.module.waiting && rig.module.drops == 0, "the 3 s start when the app can draw again");
+  rig.shows("Chat");
+  rig.frame();
+  check(rig.module.drops == 0 && rig.music == 1 && rig.sessionsEnded == 0, "and the app answers");
+}
+
+void aLapseEndsTheSessionOfTheTrigger() {
+  {
+    Rig rig;
+    rig.onDemand = true;
+    check(rig.start(VoiceTrigger::Api) && rig.session == "Chat", "the trigger opens the app's session");
+    rig.frames(AssistantRouter::kShowTimeoutMs);
+    check(rig.module.drops == 1 && rig.session.empty() && rig.sessionsEnded == 1 && rig.music == 0,
+          "an app that never draws loses the trigger and the session it opened");
+  }
+  {
+    Rig rig;
+    rig.onDemand = true;
+    rig.session = "Chat";
+    check(rig.start(VoiceTrigger::Api), "the trigger finds the session open");
+    rig.frames(AssistantRouter::kShowTimeoutMs);
+    check(rig.module.drops == 1 && rig.session == "Chat" && rig.sessionsEnded == 0,
+          "a session someone else opened stays when the trigger lapses");
+  }
+  {
+    Rig rig;
+    rig.onDemand = true;
+    check(rig.start(VoiceTrigger::Api), "the first trigger opens the session");
+    rig.shows("Chat");
+    rig.frame();
+    check(rig.start(VoiceTrigger::Mqtt) && rig.module.waiting, "a second one finds it open");
+    rig.frames(AssistantRouter::kShowTimeoutMs);
+    check(rig.module.drops == 1 && rig.session.empty() && rig.sessionsEnded == 1,
+          "it is still the session of this interaction when the second trigger lapses");
+  }
+  {
+    Rig rig;
+    check(rig.start(VoiceTrigger::Api), "an app of the rotation opens");
+    rig.frames(AssistantRouter::kShowTimeoutMs);
+    check(rig.module.drops == 1 && rig.sessionsEnded == 0, "and there is no session to end");
+  }
+}
+
 void holdConditions() {
   struct Case {
     const char* what;
@@ -460,6 +594,7 @@ void wakeGating(const fs::path& model) {
   const Case cases[] = {
       {"the panel is busy", [](Rig& r, bool on) { r.allowed = on; }},
       {"the wake word is off", [](Rig& r, bool on) { r.voice.wakeWordOn = on; }},
+      {"the assistant is off", [](Rig& r, bool on) { r.voice.assistantOff = !on; }},
       {"the assistant app cannot start", [](Rig& r, bool on) {
          if (on) r.disabled.clear();
          else r.disabled.insert("Chat");
@@ -469,10 +604,10 @@ void wakeGating(const fs::path& model) {
     Rig rig(&model);
     c.set(rig, false);
     rig.frames(300);
-    check(rig.wakeSent.empty(), std::string("the wake word does not listen while ") + c.what);
+    check(rig.wakeSent.empty() && !rig.router->listening(), std::string("the wake word does not listen while ") + c.what);
     c.set(rig, true);
     rig.frame();
-    check(rig.wakeSent.size() == 1 && rig.wakeSent[0].operation == StreamControl::Probe,
+    check(rig.wakeSent.size() == 1 && rig.wakeSent[0].operation == StreamControl::Probe && rig.router->listening(),
           std::string("it listens once ") + c.what + " no more");
     rig.frames(300);
     c.set(rig, false);
@@ -483,11 +618,47 @@ void wakeGating(const fs::path& model) {
     Rig rig(&model);
     rig.voice.homeAssistantChosen = true;
     rig.frames(300);
-    check(rig.wakeSent.empty(), "with Home Assistant, the wake word waits until Voice is ready");
+    check(rig.wakeSent.empty() && !rig.router->listening(), "with Home Assistant, the wake word waits until Voice is ready");
     rig.voice.isReady = true;
     rig.frame();
-    check(lastIs(rig.wakeSent, StreamControl::Probe), "then it listens");
+    check(lastIs(rig.wakeSent, StreamControl::Probe) && rig.router->listening(), "then it listens");
   }
+  {
+    Rig rig;
+    check(!rig.router->listening(), "a clock without a wake word never listens");
+  }
+}
+
+void theVoiceSetsTheLevel(const fs::path& model) {
+  const fs::path dir = model.parent_path();
+  fs::copy_file(model, dir / "doubtful.tflite");
+  std::ofstream(dir / "doubtful.json") << R"({"probability_cutoff":0.44,"sliding_window_size":1})";
+  const fs::path doubtful = dir / "doubtful.tflite";
+  Rig rig(&doubtful);
+  rig.keep();
+  rig.frames(kWakeWithinMs);
+  check(rig.module.triggers.empty(), "the rig's stream stays under the model's cutoff");
+  rig.voice.sensitivity = WakeSensitivity::High;
+  rig.framesUntil([&rig] { return !rig.module.triggers.empty(); }, kWakeWithinMs);
+  check(rig.module.triggers.size() == 1 && count(rig.wakeSent, StreamControl::Probe) == 1,
+        "the level of the settings reaches the listener without a new stream");
+}
+
+void offStartsNothing() {
+  Rig rig;
+  rig.voice.assistantOff = true;
+  const uint32_t mark = logMark();
+  check(!rig.start(VoiceTrigger::Api), "off: the API starts nothing");
+  check(!rig.start(VoiceTrigger::Mqtt), "off: MQTT starts nothing");
+  rig.gesture.down(rig.now);
+  rig.frames(2 * KnobGesture::kHoldMs);
+  check(rig.gesture.up(rig.now) == KnobGesture::Action::None, "off: a held knob is no click");
+  check(rig.voice.begins == 0 && rig.opened.empty() && rig.module.triggers.empty() && rig.dismissed == 0 &&
+            rig.music == 0,
+        "off: no trigger reaches anything");
+  check(logAfter(mark).find("voice: assistant app") == std::string::npos, "off: and nothing is logged");
+  rig.voice.assistantOff = false;
+  check(rig.start(VoiceTrigger::Api), "the same clock starts the app once it is the target again");
 }
 
 void homeAssistant() {
@@ -525,38 +696,90 @@ void aFrameAllocatesNothing() {
   check(made == 0, "a frame of the router allocates nothing: " + std::to_string(made));
 }
 
+void aBlockCopiesItsSamplesOnce(const fs::path& model) {
+  Rig rig(&model);
+  rig.keep();
+  require(rig.daemon.streaming() && !rig.wakeSent.empty(), "the keeper and the wake word take the stream");
+  std::vector<StreamEvent> blocks;
+  for (int i = 0; i < 40; ++i) blocks.push_back(rig.daemon.ramp(rig.now));
+  const auto deliver = [&rig](const StreamEvent& block) {
+    rig.hub.receive(block, rig.now);
+    rig.wakeWorker->run();
+  };
+  for (int i = 0; i < 4; ++i) deliver(blocks[static_cast<std::size_t>(i)]);
+  const std::size_t before = blockAllocations;
+  for (std::size_t i = 4; i < blocks.size(); ++i) deliver(blocks[i]);
+  const std::size_t made = blockAllocations - before;
+  check(made == 0, "a block reaches all consumers without a buffer of its own: " + std::to_string(made));
+}
+
 void assistantApps() {
   Rig rig;
   rig.metas = {{"Chat", meta("voice")}, {"Talk", meta("tcp voice")}, {"Clock", meta("")},
                {"Lib", meta("voice", true)}, {"Bot", meta("voice", false, true)}, {"Off", meta("voice")},
-               {"Near", meta("voices tcp")}};
-  rig.installed = {"Bot", "Chat", "Clock", "Gone", "Lib", "Near", "Off", "Talk"};
+               {"Near", meta("voices tcp")}, {"Echo", meta("voice")}};
+  rig.installed = {"Bot", "Chat", "Clock", "Echo", "Gone", "Lib", "Near", "Off", "Talk"};
+  rig.hookless.insert("Echo");
   rig.disabled.insert("Off");
   check(rig.router->apps() == std::vector<std::string>{"Chat", "Off", "Talk"},
-        "the apps that can answer: installed with @needs voice, neither module nor headless, disabled or not");
+        "the apps that can answer: installed with @needs voice and on_assistant, neither module nor headless, "
+        "disabled or not");
+}
+
+void theAppSaysWhyItCannotAnswer() {
+  namespace errors = tc002::voice::errors;
+  Rig rig;
+  const auto problem = [&rig] { return std::string(rig.router->appProblem()); };
+  check(problem().empty(), "an installed app that can answer has no problem");
+  rig.voice.app = "Gone";
+  check(problem() == errors::appMissing, "an app that is not installed");
+  rig.voice.app = "Chat";
+  rig.metas["Chat"] = meta("speech");
+  check(problem() == errors::appMissing, "an app that no longer needs voice cannot answer");
+  rig.metas["Chat"] = meta("voice");
+  rig.disabled.insert("Chat");
+  check(problem() == errors::appOff, "an app switched off");
+  check(!rig.start(VoiceTrigger::Api), "and it starts nothing, as it says");
+  rig.disabled.clear();
+  rig.failing.insert("Chat");
+  check(problem() == errors::appBroken, "an app with a script error");
+  rig.failing.clear();
+  check(problem().empty(), "fixed, it answers again");
+  Rig bare(nullptr, false);
+  check(std::string(bare.router->appProblem()) == errors::appMissing, "without the voice module no app can answer");
 }
 
 }
 
 int main(int argc, char** argv) {
-  require(argc == 2, "usage: tc002-assistant-router-test <wake fixture dir>");
+  require(argc == 2, "usage: tc002-assistant-router-test <wake word model>");
   const fs::path dir = fs::temp_directory_path() / ("assistant-router-" + std::to_string(::getpid()));
   fs::remove_all(dir);
   fs::create_directories(dir);
   const fs::path model = dir / "word.tflite";
-  fs::copy_file(fs::path(argv[1]) / "smoke.tflite", model);
+  fs::copy_file(argv[1], model);
   std::ofstream(dir / "word.json") << R"({"probability_cutoff":0,"sliding_window_size":1})";
 
   everyTriggerReachesTheApp();
   theWakeWordReachesTheApp(model);
   theWakeWordIsMuted(model);
+  theClockDoesNotWakeItself(model);
   refusals();
   panelAndMusic();
+  speechKeepsTheInteraction();
+  homeAssistantIgnoresLocalSpeech();
+  aSessionKeepsTheInteraction();
+  aCoveredPanelStopsTheClock();
+  aLapseEndsTheSessionOfTheTrigger();
   holdConditions();
   wakeGating(model);
+  theVoiceSetsTheLevel(model);
+  offStartsNothing();
   homeAssistant();
   aFrameAllocatesNothing();
+  aBlockCopiesItsSamplesOnce(model);
   assistantApps();
+  theAppSaysWhyItCannotAnswer();
   fs::remove_all(dir);
   return awtrix::test::finish("tc002-assistant-router");
 }

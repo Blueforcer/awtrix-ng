@@ -1,6 +1,8 @@
 #include "platform/linux/LinuxOptions.h"
 
 #include <cstdio>
+#include <string>
+#include <utility>
 
 #include "core/Sha256Hex.h"
 #include "platform/posix/Text.h"
@@ -23,7 +25,7 @@ void usage() {
               "  [%s %d] (TC002 only: socket to the awtrix-tc002-audio-pcm speaker helper)\n"
               "  [--speech-voice FILE] (with the speaker: the ATTS voice that reads speech aloud; a file\n"
               "   that cannot be read leaves the clock without speech)\n"
-              "  [--wake-word FILE] (with the speaker: the wake word model that can start Voice; its\n"
+              "  [--wake-word FILE] (with the speaker: the wake word model that can start the assistant; its\n"
               "   settings are the .json file of the same name beside it)\n"
               "  [--vad FILE] (with the speaker: the voice activity model that ends script recordings;\n"
               "   its settings are the .json file of the same name beside it)\n"
@@ -141,14 +143,11 @@ int parseLinuxOptions(int argc, char** argv, LinuxOptions& o) {
   if (!o.bootSound.empty() && !o.bootIntro) {
     std::fputs("--boot-sound requires --boot-intro\n", stderr); return 2;
   }
-  if (!o.speechVoice.empty() && !o.speakerRequested) {
-    std::fprintf(stderr, "--speech-voice requires %s\n", tc002::kAudioFdFlag); return 2;
-  }
-  if (!o.wakeWord.empty() && !o.speakerRequested) {
-    std::fprintf(stderr, "--wake-word requires %s\n", tc002::kAudioFdFlag); return 2;
-  }
-  if (!o.vad.empty() && !o.speakerRequested) {
-    std::fprintf(stderr, "--vad requires %s\n", tc002::kAudioFdFlag); return 2;
+  const std::pair<const char*, const std::string*> speakerFiles[] = {
+      {"--speech-voice", &o.speechVoice}, {"--wake-word", &o.wakeWord}, {"--vad", &o.vad}};
+  for (const auto& [flag, file] : speakerFiles) {
+    if (file->empty() || o.speakerRequested) continue;
+    std::fprintf(stderr, "%s requires %s\n", flag, tc002::kAudioFdFlag); return 2;
   }
   return -1;
 }
