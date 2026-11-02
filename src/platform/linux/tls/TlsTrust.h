@@ -16,6 +16,8 @@ namespace awtrix::tls {
 class TrustAnchors {
  public:
   static std::shared_ptr<const TrustAnchors> fromPem(const std::string& pem);
+  // Strict PEM containing only CA certificates, with no keys or trailing data.
+  static std::shared_ptr<const TrustAnchors> fromCaPem(const std::string& pem);
   static std::shared_ptr<const TrustAnchors> fromFile(const std::string& path);
   ~TrustAnchors();
   x509_store_st* store() const { return store_; }

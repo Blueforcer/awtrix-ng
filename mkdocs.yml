@@ -135,6 +135,7 @@ nav:
   - Smart home:
       - Home Assistant: guides/home-assistant.md
       - Home Assistant Voice: guides/voice.md
+      - Trusted certificates: guides/certificates.md
       - MQTT: guides/mqtt.md
       - Art-Net: guides/artnet.md
       - Mirroring: guides/mirroring.md

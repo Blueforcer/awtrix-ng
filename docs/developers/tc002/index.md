@@ -257,7 +257,7 @@ The TC002 code of the runtime is in `src/platform/tc002/runtime/` unless noted:
 | `MicrophoneInput` | microphone snapshots for the audio visualisation ([Microphone](microphone.md)) |
 | `src/platform/tc002/voice/` | Home Assistant Voice ([Home Assistant Voice](ha-voice.md)) |
 | `Tc002BootIntro`, `BootIntroWide`, `BootInfoWide`, `TerminalFont` | the power-on intro timed by the boot sound, then the info screen with the version and the address, both in the 3x5 terminal font |
-| `tls/` (`src/platform/linux/tls/`) | the one TLS layer: the policy the `--hardened` listener and the MQTT client use, the public CA store every HTTPS client verifies against ([CA certificates](ca-certificates.md)), broker trust with pinned fingerprints and `/api/v1/mqtt/tls`, and the `--hardened` server identity |
+| `tls/` (`src/platform/linux/tls/`) | the one TLS layer: the policy the `--hardened` listener and the MQTT client use, the public CA store every HTTPS client verifies against ([CA certificates](ca-certificates.md)), shared host trust with pending fingerprints and `/api/v1/tls/trust`, and the `--hardened` server identity |
 | `LinuxLanLogin`, `LinuxScriptHttp`, `LinuxMqttTls` (`src/platform/linux/`) | the web login as on the ESP32, the scripts' HTTP worker, the MQTT TLS transport |
 
 The web UI is the ESP32's `webui/index.html`, served minified and gzip-encoded from the release. It

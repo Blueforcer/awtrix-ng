@@ -1,4 +1,5 @@
 #include "VoiceErrors.h"
+#include "platform/linux/tls/TrustStore.h"
 #include "platform/tc002/voice/VoiceRuntime.h"
 
 #include <unistd.h>
@@ -12,8 +13,9 @@
 namespace awtrix::tc002::voice {
 VoiceRuntime::VoiceRuntime(std::string directory, Tc002Speaker& speaker,
                            MicrophoneInput& microphone,
-                           Send send)
+                           Send send, std::shared_ptr<tls::TrustStore> trust)
     : config_(std::move(directory)),
+      trust_(std::move(trust)),
       speaker_(speaker),
       microphone_(microphone),
       download_("/tmp", "awtrix-voice", {2 * 1024 * 1024, 15000, false, nullptr}),
@@ -26,7 +28,7 @@ VoiceRuntime::VoiceRuntime(std::string directory, Tc002Speaker& speaker,
                 },
                 [this](const std::string& target) {
                   downloadGeneration_ =
-                      download_.start(config_.get().url, target);
+                      download_.start(config_.get().url, target, trust_);
                   return true;
                 },
                 [this] { stopSpeaker(); }}) {
@@ -62,6 +64,14 @@ void VoiceRuntime::cancel() {
   speaker_.setVoiceOwned(false);
   owned_ = false;
 }
+void VoiceRuntime::trustChanged(const std::string& host) {
+  WebSocket::Endpoint endpoint;
+  if (!host.empty() && (!parseOrigin(config_.get().url, endpoint) ||
+      tls::TrustStore::normalizeHost(endpoint.host) != host)) return;
+  cancel();
+  certificateFailed_ = false;
+  reconnectAt_ = 0;
+}
 bool VoiceRuntime::begin(int64_t now) {
   if (!session_.ready() || !speaker_.available()) return false;
   speaker_.setVoiceOwned(true);
@@ -96,6 +106,7 @@ void VoiceRuntime::tick(int64_t now, bool allowed) {
     WebSocket::Endpoint endpoint;
     if (parseOrigin(c.url, endpoint)) {
       session_.connecting(c, now);
+      endpoint.trust = trust_;
       generation_ = socket_.connect(endpoint);
       reconnectAt_ = now + 10000;
     }
@@ -104,8 +115,10 @@ void VoiceRuntime::tick(int64_t now, bool allowed) {
     if (event.generation != generation_) continue;
     if (event.kind == WebSocket::Event::Text)
       session_.text(event.text, now);
-    else if (event.kind != WebSocket::Event::Open)
+    else if (event.kind != WebSocket::Event::Open) {
+      certificateFailed_ = event.text == errors::certificateNotTrusted;
       session_.lost(now);
+    } else certificateFailed_ = false;
   }
   session_.tick(now);
   if (pendingStart_) {
@@ -122,7 +135,12 @@ void VoiceRuntime::tick(int64_t now, bool allowed) {
         session_.state() == AssistSession::State::Speaking) {
       playbackPath_ = std::move(result.path);
       playing_ = result.success() && speaker_.playVoice(playbackPath_);
-      if (!playing_) session_.playbackDone(false, now);
+      if (!playing_) {
+        WebSocket::Endpoint endpoint;
+        if (trust_ && parseOrigin(c.url, endpoint) && !trust_->pending(endpoint.host).empty())
+          certificateFailed_ = true;
+        session_.playbackDone(false, now);
+      }
     } else if (!result.path.empty())
       ::unlink(result.path.c_str());
   }
@@ -179,6 +197,7 @@ bool VoiceRuntime::handle(const httplib::Request& req, httplib::Response& res) {
         .member("state", AssistSession::name(session_.state()))
         .member("error",
                 !loaded_ ? errors::configUnavailable
+                : certificateFailed_ ? errors::certificateNotTrusted
                 : session_.state() == AssistSession::State::Ready &&
                         !session_.microphoneAvailable()
                     ? errors::microphoneUpdate

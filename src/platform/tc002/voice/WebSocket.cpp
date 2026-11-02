@@ -29,6 +29,8 @@
 
 #include "core/render/TextEncoding.h"
 #include "platform/linux/tls/TlsTrust.h"
+#include "platform/linux/tls/TlsPolicy.h"
+#include "platform/linux/tls/TrustStore.h"
 
 namespace awtrix::tc002::voice {
 namespace {
@@ -156,7 +158,8 @@ class WebSocket::Impl::Connection {
     if (endpoint_.host.empty() || !printable(endpoint_.host) || endpoint_.port.empty() || !printable(endpoint_.port) ||
         endpoint_.target.empty() || endpoint_.target.front() != '/' || !printable(endpoint_.target))
       return fail();
-    if (endpoint_.tls && !(context_ = newTrustedTlsContext())) return fail();
+    if (endpoint_.tls && !(context_ = endpoint_.trust ? tls::newClientContext().release()
+                                                     : newTrustedTlsContext())) return fail();
     lookup_ = posix::Resolver::start([host = endpoint_.host, port = endpoint_.port] {
       return posix::Resolver::lookup(host, port);
     });
@@ -251,7 +254,11 @@ class WebSocket::Impl::Connection {
 
   void secure() {
     const int result = SSL_connect(ssl_);
-    if (result == 1) return upgrade();
+    if (result == 1) {
+      if (endpoint_.trust && endpoint_.trust->check(ssl_, endpoint_.host) != tls::PeerTrust::Verdict::Trusted)
+        return fail("certificateNotTrusted");
+      return upgrade();
+    }
     const int error = SSL_get_error(ssl_, result);
     if (error == SSL_ERROR_WANT_READ)
       sslWants_ = POLLIN;
@@ -478,12 +485,12 @@ class WebSocket::Impl::Connection {
     owner_.event({Event::Closed, generation_, {}});
   }
 
-  void fail() {
+  void fail(const char* reason = "") {
     if (stopped_) return;
     ERR_clear_error();
     owner_.markOpen(generation_, false);
     stop();
-    owner_.event({Event::Failed, generation_, {}});
+    owner_.event({Event::Failed, generation_, reason});
   }
 
   void stop() {

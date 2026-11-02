@@ -5,6 +5,7 @@
 #include "platform/tc002/voice/WebSocket.h"
 
 namespace awtrix::tc002::voice {
+inline constexpr std::size_t kMaxConfigBytes = 32768;
 struct Config {
   bool enabled = false;
   std::string url, token, pipeline, device;

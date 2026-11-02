@@ -19,6 +19,10 @@ add_executable(tc002-voice-websocket-probe test_voice_websocket.cpp)
 target_link_libraries(tc002-voice-websocket-probe PRIVATE tc002_voice_net awtrix_warnings)
 add_awtrix_test(NAME tc002-voice-websocket COMMAND "${Python3_EXECUTABLE}"
   "${CMAKE_CURRENT_SOURCE_DIR}/test_voice_websocket.py" "$<TARGET_FILE:tc002-voice-websocket-probe>" TIMEOUT 60)
+add_executable(tc002-voice-ca-probe test_voice_ca.cpp)
+target_link_libraries(tc002-voice-ca-probe PRIVATE tc002_voice_session awtrix_host awtrix_warnings)
+add_awtrix_test(NAME tc002-voice-ca COMMAND "${Python3_EXECUTABLE}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/test_voice_ca.py" "$<TARGET_FILE:tc002-voice-ca-probe>" TIMEOUT 60)
 add_awtrix_test(NAME tc002-assist-session SOURCES test_assist_session.cpp LIBRARIES tc002_voice_session)
 add_awtrix_test(NAME tc002-url-sounds SOURCES test_url_sounds.cpp "${TC002_DIR}/audio/UrlSounds.cpp"
   LIBRARIES awtrix_host awtrix_posix TIMEOUT 30)

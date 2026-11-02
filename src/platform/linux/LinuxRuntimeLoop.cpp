@@ -126,11 +126,6 @@ void LinuxRuntime::tickNetwork(int64_t now) {
     discovery_.begin(discoveryName_, o_.port);
   }
   discovery_.tick();
-  if (mqttTls_ && brokerTrust_) {
-    std::string fingerprint;
-    if (brokerTrust_->peer()->takeNewPending(fingerprint))
-      logf("mqtt: broker certificate not trusted, SHA-256 %s", fingerprint.c_str());
-  }
   mirror_.tick(now, lan && (!supervised || supervision_->networkConnected()));
   http_.tick();
   extensions_.phones.poll();
@@ -209,6 +204,10 @@ int LinuxRuntime::stop() {
 }
 
 bool LinuxRuntime::eraseAll(std::error_code& error) {
+  if (trustStore_ && !trustStore_->reset()) {
+    std::fputs("Factory reset could not erase trusted certificates\n", stderr);
+    return false;
+  }
   if (voice_ && !voice_->eraseConfig()) {
     std::fputs("Factory reset could not erase private voice credentials\n", stderr);
     return false;

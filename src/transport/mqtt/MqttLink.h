@@ -22,6 +22,9 @@ class MqttLink {
 
   void setOnOnline(std::function<void()> cb) { onOnline_ = std::move(cb); }
 
+#ifdef AWTRIX_PLATFORM_LINUX
+  void reconnect() { socket_.shutdown(); sawWifi_ = false; wasConnected_ = false; backoff_.reset(); }
+#endif
   bool tick(uint32_t nowMs, bool networkConnected);
 
   PubSubClient* client() { return client_; }

@@ -21,10 +21,11 @@
 #include "persistence/DeviceConfig.h"
 #include "persistence/SystemConfigApply.h"
 #include "platform/linux/host/HostStore.h"
+#include "platform/posix/Files.h"
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/LinuxMqttTls.h"
-#include "platform/linux/tls/BrokerTrust.h"
-#include "platform/linux/tls/BrokerTrustApi.h"
+#include "platform/linux/tls/TrustStore.h"
+#include "platform/linux/tls/TrustStoreApi.h"
 #include "platform/linux/tls/ServerIdentity.h"
 #include "platform/linux/tls/TlsPolicy.h"
 #include "platform/linux/tls/TlsTrust.h"
@@ -67,13 +68,13 @@ struct Pair {
 
 // A CA (san empty, issuer null), a self-signed server certificate (issuer null) or one the CA in
 // issuer signed; valid from an hour ago for days.
-Pair issued(const std::string& san, const Pair* issuer, long days = 1) {
+Pair issued(const std::string& san, const Pair* issuer, long days = 1, long starts = -3600) {
   KeyPtr key(EVP_PKEY_Q_keygen(nullptr, nullptr, "EC", "P-256"), EVP_PKEY_free);
   X509Ptr certificate(X509_new(), X509_free);
   X509_set_version(certificate.get(), X509_VERSION_3);
   static long serial = 1;
   ASN1_INTEGER_set(X509_get_serialNumber(certificate.get()), ++serial);
-  X509_gmtime_adj(X509_getm_notBefore(certificate.get()), -3600);
+  X509_gmtime_adj(X509_getm_notBefore(certificate.get()), starts);
   X509_gmtime_adj(X509_getm_notAfter(certificate.get()), days * 86400);
   X509_NAME_add_entry_by_txt(X509_get_subject_name(certificate.get()), "CN", MBSTRING_UTF8,
                              reinterpret_cast<const unsigned char*>(san.empty() ? "Test CA" : "server"), -1, -1, 0);
@@ -97,7 +98,7 @@ Pair issued(const std::string& san, const Pair* issuer, long days = 1) {
     add(NID_key_usage, "critical,keyCertSign,cRLSign");
   } else {
     add(NID_basic_constraints, "critical,CA:FALSE");
-    add(NID_subject_alt_name, san);
+    if (san != "CN-only") add(NID_subject_alt_name, san);
   }
   X509_sign(certificate.get(), issuer ? issuerKey.get() : key.get(), EVP_sha256());
   BIO* certificateOut = BIO_new(BIO_s_mem());
@@ -115,9 +116,9 @@ struct Broker {
   std::unique_ptr<httplib::Server> server;
   std::thread thread;
   int port = availablePort();
-  explicit Broker(const Pair& pair) {
+  explicit Broker(const Pair& pair, std::time_t when = std::time(nullptr)) {
     std::string error;
-    identity = ServerIdentity::fromPem(pair.certificate, pair.key, std::time(nullptr), error);
+    identity = ServerIdentity::fromPem(pair.certificate, pair.key, when, error);
     check(identity != nullptr, "broker identity: " + error);
     if (identity) server = newTlsServer(*identity);
     check(server && server->bind_to_port("127.0.0.1", port), "broker listens");
@@ -254,73 +255,7 @@ void brokerTrust() {
   check(!connects(otherCa, "localhost", broker.port), "another CA's broker is refused");
 
   check(!TrustAnchors::fromPem("no certificate"), "a CA upload without a certificate is refused");
-  check(!LinuxMqttTls(nullptr).valid(), "a transport without trust is not usable");
-}
-
-void brokerTrustApi(const std::filesystem::path& data) {
-  BrokerTrust broker("");
-  BrokerTrustApi api(broker);
-  std::string body;
-  check(api.handle("GET", "/api/v1/mqtt/tls", "", body) == 200 && has(body, "\"ca\":\"public\"") &&
-            has(body, "\"pending\":null"), "the status: " + body);
-  check(api.handle("POST", "/api/v1/mqtt/tls", "{}", body) == 405, "the status is read-only");
-  check(api.handle("PUT", "/api/v1/mqtt/tls/ca", "{\"certificate\":\"x\"}", body) == 422 &&
-            has(body, "invalid certificate") && has(body, "\"field\":\"certificate\""), "a broken CA is refused: " + body);
-  check(api.handle("PUT", "/api/v1/mqtt/tls/ca", "{}", body) == 422 && has(body, "expected a PEM string"),
-        "a missing CA is refused: " + body);
-  std::string request;
-  api::JsonWriter w(request);
-  w.beginObject().member("certificate", issued("", nullptr).certificate).endObject();
-  check(api.handle("PUT", "/api/v1/mqtt/tls/ca", request, body) == 200 && has(body, "\"ca\":\"uploaded\""),
-        "a CA is uploaded: " + body);
-  check(std::filesystem::exists(data / "tls" / "mqtt-ca.pem"), "and stored");
-  BrokerTrust restarted("");
-  check(restarted.ca() == BrokerTrust::Ca::Uploaded && !restarted.peer()->pinning(), "a restart keeps it, without pinning");
-
-  const std::string stored = issued("", nullptr).certificate;
-  std::string large = stored;
-  while (large.size() <= BrokerTrust::kMaxCaBytes) large += stored;
-  request.clear();
-  api::JsonWriter big(request);
-  big.beginObject().member("certificate", large).endObject();
-  check(api.handle("PUT", "/api/v1/mqtt/tls/ca", request, body) == 422 && has(body, "at most 65536 bytes") &&
-            has(body, "\"field\":\"certificate\""), "a CA larger than a restart reads is refused: " + body);
-  check(host::writeFile((data / "tls" / "mqtt-ca.pem").string(), large), "an oversized CA file");
-  check(BrokerTrust("").ca() == BrokerTrust::Ca::Unusable, "is not read back as public trust");
-  check(api.handle("DELETE", "/api/v1/mqtt/tls/ca", "", body) == 200 && has(body, "\"ca\":\"public\""), "and removed");
-  check(broker.peer()->pinning() && !std::filesystem::exists(data / "tls" / "mqtt-ca.pem"),
-        "then public CAs and pins count again");
-  check(api.handle("GET", "/api/v1/other", "", body) == 0, "other paths are not its own");
-}
-
-// A stored CA that cannot be used refuses every broker, even one the public roots or the pin would
-// accept, and says so.
-void unusableCa(const std::filesystem::path& data) {
-  const Pair ca = issued("", nullptr), leaf = issued("DNS:localhost", &ca);
-  setPublicAnchors(TrustAnchors::fromPem(ca.certificate));
-  Broker server(Pair{leaf.certificate + ca.certificate, leaf.key});
-  check(host::writeFile((data / "tls" / "mqtt-ca.pem").string(), "not a certificate"), "a broken CA file");
-  uint32_t mark = logMark();
-  BrokerTrust broker(fingerprintOf(leaf));
-  BrokerTrustApi api(broker);
-  check(broker.ca() == BrokerTrust::Ca::Unusable && !broker.peer()->pinning(), "is unusable, without pinning");
-  check(has(logSince(mark), "mqtt: uploaded CA unusable, broker refused"), "and logged");
-  std::string body;
-  check(api.handle("GET", "/api/v1/mqtt/tls", "", body) == 200 && has(body, "\"ca\":\"unusable\""), "reported: " + body);
-  check(!connects(broker.peer(), "localhost", server.port) && broker.peer()->pending().empty(),
-        "no broker is accepted or offered");
-  std::string request;
-  api::JsonWriter w(request);
-  w.beginObject().member("certificate", ca.certificate).endObject();
-  check(api.handle("PUT", "/api/v1/mqtt/tls/ca", request, body) == 200 && has(body, "\"ca\":\"uploaded\""),
-        "a new upload replaces it: " + body);
-  check(connects(broker.peer(), "localhost", server.port), "and its broker is used");
-  check(host::writeFile((data / "tls" / "mqtt-ca.pem").string(), "not a certificate"), "broken again");
-  BrokerTrust again("");
-  BrokerTrustApi againApi(again);
-  check(againApi.handle("DELETE", "/api/v1/mqtt/tls/ca", "", body) == 200 && has(body, "\"ca\":\"public\"") &&
-            connects(again.peer(), "localhost", server.port), "deleting it goes back to the public roots: " + body);
-  setPublicAnchors(nullptr);
+  check(!LinuxMqttTls(std::shared_ptr<PeerTrust>{}).valid(), "a transport without trust is not usable");
 }
 
 // One connection attempt as MqttLink makes it: handshake, the CONNECT, then waiting for an answer.
@@ -395,30 +330,100 @@ void brokerAlerts() {
 
 void settings() {
   DeviceConfig config;
-  check(!config.mqttTls && config.mqttTlsPin.empty(), "defaults");
-  const std::string pin(64, 'a');
-  int applied = 0;
-  sysconfig::ApplyError failure;
-  const std::string body = "{\"mqttTls\":true,\"mqttTlsPin\":\"" + pin + "\"}";
-  check(sysconfig::apply(config, api::JsonReader(body), applied, failure) && applied == 2, "TLS settings apply");
+  check(!config.mqttTls, "TLS off by default");
+  config.applyRead(api::JsonReader(R"({"mqttTls":true,"mqttTlsPin":"legacy","mqttHost":"kept"})"));
   std::string written;
   api::JsonWriter writer(written);
-  writer.beginObject();
-  config.write(writer, false);
-  writer.endObject();
-  check(has(written, "\"mqttTls\":true") && has(written, "\"mqttTlsPin\":\"" + pin + "\""), "and are reported");
-  DeviceConfig restored;
-  restored.applyRead(api::JsonReader(written));
-  check(restored.mqttTls && restored.mqttTlsPin == pin, "a written configuration reads back");
-  for (const std::string& bad : {std::string("ABCD"), std::string(64, 'G'), std::string(64, 'A')}) {
-    DeviceConfig target;
-    sysconfig::ApplyError error;
-    int count = 0;
-    check(!sysconfig::apply(target, api::JsonReader("{\"mqttTlsPin\":\"" + bad + "\"}"), count, error) &&
-              error.status == 422 && error.field == "mqttTlsPin", bad + " is refused: " + error.message);
+  writer.beginObject(); config.write(writer, false); writer.endObject();
+  check(config.mqttTls && config.mqttHost == "kept" && !has(written, "mqttTlsPin"),
+        "legacy trust is inactive and stripped while other settings survive");
+}
+
+void sharedTrust(const std::filesystem::path& data) {
+  const auto directory = (data / "trust").string();
+  auto store = std::make_shared<TrustStore>(directory);
+  const auto connect = [&](const std::string& host, int port) {
+    LinuxMqttTls client(store);
+    client.setPeerName(host);
+    return client.connect("127.0.0.1", static_cast<uint16_t>(port)) == 1;
+  };
+  check(TrustStore::normalizeHost("EXAMPLE.Local.") == "example.local", "DNS canonicalization");
+  check(TrustStore::normalizeHost("2001:0DB8:0:0::1") == "2001:db8::1", "IPv6 canonicalization");
+  for (const auto* bad : {"", "https://localhost", "localhost:443", "*.local", "x/y", "a..b", "-host", "host-"})
+    check(TrustStore::normalizeHost(bad).empty(), "invalid host refused");
+  const Pair own = issued("CN-only", nullptr);
+  Broker broker(own);
+  setPublicAnchors(nullptr);
+  check(!connect("Hue.Local", broker.port), "untrusted CN-only leaf refused");
+  const auto pin = fingerprintOf(own);
+  check(store->pending("hue.local") == pin, "refused leaf pending under normalized host");
+  check(store->approve("hue.local", std::string(64, 'a')) == 409, "stale approval refused");
+  check(store->approve("HUE.Local", pin) == 200 && connect("hue.local", broker.port), "explicit pin accepts CN-only leaf");
+  check(!connect("other.local", broker.port), "pin cannot cross hosts");
+  TrustStore restarted(directory);
+  check(has(restarted.status(), pin) && restarted.pending("other.local").empty(), "only saved trust persists");
+  const auto ca = issued("", nullptr), other = issued("", nullptr), leaf = issued("DNS:localhost", &ca);
+  Broker chained({leaf.certificate + ca.certificate, leaf.key});
+  setPublicAnchors(TrustAnchors::fromPem(ca.certificate));
+  check(connect("localhost", chained.port), "public chain needs no approval");
+  check(store->uploadCa("localhost", other.certificate) == 200 && !connect("localhost", chained.port),
+        "custom CA replaces public roots");
+  check(store->approve("localhost", fingerprintOf(leaf)) == 200 && connect("localhost", chained.port),
+        "explicit pin works alongside custom CA");
+  check(store->remove("localhost", "pin") == 200 && !connect("localhost", chained.port), "pin revocation");
+  check(store->uploadCa("localhost", ca.certificate) == 200 && connect("localhost", chained.port), "CA chain accepted");
+  check(!connect("127.0.0.1", chained.port), "CA trust cannot cross hosts or skip name checks");
+  for (const auto& bad : {std::string("bad"), ca.certificate + "garbage", ca.certificate + own.key,
+                           ca.certificate + '\0', leaf.certificate, std::string(65537, 'x')})
+    check(store->uploadCa("localhost", bad) == 422 && connect("localhost", chained.port), "bad CA leaves active trust intact");
+  for (const long future : {0L, 1L}) {
+    const auto dated = issued("CN-only", nullptr, future ? 2 : -1, future ? 86400 : -172800);
+    Broker datedBroker(dated, std::time(nullptr) + (future ? 129600 : -129600));
+    check(!connect("dated.local", datedBroker.port), "untrusted dated leaf refused");
+    check(store->approve("dated.local", fingerprintOf(dated)) == 200 && connect("dated.local", datedBroker.port),
+          "pin ignores expired and future dates");
   }
-  check(sysconfig::apply(config, api::JsonReader("{\"mqttTlsPin\":\"\"}"), applied, failure) && config.mqttTlsPin.empty(),
-        "an empty pin forgets the broker");
+  const auto rotated = issued("CN-only", nullptr);
+  Broker rotatedBroker(rotated);
+  check(!connect("hue.local", rotatedBroker.port) && store->pending("hue.local") == fingerprintOf(rotated),
+        "changed leaf needs another approval");
+  check(store->approve("hue.local", pin) == 409, "old displayed fingerprint cannot approve replacement");
+  // Mutations serialize with worker verification, including revocation and pending updates.
+  std::thread worker([&] { for (int i = 0; i < 5; ++i) connect("localhost", chained.port); });
+  for (int i = 0; i < 5; ++i) check(store->uploadCa("localhost", ca.certificate) == 200, "concurrent CA update");
+  worker.join();
+  check(store->reset(), "reset trust");
+  for (std::size_t i = 0; i < TrustStore::kMaxHosts; ++i)
+    check(store->uploadCa("host" + std::to_string(i), ca.certificate) == 200, "bounded saved host");
+  check(store->uploadCa("overflow", ca.certificate) == 409, "saved host limit enforced");
+  check(store->reset(), "clear saved hosts");
+  for (std::size_t i = 0; i <= TrustStore::kMaxPending; ++i) connect("pending" + std::to_string(i), broker.port);
+  check(store->pending("pending32").empty(), "pending host limit enforced");
+  check(store->reset(), "clear pending hosts");
+  check(posix::replaceText(directory + "/trust.json", "broken"), "corrupt persisted store");
+  store = std::make_shared<TrustStore>(directory);
+  check(has(store->status(), "\"usable\":false") && !connect("localhost", chained.port), "corrupt trust fails closed");
+  check(store->uploadCa("localhost", ca.certificate) == 503 && store->reset(), "only explicit reset recovers");
+  TrustStoreApi api(*store, {});
+  httplib::Request req; httplib::Response res;
+  req.method = "PUT"; req.path = "/api/v1/tls/trust/localhost/ca";
+  std::string body;
+  api::JsonWriter(body).beginObject().member("certificate", ca.certificate).endObject(); req.body = body;
+  check(api.handle(req, res) && res.status == 403, "unguarded mutation refused");
+  req.headers.emplace("Host", "clock.local"); req.headers.emplace("Origin", "http://other.local");
+  req.headers.emplace("X-Awtrix-Trust", "1"); res = {};
+  check(api.handle(req, res) && res.status == 403, "cross-origin mutation refused");
+  req.headers.erase("Origin"); req.headers.emplace("Origin", "http://clock.local"); res = {};
+  check(api.handle(req, res) && res.status == 200, "guarded CA upload: " + std::to_string(res.status) + " " + res.body);
+  req.path = "/api/v1/mqtt/tls"; res = {};
+  check(!api.handle(req, res), "old broker API retired");
+  check(store->remove("localhost") == 200, "forget host");
+  std::filesystem::remove_all(directory);
+  check(posix::ensurePrivateDirectory(directory), "recreate private directory");
+  std::filesystem::create_directory(directory + "/trust.json");
+  check(store->uploadCa("localhost", ca.certificate) == 507 && !store->custom("localhost"),
+        "failed persistence leaves active trust untouched");
+  setPublicAnchors(nullptr);
 }
 
 }
@@ -431,8 +436,7 @@ int main() {
   identityChecks();
   serverPresentsItsChain();
   brokerTrust();
-  brokerTrustApi(data);
-  unusableCa(data);
+  sharedTrust(data);
   brokerAlerts();
   settings();
   std::error_code ignored;

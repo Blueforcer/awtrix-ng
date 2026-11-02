@@ -2542,7 +2542,8 @@ These keys appear only while the feature is available:
 | `ble` | `true`: scripts can use Bluetooth LE, see [Bluetooth LE](../guides/ble.md) |
 | `gamepad` | `true`: scripts can read a gamepad. See [`GET /api/v1/gamepad`](#get-apiv1gamepad) |
 | `gamepadRemote` | `true`: a phone can be a gamepad. See [`POST /api/v1/gamepad/remote`](#post-apiv1gamepadremote) |
-| `mqttTls` | `true`: MQTT can connect over TLS. See [`GET /api/v1/mqtt/tls`](#get-apiv1mqtttls) |
+| `mqttTls` | `true`: MQTT can connect over TLS |
+| `tlsTrust` | `true`: shared host certificate trust is available. See [`GET /api/v1/tls/trust`](#get-apiv1tlstrust) |
 | `voice` | `true`: Home Assistant Voice is available. See [`/api/v1/voice`](#apiv1voice) |
 | `bootSound` | `true`: the clock plays a sound when it starts. The [`bootSound`](settings.md#sound) setting turns it off |
 | `enlargeApps` | `true`: pushed apps and notifications can be shown at double size. The [`enlargeApps`](settings.md#global-text) setting turns it off |
@@ -2803,7 +2804,6 @@ curl -X PUT http://<awtrix-ip>/api/v1/system \
 | `mqttPass` | string | `""` | **secret** |
 <!-- only tc002 -->
 | `mqttTls` | boolean | `false` | connect to the broker over TLS. See [System → MQTT](system.md#mqtt-and-home-assistant) |
-| `mqttTlsPin` | string | `""` | SHA-256 of a broker certificate you trust, 64 lowercase hex digits. `""` trusts none |
 <!-- /only -->
 | `mqttPrefix` | string | `""` | empty uses the device id |
 | `haDiscovery` | boolean | `false` | Home Assistant auto-discovery |
@@ -3134,66 +3134,43 @@ Ends the session of one phone. Its player's Bluetooth gamepad counts again.
 curl -X DELETE http://<awtrix-ip>/api/v1/gamepad/remote/7
 ```
 
-### GET /api/v1/mqtt/tls
+### GET /api/v1/tls/trust
 
-Reads how AWTRIX trusts the MQTT broker when it connects over TLS. See [MQTT → Connect over
-TLS](../guides/mqtt.md#connect-over-tls-tc002).
-
-This route and the two below exist only while [capabilities](#get-apiv1capabilities) say
-`"mqttTls": true`. Otherwise they answer `404`.
-
-**Request:** no body.
-
-**Response:** `200`:
+Reads the shared trust settings for MQTT, Home Assistant Voice and script HTTPS.
+Available when `capabilities.tlsTrust` is `true`.
 
 | Key | Type | Meaning |
 |---|---|---|
-| `ca` | string | `public`: public certificate authorities and the trusted fingerprint count. `uploaded`: only your uploaded broker CA. `unusable`: the uploaded broker CA cannot be read, and no broker is accepted until you upload or delete it |
-| `pending` | string | the SHA-256 of a broker certificate AWTRIX refused and you can trust with [`mqttTlsPin`](system.md#mqtt-and-home-assistant). `null` when there is none |
+| `usable` | boolean | `false` refuses connections until the store is reset |
+| `hosts` | array | saved hosts and hosts with pending certificates |
+| `hosts[].host` | string | normalized hostname or IP address, shared across ports |
+| `hosts[].pin` | string or null | trusted leaf SHA-256, 64 lowercase hexadecimal digits |
+| `hosts[].ca` | boolean | a custom CA is saved for this host |
+| `hosts[].pending` | string or null | refused leaf SHA-256 awaiting approval |
 
-```bash
-curl http://<awtrix-ip>/api/v1/mqtt/tls
-# {"ca":"public","pending":"ce781fea…c798"}
-```
+### Change trusted certificates
 
-### PUT /api/v1/mqtt/tls/ca
+All mutations require administration login when configured, `X-Awtrix-Trust: 1` and an `Origin`
+matching the request's `Host`. Encode the host as one URL path component.
 
-Uploads the certificate of your own certificate authority for the MQTT broker. From the next
-connection attempt on, AWTRIX accepts only a broker with a certificate from this authority that
-names `mqttHost`.
+| Method | Route | Body | Action |
+|---|---|---|---|
+| PUT | `/api/v1/tls/trust/{host}/ca` | `{"certificate":"PEM CA text"}` | upload up to 65536 bytes of strict CA PEM |
+| POST | `/api/v1/tls/trust/{host}/pin` | `{"fingerprint":"64 lowercase hex digits"}` | approve the exact pending certificate |
+| DELETE | `/api/v1/tls/trust/{host}/ca` | none | remove its CA |
+| DELETE | `/api/v1/tls/trust/{host}/pin` | none | remove its pin |
+| DELETE | `/api/v1/tls/trust/{host}` | none | forget its saved and pending trust |
+| DELETE | `/api/v1/tls/trust` | none | reset the entire store, including an unusable store |
 
-**Request:**
+Success returns `200` with the status above. Errors: `400 invalidJson`, `403 forbiddenOrigin`,
+`405 methodNotAllowed`, `409 conflict` for stale approval or the 32-host limit,
+`413 payloadTooLarge`, `422 validationFailed`, `503 trustUnavailable`, or
+`507 insufficientStorage`. Failed writes leave active trust unchanged.
 
-| Key | Type | Meaning |
-|---|---|---|
-| `certificate` | string | one or more CA certificates in PEM, at most 65536 bytes |
-
-**Response:** `200` with the same body as [`GET /api/v1/mqtt/tls`](#get-apiv1mqtttls).
-
-**Errors:**
-
-| Status | Condition |
-|---|---|
-| 422 | `validationFailed`: `invalid certificate`, `expected a PEM string` or `at most 65536 bytes`, `field` is `certificate` |
-| 507 | `insufficientStorage`: `not saved` |
-
-```bash
-jq -n --rawfile certificate ca.crt '{$certificate}' |
-  curl -X PUT http://<awtrix-ip>/api/v1/mqtt/tls/ca -H "Content-Type: application/json" -d @-
-```
-
-### DELETE /api/v1/mqtt/tls/ca
-
-Deletes the uploaded broker CA, also an unusable one. Public certificate authorities and the
-trusted fingerprint count again.
-
-**Request:** no body.
-
-**Response:** `200` with the same body as [`GET /api/v1/mqtt/tls`](#get-apiv1mqtttls).
-
-```bash
-curl -X DELETE http://<awtrix-ip>/api/v1/mqtt/tls/ca
-```
+Public authorities apply unless the host has an uploaded CA. A saved pin also counts.
+Pins ignore certificate dates and names. CA chains check both. Pending certificates remain
+untrusted until explicitly approved. At most 32 pending hosts are kept in memory.
+See [Trusted certificates](../guides/certificates.md).
 
 ### GET /api/v1/voice {#apiv1voice}
 
@@ -3773,9 +3750,8 @@ Any other path answers **404** `notFound` with the message `unknown route`.
 | DELETE | `/api/v1/gamepad/{id}` | [forget one gamepad](#delete-apiv1gamepadid) |
 | POST | `/api/v1/gamepad/remote` | [make a phone a gamepad](#post-apiv1gamepadremote) |
 | DELETE | `/api/v1/gamepad/remote/{session}` | [end one phone's session](#delete-apiv1gamepadremotesession) |
-| GET | `/api/v1/mqtt/tls` | [how the MQTT broker is trusted](#get-apiv1mqtttls) |
-| PUT | `/api/v1/mqtt/tls/ca` | [upload the broker's CA](#put-apiv1mqtttlsca) |
-| DELETE | `/api/v1/mqtt/tls/ca` | [delete the broker's CA](#delete-apiv1mqtttlsca) |
+| GET, DELETE | `/api/v1/tls/trust` | [shared certificate trust](#get-apiv1tlstrust) |
+| PUT, POST, DELETE | `/api/v1/tls/trust/{host}/*` | [change trusted certificates](#change-trusted-certificates) |
 | GET | `/api/v1/voice` | [Home Assistant Voice state](#apiv1voice) |
 | POST | `/api/v1/voice` | [change Home Assistant Voice](#post-apiv1voice) |
 | GET | `/api/v1/oauth` | [scripts that sign in](#get-apiv1oauth) |

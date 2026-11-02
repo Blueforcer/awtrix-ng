@@ -875,7 +875,8 @@ class LanMqttTlsContracts(unittest.TestCase):
         self.addCleanup(self.app.stop)
 
     def json(self, method, path, body=None):
-        status, payload, _ = self.app.request(method, path, body)
+        status, payload, _ = self.app.request(method, path, body, headers={
+            "Origin": f"http://awtrix.local:{self.app.port}", "X-Awtrix-Trust": "1"})
         self.assertEqual(200, status, payload)
         return json.loads(payload)
 
@@ -900,44 +901,44 @@ class LanMqttTlsContracts(unittest.TestCase):
         port = self.mqtt_broker()
         operator = self.operator(port)
         self.app.start()
-        pending = eventually(lambda: self.json("GET", "/api/v1/mqtt/tls")["pending"],
+        pending = eventually(lambda: (self.json("GET", "/api/v1/tls/trust")["hosts"] or [{}])[0].get("pending"),
                              lambda value: value is not None)
         self.assertEqual(self.fingerprint, pending)
         self.assertEqual(0, self.json("GET", "/api/v1/device")["mqtt"]["connects"])
-        self.assertIn("broker certificate not trusted, SHA-256 " + self.fingerprint, self.app.logs())
-        self.json("PUT", "/api/v1/system", {"mqttTlsPin": pending})
+        self.assertIn("localhost untrusted SHA-256 " + self.fingerprint, self.app.logs())
+        self.json("POST", "/api/v1/tls/trust/localhost/pin", {"fingerprint": pending})
         self.assertEqual("online", operator.wait_topic("contract/availability"))
-        self.assertIsNone(self.json("GET", "/api/v1/mqtt/tls")["pending"])
-        self.assertEqual(pending, self.json("GET", "/api/v1/system")["mqttTlsPin"])
+        self.assertIsNone((self.json("GET", "/api/v1/tls/trust")["hosts"] or [{}])[0].get("pending"))
+        self.assertEqual(pending, self.json("GET", "/api/v1/tls/trust")["hosts"][0]["pin"])
         self.assertNotIn(self.password, self.app.logs())
 
-    def test_a_changed_broker_certificate_is_refused_until_trusted_again(self):
+    def test_legacy_broker_pin_is_inactive(self):
         port = self.mqtt_broker()
         values = json.loads((self.app.data / "device.json").read_text())
         values["mqttTlsPin"] = "ab" * 32
         (self.app.data / "device.json").write_text(json.dumps(values))
         self.app.start()
-        pending = eventually(lambda: self.json("GET", "/api/v1/mqtt/tls")["pending"],
+        pending = eventually(lambda: (self.json("GET", "/api/v1/tls/trust")["hosts"] or [{}])[0].get("pending"),
                              lambda value: value is not None)
         self.assertEqual(self.fingerprint, pending)
-        self.assertEqual("ab" * 32, self.json("GET", "/api/v1/system")["mqttTlsPin"])
+        self.assertNotIn("mqttTlsPin", self.json("GET", "/api/v1/system"))
         self.assertEqual(0, self.json("GET", "/api/v1/device")["mqtt"]["connects"])
 
     def test_an_uploaded_ca_verifies_the_broker_and_its_name(self):
         port = self.mqtt_broker()
         operator = self.operator(port)
         self.app.start()
-        status = self.json("PUT", "/api/v1/mqtt/tls/ca", {"certificate": self.mqtt_cert.read_text()})
-        self.assertEqual("uploaded", status["ca"])
+        status = self.json("PUT", "/api/v1/tls/trust/localhost/ca", {"certificate": self.mqtt_cert.read_text()})
+        self.assertTrue(status["hosts"][0]["ca"])
         self.assertEqual("online", operator.wait_topic("contract/availability"))
-        self.assertIsNone(self.json("GET", "/api/v1/mqtt/tls")["pending"])
+        self.assertIsNone((self.json("GET", "/api/v1/tls/trust")["hosts"] or [{}])[0].get("pending"))
         self.app.stop()
         self.mqtt_broker(host="127.0.0.1")
         self.app.start()
         state = eventually(lambda: self.json("GET", "/api/v1/device")["mqtt"], lambda value: value["attempts"] >= 1)
         self.assertEqual(0, state["connects"])
-        self.assertIsNone(self.json("GET", "/api/v1/mqtt/tls")["pending"])
-        self.assertEqual("public", self.json("DELETE", "/api/v1/mqtt/tls/ca")["ca"])
+        self.assertTrue(any(row["host"] == "127.0.0.1" and row["pending"] for row in self.json("GET", "/api/v1/tls/trust")["hosts"]))
+        self.assertEqual([], self.json("DELETE", "/api/v1/tls/trust")["hosts"])
 
 
 if __name__ == "__main__":

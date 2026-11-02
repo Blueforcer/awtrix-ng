@@ -41,6 +41,12 @@ The token is kept on the clock and never shown again. To keep it, leave the fiel
 change something else. When you change the Home Assistant address, enter the token again.
 **Remove** next to the token deletes it and switches Voice off.
 
+## HTTPS with your own certificate
+
+Open **System → Trusted certificates** to trust the pending Home Assistant certificate, or enter
+its hostname and upload your CA. Voice and spoken answers use the same host settings.
+See [Trusted certificates](certificates.md).
+
 ## Switch it off
 
 The **Voice** switch takes effect at once. Off, the clock closes its connection to Home Assistant
@@ -97,6 +103,7 @@ message to [`<prefix>/cmd/voice/start`](../reference/mqtt.md#voicestart).
 
 | Connection shows | What to do |
 |---|---|
+| Certificate not trusted | Open **System → Trusted certificates**, then approve the fingerprint or upload the host's CA. |
 | HA unreachable | Check the address and that Home Assistant runs. Address only, no path. |
 | Token rejected | Create a new long-lived access token and save it. |
 | Pipeline lacks STT/TTS | Pick a pipeline with speech-to-text and text-to-speech. |

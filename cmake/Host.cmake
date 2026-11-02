@@ -18,8 +18,8 @@ target_sources(awtrix_host PRIVATE
   "${PROJECT_SOURCE_DIR}/src/platform/linux/tls/TlsPolicy.cpp"
   "${PROJECT_SOURCE_DIR}/src/platform/linux/tls/TlsTrust.cpp"
   "${PROJECT_SOURCE_DIR}/src/platform/linux/tls/ServerIdentity.cpp"
-  "${PROJECT_SOURCE_DIR}/src/platform/linux/tls/BrokerTrust.cpp"
-  "${PROJECT_SOURCE_DIR}/src/platform/linux/tls/BrokerTrustApi.cpp"
+  "${PROJECT_SOURCE_DIR}/src/platform/linux/tls/TrustStore.cpp"
+  "${PROJECT_SOURCE_DIR}/src/platform/linux/tls/TrustStoreApi.cpp"
   "${PROJECT_SOURCE_DIR}/src/platform/linux/net/FileDownload.cpp"
   "${PROJECT_SOURCE_DIR}/src/platform/linux/net/HttpClient.cpp"
   "${PROJECT_SOURCE_DIR}/src/platform/linux/net/HttpGet.cpp"
@@ -42,6 +42,6 @@ target_sources(awtrix_host PRIVATE
   "${PROJECT_SOURCE_DIR}/src/transport/mqtt/MqttLink.cpp"
   "${PROJECT_SOURCE_DIR}/src/transport/mqtt/HaAnnouncer.cpp")
 target_include_directories(awtrix_host PUBLIC "${PROJECT_SOURCE_DIR}/src/platform/linux/host/compat")
-target_compile_definitions(awtrix_host PUBLIC CPPHTTPLIB_OPENSSL_SUPPORT)
+target_compile_definitions(awtrix_host PUBLIC CPPHTTPLIB_OPENSSL_SUPPORT AWTRIX_PLATFORM_LINUX=1)
 target_link_libraries(awtrix_host PUBLIC awtrix_core pubsubclient OpenSSL::SSL OpenSSL::Crypto
   PRIVATE tjpgd awtrix_posix awtrix_warnings)

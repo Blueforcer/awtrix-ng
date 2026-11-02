@@ -13,6 +13,7 @@ function readAudioCaps(caps){
   S.enlargeApps=caps.enlargeApps===true;
   S.iphone=caps.ble===true;
   S.mqttTls=caps.mqttTls===true;
+  S.tlsTrust=caps.tlsTrust===true;
   S.oauth=caps.oauth===true;
   if(S.oauth)loadOauthApps();
   //linux:end

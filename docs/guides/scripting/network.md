@@ -440,6 +440,16 @@ Each call returns at once. `cb(body, status)` runs once, later. `opts` is an opt
   answer is still arriving, the whole answer is dropped: your callback gets `(nil, status)` with
   the real status code. So do not rely on a big `cap`. Use `find`.
 
+<!-- only tc002 -->
+### HTTPS on your local network
+
+Scripts use the host's trust settings from **System → Trusted certificates**. Run the request
+once, compare the pending fingerprint with the device's certificate, then press **Trust
+certificate**. You can also enter the host there and upload your CA. Scripts need no extra HTTP
+options. See [Trusted certificates](../certificates.md).
+
+<!-- /only -->
+
 ### What your callback gets
 
 - **Any real answer, including 4xx and 5xx,** reaches your callback with its `body`. That is where

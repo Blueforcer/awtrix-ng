@@ -3,19 +3,24 @@
 #include <deque>
 #include <functional>
 #include <mutex>
+#include <memory>
 #include <thread>
 #include "core/script/ScriptServices.h"
 #include "platform/linux/net/HttpClient.h"
+
+namespace awtrix::tls { class TrustStore; }
 
 namespace awtrix {
 class LinuxScriptHttp : public script::IScriptHttp {
  public:
   ~LinuxScriptHttp();
+  void setTrustStore(std::shared_ptr<tls::TrustStore> trust) { trust_ = std::move(trust); }
   void begin(std::function<void(script::HttpResult)> result);
   void stop();
   bool request(const script::HttpRequest& request) override;
  private:
   void run();
+  std::shared_ptr<tls::TrustStore> trust_;
   std::function<void(script::HttpResult)> result_;
   std::mutex mutex_;
   std::condition_variable ready_;

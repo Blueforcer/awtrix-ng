@@ -216,67 +216,13 @@ This check cannot be switched off.
 
 ### Trust your broker's certificate
 
-Brokers at home, such as the Home Assistant Mosquitto add-on or Mosquitto on a Raspberry Pi,
-usually have a certificate of their own. AWTRIX refuses such a broker the first time.
+Open **System → Trusted certificates**. Compare the pending fingerprint with your broker's
+certificate, then press **Trust certificate**. For a private certificate authority, enter the
+**Broker host** there and upload its CA. MQTT reconnects after a trust change.
 
-1. In the **MQTT** section, **Broker certificate** appears, with the certificate's fingerprint.
-2. Compare it with the fingerprint of your broker's certificate. On the broker's computer (for Home
-   Assistant: in the **Terminal** add-on):
-
-    ```bash
-    openssl x509 -in /ssl/fullchain.pem -noout -fingerprint -sha256
-    ```
-
-    Replace `/ssl/fullchain.pem` with the certificate file your broker uses. openssl prints the
-    fingerprint in capitals with colons. It is the same code.
-
-3. If both match, press **Trust**. AWTRIX connects within a few seconds. No restart needed.
-
-If the broker later shows a different certificate, AWTRIX refuses it and shows the new
-fingerprint. That happens when the broker got a new certificate, but also when another device
-pretends to be your broker. Compare again before you press **Trust**.
-
-The trusted fingerprint is saved as `mqttTlsPin` and is part of a backup.
-
-### Use your own certificate authority
-
-Only needed if you run your own certificate authority.
-
-1. In the **MQTT** section, go to **Broker CA** and press **Upload**.
-2. Pick your authority's certificate file (`.pem` or `.crt`, at most 64 KB).
-
-From then on, AWTRIX accepts only brokers whose certificate comes from this authority and carries
-the name in **Broker host**. Public authorities and trusted fingerprints do not count while your
-authority is uploaded. Press **Delete** to go back.
-
-If the uploaded file cannot be read after a restart, AWTRIX connects to no broker at all.
-**Broker CA** then shows **Unusable**. Upload the file again, or delete it.
-
-### Use it over the API
-
-Everything above also works with `curl`. Switch TLS on (then restart):
-
-```bash
-curl -X PUT http://<awtrix-ip>/api/v1/system \
-  -H "Content-Type: application/json" \
-  -d '{"mqttTls":true,"mqttPort":8883}'
-```
-
-Read the fingerprint that waits for your decision from
-[`GET /api/v1/mqtt/tls`](../reference/http.md#get-apiv1mqtttls), and trust it:
-
-```bash
-curl -X PUT http://<awtrix-ip>/api/v1/system \
-  -H "Content-Type: application/json" \
-  -d '{"mqttTlsPin":"<the 64-character fingerprint>"}'
-```
-
-Upload your own certificate authority:
-
-```bash
-jq -n --rawfile certificate ca.crt '{$certificate}' |
-  curl -X PUT http://<awtrix-ip>/api/v1/mqtt/tls/ca -H "Content-Type: application/json" -d @-
-```
+MQTT, Home Assistant Voice and script HTTPS share trust for that host. See
+[Trusted certificates](certificates.md) for the steps and
+[the API reference](../reference/http.md#get-apiv1tlstrust) for API operations.
 
 ### When the broker ends the connection
 

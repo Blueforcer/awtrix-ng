@@ -14,13 +14,14 @@ class VoiceRuntime {
  public:
   using Send = std::function<bool(std::string)>;
   VoiceRuntime(std::string directory, Tc002Speaker& speaker,
-               MicrophoneInput& microphone, Send send);
+               MicrophoneInput& microphone, Send send, std::shared_ptr<tls::TrustStore> trust = {});
   ~VoiceRuntime();
   void tick(int64_t now, bool allowed);
   bool begin(int64_t now);
   void endInput(int64_t now);
   void receive(const StreamEvent& event, int64_t now);
   void cancel();
+  void trustChanged(const std::string& host);
   bool eraseConfig() {
     cancel();
     return config_.erase();
@@ -38,6 +39,8 @@ class VoiceRuntime {
  private:
   void stopSpeaker();
   ConfigStore config_;
+  std::shared_ptr<tls::TrustStore> trust_;
+  bool certificateFailed_ = false;
   Tc002Speaker& speaker_;
   MicrophoneInput& microphone_;
   WebSocket socket_;

@@ -47,7 +47,7 @@ std::string serialize(const Config& c, bool secret) {
 }
 // Returns the offending field, "" for the body as a whole, or nullptr when valid.
 const char* applyConfig(std::string_view json, Config& c) {
-  if (json.size() > 8192 || !api::isWellFormed(json)) return "";
+  if (json.size() > kMaxConfigBytes || !api::isWellFormed(json)) return "";
   api::JsonReader r(json);
   if (!r.isObject()) return "";
   if (!boolField(r, "enabled", c.enabled)) return "enabled";
@@ -117,12 +117,17 @@ bool ConfigStore::load() {
     return false;
   std::string json;
   Config next;
-  if (!posix::readText(path, json, 8192) || applyConfig(json, next))
+  if (!posix::readText(path, json, kMaxConfigBytes) || applyConfig(json, next))
     return false;
   config_ = std::move(next);
   return true;
 }
 bool ConfigStore::update(std::string_view json, Rejection& rejection) {
+  if (api::present(api::memberValue(json, "ca"))) {
+    rejection.field = "ca";
+    rejection.message = "use System / Trusted certificates";
+    return false;
+  }
   Config next = config_;
   if (const char* field = applyConfig(json, next)) {
     rejection.field = field;
@@ -146,8 +151,14 @@ bool ConfigStore::update(std::string_view json, Rejection& rejection) {
       return false;
     }
   }
+  const std::string saved = serialize(next, true);
+  if (saved.size() > kMaxConfigBytes) {
+    rejection.field = "";
+    rejection.message = "settings too large";
+    return false;
+  }
   if (!posix::ensurePrivateDirectory(directory_) ||
-      !posix::replaceText(directory_ + "/voice.json", serialize(next, true))) {
+      !posix::replaceText(directory_ + "/voice.json", saved)) {
     rejection.stored = false;
     rejection.message = "could not save";
     return false;

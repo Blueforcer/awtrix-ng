@@ -257,8 +257,10 @@ A wrong method on a supported route below answers `405`, and the `message` is
 | `/api/v1/gamepad/{id}` | `DELETE` |
 | `/api/v1/gamepad/remote` | `POST` |
 | `/api/v1/gamepad/remote/{session}` | `DELETE` |
-| `/api/v1/mqtt/tls` | `GET` |
-| `/api/v1/mqtt/tls/ca` | `PUT, DELETE` |
+| `/api/v1/tls/trust` | `GET, DELETE` |
+| `/api/v1/tls/trust/{host}/ca` | `PUT, DELETE` |
+| `/api/v1/tls/trust/{host}/pin` | `POST, DELETE` |
+| `/api/v1/tls/trust/{host}` | `DELETE` |
 | `/api/v1/oauth` | `GET` |
 | `/api/v1/oauth/{name}` | `GET, POST, DELETE` |
 | `/api/v1/oauth/{name}/start` · `/api/v1/oauth/{name}/code` | `POST` |

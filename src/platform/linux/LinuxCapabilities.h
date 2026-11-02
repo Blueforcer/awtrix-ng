@@ -19,6 +19,7 @@ class LinuxCapabilities {
   bool voice = false;
   bool clockFaces = false;
   bool mqttTls = false;
+  bool tlsTrust = false;
   bool bootSound = false;
   bool enlargeApps = false;
 
@@ -43,6 +44,7 @@ class LinuxCapabilities {
       writer.endArray();
     }
     if (mqttTls) writer.member("mqttTls", true);
+    if (tlsTrust) writer.member("tlsTrust", true);
     if (bootSound) writer.member("bootSound", true);
     if (enlargeApps) writer.member("enlargeApps", true);
   }

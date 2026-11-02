@@ -113,42 +113,76 @@ function voiceSection(page){
     actionRow(t('vcOn'),t('vcOnH'),[on.node]),
     actionRow(t('vcUrl'),null,[url]),
     actionRow(t('vcToken'),t('vcTokenH'),[tokenState,token,clear]),
+    actionRow(t('ctSection'),null,[certificateLink()]),
     actionRow(t('vcPipe'),t('vcPipeH'),[pipe]),
     actionRow(t('vcDev'),t('vcDevH'),[dev]),
     actionRow('',null,[save])]);
   poller(load,2000);
 }
 const IPSTATE={off:'mqoff',waiting:'ipWait',connecting:'mqbusy',ready:'mqup'};
-function brokerTrustRows(page){
-  const cIn=el('input',{type:'file',accept:'.pem,.crt,.cer',multiple:''});
-  cIn.addEventListener('change',async()=>{
-    const x=await Promise.all([...cIn.files].map(f=>f.text()));cIn.value='';
-    if(x.length)req('PUT','/api/v1/mqtt/tls/ca',{certificate:x.join('\n')}).then(done,toastErr);
+function certificateLink(){
+  const link=el('button',null,t('ctManage'));
+  link.addEventListener('click',()=>{
+    const section=document.querySelector('#sec-certificates');
+    if(section){section.open=true;section.scrollIntoView?.({behavior:'smooth'});}
   });
-  const up=el('button',null,'Upload');up.addEventListener('click',()=>cIn.click());
-  const done=r=>{paint(r.data);toast(t('saved'));};
-  const load=async()=>paint((await api('/api/v1/mqtt/tls',{timeout:4000})).data);
-  const fp=el('div',{class:'badge bad'}),ca=el('div',{class:'badge'});
-  const cDel=armable(el('button',null,t('del')),()=>req('DELETE','/api/v1/mqtt/tls/ca').then(done,toastErr));
-  let pending='';
-  const trust=el('button',{class:'pri'},'Trust');
-  trust.addEventListener('click',()=>req('PUT','/api/v1/system',{mqttTlsPin:pending}).then(()=>{toast(t('saved'));load();},toastErr));
-  const mRow=actionRow('Broker certificate',
-    'Not trusted. Compare the SHA-256 with your broker.',[fp,trust]);
-  const cRow=actionRow('Broker CA',
-    'Replaces public CAs and trusted certificates.',[ca,up,cDel,cIn]);
-  function paint(d){
-    pending=d.pending||'';
-    mRow.style.display=pending?'':'none';
-    fp.replaceChildren(pending);
-    const bad=d.ca==='unusable';
-    ca.className=bad?'badge bad':'badge';
-    ca.replaceChildren(bad?'Unusable':d.ca==='uploaded'?'Uploaded':'Public CAs');
-    cDel.style.display=bad||d.ca==='uploaded'?'':'none';
+  return link;
+}
+function certificatesSection(page){
+  const base='/api/v1/tls/trust',rows=el('div'),error=el('div',{class:'banner bad',style:'display:none'});
+  const host=el('input',{type:'text',autocomplete:'off',spellcheck:'false','aria-label':t('ctHost'),placeholder:'homeassistant.local'});
+  const send=(method,path,body)=>api(base+path,{method,headers:{'Content-Type':'application/json','X-Awtrix-Trust':'1'},
+    ...(body?{body:JSON.stringify(body)}:{})});
+  const change=async(method,path,body)=>{
+    try{const{data}=await send(method,path,body);paint(data);toast(t('saved'));}
+    catch(e){toastErr(e);await load().catch(()=>{});}
+  };
+  function upload(name){
+    const input=el('input',{type:'file',accept:'.pem,.crt,.cer','aria-label':t('ctUpload'),style:'display:none'});
+    input.addEventListener('change',async()=>{
+      const file=input.files[0];input.value='';
+      if(!file)return;
+      if(!file.size||file.size>65536){toast(t('ctSize'),false);return;}
+      try{await change('PUT','/'+encodeURIComponent(name())+'/ca',{certificate:await file.text()});}
+      catch(e){toastErr(e);}
+    });
+    const button=el('button',null,t('ctUpload'));
+    button.addEventListener('click',()=>input.click());
+    return [button,input];
   }
-  page.panel.querySelector('#sec-mqtt .rows')?.append(mRow,cRow);
-  paint({});
-  poller(load,5000);
+  const reset=armable(el('button',null,t('ctReset')),()=>change('DELETE',''));
+  function paint(d){
+    const unusable=d.usable===false;
+    error.style.display=unusable?'':'none';
+    error.replaceChildren(t('ctUnusable'),reset);
+    rows.replaceChildren();
+    for(const entry of d.hosts||[]){
+      const path='/'+encodeURIComponent(entry.host),controls=[];
+      const labels=[];
+      if(entry.pending){
+        labels.push(t('ctPending')+': '+entry.pending);
+        const trust=el('button',{class:'pri'},t('ctTrust'));
+        trust.addEventListener('click',()=>change('POST',path+'/pin',{fingerprint:entry.pending}));
+        controls.push(trust);
+      }
+      if(entry.pin){
+        labels.push(t('ctPin')+': '+entry.pin);
+        controls.push(armable(el('button',null,t('ctRemovePin')),()=>change('DELETE',path+'/pin')));
+      }
+      if(entry.ca){
+        labels.push(t('ctCaSaved'));
+        controls.push(armable(el('button',null,t('ctRemoveCa')),()=>change('DELETE',path+'/ca')));
+      }
+      controls.push(...upload(()=>entry.host),
+        armable(el('button',null,t('ctForget')),()=>change('DELETE',path)));
+      rows.append(actionRow(entry.host,labels.join(' · '),controls));
+    }
+    if(!rows.childNodes.length)rows.append(el('p',{class:'hint'},t('ctEmpty')));
+  }
+  const load=async()=>paint((await api(base,{timeout:4000})).data);
+  page.section('certificates',t('ctSection'),t('ctHelp'),[error,rows,
+    actionRow(t('ctHost'),t('ctAdd'),[host,...upload(()=>host.value.trim())])]);
+  poller(load,2000);
 }
 function iphoneSection(page){
   const state=el('div',{class:'badge'});

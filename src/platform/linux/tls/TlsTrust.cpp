@@ -51,6 +51,23 @@ std::shared_ptr<const TrustAnchors> TrustAnchors::fromPem(const std::string& pem
   return adopt(store);
 }
 
+std::shared_ptr<const TrustAnchors> TrustAnchors::fromCaPem(const std::string& pem) {
+  std::size_t at = 0;
+  while (at < pem.size()) {
+    at = pem.find_first_not_of(" \t\r\n", at);
+    if (at == std::string::npos) break;
+    constexpr char begin[] = "-----BEGIN CERTIFICATE-----";
+    constexpr char end[] = "-----END CERTIFICATE-----";
+    if (pem.compare(at, sizeof(begin) - 1, begin) != 0) return nullptr;
+    const auto last = pem.find(end, at + sizeof(begin) - 1);
+    if (last == std::string::npos) return nullptr;
+    const auto certificates = readCertificates(pem.substr(at, last + sizeof(end) - 1 - at));
+    if (certificates.size() != 1 || X509_check_ca(certificates.front().get()) <= 0) return nullptr;
+    at = last + sizeof(end) - 1;
+  }
+  return fromPem(pem);
+}
+
 std::shared_ptr<const TrustAnchors> TrustAnchors::fromFile(const std::string& path) {
   X509_STORE* store = X509_STORE_new();
   if (store && X509_STORE_load_file(store, path.c_str()) != 1) {

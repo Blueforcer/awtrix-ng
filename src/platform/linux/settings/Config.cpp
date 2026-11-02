@@ -1,14 +1,9 @@
 #include "platform_settings/Config.h"
 #include "core/ConfigRules.h"
-#include "core/Sha256Hex.h"
 #include "persistence/DeviceConfigRows.h"
 
 namespace awtrix {
-bool PlatformConfig::validate(cfgrules::ConfigError& err) const {
-  if (!mqttTlsPin.empty() && !isSha256Hex(mqttTlsPin)) {
-    err = {"mqttTlsPin", "expected 64 lowercase hex digits"};
-    return false;
-  }
+bool PlatformConfig::validate(cfgrules::ConfigError&) const {
   return true;
 }
 
