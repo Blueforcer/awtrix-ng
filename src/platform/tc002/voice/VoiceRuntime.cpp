@@ -135,7 +135,12 @@ void VoiceRuntime::tick(int64_t now, bool allowed) {
         session_.state() == AssistSession::State::Speaking) {
       playbackPath_ = std::move(result.path);
       playing_ = result.success() && speaker_.playVoice(playbackPath_);
-      if (!playing_) session_.playbackDone(false, now);
+      if (!playing_) {
+        WebSocket::Endpoint endpoint;
+        if (trust_ && parseOrigin(c.url, endpoint) && !trust_->pending(endpoint.host).empty())
+          certificateFailed_ = true;
+        session_.playbackDone(false, now);
+      }
     } else if (!result.path.empty())
       ::unlink(result.path.c_str());
   }
