@@ -399,7 +399,7 @@ and it drops a little under load.
 ## Environment fields (conditional)
 
 **Only when a temperature sensor was found at startup.** AWTRIX looks for BME280, then BMP280,
-then HTU21DF, then SHT31. If none answers – or if `pinI2cSda` / `pinI2cScl` is `-1` – all three
+then HTU21DF, then SHT31, then AHT10. If none answers – or if `pinI2cSda` / `pinI2cScl` is `-1` – all three
 keys are left out. A sensor you connect later is found only after a restart.
 
 Only the values the sensor can measure appear:
@@ -410,6 +410,7 @@ Only the values the sensor can measure appear:
 | BMP280 | ✓ | - | ✓ |
 | HTU21DF | ✓ | ✓ | - |
 | SHT31 | ✓ | ✓ | - |
+| AHT10 / AHT20 | ✓ | ✓ | - |
 
 | Key | Type | Range | Units | Meaning |
 | --- | --- | --- | --- | --- |

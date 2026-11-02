@@ -539,8 +539,9 @@ If your panel is mounted differently, you may also need `rotate` or `mirror` und
 AWTRIX finds I²C sensors by itself at startup. You only set `pinI2cSda` and `pinI2cScl`.
 
 AWTRIX looks for these sensors in this order: **BME280** (`0x76`, then `0x77`), **BMP280** (same
-two addresses), **HTU21DF** (its fixed address), **SHT31** (`0x44`). It uses the first one that
-answers. If a BME280 and an SHT31 share the bus, the SHT31 is ignored.
+two addresses), **HTU21DF** (its fixed address), **SHT31** (`0x44`), **AHT10** or AHT20
+(`0x38`). It uses the first one that answers. If a BME280 and an SHT31 share the bus, the SHT31
+is ignored.
 
 | Sensor | Temperature | Humidity | Air pressure |
 |---|---|---|---|
@@ -548,6 +549,7 @@ answers. If a BME280 and an SHT31 share the bus, the SHT31 is ignored.
 | BMP280 | yes | – | yes |
 | HTU21DF | yes | yes | – |
 | SHT31 | yes | yes | – |
+| AHT10 / AHT20 | yes | yes | – |
 
 Values the sensor does not measure are left out of device state. With no sensor, all of them
 are left out, and `tempOffset` / `humOffset` have no effect.

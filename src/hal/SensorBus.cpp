@@ -1,5 +1,6 @@
 #include "hal/SensorBus.h"
 
+#include <Adafruit_AHTX0.h>
 #include <Adafruit_BME280.h>
 #include <Adafruit_BMP280.h>
 #include <Adafruit_HTU21DF.h>
@@ -15,18 +16,20 @@ constexpr uint32_t kSensorTaskStack = 4096;
 }
 
 struct SensorBus::Impl {
-  enum Type { None, BME280, BMP280, HTU21DF, SHT31 } type = None;
+  enum Type { None, BME280, BMP280, HTU21DF, SHT31, AHT10 } type = None;
   int sda = 21, scl = 22;
   Adafruit_BME280 bme;
   Adafruit_BMP280 bmp;
   Adafruit_HTU21DF htu;
   Adafruit_SHT31 sht;
+  Adafruit_AHTX0 aht;
 
   SensorReading latest;
   portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
   // Auto-detect by probing the usual addresses: 0x76/0x77 for BME/BMP280, HTU21DF on its fixed
-  // one, SHT31 on 0x44. First chip that answers wins, so the order decides ambiguous cases.
+  // one, SHT31 on 0x44, AHT10/AHT20 on 0x38. First chip that answers wins, so the order decides
+  // ambiguous cases.
   void begin() {
     if (sda < 0 || scl < 0) return;
     Wire.begin(sda, scl);
@@ -38,6 +41,8 @@ struct SensorBus::Impl {
       type = HTU21DF;
     } else if (sht.begin(0x44)) {
       type = SHT31;
+    } else if (aht.begin(&Wire, 0, 0x38)) {
+      type = AHT10;
     }
     if (type == None) return;
     latest = readBlocking();
@@ -57,7 +62,7 @@ struct SensorBus::Impl {
         "sensors", kSensorTaskStack, this, 1, nullptr, 0);
   }
 
-  bool hasHumidity() const { return type == BME280 || type == HTU21DF || type == SHT31; }
+  bool hasHumidity() const { return type == BME280 || type == HTU21DF || type == SHT31 || type == AHT10; }
   bool hasPressure() const { return type == BME280 || type == BMP280; }
 
   SensorReading read() {
@@ -87,6 +92,13 @@ struct SensorBus::Impl {
         r.present = true; r.hasHumidity = true;
         sht.readBoth(&r.temperatureC, &r.humidity);
         break;
+      case AHT10: {
+        sensors_event_t humidity, temp;
+        if (!aht.getEvent(&humidity, &temp)) break;
+        r.present = true; r.hasHumidity = true;
+        r.temperatureC = temp.temperature; r.humidity = humidity.relative_humidity;
+        break;
+      }
       default:
         break;
     }
@@ -99,6 +111,7 @@ struct SensorBus::Impl {
       case BMP280: return "BMP280";
       case HTU21DF: return "HTU21DF";
       case SHT31: return "SHT31";
+      case AHT10: return "AHT10";
       default: return "none";
     }
   }

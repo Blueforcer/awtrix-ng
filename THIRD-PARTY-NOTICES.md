@@ -36,6 +36,7 @@ every distributed binary.
 | [Adafruit BMP280 Library](https://github.com/adafruit/Adafruit_BMP280_Library) | ^2.6.8 | BSD | [BSD-Adafruit-BMP280.txt](LICENSES/BSD-Adafruit-BMP280.txt) | K. Townsend for Adafruit Industries |
 | [Adafruit HTU21DF Library](https://github.com/adafruit/Adafruit_HTU21DF_Library) | ^1.0.5 | BSD | [BSD-Adafruit-HTU21DF.txt](LICENSES/BSD-Adafruit-HTU21DF.txt) | Adafruit Industries |
 | [Adafruit SHT31 Library](https://github.com/adafruit/Adafruit_SHT31) | ^2.2.0 | BSD-3-Clause | [BSD-3-Clause-Adafruit-SHT31.txt](LICENSES/BSD-3-Clause-Adafruit-SHT31.txt) | Adafruit Industries |
+| [Adafruit AHTX0](https://github.com/adafruit/Adafruit_AHTX0) | ^2.0.5 | BSD | [BSD-Adafruit-AHTX0.txt](LICENSES/BSD-Adafruit-AHTX0.txt) | Limor Fried for Adafruit Industries |
 
 **FastLED carries a sub-component under a different license.**
 `src/third_party/cq_kernel/` inside FastLED is Apache-2.0 rather than MIT. It is
