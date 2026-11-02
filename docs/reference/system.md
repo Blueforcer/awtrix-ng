@@ -320,7 +320,7 @@ curl -u admin:hunter2 -X PUT http://<awtrix-ip>/api/v1/system \
 | `batteryDividerRatio` | float | 0.1–10 | `1.79` | V/V | Battery volts per volt at the pin, set by your resistor divider. Outside 0.1–10 → `422`. **Applies within 2 s.** | no |
 | `lowBatteryThreshold` | uint8 | 0–100 (`0` = off) | `0` | % | Below this battery percentage, `GET /api/v1/device` reports `lowBattery: true` (and the Home Assistant "Low battery" sensor turns on). `0` switches the check off. **Applies within 2 s.** | no |
 
-AWTRIX finds the temperature sensor by itself at startup (BME280, BMP280, HTU21DF, SHT31). You only
+AWTRIX finds the temperature sensor by itself at startup (BME280, BMP280, HTU21DF, SHT31, AHT10). You only
 set the pins, not the sensor type.
 
 To calibrate the battery divider, read `batteryPinMillivolts` from `GET /api/v1/device` with a

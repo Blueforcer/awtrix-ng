@@ -518,6 +518,10 @@
       "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
     },
     {
+      "notice": "Adafruit AHTX0",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
+    },
+    {
       "notice": "Unity",
       "reason": "test framework resolved by PlatformIO for native unit tests; not distributed"
     }
