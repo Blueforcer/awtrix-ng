@@ -9,9 +9,7 @@
 #include "system/DisplayProbe.h"
 
 #ifdef AWTRIX_DISPLAY_MAX7219
-#include <SPI.h>
-
-#include <cstring>
+#include <LEDMatrixDriver.hpp>
 #endif
 
 namespace awtrix {
@@ -25,88 +23,37 @@ namespace awtrix {
 #ifndef AWTRIX_MAX7219_CS_PIN
 #define AWTRIX_MAX7219_CS_PIN 5
 #endif
-// The modules run on 5 V and take the ESP32's 3.3 V signals with little margin; at 5 MHz single
-// rows were latched wrong now and then, so the clock stays low. A row is 16 bits per module.
-#ifndef AWTRIX_MAX7219_SPI_HZ
-#define AWTRIX_MAX7219_SPI_HZ 1000000
-#endif
 
 namespace {
+LEDMatrixDriver* g_lmd = nullptr;
 constexpr int kMonoThreshold = 32;
-constexpr int kMaxModules = kMatrixWidthMax / 8;
-// Registers are rewritten and every row resent this often, so a module that latched noise
-// recovers on its own; between refreshes only rows that changed go out.
-constexpr uint32_t kRefreshMs = 1000;
-constexpr uint8_t kRegDecode = 0x09, kRegIntensity = 0x0A, kRegScanLimit = 0x0B,
-                  kRegShutdown = 0x0C, kRegTest = 0x0F;
-
-int g_modules = 0;
-uint8_t g_rows[8][kMaxModules];
-uint8_t g_sent[8][kMaxModules];
-uint8_t g_intensity = 0;
-bool g_enabled = false;
-uint32_t g_lastRefresh = 0;
 
 bool pixelOn(uint32_t c) {
   const int r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
   return (r + g + b) / 3 > kMonoThreshold;
 }
-
-// One transaction writes the same register on every module; the first word shifts through to the
-// far end of the chain, so module 0 (the left one) is sent first.
-template <typename Value>
-void sendToChain(uint8_t reg, Value value) {
-  SPI.beginTransaction(SPISettings(AWTRIX_MAX7219_SPI_HZ, MSBFIRST, SPI_MODE0));
-  digitalWrite(AWTRIX_MAX7219_CS_PIN, LOW);
-  for (int m = 0; m < g_modules; ++m) SPI.transfer16(static_cast<uint16_t>(reg << 8 | value(m)));
-  digitalWrite(AWTRIX_MAX7219_CS_PIN, HIGH);
-  SPI.endTransaction();
-}
-
-void sendRegister(uint8_t reg, uint8_t value) {
-  sendToChain(reg, [value](int) { return value; });
-}
-
-void sendRow(int row) {
-  sendToChain(static_cast<uint8_t>(row + 1), [row](int m) { return g_rows[row][m]; });
-  for (int m = 0; m < g_modules; ++m) g_sent[row][m] = g_rows[row][m];
-}
-
-void initModules() {
-  sendRegister(kRegTest, 0);
-  sendRegister(kRegDecode, 0);
-  sendRegister(kRegScanLimit, 7);
-  sendRegister(kRegIntensity, g_intensity);
-  sendRegister(kRegShutdown, g_enabled ? 1 : 0);
-}
 }
 
 bool MatrixRenderer::begin(int /*pin*/, const MatrixLayout& layout, uint8_t brightness) {
-  if (g_modules) return ready();
+  if (g_lmd) return ready();
   layout_ = layout;
-  g_modules = layout_.width() / 8;
-  pinMode(AWTRIX_MAX7219_CS_PIN, OUTPUT);
-  digitalWrite(AWTRIX_MAX7219_CS_PIN, HIGH);
-  SPI.begin();
+  const int segments = layout_.width() / 8;
+  g_lmd = new LEDMatrixDriver(segments, AWTRIX_MAX7219_CS_PIN);
   ledsAllocated_ = layout_.ledCount();
-  logf("matrix: MAX7219 x%d, CS GPIO %d, SPI %u kHz", g_modules, AWTRIX_MAX7219_CS_PIN,
-       static_cast<unsigned>(AWTRIX_MAX7219_SPI_HZ / 1000));
+  logf("matrix: MAX7219 x%d, CS GPIO %d", segments, AWTRIX_MAX7219_CS_PIN);
+  g_lmd->clear();
   setBrightness(brightness);
-  initModules();
-  for (int row = 0; row < 8; ++row) sendRow(row);
-  g_lastRefresh = millis();
+  g_lmd->display();
   return true;
 }
 
 void MatrixRenderer::setBrightness(uint8_t brightness) {
-  if (!g_modules) return;
+  static int applied = -1;
+  if (!g_lmd || applied == brightness) return;
+  applied = brightness;
   // Intensity 0 is still lit on a MAX7219, so only a real zero shuts the chips down.
-  const bool enabled = brightness > 0;
-  const uint8_t intensity = static_cast<uint8_t>(brightness * 15 / 255);
-  if (enabled != g_enabled) sendRegister(kRegShutdown, enabled ? 1 : 0);
-  if (intensity != g_intensity) sendRegister(kRegIntensity, intensity);
-  g_enabled = enabled;
-  g_intensity = intensity;
+  g_lmd->setEnabled(brightness > 0);
+  g_lmd->setIntensity(static_cast<uint8_t>(brightness * 15 / 255));
 }
 
 int MatrixRenderer::xyToIndex(int x, int y) const { return layout_.xyToIndex(x, y); }
@@ -114,11 +61,8 @@ int MatrixRenderer::xyToIndex(int x, int y) const { return layout_.xyToIndex(x, 
 void MatrixRenderer::show(const Canvas& canvas) {
   if (!ready()) return;
   const int W = layout_.width(), H = layout_.height();
-  for (int y = 0; y < H; ++y)
-    for (int m = 0; m < g_modules; ++m) g_rows[y][m] = 0;
   for (int y = 0; y < H; ++y) {
     for (int x = 0; x < W; ++x) {
-      if (!pixelOn(canvas.getPixel(x, y))) continue;
       // The modules are addressed by canvas position; of the panel settings only the picture
       // orientation applies, the rest describes LED strip wiring.
       int px = layout_.mirror ? W - 1 - x : x, py = y;
@@ -126,17 +70,10 @@ void MatrixRenderer::show(const Canvas& canvas) {
         px = W - 1 - px;
         py = H - 1 - py;
       }
-      g_rows[py][px >> 3] |= static_cast<uint8_t>(0x80 >> (px & 7));
+      g_lmd->setPixel(px, py, pixelOn(canvas.getPixel(x, y)));
     }
   }
-  const uint32_t now = millis();
-  const bool refresh = now - g_lastRefresh >= kRefreshMs;
-  if (refresh) {
-    g_lastRefresh = now;
-    initModules();
-  }
-  for (int row = 0; row < 8; ++row)
-    if (refresh || memcmp(g_rows[row], g_sent[row], g_modules) != 0) sendRow(row);
+  g_lmd->display();
   displayprobe::presented();
 }
 
