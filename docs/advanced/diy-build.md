@@ -91,7 +91,7 @@ many icons and scripts, and its PSRAM (extra memory) is needed for
 |---|---|---|
 | 3 x momentary push button | App navigation, menus, deep-sleep wake | [Buttons](../reference/system.md#buttons) |
 | LDR (for example GL5528) + 10 k resistor | Auto-brightness | [Brightness & sensors](../guides/brightness.md) |
-| BME280 / BMP280 / HTU21DF / SHT31 | Temperature, humidity, pressure apps | [Sensor bus](../reference/gpio.md#sensor-bus) |
+| BME280 / BMP280 / HTU21DF / SHT31 / AHT10 | Temperature, humidity, pressure apps | [Sensor bus](../reference/gpio.md#sensor-bus) |
 | Passive piezo buzzer | RTTTL melodies and beeps | [Sound](../guides/sounds.md) |
 <!-- only esp32-s3 -->
 | **MAX98357A** I2S DAC + 4-8 ohm speaker | Your own MP3s and internet radio (needs PSRAM) | [Internet radio](../guides/radio.md) |
@@ -511,12 +511,12 @@ The percentage is estimated from the voltage of a typical Li-Ion cell, so it is 
 
 ### Environment sensor
 
-Connect one of **BME280** (`0x76`/`0x77`), **BMP280** (same addresses), **HTU21DF** or **SHT31**
-(`0x44`) to the I2C pins. AWTRIX finds it at startup, looking in that order, and uses the first
+Connect one of **BME280** (`0x76`/`0x77`), **BMP280** (same addresses), **HTU21DF**, **SHT31**
+(`0x44`) or **AHT10** / AHT20 (`0x38`) to the I2C pins. AWTRIX finds it at startup, looking in that order, and uses the first
 one that answers. So connect only one sensor. Most breakout boards have pull-up resistors. If
 yours does not, add 4.7 k from each line to 3V3.
 
-All four measure temperature. BME280, HTU21DF and SHT31 also measure humidity. BME280 and BMP280
+All of them measure temperature. BME280, HTU21DF, SHT31 and AHT10 also measure humidity. BME280 and BMP280
 also measure air pressure. If the sensor reads too warm because of heat from the clock, correct it
 with `tempOffset` and `humOffset`.
 

@@ -184,7 +184,7 @@ A change applies after a reboot. See
 ## Temperature, humidity & pressure
 
 There is no sensor type to set and nothing to install. When the clock starts, it uses the first
-sensor it finds. Four sensors are supported, checked in this order:
+sensor it finds. Five sensors are supported, checked in this order:
 
 | Sensor | Address(es) | Temperature | Humidity | Pressure |
 |---|---|---|---|---|
@@ -192,6 +192,7 @@ sensor it finds. Four sensors are supported, checked in this order:
 | BMP280 | `0x76`, `0x77` | yes | **no** | yes |
 | HTU21DF | `0x40` | yes | yes | no |
 | SHT31 | `0x44` | yes | yes | no |
+| AHT10 / AHT20 | `0x38` | yes | yes | no |
 
 The first match wins. This matters for one pair: the BME280 and the BMP280 use the same addresses,
 so on a board with both you get the BME280.
