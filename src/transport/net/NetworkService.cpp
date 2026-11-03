@@ -10,6 +10,22 @@
 #include "core/net/WifiLink.h"
 #include "system/Log.h"
 
+// The prebuilt mDNS of IDF 4.4.7 dereferences a NULL answer list (mdns.c:1324, fixed upstream) when
+// known answers empty a reply it has queued for a query flagged as truncated, so three packets from
+// any host on the network can reboot the clock. It only ever searches replies to such queries, and
+// clearing the flag on the way in leaves none. The cost is a reply the asker may already know.
+extern "C" {
+void* _mdns_get_packet_data(void* packet);
+size_t _mdns_get_packet_len(void* packet);
+esp_err_t __real__mdns_send_rx_action(void* packet);
+
+__attribute__((used)) esp_err_t __wrap__mdns_send_rx_action(void* packet) {
+  auto* data = static_cast<uint8_t*>(_mdns_get_packet_data(packet));
+  if (_mdns_get_packet_len(packet) >= 4 && data[2] == 0x02 && data[3] == 0x00) data[2] = 0;
+  return __real__mdns_send_rx_action(packet);
+}
+}
+
 namespace awtrix {
 
 namespace {
