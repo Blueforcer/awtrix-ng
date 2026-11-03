@@ -1,3 +1,6 @@
+// This test replaces operator new and delete with malloc and free, which GCC 15 takes for a mismatch once they inline.
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+
 #include "system/Log.h"
 #include "system/MonotonicClock.h"
 #include "platform/posix/Time.h"

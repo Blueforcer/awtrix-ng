@@ -239,8 +239,8 @@ class Generate(ProvisionCase):
         for line in key.decode().splitlines():
             if not line.startswith("-----"):
                 self.assertNotIn(line, out + err)
-        text = self.openssl("x509", "-noout", "-subject", "-ext", "subjectAltName", "-in", str(self.dir / "tls.crt")).decode()
-        self.assertIn("CN = localhost", text)
+        text = self.openssl("x509", "-noout", "-subject", "-nameopt", "RFC2253", "-ext", "subjectAltName", "-in", str(self.dir / "tls.crt")).decode()
+        self.assertIn("CN=localhost", text)
         self.assertIn("DNS:localhost", text)
         self.assertNotIn("IP Address", text)
         names = self.openssl("x509", "-noout", "-subject", "-issuer", "-nameopt", "RFC2253", "-in", str(self.dir / "tls.crt"))
@@ -256,9 +256,9 @@ class Generate(ProvisionCase):
         result = self.assert_generated(self.generate_argv(origin=origin))
         self.assertEqual(["IP:127.0.0.1"], result["san"])
         self.assertEqual("127.0.0.1", result["host"])
-        text = self.openssl("x509", "-noout", "-subject", "-ext", "subjectAltName", "-in", str(self.dir / "tls.crt")).decode()
+        text = self.openssl("x509", "-noout", "-subject", "-nameopt", "RFC2253", "-ext", "subjectAltName", "-in", str(self.dir / "tls.crt")).decode()
         self.assertIn("IP Address:127.0.0.1", text)
-        self.assertIn("CN = 127.0.0.1", text)
+        self.assertIn("CN=127.0.0.1", text)
         self.assertEqual(0, run_main(self.check_argv(origin=origin))[0])
         self.assert_refused(self.check_argv(origin=self.origin), "tls.crt: ")
 
@@ -266,8 +266,8 @@ class Generate(ProvisionCase):
         host = "a" * 63 + "." + "b" * 6
         result = self.assert_generated(self.generate_argv(origin=f"https://{host}:{self.port}"))
         self.assertEqual([f"DNS:{host}"], result["san"])
-        text = self.openssl("x509", "-noout", "-subject", "-in", str(self.dir / "tls.crt")).decode()
-        self.assertIn("CN = AWTRIX NG", text)
+        text = self.openssl("x509", "-noout", "-subject", "-nameopt", "RFC2253", "-in", str(self.dir / "tls.crt")).decode()
+        self.assertIn("CN=AWTRIX NG", text)
         self.assertEqual(0, run_main(self.check_argv(origin=f"https://{host}:{self.port}"))[0])
 
     def test_days_bounds_the_validity(self):

@@ -50,7 +50,7 @@ jobs:
       - name: Install Linux build and integration dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake libssl-dev liblzma-dev libjpeg-turbo8-dev openssl mosquitto
+          sudo apt-get install -y build-essential cmake libssl-dev liblzma-dev libjpeg-turbo8-dev openssl mosquitto squashfs-tools
           pip install -U platformio
       - name: Resolve shared host libraries
         run: pio pkg install -e native
@@ -81,7 +81,7 @@ jobs:
       - name: Install Linux build and integration dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake libssl-dev liblzma-dev libjpeg-turbo8-dev openssl mosquitto
+          sudo apt-get install -y build-essential cmake libssl-dev liblzma-dev libjpeg-turbo8-dev openssl mosquitto squashfs-tools
           pip install -U platformio
       - name: Resolve shared host libraries
         run: pio pkg install -e native
