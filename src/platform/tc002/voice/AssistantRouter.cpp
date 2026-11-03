@@ -138,7 +138,9 @@ void AssistantRouter::tickInteraction(int64_t now) {
     logf("voice: assistant app %s did not show", interaction.app.c_str());
     if (interaction.session) ports_.endSession();
   } else if (ports_.shown(interaction.app)) {
-    if (interaction.session || parts_.module.holds(interaction.app) || ports_.speaking()) interaction.activeAt = now;
+    if (interaction.session || parts_.module.holds(interaction.app) || ports_.speaking() ||
+        ports_.awaitsSlowAnswer(interaction.app))
+      interaction.activeAt = now;
     if (now - interaction.activeAt < kAssistantIdleMs) return;
   }
   parts_.module.dropTrigger();

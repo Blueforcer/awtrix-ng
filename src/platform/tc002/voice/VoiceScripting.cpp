@@ -62,11 +62,6 @@ var fields = def (map)
   return out.concat('\x1f')
 end
 
-var payload = def (data)
-  if isinstance(data, voice_clip) return data.id end
-  return type(data) == 'string' ? data : nil
-end
-
 var drop = def (entries, app)
   var gone = []
   for number : entries.keys() if entries[number][0] == app gone.push(number) end end
@@ -126,13 +121,13 @@ m.play = def (clip, done)
   plays[number] = [_native_app(), done, clip]
   return true
 end
-m.send = def (data, url, opts, cb)
+m.send = def (clip, url, opts, cb)
   if type(cb) != 'function' raise 'value_error', 'voice.send needs a callback' end
   if opts != nil && classname(opts) != 'map' raise 'value_error', 'voice.send options must be a map' end
-  var form = isinstance(data, voice_clip) ? opts : nil
-  started(calls, _voice_send(payload(data), str(url), str(get(opts, 'method', 'POST')), _http_headers(opts),
-                             str(get(form, 'as', 'form')), str(get(form, 'field', 'file')),
-                             fields(get(form, 'fields', nil)), _http_find(opts), _http_keep(opts),
+  if !isinstance(clip, voice_clip) raise 'value_error', 'voice.send needs a clip' end
+  started(calls, _voice_send(clip.id, str(url), str(get(opts, 'method', 'POST')), _http_headers(opts),
+                             str(get(opts, 'as', 'form')), str(get(opts, 'field', 'file')),
+                             fields(get(opts, 'fields', nil)), _http_find(opts), _http_keep(opts),
                              _http_cap(opts), get(opts, 'timeout', nil)), cb)
 end
 m.fetch = def (url, opts, cb)
@@ -207,10 +202,6 @@ VoiceScripting& self(bvm* vm) { return *static_cast<VoiceScripting*>(script::Ber
 const std::string& caller() { return script::ScriptExtensionHost::caller(); }
 std::string bytes(bvm* vm, int index) {
   return {be_tostring(vm, index), static_cast<std::size_t>(be_strlen(vm, index))};
-}
-VoiceTransfers::SendData sendData(bvm* vm, int index) {
-  if (be_isint(vm, index)) return static_cast<ClipId>(be_toint(vm, index));
-  return bytes(vm, index);
 }
 
 template <class Attempt>
@@ -299,9 +290,8 @@ int VoiceScripting::play(const std::string& app, ClipId clip) {
   return number;
 }
 
-int VoiceScripting::send(const std::string& app, VoiceTransfers::SendData data,
-                         const VoiceTransfers::Options& options) {
-  const int number = transfers_.send(app, std::move(data), options);
+int VoiceScripting::send(const std::string& app, ClipId clip, const VoiceTransfers::Options& options) {
+  const int number = transfers_.send(app, clip, options);
   updateMusic();
   return number;
 }
@@ -435,7 +425,7 @@ int VoiceScripting::nState(bvm* vm) {
 
 int VoiceScripting::nSend(bvm* vm) {
   int result = kBad;
-  if (be_top(vm) >= 11 && (be_isint(vm, 1) || be_isstring(vm, 1)) && be_isstring(vm, 2) && be_isstring(vm, 3) &&
+  if (be_top(vm) >= 11 && be_isint(vm, 1) && be_isstring(vm, 2) && be_isstring(vm, 3) &&
       be_isstring(vm, 4) && be_isstring(vm, 5) && be_isstring(vm, 6) && be_isstring(vm, 7) && be_isstring(vm, 8) &&
       be_isint(vm, 9) && be_isint(vm, 10)) {
     const std::optional<uint32_t> timeout = rangeOption(vm, 11, kTimeoutSec, kSendTimeoutSec);
@@ -451,7 +441,8 @@ int VoiceScripting::nSend(bvm* vm) {
       options.keep = static_cast<int>(be_toint(vm, 9));
       options.cap = static_cast<int>(be_toint(vm, 10));
       options.timeoutSec = *timeout;
-      result = withRoomOfDroppedClips(vm, [&] { return self(vm).send(caller(), sendData(vm, 1), options); });
+      const ClipId clip = static_cast<ClipId>(be_toint(vm, 1));
+      result = withRoomOfDroppedClips(vm, [&] { return self(vm).send(caller(), clip, options); });
     }
   }
   be_pushint(vm, result);

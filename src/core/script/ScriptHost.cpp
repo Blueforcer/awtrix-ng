@@ -121,8 +121,16 @@ bool ScriptHost::HttpAdapter::request(const HttpRequest& req) {
 
   if (!h->svc_.http->request(req)) return false;
   const int64_t now = h->svc_.monotonicMs ? h->svc_.monotonicMs() : 0;
-  h->httpOwner_[req.id] = HttpOwner{owner, now + kHttpTimeoutMs};
+  h->httpOwner_[req.id] = HttpOwner{owner, now + kHttpTimeoutMs + int64_t{req.timeoutSec} * 1000, req.timeoutSec != 0};
   return true;
+}
+
+void ScriptHost::HttpAdapter::cancel(uint32_t id) {
+  ScriptHost* h = host_;
+  const auto it = h->httpOwner_.find(id);
+  if (it == h->httpOwner_.end() || it->second.script != BindingScope::currentScript()) return;
+  h->httpOwner_.erase(it);
+  if (h->svc_.http) h->svc_.http->cancel(id);
 }
 
 void ScriptHost::MqttAdapter::publish(const std::string& topic, const std::string& payload) {
@@ -558,8 +566,14 @@ void ScriptHost::forgetScript(const std::string& name) {
   for (auto& button : buttons_)
     if (button.owner == name) button.owner.clear();
 
-  for (auto it = httpOwner_.begin(); it != httpOwner_.end();)
-    it = (it->second.script == name) ? httpOwner_.erase(it) : std::next(it);
+  for (auto it = httpOwner_.begin(); it != httpOwner_.end();) {
+    if (it->second.script != name) {
+      ++it;
+      continue;
+    }
+    if (svc_.http) svc_.http->cancel(it->first);
+    it = httpOwner_.erase(it);
+  }
 
   for (auto it = mqttSubs_.begin(); it != mqttSubs_.end();) {
     auto& subs = it->second;

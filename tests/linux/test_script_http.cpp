@@ -100,8 +100,8 @@ struct Rig {
     return fetch(id, server.origin + path, key);
   }
 
-  script::HttpResult fetch(uint32_t id, const std::string& url, const std::string& key,
-                           const std::string& method = "GET", const std::string& body = "") {
+  bool offer(uint32_t id, const std::string& url, const std::string& key, const std::string& method = "GET",
+             const std::string& body = "", uint32_t timeoutSec = 0) {
     script::HttpRequest request;
     request.id = id;
     request.method = method;
@@ -109,11 +109,27 @@ struct Rig {
     request.body = body;
     request.headers.emplace_back("X-Key", key);
     request.maxBytes = 8192;
-    {
-      script::BindingScope scope(nullptr, nullptr, "S");
-      require(http.request(request), "the request is queued");
-    }
+    request.timeoutSec = timeoutSec;
+    script::BindingScope scope(nullptr, nullptr, "S");
+    return http.request(request);
+  }
+
+  void ask(uint32_t id, const std::string& url, const std::string& key, const std::string& method = "GET",
+           const std::string& body = "", uint32_t timeoutSec = 0) {
+    require(offer(id, url, key, method, body, timeoutSec), "the request is queued");
+  }
+
+  void running(const std::string& url) {
     const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < end) {
+      if (lastCall() == "S " + url) return;
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(false, "the worker takes the request");
+  }
+
+  script::HttpResult next(int seconds = 5) {
+    const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
     while (std::chrono::steady_clock::now() < end) {
       {
         std::lock_guard<std::mutex> lock(mutex);
@@ -127,6 +143,12 @@ struct Rig {
     }
     require(false, "the request ends");
     return {};
+  }
+
+  script::HttpResult fetch(uint32_t id, const std::string& url, const std::string& key,
+                           const std::string& method = "GET", const std::string& body = "") {
+    ask(id, url, key, method, body);
+    return next();
   }
 
   std::string lastCall() {
@@ -148,6 +170,89 @@ void hostileAnswersEndWithAStatus() {
     check(result.id == id && result.status == hostile.status,
           std::string(hostile.name) + " ends with " + std::to_string(result.status));
   }
+}
+
+awtrix::test::RawServer::Serve answerAfter(std::chrono::milliseconds delay) {
+  return [delay](int peer) {
+    awtrix::test::readRequest(peer);
+    std::this_thread::sleep_for(delay);
+    awtrix::test::sendText(peer, "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nlate");
+  };
+}
+
+void aTimeoutSetsTheWait() {
+  Rig rig;
+  script::HttpRequest request;
+  request.id = 200;
+  request.method = "GET";
+  request.url = rig.server.origin + "/key";
+  request.timeoutSec = 121;
+  check(!rig.http.request(request), "more than two minutes is refused");
+
+  awtrix::test::RawServer soon(answerAfter(std::chrono::milliseconds(1200)));
+  rig.ask(201, soon.url(), "", "GET", "", 1);
+  script::HttpResult result = rig.next();
+  check(result.id == 201 && result.status == 0, "a shorter wait ends first: " + std::to_string(result.status));
+
+  awtrix::test::RawServer late(answerAfter(std::chrono::seconds(6)));
+  rig.ask(202, late.url(), "", "POST", "x", 8);
+  result = rig.fetch(203, rig.server.origin + "/key", "plain");
+  check(result.id == 203 && result.status == 200, "a long wait holds up no plain request: " + std::to_string(result.id));
+  result = rig.next(10);
+  check(result.id == 202 && result.status == 200 && result.body == "late",
+        "a longer wait outlasts the 5 s of a plain request: " + std::to_string(result.status));
+}
+
+void aCancelEndsTheRequest() {
+  Rig rig;
+  awtrix::test::RawServer slow(answerAfter(std::chrono::seconds(4)));
+  rig.ask(301, slow.url(), "", "POST", "x", 20);
+  rig.running(slow.url());
+  rig.ask(302, rig.server.origin + "/body", "", "POST", "queued", 20);
+  rig.http.cancel(302);
+  rig.http.cancel(301);
+  script::HttpResult result = rig.next(2);
+  check(result.id == 301 && result.status == 0, "a cancel ends the running request: " + std::to_string(result.id));
+  rig.ask(303, rig.server.origin + "/key", "after", "GET", "", 5);
+  result = rig.next();
+  check(result.id == 303 && result.status == 200, "the next one goes on: " + std::to_string(result.id));
+  check(rig.server.takeKeys() == std::vector<std::string>{"after"}, "and the cancelled one was never sent");
+}
+
+void aRequestThatWaitedTooLongIsNotSent() {
+  Rig rig;
+  awtrix::test::RawServer slow(answerAfter(std::chrono::milliseconds(script::kHttpTimeoutMs + 500)));
+  rig.ask(311, slow.url(), "", "POST", "x", 40);
+  rig.running(slow.url());
+  rig.ask(312, rig.server.origin + "/body", "", "POST", "late", 40);
+  script::HttpResult result = rig.next(40);
+  check(result.id == 311 && result.status == 200, "the first one takes its time: " + std::to_string(result.id));
+  result = rig.next(2);
+  check(result.id == 312 && result.status == 0, "the one behind it fails at once: " + std::to_string(result.id));
+  check(rig.server.takeKeys().empty(), "and is never sent");
+}
+
+void modbusKeepsItsQueue() {
+  Rig rig;
+  awtrix::test::RawServer slow(answerAfter(std::chrono::seconds(4)));
+  rig.ask(321, slow.url(), "", "POST", "x", 20);
+  rig.running(slow.url());
+  rig.ask(322, "modbus://127.0.0.1:1/1/3/0/1", "", "GET", "", 20);
+  const script::HttpResult result = rig.next(2);
+  check(result.id == 322, "modbus does not wait behind a slow request: " + std::to_string(result.id));
+}
+
+void queuedBodiesHaveALimit() {
+  constexpr std::size_t kLimit = 4 * 1024 * 1024;
+  Rig rig;
+  awtrix::test::RawServer slow(answerAfter(std::chrono::seconds(2)));
+  rig.ask(331, slow.url(), "", "POST", "x", 20);
+  rig.running(slow.url());
+  rig.ask(332, rig.server.origin + "/body", "", "POST", std::string(kLimit, 'x'), 20);
+  check(!rig.offer(333, rig.server.origin + "/body", "", "POST", "y", 20), "a byte more is refused");
+  check(!rig.offer(334, rig.server.origin + "/body", "", "POST", "y"), "in either queue");
+  rig.http.cancel(332);
+  check(rig.offer(335, rig.server.origin + "/body", "", "POST", "y"), "a cancel gives the room back");
 }
 
 }
@@ -239,5 +344,10 @@ int main() {
   check(result.status == 200 && rig.server.takeKeys().back() == "plain", "and the worker goes on");
   rig.http.stop();
   hostileAnswersEndWithAStatus();
+  aTimeoutSetsTheWait();
+  aCancelEndsTheRequest();
+  aRequestThatWaitedTooLongIsNotSent();
+  modbusKeepsItsQueue();
+  queuedBodiesHaveALimit();
   return awtrix::test::finish("linux-script-http");
 }

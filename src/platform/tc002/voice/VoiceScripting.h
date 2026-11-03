@@ -68,7 +68,7 @@ class VoiceScripting : public script::ScriptExtension, public AssistantRouter::M
   void release(const std::string& app, ClipId clip) { clips_.releaseReady(app, clip); }
   const char* state(const std::string& app) const { return recorder_.state(app); }
   uint8_t level(const std::string& app) const { return recorder_.level(app); }
-  int send(const std::string& app, VoiceTransfers::SendData data, const VoiceTransfers::Options& options);
+  int send(const std::string& app, ClipId clip, const VoiceTransfers::Options& options);
   int fetch(const std::string& app, std::string body, const VoiceTransfers::Options& options);
 
  private:

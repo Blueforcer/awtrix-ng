@@ -446,6 +446,7 @@ void LinuxRuntime::composeAssistant() {
   ports.shown = [this](const std::string& app) { return engine().currentAppId() == app; };
   ports.covered = [this] { return engine().hasNotification() || mirror_.mirror().active(); };
   ports.speaking = [this] { return speaker_->speaking(); };
+  ports.awaitsSlowAnswer = [this](const std::string& app) { return scripts_ && scripts_->awaitsSlowAnswer(app); };
   ports.inSession = [this](const std::string& app) { return engine().sessionApp() == app; };
   ports.endSession = [this] { engine().endSession(); };
   ports.panelOff = [this] { return engine().state().runtime().matrixOff; };

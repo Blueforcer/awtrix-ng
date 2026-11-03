@@ -164,19 +164,21 @@ For a service that wants the sound as the whole request, add `'as': 'raw'`. The 
 ## Ask a service that takes its time {#slow-services}
 
 A chat model often thinks for many seconds before it sends its first byte. `http` gives up after 5
-seconds without one, and all apps share its queue, so a slow answer holds up everyone else's
-requests. Send such a request with `voice.send` and text instead of a clip:
+seconds without one, so give such a request more time with `timeout`:
 
 ```berry
-voice.send(json.dump(request), url,
-           {'cap': 16384, 'timeout': 120, 'headers': {'Authorization': 'Bearer {secret:key}'}},
-           / body, status -> self.on_answer(body, status))
+http.post(url, json.dump(request), / body, status -> self.on_answer(body, status),
+          {'cap': 16384, 'timeout': 120,
+           'headers': {'Content-Type': 'application/json', 'Authorization': 'Bearer {secret:key}'}})
 ```
 
-The text is the body of the request, sent as `application/json` unless your headers name another
-`Content-Type`. `as`, `field` and `fields` do not apply. `timeout` is how many seconds the whole
-request may take, also while it waits for the first byte. Connecting has its own limit of 3 seconds.
-For a service that wants its key in the body, write `{secret:key}` in the text.
+`timeout` is how many seconds the whole request may take, also while it waits for the first byte.
+Connecting has its own limit of 3 seconds. For a service that wants its key in the body, write
+`{secret:key}` in the text.
+
+`http.post()` returns an id. When the question is no longer needed, end the request with
+`http.cancel(id)`. Otherwise the next question waits behind it, and after 30 seconds of waiting it is
+not sent.
 
 ## Fetch audio and play it
 
@@ -250,7 +252,7 @@ import voice
 import secret
 
 class Ask
-  var turn, label, tint, until
+  var turn, asking, label, tint, until
 
   def init()
     self.turn = 0
@@ -270,8 +272,13 @@ class Ask
   end
 
   def on_hide()
+    self.drop_question()
+  end
+
+  def drop_question()
     self.turn += 1
     voice.cancel()
+    http.cancel(self.asking)
   end
 
   def loop()
@@ -285,9 +292,8 @@ class Ask
   end
 
   def listen(from)
-    self.turn += 1
+    self.drop_question()
     var turn = self.turn
-    voice.cancel()
     self.show("LISTEN", 0x00AAFF, 0)
     voice.record({'from': from}, / clip, code -> self.heard(turn, clip, code))
   end
@@ -310,7 +316,7 @@ class Ask
     var request = {'model': store.get('chat_model'), 'messages': [{'role': 'user', 'content': question}]}
     var url = store.get('chat_url')
     var opts = {'cap': 16384, 'timeout': 120, 'headers': self.headers(url, true)}
-    voice.send(json.dump(request), url, opts, / answer, code -> self.answered(turn, answer, code))
+    self.asking = http.post(url, json.dump(request), / answer, code -> self.answered(turn, answer, code), opts)
   end
 
   def answered(turn, answer, status)
@@ -379,8 +385,9 @@ local service works without a key. For another service, change `hosts=` and ente
 
 - **A refused call runs your callback before the call returns.** Set your state first, as `listen()`
   does above, and only then call `voice.record()`, `voice.send()` or `voice.fetch()`.
-- **The callback of a cancelled question still runs, with `voice.CANCELLED`.** Count your questions,
-  as `turn` does above, and ignore answers to an older one.
+- **The callback of a cancelled question still runs, with `voice.CANCELLED`.** `voice.cancel()` does
+  not stop an `http` request: `http.cancel()` does, and its callback gets `(nil, 0)`. Count your
+  questions, as `turn` does above, and ignore answers to an older one.
 - **`voice.send()` with a clip from before your app was hidden answers `voice.GONE`.** Keep a clip in
   a member only while you are using it.
 - **A third `voice.send()` or `voice.fetch()` at the same time answers `voice.BUSY`.** Send the next

@@ -195,8 +195,8 @@ http.get("https://api.example.com/v1/quote?token={secret:key}", / body, status -
 http.post("https://api.example.com/v1/quote", '{"token":"{secret:key}"}', / body, status -> self.on_body(body, status))
 ```
 
-It works in `http.*`, and in [`voice.send` and `voice.fetch`](../voice-scripts.md). Everywhere else,
-it is plain text: in a clip, in a form field, in a header name, and in any other module.
+It works in `http.*`, and in [`voice.send` and `voice.fetch`](../voice-scripts.md), there not in a clip
+or a form field. Everywhere else, it is plain text: in a header name, and in any other module.
 
 The clock looks through the whole body. If text you pass on, for example an answer from a chat
 service, holds `{secret:key}`, the clock fills it in. With an unknown key, it refuses the request.
@@ -586,8 +586,10 @@ Select fetches again on the next `loop()`. Left and right switch apps as usual. 
 | `http.patch(url, body, cb, opts?)` | sends `body` with `PATCH` |
 | `http.delete(url, cb, opts?)` | sends `DELETE` |
 | `http.request(method, url, cb, opts?)` | sends any method. `opts` may carry `body` |
+| `http.cancel(id)` | ends a request of your script and answers `true`, or `false` when it has already ended |
 
-Each call returns at once. `cb(body, status)` runs once, later. `opts` is an optional map:
+Each call returns at once, with an id for `http.cancel()`, or `nil` when the request cannot be sent.
+`cb(body, status)` runs once, later. `opts` is an optional map:
 
 | Key | Value | Meaning |
 |---|---|---|
@@ -596,6 +598,7 @@ Each call returns at once. `cb(body, status)` runs once, later. `opts` is an opt
 | `keep` | bytes, `256` by default | how much is kept from the match on. `cap` can make it smaller, not larger |
 | `cap` | bytes, 8 KB by default | the most of the answer that is kept |
 | `body` | text | the request body of `http.request()` |
+| `timeout` | whole seconds, <!-- only esp32 esp32-s3 -->1–60<!-- /only --><!-- only tc002 -->1–120<!-- /only --> | how long the whole request may take, also while it waits for the first byte |
 
 - AWTRIX sets `Host`, `Content-Length`, `Transfer-Encoding` and `Connection` itself and ignores
   them in your headers. All other headers are yours.
@@ -611,22 +614,37 @@ Each call returns at once. `cb(body, status)` runs once, later. `opts` is an opt
 - **Any real answer, including 4xx and 5xx,** reaches your callback with its `body`. That is where
   an API explains what went wrong.
 - **No answer:** no Wi-Fi, an unknown host, a refused connection, too many requests at once, or no
-  answer within 30 seconds. `status` is `0` and `body` is `nil`.
-- **A request that cannot be sent**, with an unknown method or a malformed header, gets
-  `cb(nil, 0)` at once, like a network error.
+  answer in time. `status` is `0` and `body` is `nil`.
+- **A request that cannot be sent**, with an unknown method, a malformed header or a `timeout` out of
+  range, gets `cb(nil, 0)` at once, like a network error.
 - **`find` text that never comes** gives `(nil, status)` with the real status code, so you can tell
   it from a network failure.
+- **`http.cancel(id)`** runs your callback with `(nil, 0)` before it returns. When your app ends, its
+  open requests end too, without a callback.
 - Only `http://` and `https://` addresses work.
 - An answer is kept up to 8 KB, or up to `cap` if you set one. It is less when the device is short
   of free memory.
 - Each script can have **8 requests** open at once. They run one after another, together with those
-  of all other scripts.
+  of all other scripts. A request that has waited 30 seconds is not sent, and your callback gets
+  `(nil, 0)`.
 - `GET` follows redirects. A `POST` or `PUT` does not follow them reliably.
+- An answer has to start within 5 seconds, unless you set `timeout`. A service that thinks longer,
+  for example a chat model, needs it.
 <!-- only tc002 -->
-- An answer has to start within 5 seconds. A service that thinks longer, for example a chat model,
-  belongs on [`voice.send`](../voice-scripts.md#slow-services).
+- Requests with `timeout` run one after another in a queue of their own, so they delay no request
+  without one. End a question you no longer need with `http.cancel()`, or the next one waits behind
+  it.
+- `timeout` does not cover looking up the name of the service. A name server that does not answer
+  holds this request and those behind it.
 <!-- /only -->
 <!-- only esp32 esp32-s3 -->
+- A request with `timeout` holds up the requests of all other scripts for as long as it waits, and
+  those that wait 30 seconds fail. An `https://` request keeps its memory that long. Use it only for
+  a service that needs it.
+- `timeout` starts before the clock connects, but connecting is not cut short. It can take 5 seconds
+  and more, so a very short `timeout` takes that long too.
+- `http.cancel()` stops a running request. One still waiting for its turn is sent anyway, and its
+  answer is dropped.
 - For about 15 seconds after the clock joins Wi-Fi, `https://` requests wait, then run. The first
   result simply arrives a few seconds later. When memory is too tight for HTTPS, the request is
   retried for about 20 seconds before your callback gets a failure.

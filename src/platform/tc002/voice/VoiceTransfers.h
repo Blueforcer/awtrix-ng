@@ -6,7 +6,6 @@
 #include <map>
 #include <optional>
 #include <string>
-#include <variant>
 #include <vector>
 
 #include "platform/linux/net/TransferQueue.h"
@@ -17,7 +16,6 @@ namespace awtrix::tc002::voice {
 
 class VoiceTransfers {
  public:
-  using SendData = std::variant<ClipId, std::string>;
   struct Options {
     std::string url, method, headers, as, field, fields, find;
     int keep = 0, cap = 0;
@@ -28,7 +26,7 @@ class VoiceTransfers {
   VoiceTransfers(const VoiceTransfers&) = delete;
   VoiceTransfers& operator=(const VoiceTransfers&) = delete;
 
-  int send(const std::string& app, SendData data, const Options& options);
+  int send(const std::string& app, ClipId id, const Options& options);
   int fetch(const std::string& app, std::string body, const Options& options);
   std::vector<VoiceEvent> cancel(const std::string& app);
   std::optional<VoiceEvent> poll();

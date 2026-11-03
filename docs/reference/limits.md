@@ -94,9 +94,17 @@ Layouts have their own budgets, listed in `capabilities.layouts.limits`. See
 | HTTP response body | 8 KB, or `cap` if the request sets one - lowered to the free memory when the answer starts | the body is cut at that size. To keep only the part you need, use [`find`](../guides/scripting/network.md#picking-one-field-out-of-a-big-answer) |
 | Free memory while a response arrives | enough for the rest of the body | the whole request fails: the callback gets `nil` and the **real** status code |
 | HTTP connect and read timeout | <!-- only esp32 esp32-s3 -->5 s each<!-- /only --><!-- only tc002 -->3 s to connect, 5 s to read<!-- /only --> | the callback gets `nil, 0` |
-| HTTP request unanswered | 30 s | the callback gets `nil, 0` |
+| HTTP `timeout` | <!-- only esp32 esp32-s3 -->1–60 s<!-- /only --><!-- only tc002 -->1–120 s<!-- /only -->, whole seconds, replaces the read timeout | the callback gets `nil, 0`. Outside the range at once |
+<!-- only tc002 -->
+| Looking up a service's name | not limited by `timeout`, and cannot be cancelled | a name server that does not answer holds this request and those behind it |
+<!-- /only -->
+| HTTP request unanswered | 30 s, plus `timeout` if the request sets one | the callback gets `nil, 0` |
+| Waiting for its turn | 30 s | the request is not sent, and the callback gets `nil, 0` |
 | HTTP requests in flight | 8 per script | `http.get()` calls back `nil, 0` at once |
-| HTTP requests at a time | 1 for all scripts together, with at most <!-- only esp32 esp32-s3 -->16<!-- /only --><!-- only tc002 -->8<!-- /only --> in the queue | a slow request delays the others, also those of other scripts, and the wait counts towards the 30 s. With the queue full, `http.get()` calls back `nil, 0` at once |
+<!-- only tc002 -->
+| HTTP bodies waiting | 4 MB across all scripts | `http.post()` calls back `nil, 0` at once |
+<!-- /only -->
+| HTTP requests at a time | 1 for all scripts together<!-- only tc002 -->, and 1 more for those with `timeout`<!-- /only -->, with at most <!-- only esp32 esp32-s3 -->16 in the queue<!-- /only --><!-- only tc002 -->8 in each queue<!-- /only --> | a slow request delays the others, also those of other scripts, and the wait counts towards the 30 s. With the queue full, `http.get()` calls back `nil, 0` at once |
 | Script timers | 8 per app, 32 in total; each 25 ms to 1 day | `timer.after()` and `timer.every()` return `nil` |
 | MQTT subscriptions | 8 per script | further `mqtt.subscribe()` calls are ignored |
 | MQTT messages waiting | 32, shared by all scripts | the oldest waiting message is dropped |
@@ -140,8 +148,8 @@ one of the [status values](voice.md#status-values).
 | Connecting for a send or fetch | 3 s, within `timeout` | the callback gets `nil, 0` |
 | Looking up a service's name | not limited by `timeout`, and cannot be cancelled | a name server that does not answer holds this send or fetch and those behind it, also past `timeout` |
 | Answer to a send | 8 KB, or `cap` if you set one | the body is cut at that size, as for [`http`](#scripting) |
-| Memory for a send or fetch | twice its string body and twice its `cap`, above the 4 MB kept free and a running recording's whole limit. A body with `{secret:key}` needs room for a third copy and 4 KB more | the callback gets `voice.FULL` |
-| String bodies waiting | 4 MB across all apps | the callback gets `voice.FULL` |
+| Memory for a send or fetch | twice its `cap` for a send, twice its `body` for a fetch, above the 4 MB kept free and a running recording's whole limit. A body with `{secret:key}` needs room for a third copy and 4 KB more | the callback gets `voice.FULL` |
+| Fetch bodies waiting | 4 MB across all apps | the callback gets `voice.FULL` |
 | Size of a fetch | 2 MB of WAV or MP3 | the callback gets `voice.BAD`. With too little memory left, `voice.FULL` |
 | Type of a fetch | `Content-Type` `audio/mpeg`, `audio/mp3`, `audio/wav`, `audio/wave`, `audio/x-wav` or `application/octet-stream` | the callback gets `voice.BAD` |
 | Callbacks in a row | 32 | the others follow a moment later |

@@ -25,7 +25,6 @@ constexpr std::size_t kFetchBytes = 2 * 1024 * 1024;
 constexpr std::size_t kBodyBytesAcrossApps = 4 * 1024 * 1024;
 constexpr std::uint64_t kCopiesHeld = 2;
 constexpr int64_t kMsPerSecond = 1000;
-constexpr const char* kJsonType = "application/json";
 constexpr const char* kDownloadTypes[] = {"audio/mpeg", "audio/mp3",   "audio/wav",
                                           "audio/wave", "audio/x-wav", "application/octet-stream"};
 constexpr const char* kUploadName = "speech";
@@ -96,19 +95,13 @@ int attachClip(const Clip& clip, const VoiceTransfers::Options& options, net::Tr
 VoiceTransfers::VoiceTransfers(ClipStore& clips, net::FillRequest fill)
     : clips_(clips), queue_(kTransfersPerApp, std::move(fill)) {}
 
-int VoiceTransfers::send(const std::string& app, SendData data, const Options& options) {
-  const ClipId* const id = std::get_if<ClipId>(&data);
-  const Clip* const clip = id ? clips_.find(app, *id) : nullptr;
-  if (id && !clip) return kGone;
+int VoiceTransfers::send(const std::string& app, ClipId id, const Options& options) {
+  const Clip* const clip = clips_.find(app, id);
+  if (!clip) return kGone;
   net::TransferRequest request;
   if (options.keep < 0 || !describe(app, options, request)) return kBad;
-  if (clip) {
-    const int attached = attachClip(*clip, options, request);
-    if (attached != kOk) return attached;
-  } else {
-    request.body = std::move(std::get<std::string>(data));
-    if (!script::hasHeader(request.headers, "Content-Type")) request.headers.emplace_back("Content-Type", kJsonType);
-  }
+  const int attached = attachClip(*clip, options, request);
+  if (attached != kOk) return attached;
   request.filter = {options.find, static_cast<std::size_t>(options.keep),
                     options.cap > 0 ? static_cast<std::size_t>(options.cap) : script::kMaxHttpBody};
   return start(std::move(request), VoiceEvent::Kind::Send, 0);

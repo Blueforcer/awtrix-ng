@@ -78,6 +78,7 @@ class AssistantRouter {
     std::function<bool(const std::string&)> shown;
     std::function<bool()> covered;
     std::function<bool()> speaking;
+    std::function<bool(const std::string&)> awaitsSlowAnswer;
     std::function<bool(const std::string&)> inSession;
     std::function<void()> endSession;
     std::function<bool()> panelOff;

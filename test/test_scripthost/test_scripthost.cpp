@@ -111,14 +111,20 @@ struct FakeHttp : script::IScriptHttp {
   std::vector<uint32_t> ids;
   std::vector<std::string> urls;
   std::vector<std::string> methods;
+  std::vector<std::string> bodies;
+  std::vector<uint32_t> timeouts;
+  std::vector<uint32_t> cancelled;
   bool accept = true;
   bool request(const script::HttpRequest& req) override {
     if (!accept) return false;
     ids.push_back(req.id);
     urls.push_back(req.url);
     methods.push_back(req.method);
+    bodies.push_back(req.body);
+    timeouts.push_back(req.timeoutSec);
     return true;
   }
+  void cancel(uint32_t id) override { cancelled.push_back(id); }
   uint32_t last() const { return ids.empty() ? 0 : ids.back(); }
 };
 
@@ -1185,6 +1191,147 @@ static void test_answered_http_request_is_not_swept() {
   TEST_ASSERT_EQUAL_STRING("33", check(reg, "W").c_str());
 }
 
+static void test_http_budget_leaves_the_queue_its_time() {
+  TEST_ASSERT_TRUE(script::httpBudgetMs(0, 0) == script::kHttpTimeoutMs);
+  TEST_ASSERT_TRUE(script::httpBudgetMs(0, script::kHttpTimeoutMs - 1000) == 1000);
+  TEST_ASSERT_TRUE(script::httpBudgetMs(0, script::kHttpTimeoutMs) == 0);
+  TEST_ASSERT_TRUE(script::httpBudgetMs(60, script::kHttpTimeoutMs - 1) == 60000);
+  TEST_ASSERT_TRUE(script::httpBudgetMs(60, script::kHttpTimeoutMs) == 0);
+}
+
+static void test_http_timeout_extends_the_wait() {
+  FakeHttp fake;
+  g_svc.http = &fake;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("W", app("var t\ndef init() self.t = 'open' end\n"
+                    "def setup() http.get('http://x/', def(b, s) self.t = str(s) end, {'timeout': 40}) end\n"
+                    "def draw() end\n"
+                    "def check() return self.t end"));
+  TEST_ASSERT_EQUAL_UINT32(40, fake.timeouts.back());
+  RenderCtx ctx;
+  g_now = script::kHttpTimeoutMs + 40000 - 1;
+  host.tick(ctx, "W");
+  TEST_ASSERT_EQUAL_STRING("open", check(reg, "W").c_str());
+  g_now = script::kHttpTimeoutMs + 40000 + 1;
+  host.tick(ctx, "W");
+  TEST_ASSERT_EQUAL_STRING("0", check(reg, "W").c_str());
+}
+
+static void test_http_timeout_must_be_a_positive_whole_number() {
+  FakeHttp fake;
+  g_svc.http = &fake;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("W", app("var t\ndef init() self.t = '' end\n"
+                    "def setup()\n"
+                    "  for bad : [0, -1, 0.5, 1.5, '60', {}, true]\n"
+                    "    http.get('http://x/', def(b, s) self.t += str(s) end, {'timeout': bad})\n"
+                    "  end\n"
+                    "end\n"
+                    "def draw() end\n"
+                    "def check() return self.t end"));
+  TEST_ASSERT_EQUAL_STRING("0000000", check(reg, "W").c_str());
+  TEST_ASSERT_TRUE(fake.ids.empty());
+}
+
+static void test_http_cancel_ends_a_request_at_once() {
+  FakeHttp fake;
+  g_svc.http = &fake;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("W", app("var t, id\ndef init() self.t = 'open' end\n"
+                    "def setup() self.id = http.get('http://x/', def(b, s) self.t = str(b) .. ' ' .. str(s) end) end\n"
+                    "def on_button(b)\n"
+                    "  var first = http.cancel(self.id)\n"
+                    "  self.t = self.t .. ' ' .. str(first) .. ' ' .. str(http.cancel(self.id)) .. ' ' .. str(http.cancel(nil))\n"
+                    "end\n"
+                    "def draw() end\n"
+                    "def check() return self.t end"));
+  const uint32_t id = fake.last();
+  RenderCtx ctx;
+  host.tick(ctx, "W");
+  host.handleButton("W", "select");
+  TEST_ASSERT_EQUAL_STRING("nil 0 true false false", check(reg, "W").c_str());
+  TEST_ASSERT_EQUAL_UINT(1, fake.cancelled.size());
+  TEST_ASSERT_EQUAL_UINT32(id, fake.cancelled[0]);
+
+  host.pushHttpResult({id, true, 200, "late"});
+  host.tick(ctx, "W");
+  TEST_ASSERT_EQUAL_STRING("nil 0 true false false", check(reg, "W").c_str());
+}
+
+static void test_http_cancel_is_for_the_owner_only() {
+  FakeHttp fake;
+  g_svc.http = &fake;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("A", app("var t\ndef init() self.t = 'open' end\n"
+                    "def setup() http.get('http://x/', def(b, s) self.t = 'ended' end) end\n"
+                    "def draw() end\n"
+                    "def check() return self.t end"));
+  const std::string id = std::to_string(fake.last());
+  host.set("B", app("var t\ndef init() self.t = '' end\n"
+                    "def on_button(b)\n"
+                    "  self.t = str(http.cancel(" + id + "))\n"
+                    "  _native_http_cancel(" + id + ")\n"
+                    "end\n"
+                    "def draw() end\n"
+                    "def check() return self.t end"));
+  RenderCtx ctx;
+  host.tick(ctx, "B");
+  host.handleButton("B", "select");
+  TEST_ASSERT_EQUAL_STRING("false", check(reg, "B").c_str());
+  TEST_ASSERT_EQUAL_STRING("open", check(reg, "A").c_str());
+  TEST_ASSERT_TRUE(fake.cancelled.empty());
+}
+
+static void test_http_requests_end_with_their_script() {
+  FakeHttp fake;
+  g_svc.http = &fake;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("W", app("def setup() http.get('http://x/', def(b, s) end) end\n"
+                    "def draw() end\n"
+                    "def check() return '' end"));
+  const uint32_t id = fake.last();
+  host.remove("W");
+  TEST_ASSERT_EQUAL_UINT(1, fake.cancelled.size());
+  TEST_ASSERT_EQUAL_UINT32(id, fake.cancelled[0]);
+}
+
+static void test_http_body_keeps_every_byte() {
+  FakeHttp fake;
+  g_svc.http = &fake;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("W", app("def setup()\n"
+                    "  import json\n"
+                    "  http.post('http://x/', json.load('\"a\\\\u0000b\"'), def(b, s) end)\n"
+                    "end\n"
+                    "def draw() end\n"
+                    "def check() return '' end"));
+  TEST_ASSERT_TRUE(fake.bodies.back() == std::string("a\0b", 3));
+}
+
+static void test_only_a_request_with_a_timeout_is_a_slow_answer() {
+  FakeHttp fake;
+  g_svc.http = &fake;
+  AppRegistry reg;
+  script::ScriptHost host(reg, g_svc, nullptr, nullptr);
+  host.set("Plain", app("def setup() http.get('http://x/', def(b, s) end) end\n"
+                        "def draw() end\n"
+                        "def check() return '' end"));
+  TEST_ASSERT_FALSE(host.awaitsSlowAnswer("Plain"));
+  host.set("Slow", app("def setup() http.get('http://x/', def(b, s) end, {'timeout': 40}) end\n"
+                       "def draw() end\n"
+                       "def check() return '' end"));
+  TEST_ASSERT_TRUE(host.awaitsSlowAnswer("Slow"));
+  host.pushHttpResult({fake.last(), true, 200, ""});
+  RenderCtx ctx;
+  host.tick(ctx, "Slow");
+  TEST_ASSERT_FALSE(host.awaitsSlowAnswer("Slow"));
+}
 
 static void test_mqtt_fans_out_to_every_subscriber() {
   FakeMqtt fake;
@@ -3173,6 +3320,14 @@ int main(int, char**) {
   RUN_TEST(test_mqtt_publish_reaches_transport);
   RUN_TEST(test_unanswered_http_requests_free_their_slots);
   RUN_TEST(test_answered_http_request_is_not_swept);
+  RUN_TEST(test_http_budget_leaves_the_queue_its_time);
+  RUN_TEST(test_http_timeout_extends_the_wait);
+  RUN_TEST(test_http_timeout_must_be_a_positive_whole_number);
+  RUN_TEST(test_http_cancel_ends_a_request_at_once);
+  RUN_TEST(test_http_cancel_is_for_the_owner_only);
+  RUN_TEST(test_http_requests_end_with_their_script);
+  RUN_TEST(test_http_body_keeps_every_byte);
+  RUN_TEST(test_only_a_request_with_a_timeout_is_a_slow_answer);
   RUN_TEST(test_remove_drops_subscriptions);
   RUN_TEST(test_replace_releases_slots_and_broker_subscriptions);
   RUN_TEST(test_broken_script_does_not_receive_http_results);

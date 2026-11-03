@@ -761,12 +761,12 @@ int b_version(bvm* vm) {
 
 int b_http_request(bvm* vm) {
   bool ok = false;
-  if (g_svc && g_svc->http && be_top(vm) >= 8 && be_isstring(vm, 2) && be_isstring(vm, 3) &&
+  if (g_svc && g_svc->http && be_top(vm) >= 9 && be_isstring(vm, 2) && be_isstring(vm, 3) &&
       be_isstring(vm, 4) && be_isstring(vm, 5) && be_isstring(vm, 6)) {
     HttpRequest req;
     req.id = static_cast<uint32_t>(argInt(vm, 1));
     req.url = be_tostring(vm, 3);
-    req.body = be_tostring(vm, 4);
+    req.body.assign(be_tostring(vm, 4), static_cast<std::size_t>(be_strlen(vm, 4)));
     const std::string headerBlock = be_tostring(vm, 5);
 
     req.find = be_tostring(vm, 6);
@@ -778,7 +778,10 @@ int b_http_request(bvm* vm) {
     const int cap = argInt(vm, 8);
     req.maxBytes = cap > 0 ? static_cast<std::size_t>(cap) : kMaxHttpBody;
 
-    if (normalizeMethod(be_tostring(vm, 2), req.method) && keep >= 0 &&
+    const int timeout = argInt(vm, 9);
+    req.timeoutSec = timeout > 0 ? static_cast<uint32_t>(timeout) : 0;
+
+    if (normalizeMethod(be_tostring(vm, 2), req.method) && keep >= 0 && timeout >= 0 &&
         parseHeaderBlock(headerBlock, req.headers))
       ok = g_svc->http->request(req);
     else if (g_svc->logDebug)
@@ -786,6 +789,12 @@ int b_http_request(bvm* vm) {
   }
   be_pushbool(vm, ok);
   be_return(vm);
+}
+
+int b_http_cancel(bvm* vm) {
+  if (g_svc && g_svc->http && be_top(vm) >= 1 && be_isint(vm, 1))
+    g_svc->http->cancel(static_cast<uint32_t>(be_toint(vm, 1)));
+  be_return_nil(vm);
 }
 
 int b_mqtt_publish(bvm* vm) {
@@ -1290,6 +1299,7 @@ bool installBindings(BerryVM& vm, std::string& err) {
   be_regfunc(b, "_native_timer_start", b_timer_start);
   be_regfunc(b, "_native_timer_cancel", b_timer_cancel);
   be_regfunc(b, "_native_http_request", b_http_request);
+  be_regfunc(b, "_native_http_cancel", b_http_cancel);
   be_regfunc(b, "_native_mqtt_publish", b_mqtt_publish);
   be_regfunc(b, "_native_mqtt_subscribe", b_mqtt_subscribe);
   be_regfunc(b, "_native_store_flush", b_store_flush);

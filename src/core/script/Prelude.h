@@ -60,6 +60,13 @@ def _http_cap(opts)
   return c == nil ? 0 : int(c)
 end
 
+def _http_timeout(opts)
+  if opts == nil return 0 end
+  var t = opts.find('timeout')
+  if t == nil return 0 end
+  return type(t) == 'int' && t > 0 ? t : -1
+end
+
 def _http_send(method, url, body, cb, opts)
   var id = _http_next
   _http_next += 1
@@ -68,8 +75,9 @@ def _http_send(method, url, body, cb, opts)
   end
   if body == nil body = "" end
   if _native_http_request(id, method, url, str(body), _http_headers(opts),
-                          _http_find(opts), _http_keep(opts), _http_cap(opts))
+                          _http_find(opts), _http_keep(opts), _http_cap(opts), _http_timeout(opts))
     _http_cbs[id] = [_native_app(), cb]
+    return id
   else
     # No transport, a rejected request (bad method, malformed headers) or a
     # full platform queue. Soft-fail exactly the way a network error does,
@@ -82,22 +90,30 @@ end
 # for. The trailing comment is what the editor's signature table reads -- see
 # scripts/berry_api.py -- and it only looks at a def whose header ends the line.
 def _http_get(url, cb, opts) # http.get(url, cb, opts?)
-  _http_send("GET", url, nil, cb, opts)
+  return _http_send("GET", url, nil, cb, opts)
 end
 def _http_delete(url, cb, opts) # http.delete(url, cb, opts?)
-  _http_send("DELETE", url, nil, cb, opts)
+  return _http_send("DELETE", url, nil, cb, opts)
 end
 def _http_post(url, body, cb, opts) # http.post(url, body, cb, opts?)
-  _http_send("POST", url, body, cb, opts)
+  return _http_send("POST", url, body, cb, opts)
 end
 def _http_put(url, body, cb, opts) # http.put(url, body, cb, opts?)
-  _http_send("PUT", url, body, cb, opts)
+  return _http_send("PUT", url, body, cb, opts)
 end
 def _http_patch(url, body, cb, opts) # http.patch(url, body, cb, opts?)
-  _http_send("PATCH", url, body, cb, opts)
+  return _http_send("PATCH", url, body, cb, opts)
 end
 def _http_request(method, url, cb, opts) # http.request(method, url, cb, opts?)
-  _http_send(method, url, nil, cb, opts)
+  return _http_send(method, url, nil, cb, opts)
+end
+def _http_cancel(id) # http.cancel(id)
+  var e = _http_cbs.find(id)
+  if e == nil || e[0] != _native_app() return false end
+  _http_cbs.remove(id)
+  _native_http_cancel(id)
+  e[1](nil, 0)
+  return true
 end
 
 http.get = _http_get
@@ -106,6 +122,7 @@ http.post = _http_post
 http.put = _http_put
 http.patch = _http_patch
 http.request = _http_request
+http.cancel = _http_cancel
 
 # status 0 with body nil signals "no response at all". Any real response reaches
 # the callback, 4xx and 5xx included -- that is where an API explains itself.

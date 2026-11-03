@@ -71,6 +71,12 @@ static_assert(kTlsBootGraceMs < kHttpTimeoutMs,
               "a held fetch must still fit the answer window");
 static_assert(kMaxTightRetries * kTightRetryDelayMs < kHttpTimeoutMs,
               "retries must give up before the request expires");
+
+inline int64_t httpBudgetMs(uint32_t timeoutSec, int64_t waitedMs) {
+  if (waitedMs >= kHttpTimeoutMs) return 0;
+  return timeoutSec ? int64_t{timeoutSec} * 1000 : kHttpTimeoutMs - waitedMs;
+}
+
 #define AWTRIX_MAX_MQTT_SUBS 8
 constexpr std::size_t kMaxMqttSubs = AWTRIX_MAX_MQTT_SUBS;
 
@@ -83,6 +89,7 @@ struct HttpRequest {
   std::size_t maxBytes = 0;
   std::string find;
   std::size_t keep = 0;
+  uint32_t timeoutSec = 0;
 };
 
 struct HttpResult {
@@ -96,6 +103,7 @@ class IScriptHttp {
  public:
   virtual ~IScriptHttp() = default;
   virtual bool request(const HttpRequest& req) = 0;
+  virtual void cancel(uint32_t) {}
 };
 
 class IScriptMqtt {

@@ -1281,6 +1281,54 @@ return Fetch()
         self.assertIs(result["post"], True)
         self.assertEqual([], posted)
 
+    def test_http_timeout_sets_the_wait(self):
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                time.sleep(6)
+                body = b"late"
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        url = f"http://127.0.0.1:{server.server_port}/"
+        self.app.install("timeoutcontract", f'''# @headless true
+class Fetch
+ var sent
+ def init() self.sent = false end
+ def loop()
+  if self.sent return end
+  self.sent = true
+  http.post("{url}", "x", /body,status -> shared.set("plain", status), nil)
+  var dropped = http.post("{url}", "x", /body,status -> shared.set("cancelled", status), {{'timeout': 8}})
+  http.cancel(dropped)
+  http.post("{url}", "x", /body,status -> shared.set("patient", body), {{'timeout': 8}})
+  http.post("{url}", "x", /body,status -> shared.set("toolong", status), {{'timeout': 121}})
+  http.post("{url}", "x", /body,status -> shared.set("zero", status), {{'timeout': 0}})
+ end
+end
+return Fetch()
+''')
+
+        def values():
+            return {row["key"]: row["value"] for row in
+                    self.app.json("GET", "/api/v1/scripts/shared") if row["owner"] == "timeoutcontract"}
+        result = eventually(values, lambda v: {"plain", "patient", "toolong", "zero", "cancelled"} <= v.keys(),
+                            timeout=15)
+        self.assertEqual(0, result["plain"])
+        self.assertEqual("late", result["patient"])
+        self.assertEqual(0, result["toolong"])
+        self.assertEqual(0, result["zero"])
+        self.assertEqual(0, result["cancelled"])
+
     def test_http_client_and_self_signed_tls_rejection(self):
         openssl = self.tool("openssl", OPTIONS.require_tls)
         class Handler(http.server.BaseHTTPRequestHandler):

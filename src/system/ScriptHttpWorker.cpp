@@ -30,6 +30,8 @@ constexpr BaseType_t kCore = 0;
 
 constexpr uint16_t kConnectTimeoutMs = 5000;
 constexpr uint16_t kSocketTimeoutMs = 5000;
+constexpr uint32_t kMaxTimeoutSec = 60;
+static_assert(kMaxTimeoutSec * 1000 <= UINT16_MAX, "HTTPClient keeps its timeout in 16 bits of milliseconds");
 constexpr TickType_t kIdlePollTicks = pdMS_TO_TICKS(25);
 
 // Breathing room between back-to-back fetches: a TLS session leaves the internal heap fragmented,
@@ -60,6 +62,23 @@ class FilterSink : public Stream {
 
  private:
   script::HttpBodyFilter& filter_;
+};
+
+struct RequestEnd {
+  int64_t deadlineMs;
+  const std::atomic<bool>& stop;
+  bool reached() const { return monotonicMs() >= deadlineMs || stop.load(std::memory_order_relaxed); }
+};
+
+template <class Socket>
+class EndingClient : public Socket {
+ public:
+  explicit EndingClient(const RequestEnd& end) : end_(end) {}
+  uint8_t connected() override { return end_.reached() ? 0 : Socket::connected(); }
+  int available() override { return end_.reached() ? 0 : Socket::available(); }
+
+ private:
+  const RequestEnd& end_;
 };
 
 }
@@ -93,7 +112,7 @@ bool ScriptHttpWorker::request(const script::HttpRequest& req) {
     script::modbus::Read read;
     if (req.method != "GET" || !script::modbus::parse(req.url, read)) return false;
   } else if (req.url.rfind("http://", 0) != 0 && req.url.rfind("https://", 0) != 0) return false;
-  if (req.method.empty()) return false;
+  if (req.method.empty() || req.timeoutSec > kMaxTimeoutSec) return false;
 
   if (pending_.load(std::memory_order_relaxed) >= kQueueCap) {
     if (script::modbus::isUrl(req.url)) logf("modbus: queue full");
@@ -106,8 +125,18 @@ bool ScriptHttpWorker::request(const script::HttpRequest& req) {
   if (queued.maxBytes == 0) queued.maxBytes = script::kMaxHttpBody;
 
   pending_.fetch_add(1, std::memory_order_relaxed);
-  queue_.push(Queued{std::move(queued)});
+  queue_.push(Queued{std::move(queued), 0, 0, monotonicMs()});
   return true;
+}
+
+void ScriptHttpWorker::cancel(uint32_t id) {
+  if (running_.load(std::memory_order_relaxed) == id) stopRunning_.store(true, std::memory_order_relaxed);
+}
+
+void ScriptHttpWorker::giveUp(uint32_t id) {
+  script::HttpResult res;
+  res.id = id;
+  onResult_(std::move(res));
 }
 
 void ScriptHttpWorker::taskEntry(void* self) {
@@ -134,6 +163,12 @@ void ScriptHttpWorker::run() {
       vTaskDelay(kRequeueTicks);
       continue;
     }
+    const int64_t budgetMs = script::httpBudgetMs(q.req.timeoutSec, monotonicMs() - q.queuedAtMs);
+    if (budgetMs <= 0) {
+      giveUp(q.req.id);
+      pending_.fetch_sub(1, std::memory_order_relaxed);
+      continue;
+    }
     const std::size_t freeHeap = heap_caps_get_free_size(kGuardHeapCaps);
     const std::size_t largestBlock = heap_caps_get_largest_free_block(kGuardHeapCaps);
     if (!script::fetchFits(https, freeHeap, largestBlock)) {
@@ -149,14 +184,15 @@ void ScriptHttpWorker::run() {
       logf("script http: heap too tight for TLS (%u free, %u largest) after %u tries, skipped %s",
            static_cast<unsigned>(freeHeap), static_cast<unsigned>(largestBlock),
            static_cast<unsigned>(q.tightTries) + 1, q.req.url.c_str());
-      script::HttpResult res;
-      res.id = q.req.id;
-      onResult_(std::move(res));
+      giveUp(q.req.id);
       const bool moreQueued = pending_.fetch_sub(1, std::memory_order_relaxed) > 1;
       if (moreQueued) vTaskDelay(kFetchGapTicks);
       continue;
     }
-    fetch(q.req);
+    running_.store(q.req.id, std::memory_order_relaxed);
+    fetch(q.req, budgetMs);
+    running_.store(0, std::memory_order_relaxed);
+    stopRunning_.store(false, std::memory_order_relaxed);
     const bool moreQueued = pending_.fetch_sub(1, std::memory_order_relaxed) > 1;
     if (moreQueued) vTaskDelay(kFetchGapTicks);
   }
@@ -174,7 +210,7 @@ int64_t ScriptHttpWorker::connectedForMs() {
 
 // Runs on the worker task and blocks for as long as the request takes. The clients are stack-local
 // on purpose, so a TLS session's memory is handed straight back when this returns.
-void ScriptHttpWorker::fetch(const script::HttpRequest& req) {
+void ScriptHttpWorker::fetch(const script::HttpRequest& req, int64_t budgetMs) {
   if (script::modbus::isUrl(req.url)) {
     fetchModbus(req);
     return;
@@ -190,19 +226,21 @@ void ScriptHttpWorker::fetch(const script::HttpRequest& req) {
   probe::watchBegin();
 #endif
 
-  WiFiClient plain;
-  WiFiClientSecure secure;
+  const uint16_t socketTimeoutMs = req.timeoutSec ? static_cast<uint16_t>(req.timeoutSec * 1000) : kSocketTimeoutMs;
+  const RequestEnd end{monotonicMs() + budgetMs, stopRunning_};
+  EndingClient<WiFiClient> plain(end);
+  EndingClient<WiFiClientSecure> secure(end);
   if (https) {
     secure.setInsecure();
-    secure.setTimeout(kSocketTimeoutMs / 1000);
+    secure.setTimeout(socketTimeoutMs / 1000);
   } else {
-    plain.setTimeout(kSocketTimeoutMs / 1000);
+    plain.setTimeout(socketTimeoutMs / 1000);
   }
   WiFiClient& client = https ? static_cast<WiFiClient&>(secure) : plain;
 
   HTTPClient http;
   http.setConnectTimeout(kConnectTimeoutMs);
-  http.setTimeout(kSocketTimeoutMs);
+  http.setTimeout(socketTimeoutMs);
   // Connection reuse would keep a socket, and for https a whole TLS context, alive between
   // unrelated script fetches; the heap is worth more here than the handshake.
   http.setReuse(false);
@@ -220,12 +258,13 @@ void ScriptHttpWorker::fetch(const script::HttpRequest& req) {
         req.method.c_str(),
         reinterpret_cast<uint8_t*>(const_cast<char*>(req.body.data())), req.body.size());
     if (code > 0) {
-      res.status = code;
       script::HttpBodyFilter filter;
       filter.begin(req.find, req.keep, script::bodyCapWithinHeapGrowth(req.maxBytes));
       FilterSink sink(filter);
       http.writeToStream(&sink);
-      res.ok = filter.matched() && !filter.outOfRoom();
+      const bool inTime = !end.reached();
+      res.status = inTime ? code : 0;
+      res.ok = inTime && filter.matched() && !filter.outOfRoom();
       if (res.ok) res.body = std::move(filter.body());
       else if (filter.outOfRoom())
         logdbg("script http: %s ran out of room for the answer", req.url.c_str());

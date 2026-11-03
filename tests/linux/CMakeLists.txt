@@ -38,7 +38,7 @@ add_awtrix_test(NAME linux-multipart SOURCES test_multipart.cpp LIBRARIES awtrix
 add_awtrix_test(NAME linux-private-host SOURCES test_private_host.cpp LIBRARIES awtrix_host)
 add_awtrix_test(NAME linux-transfer-queue SOURCES test_transfer_queue.cpp LIBRARIES awtrix_host TIMEOUT 60)
 add_awtrix_test(NAME linux-script-http SOURCES test_script_http.cpp "${linux}/LinuxScriptHttp.cpp"
-  LIBRARIES awtrix_host TIMEOUT 30)
+  LIBRARIES awtrix_host TIMEOUT 75)
 add_awtrix_test(NAME linux-tls SOURCES test_tls.cpp "${linux}/LinuxMqttTls.cpp" LIBRARIES awtrix_host TIMEOUT 60)
 add_awtrix_test(NAME linux-button-webhook SOURCES test_button_webhook.cpp "${linux}/LinuxButtonWebhook.cpp"
   LIBRARIES awtrix_core Threads::Threads TIMEOUT 30)

@@ -845,78 +845,51 @@ void sendOptions() {
         "options, also a 17th form field or a Content-Type for a form, are BAD: " + rig.log());
 }
 
-void aStringIsTheBody() {
-  const auto echo = [](const httplib::Request& request, httplib::Response& response) {
-    response.set_content(request.method + " " + request.get_header_value("Content-Type") + " " +
-                             request.get_header_value("X-Key") + " [" + request.body + "]",
-                         "text/plain");
-  };
-  Loopback loopback;
-  loopback.server.Post("/echo", echo);
-  loopback.server.Put("/echo", echo);
-  loopback.listen();
+void aSendNeedsAClip() {
   Rig rig;
-  rig.fill = [](const std::string&, std::string&, net::RequestHeaders& headers, net::RequestBody& body) {
-    for (auto& header : headers) {
-      if (header.second != "{secret:k}") continue;
-      header.second = "s3cret";
-      return net::RequestFill::Filled;
-    }
-    const std::size_t at = body.head.find("{secret:k}");
-    if (at == std::string::npos) return net::RequestFill::Unchanged;
-    body.head.replace(at, 10, "s3cret");
-    return net::RequestFill::Filled;
-  };
-  const std::string url = "'" + loopback.origin + "/echo'";
-  const struct {
-    std::string data, options, answer;
-  } sent[] = {
-      {"'{\"q\":1}'", "nil", "POST application/json  [{\"q\":1}]"},
-      {"''", "nil", "POST application/json  []"},
-      {"'x'", "{'headers': {'content-type': 'text/plain'}}", "POST text/plain  [x]"},
-      {"'x'", "{'as': 'json', 'field': 'y', 'fields': ['z']}", "POST application/json  [x]"},
-      {"'x'", "{'as': 'raw', 'fields': {'a': 'b'}}", "POST application/json  [x]"},
-      {"'x'", "{'method': 'PUT'}", "PUT application/json  [x]"},
-      {"'x'", "{'headers': {'X-Key': '{secret:k}'}}", "POST application/json s3cret [x]"},
-      {"'{\"k\":\"{secret:k}\"}'", "nil", "POST application/json  [{\"k\":\"s3cret\"}]"},
-      {"'{\"text\":\"hello\"}'", "{'find': '\"text\":', 'keep': 14}", "\"text\":\"hello\""},
-  };
-  for (const auto& one : sent) {
-    require(rig.install("S", app("voice.send(" + one.data + ", " + url + ", " + one.options + ", self.answer('sent'))")),
-            "a script sends a string with " + one.options);
-    check(rig.until("sent "), "the upload ends: " + rig.log());
-    check(rig.log() == "sent 200 " + one.answer + ";idle",
-          "a string is the body, typed JSON unless a header names a type, and as, field and fields do not apply: " +
-              rig.log());
-  }
-  for (const std::string data : {"5", "nil", "true", "1.5", "['x']", "{}"}) {
-    require(rig.install("S", app("voice.send(" + data + ", " + url + ", nil, self.answer('sent'))")),
+  for (const std::string data : {"'x'", "''", "5", "nil", "true", "1.5", "['x']", "{}"}) {
+    require(rig.install("S", app("try voice.send(" + data + ", 'http://127.0.0.1:1/x', nil, self.answer('sent')) "
+                                 "except .. as kind, words self.log += kind + ': ' + words + ';' end")),
             "a script sends " + data);
-    check(rig.log() == "sent -6 nil;idle", "what is neither a clip nor a string is BAD: " + rig.log());
-  }
-  for (const std::string options : {"{'method': 'BREW'}", "{'keep': -1}"}) {
-    require(rig.install("S", app("voice.send('x', " + url + ", " + options + ", self.answer('sent'))")),
-            "a script sends a string with " + options);
-    check(rig.log() == "sent -6 nil;idle", "bad options are BAD for a string as well: " + rig.log());
+    check(rig.log() == "value_error: voice.send needs a clip;idle", "anything but a clip raises: " + rig.log());
   }
 }
 
-void aStringTravelsLikeAClip() {
+void aSendHoldsAndCancels() {
   Gate gate;
   Loopback loopback;
+  loopback.server.Get("/wav", [](const httplib::Request&, httplib::Response& response) {
+    response.set_content(kAnswer, "audio/wav");
+  });
   loopback.server.Post("/gate", [&gate](const httplib::Request&, httplib::Response&) { gate.pass(); });
+  loopback.server.Put("/put", [](const httplib::Request& request, httplib::Response& response) {
+    response.set_content(request.method, "text/plain");
+  });
   loopback.listen();
   {
     Rig rig;
-    const std::string send = "voice.send('x', '" + loopback.origin + "/gate', nil, ";
-    require(rig.install("S", app(send + "self.answer('one')) " + send + "self.answer('two')) " + send +
-                                 "self.answer('three'))")),
-            "a script sends three strings");
-    check(rig.log() == "three -2 nil;idle" && rig.module->holds("S") && rig.speaker.music,
-          "two run, a third is BUSY, and they hold the app and the music: " + rig.log());
+    const std::string at = "'" + loopback.origin;
+    require(rig.install("S", app("voice.fetch(" + at + "/wav', nil, def (c, s)\n"
+                                 "  voice.send(c, " + at + "/put', {'method': 'PUT'}, self.answer('put'))\n"
+                                 "end)")),
+            "a script sends with a method");
+    check(rig.until("put "), "the upload ends: " + rig.log());
+    check(rig.log() == "put 200 PUT;idle", "the method is the one asked for: " + rig.log());
+
+    const std::string send = "  voice.send(c, " + at + "/gate', nil, ";
+    require(rig.install("S", app("voice.fetch(" + at + "/wav', nil, def (c, s)\n"
+                                 "  voice.send(c, " + at + "/put', {'method': 'BREW'}, self.answer('bad'))\n" +
+                                 send + "self.answer('one'))\n" + send + "self.answer('two'))\n" + send +
+                                 "self.answer('three'))\n"
+                                 "end)")),
+            "a script sends three clips");
+    check(rig.until("three "), "the third is answered: " + rig.log());
+    check(rig.log() == "bad -6 nil;three -2 nil;idle" && rig.module->holds("S") && rig.speaker.music,
+          "a bad method is BAD, two run, a third is BUSY, and they hold the app and the music: " + rig.log());
     rig.module->cancel("S");
     rig.frame();
-    check(rig.log() == "three -2 nil;one -3 nil;two -3 nil;idle" && !rig.module->holds("S") && !rig.speaker.music,
+    check(rig.log() == "bad -6 nil;three -2 nil;one -3 nil;two -3 nil;idle" && !rig.module->holds("S") &&
+              !rig.speaker.music,
           "voice.cancel() ends them with CANCELLED: " + rig.log());
   }
   gate.open = true;
@@ -937,26 +910,22 @@ void timeoutOptions() {
     const std::string options = "{'timeout': " + bad + "}";
     require(rig.install("S", app("voice.fetch(" + wav + ", nil, def (c, s)\n"
                                  "  voice.send(c, " + ok + ", " + options + ", self.answer('clip'))\n"
-                                 "  voice.send('x', " + ok + ", " + options + ", self.answer('text'))\n"
                                  "  voice.fetch(" + wav + ", " + options + ", self.note('fetch'))\n"
                                  "end)")),
             "a script uses " + options);
     check(rig.until("fetch "), "the requests end: " + rig.log());
-    check(rig.log() == "clip -6 nil;text -6 nil;fetch -6;idle",
+    check(rig.log() == "clip -6 nil;fetch -6;idle",
           "a timeout out of range or of the wrong type is BAD: " + options + " " + rig.log());
   }
   for (const std::string good : {"1", "120"}) {
     const std::string options = "{'timeout': " + good + "}";
     require(rig.install("S", app("voice.fetch(" + wav + ", " + options + ", def (c, s)\n"
                                  "  self.note('fetch')(c, s)\n"
-                                 "  voice.send(c, " + ok + ", " + options + ", def (body, s)\n"
-                                 "    self.answer('clip')(body, s)\n"
-                                 "    voice.send('x', " + ok + ", " + options + ", self.answer('text'))\n"
-                                 "  end)\n"
+                                 "  voice.send(c, " + ok + ", " + options + ", self.answer('clip'))\n"
                                  "end)")),
             "a script uses " + options);
-    check(rig.until("text "), "the requests end: " + rig.log());
-    check(rig.log() == "fetch 200 wav;clip 200 ok;text 200 ok;idle",
+    check(rig.until("clip "), "the requests end: " + rig.log());
+    check(rig.log() == "fetch 200 wav;clip 200 ok;idle",
           "the ends of the range are allowed: " + options + " " + rig.log());
   }
 }
@@ -965,6 +934,9 @@ void theBudgetCoversTheFirstByte() {
   Gate gate;
   Loopback loopback;
   loopback.answerAfter("/gate", gate);
+  loopback.server.Get("/wav", [](const httplib::Request&, httplib::Response& response) {
+    response.set_content(kAnswer, "audio/wav");
+  });
   loopback.server.Post("/gate", [&gate](const httplib::Request&, httplib::Response&) { gate.pass(); });
   loopback.server.Post("/late", [](const httplib::Request&, httplib::Response& response) {
     std::this_thread::sleep_for(std::chrono::seconds(6));
@@ -974,19 +946,22 @@ void theBudgetCoversTheFirstByte() {
   {
     Rig rig;
     const std::string at = "'" + loopback.origin;
-    require(rig.install("S", app("voice.send('x', " + at + "/gate', {'timeout': 1}, def (body, s)\n"
-                                 "  self.answer('send')(body, s)\n"
-                                 "  voice.fetch(" + at + "/gate', {'timeout': 1}, def (c, s)\n"
-                                 "    self.note('fetch')(c, s)\n"
-                                 "    voice.send('x', " + at + "/late', {'timeout': 8}, self.answer('late'))\n"
+    require(rig.install("S", app("voice.fetch(" + at + "/gate', {'timeout': 1}, self.note('fetch'))")),
+            "a script waits for a download");
+    check(rig.until("fetch ", 15), "the download ends: " + rig.log());
+    check(rig.log() == "fetch 0;idle" && files(rig.folder.path) == 0,
+          "a download out of time ends with status 0 and leaves no clip: " + rig.log());
+    require(rig.install("S", app("voice.fetch(" + at + "/wav', nil, def (c, s)\n"
+                                 "  voice.send(c, " + at + "/gate', {'timeout': 1}, def (body, s)\n"
+                                 "    self.answer('send')(body, s)\n"
+                                 "    voice.send(c, " + at + "/late', {'timeout': 8}, self.answer('late'))\n"
                                  "  end)\n"
                                  "end)")),
             "a script waits for answers");
     check(rig.until("late ", 15), "the requests end: " + rig.log());
-    check(rig.log() == "send 0 nil;fetch 0;late 200 late;idle",
+    check(rig.log() == "send 0 nil;late 200 late;idle",
           "a budget shorter than the server's delay ends with status 0, and one longer outlasts the 5 s other "
           "requests wait for a first byte: " + rig.log());
-    check(files(rig.folder.path) == 0, "a download out of time leaves no clip");
   }
   gate.open = true;
 }
@@ -1363,7 +1338,7 @@ void memoryRoom() {
   }
 }
 
-void bodiesAndAnswersMustFit() {
+void bodiesMustFit() {
   Gate gate;
   Loopback loopback;
   loopback.server.Post("/gate", [&gate](const httplib::Request&, httplib::Response&) { gate.pass(); });
@@ -1373,34 +1348,34 @@ void bodiesAndAnswersMustFit() {
   options.url = loopback.origin + "/gate";
   options.method = "POST";
   options.timeoutSec = 30;
-  options.cap = 1000;
   {
     Rig rig;
-    const std::string body(10000, 'x');
-    rig.available = kKeepFreeBytes + 2 * (body.size() + 1000) - 1;
-    check(rig.module->send("S", body, options) == tc002::voice::kFull,
-          "a string must fit twice beside its answer, twice too, and the memory kept free");
-    rig.available = kKeepFreeBytes + 2 * (body.size() + 1000);
-    const int running = rig.module->send("S", body, options);
+    const std::string body(3 * kMegabyte / 2, 'x');
+    const uint64_t needed = kKeepFreeBytes + 2 * body.size();
+    rig.available = needed - 1;
+    check(rig.module->fetch("S", body, options) == tc002::voice::kFull,
+          "a body must fit twice beside the memory kept free");
+    rig.available = needed;
+    const int running = rig.module->fetch("S", body, options);
     check(running > 0, "exactly that much is enough: " + std::to_string(running));
     rig.available = uint64_t{1} << 40;
-    require(gate.reached(), "the first send runs");
-    check(rig.module->send("S", std::string(4 * kMegabyte - body.size(), 'x'), options) > 0,
+    require(gate.reached(), "the first fetch runs");
+    check(rig.module->fetch("S", std::string(4 * kMegabyte - body.size(), 'x'), options) > 0,
           "bodies may wait up to 4 MB across all apps");
-    check(rig.module->send("T", "x", options) == tc002::voice::kFull, "a byte more is FULL");
+    check(rig.module->fetch("T", "x", options) == tc002::voice::kFull, "a byte more is FULL");
     rig.module->cancel("S");
-    check(rig.module->send("T", std::string(4 * kMegabyte, 'x'), options) > 0, "a cancelled transfer gives its room back");
+    check(rig.module->fetch("T", std::string(4 * kMegabyte, 'x'), options) > 0, "a cancelled transfer gives its room back");
     rig.module->cancel("T");
   }
   {
     Rig rig;
-    const std::string body = "{secret:k}" + std::string(10000, 'x');
-    const uint64_t needed = 2 * (body.size() + 1000) + body.size() + net::kMaxFillGrowth;
-    rig.available = kKeepFreeBytes + needed - 1;
-    check(rig.module->send("S", body, options) == tc002::voice::kFull,
-          "a string with a placeholder must also fit its filled copy");
-    rig.available = kKeepFreeBytes + needed;
-    check(rig.module->send("S", body, options) > 0, "exactly that much is enough");
+    const std::string body = "{secret:k}" + std::string(3 * kMegabyte / 2, 'x');
+    const uint64_t needed = kKeepFreeBytes + 2 * body.size() + body.size() + net::kMaxFillGrowth;
+    rig.available = needed - 1;
+    check(rig.module->fetch("S", body, options) == tc002::voice::kFull,
+          "a body with a placeholder must also fit its filled copy");
+    rig.available = needed;
+    check(rig.module->fetch("S", body, options) > 0, "exactly that much is enough");
     rig.module->cancel("S");
   }
   gate.open = true;
@@ -1508,8 +1483,8 @@ int main(int argc, char** argv) {
   fullAndLevel();
   assistantRoundTrip();
   sendOptions();
-  aStringIsTheBody();
-  aStringTravelsLikeAClip();
+  aSendNeedsAClip();
+  aSendHoldsAndCancels();
   timeoutOptions();
   theBudgetCoversTheFirstByte();
   refusedRequests();
@@ -1526,7 +1501,7 @@ int main(int argc, char** argv) {
   shutdownEndsTransfers();
   destructionLetsGo();
   memoryRoom();
-  bodiesAndAnswersMustFit();
+  bodiesMustFit();
   modelPerRecording();
   releaseOnlyReady();
   onAssistant();

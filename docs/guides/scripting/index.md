@@ -173,7 +173,7 @@ follow the link. In the editor, **Ctrl-.** lists every call.
 | [Letting the user change something](storage.md#settings-the-user-can-change) | a `# @config` line, then `store.get()` |
 | [Handing values to another app](several-apps.md#talking-to-other-apps) | `shared.set()` `shared.get()` `shared.age()` `shared.keys()` |
 | [Sharing code between apps](several-apps.md#sharing-code-between-scripts) | a `# @module` file, then `import` |
-| [Fetching from the internet](network.md#http) | `http.get()` `http.post()` `http.put()` `http.patch()` `http.delete()` `http.request()` |
+| [Fetching from the internet](network.md#http) | `http.get()` `http.post()` `http.put()` `http.patch()` `http.delete()` `http.request()` `http.cancel()` |
 | [Picking a value out of a reply](network.md#regular-expressions) | `re.search()` `re.match()` `re.matchall()`, or `json.load()` |
 | [Home automation](network.md#mqtt) | `mqtt.publish()` `mqtt.subscribe()` |
 | [Reading a Modbus device](../modbus.md) | `modbus.readHoldingRegisters()` `modbus.readInputRegisters()` `modbus.readCoils()` `modbus.readDiscreteInputs()` |

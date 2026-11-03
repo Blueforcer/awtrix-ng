@@ -86,6 +86,11 @@ class ScriptHost {
 
   void pushHttpResult(HttpResult r) { httpQueue_.push(std::move(r)); }
   void pushMqttMessage(MqttMessage m) { mqttQueue_.push(std::move(m)); }
+  bool awaitsSlowAnswer(const std::string& name) const {
+    for (const auto& kv : httpOwner_)
+      if (kv.second.slow && kv.second.script == name) return true;
+    return false;
+  }
 
   void defineNative(const char* name, Native fn, void* self);
   bool defineModule(const std::string& name, const std::string& source);
@@ -138,6 +143,7 @@ class ScriptHost {
    public:
     explicit HttpAdapter(ScriptHost* h) : host_(h) {}
     bool request(const HttpRequest& req) override;
+    void cancel(uint32_t id) override;
 
    private:
     ScriptHost* host_;
@@ -159,6 +165,7 @@ class ScriptHost {
   struct HttpOwner {
     std::string script;
     int64_t dueMs = 0;
+    bool slow = false;
   };
 
   struct Module {

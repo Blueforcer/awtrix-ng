@@ -20,7 +20,9 @@ namespace awtrix::test {
 
 class RawServer {
  public:
-  explicit RawServer(std::function<void(int peer)> serve) : serve_(std::move(serve)) {
+  using Serve = std::function<void(int peer)>;
+
+  explicit RawServer(Serve serve) : serve_(std::move(serve)) {
     constexpr int kReceiveBufferBytes = 64 * 1024;
     listener_ = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
     sockaddr_in address{};
@@ -71,7 +73,7 @@ class RawServer {
     }
   }
 
-  std::function<void(int peer)> serve_;
+  Serve serve_;
   int listener_ = -1;
   int port_ = 0;
   std::mutex mutex_;

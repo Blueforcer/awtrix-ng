@@ -136,7 +136,7 @@ struct Rig {
   std::vector<std::string> opened;
   bool openFails = false;
   std::string shown;
-  bool covered = false, speaking = false, onDemand = false;
+  bool covered = false, speaking = false, slowAnswer = false, onDemand = false;
   std::string session;
   unsigned sessionsEnded = 0;
   bool panelOff = false;
@@ -192,6 +192,7 @@ struct Rig {
             [this](const std::string& app) { return shown == app; },
             [this] { return covered; },
             [this] { return speaking; },
+            [this](const std::string& app) { return slowAnswer && shown == app; },
             [this](const std::string& app) { return session == app; },
             [this] {
               session.clear();
@@ -486,6 +487,21 @@ void speechKeepsTheInteraction() {
   check(rig.power == std::vector<bool>{true, false} && rig.music == 0, "then the interaction ends");
 }
 
+void aSlowAnswerKeepsTheInteraction() {
+  Rig rig;
+  rig.panelOff = true;
+  rig.start(VoiceTrigger::Api);
+  rig.shows("Chat");
+  rig.slowAnswer = true;
+  rig.frames(3 * AssistantRouter::kAssistantIdleMs);
+  check(rig.power.size() == 1 && rig.music == 1, "the panel stays on and the radio waits for a slow answer");
+  rig.slowAnswer = false;
+  rig.frames(AssistantRouter::kAssistantIdleMs - 30);
+  check(rig.power.size() == 1 && rig.music == 1, "and 10 s after");
+  rig.frame();
+  check(rig.power == std::vector<bool>{true, false} && rig.music == 0, "then the interaction ends");
+}
+
 void homeAssistantIgnoresLocalSpeech() {
   Rig rig;
   rig.voice.homeAssistantChosen = true;
@@ -767,6 +783,7 @@ int main(int argc, char** argv) {
   refusals();
   panelAndMusic();
   speechKeepsTheInteraction();
+  aSlowAnswerKeepsTheInteraction();
   homeAssistantIgnoresLocalSpeech();
   aSessionKeepsTheInteraction();
   aCoveredPanelStopsTheClock();

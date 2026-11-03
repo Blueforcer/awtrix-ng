@@ -574,8 +574,10 @@ branch on `status` only where the script must tell them apart.
 
 **All apps share one queue, and requests run one after another.** A slow request delays every other
 app's requests, and the wait counts towards the 30 seconds. An answer has to start within 5 seconds
-of the request going out. A service that thinks longer, such as a chat model, belongs on
-`voice.send` on a TC002 (see *Voice* at the end).
+of the request going out. For a service that thinks longer, such as a chat model, set `timeout` in
+`opts`: whole seconds, 1-60 on ESP32, 1-120 on TC002, for the whole request. On ESP32 it holds up every
+other request while it waits; on TC002 requests with `timeout` have a queue of their own. A request
+that has waited 30 seconds is not sent: its callback gets `(nil, 0)`.
 
 The other methods take the same shape, with an optional trailing `opts` map:
 
@@ -588,7 +590,12 @@ The other methods take the same shape, with an optional trailing `opts` map:
              {'headers': {'Authorization': "Bearer " + self.token}})
 ```
 
-`opts` keys are `headers` (a map), `cap`, `find` and `keep` (below), and `body` - which is how
+Every method returns an id, or `nil` when the request cannot be sent. `http.cancel(id)` ends a request
+of this app: the callback gets `(nil, 0)` before it returns, and it answers `true`, or `false` when the
+request has already ended. When an app ends, its open requests end too, without a callback. On ESP32
+a request still waiting for its turn is sent anyway, and its answer dropped.
+
+`opts` keys are `headers` (a map), `timeout` (above), `cap`, `find` and `keep` (below), and `body` - which is how
 `http.request()` and `http.delete()` send one, and what `post`/`put`/`patch` fall back to when the
 body argument is `nil`. `Host`, `Content-Length`, `Transfer-Encoding` and `Connection` are set by
 the device and ignored if a script supplies them. Every request sends `User-Agent: AWTRIX-NG`, so
@@ -1362,8 +1369,9 @@ anything that waits, waits by returning and being called again.
 | HTTP response body | 8 KB by default; `cap` raises or lowers it, and `find`+`keep` narrows it to a window (`keep` defaults to 256) | truncated, or filtered |
 | Free memory while the body is collected | brings `cap` down to what is there; running out mid-body drops the response | callback gets `nil` and the real status code |
 | HTTP requests in flight | 8 per app | callback gets `nil` immediately |
-| HTTP requests at a time | 1 for all apps together; at most 16 queued on ESP32, 8 on TC002 | a slow one delays the others; a full queue gives `nil` immediately |
-| HTTP timeout | connect: ESP32 5 s, TC002 3 s; read: 5 s; total: 30 s, queue included | callback gets `nil` |
+| HTTP requests at a time | 1 for all apps together, on TC002 1 more for those with `timeout`; at most 16 queued on ESP32, 8 per queue on TC002 | a slow one delays the others; a full queue gives `nil` immediately |
+| HTTP timeout | connect: ESP32 5 s, TC002 3 s; read: 5 s; total: 30 s, queue included; `timeout` replaces read and total, 1-60 s on ESP32, 1-120 s on TC002, whole seconds, and leaves 30 s for the queue; after 30 s in the queue a request is not sent; on TC002 a name lookup is not covered | callback gets `nil`, out of range at once |
+| HTTP bodies waiting (TC002) | 4 MB across all apps | callback gets `nil` at once |
 | Pending timers | 8 per app, 32 total; integer delay 25–86400000 ms | `timer.after()` / `timer.every()` return `nil` for invalid arguments or a full queue |
 | MQTT subscriptions | 8 per app | further subscribes ignored |
 | MQTT messages waiting | 32, shared by every script | the oldest is dropped |
@@ -1372,7 +1380,7 @@ anything that waits, waits by returning and being called again.
 | Regex | 256-byte pattern, 7 capturing groups | the call answers `nil` |
 | Voice clips (TC002) | 4 and 4 MB per app; a running recording counts as `max` at 32 KB/s, a running fetch as 2 MB; 4 MB of system memory stay free, and room for a running recording's whole limit | callback gets `voice.FULL` |
 | Voice recording (TC002) | one on the clock, by the app on the panel; `silence` 300-3000 ms (800), `wait` 1-15 s (5), `max` 1-30 s (15) | out of range `voice.BAD`, otherwise `voice.BUSY` |
-| `voice.send`, `voice.fetch` (TC002) | 2 per app, one at a time across all apps, so a long one delays the others; `timeout` 1-120 s (30 and 15), counted from the transfer's turn, with 3 s of it to connect and a name lookup on top; 16 form fields; a fetch 2 MB; string bodies waiting 4 MB across all apps; twice body and `cap` must fit above the 4 MB kept free and a running recording's whole limit | a third `voice.BUSY`, out of range or oversized `voice.BAD`, no room `voice.FULL`, no answer in time status `0` |
+| `voice.send`, `voice.fetch` (TC002) | 2 per app, one at a time across all apps, so a long one delays the others; `timeout` 1-120 s (30 and 15), counted from the transfer's turn, with 3 s of it to connect and a name lookup on top; 16 form fields; a fetch 2 MB; fetch bodies waiting 4 MB across all apps; twice body and `cap` must fit above the 4 MB kept free and a running recording's whole limit | a third `voice.BUSY`, out of range or oversized `voice.BAD`, no room `voice.FULL`, no answer in time status `0` |
 | `@secret` (TC002) | 4 lines; key 24 characters, `label` 48, `help` 96, `hosts` required, 1-8; a value 512 bytes without control characters | one bad line: no key of the app works, and saving erases them |
 | `{secret:key}` (TC002) | a filled URL, header value or body is at most 4 KB longer | nothing is sent, callback gets `(nil, 0)` |
 | Frame budget | 25 ms | nothing is dropped; the whole panel's frame rate falls |
@@ -1809,7 +1817,7 @@ Never put a key in `@config`, in `store` or in the source, and never ask for it 
 - `# @needs secret` is what warns on other clocks; an `@secret` line alone asks for nothing. The other
   clocks ignore the line and send `{secret:key}` as plain text.
 - **Write `{secret:key}` in a header value, in the path or query of the URL** (percent-encoded there),
-  **or in a text body** (`http.*`, `voice.send` with a string, `voice.fetch` with `body`). In a header
+  **or in a text body** (`http.*`, `voice.fetch` with `body`). In a header
   and a body the value goes in as it is. It works in `http.*`, `voice.send` and `voice.fetch`. A clip, a
   form field, a header name and every other module treat it as plain text. The whole body counts, so
   text passed on from elsewhere that holds `{secret:` is filled in, or refused with an unknown key.
@@ -1851,17 +1859,16 @@ download) and `kind` (`wav` or `mp3`). The script cannot read the sound, only se
 | `voice.stop()` | ends the recording; the callback gets what it has |
 | `voice.level()` | 0-255, the loudness of the running recording, otherwise 0 |
 | `voice.state()` | `'idle'`, `'recording'` or `'playing'` |
-| `voice.send(data, url, opts, cb)` | `cb(body, status)` as in `http`. `data` is a clip or a string |
+| `voice.send(clip, url, opts, cb)` | `cb(body, status)` as in `http` |
 | `voice.fetch(url, opts, cb)` | `cb(clip, status)`, 200 with WAV or MP3 only, and a `Content-Type` of `audio/mpeg`, `audio/mp3`, `audio/wav`, `audio/wave`, `audio/x-wav` or `application/octet-stream`. `opts`: `body`, `method` (`POST` with a body, else `GET`), `headers`, `timeout` (default 15) |
 | `voice.play(clip, done?)` | answers whether it started. `done(heard)` runs after it ended; `false` when stopped or replaced |
 | `voice.cancel()` | ends the app's recording, playback, sends and fetches; their callbacks get `voice.CANCELLED` or `false` |
 
 `voice.send` options: `headers`, `method` (`POST`), `find`, `keep`, `cap` as in `http` (5.7), and
 `timeout` in whole seconds, 1-120, default 30, which also covers the wait for the first byte.
-Connecting has its own 3 s. **A clip**
+Connecting has its own 3 s. The clip
 goes as a form: `field` (`file`), `fields` (a map, at most 16), no `Content-Type` of yours; `'as': 'raw'`
-sends it as the whole body. **A string** is the body, as `application/json` unless `headers` names a
-`Content-Type`; `as`, `field` and `fields` do not apply.
+sends it as the whole body. Anything but a clip raises `value_error`.
 
 Status: an HTTP code, `0` when no server answered or a key was refused, or `voice.SILENCE` (-1, nobody
 spoke), `voice.BUSY` (-2, the app is not shown, the assistant is busy, another recording runs, a third
@@ -1881,8 +1888,10 @@ type or that is neither WAV nor MP3).
   `on_assistant(trigger)` runs after its first frame with `wake`, `knob`, `mqtt` or `api`. A
   `voice.record()` there starts at the trigger; a later one starts now. End with `rotation.close()`.
   A new trigger does nothing while the clock speaks or the app still records, plays, sends or fetches.
-- **The chat step uses `voice.send`, not `http.post`.** `http` gives up after 5 s without a first byte,
-  and its one queue serves all apps, so a service that answers slowly belongs on `voice.send`.
+  `http` does not count, so a trigger can arrive during the chat step.
+- **The chat step uses `http.post` with `timeout`.** Without it `http` gives up after 5 s without a
+  first byte, and a chat model often thinks longer. `voice.cancel()` does not end it: keep the id and
+  call `http.cancel(id)`, or the next question waits behind the old one.
 - Most keys for these services go in a header: see *API keys* above. Give each service its own
   `@secret` line bound to its host and pick the key per URL with `secret.allows(key, url)`. A local
   service needs no key.
@@ -1911,7 +1920,7 @@ import voice
 import secret
 
 class Ask
-  var turn, label, tint, until
+  var turn, asking, label, tint, until
 
   def init()
     self.turn = 0
@@ -1931,8 +1940,13 @@ class Ask
   end
 
   def on_hide()
+    self.drop_question()
+  end
+
+  def drop_question()
     self.turn += 1
     voice.cancel()
+    http.cancel(self.asking)
   end
 
   def loop()
@@ -1946,9 +1960,8 @@ class Ask
   end
 
   def listen(from)
-    self.turn += 1
+    self.drop_question()
     var turn = self.turn
-    voice.cancel()
     self.show("LISTEN", 0x00AAFF, 0)
     voice.record({'from': from}, / clip, code -> self.heard(turn, clip, code))
   end
@@ -1971,7 +1984,7 @@ class Ask
     var request = {'model': store.get('chat_model'), 'messages': [{'role': 'user', 'content': question}]}
     var url = store.get('chat_url')
     var opts = {'cap': 16384, 'timeout': 120, 'headers': self.headers(url, true)}
-    voice.send(json.dump(request), url, opts, / answer, code -> self.answered(turn, answer, code))
+    self.asking = http.post(url, json.dump(request), / answer, code -> self.answered(turn, answer, code), opts)
   end
 
   def answered(turn, answer, status)

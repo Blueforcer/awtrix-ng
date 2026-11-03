@@ -15,13 +15,13 @@ Every call, option and status value of [`import voice`](../guides/voice-scripts.
 | `voice.stop()` | ends the recording now. The callback gets what it has |
 | `voice.level()` | the loudness of the running recording, 0 to 255, otherwise 0 |
 | `voice.state()` | `'idle'`, `'recording'` or `'playing'` |
-| `voice.send(data, url, opts, cb)` | sends a clip or a text. `opts` may be `nil`. `cb(body, status)` |
+| `voice.send(clip, url, opts, cb)` | sends a clip. `opts` may be `nil`. `cb(body, status)` |
 | `voice.fetch(url, opts, cb)` | downloads WAV or MP3 into a clip. `opts` may be `nil`. `cb(clip, status)` |
 | `voice.play(clip, done?)` | plays a clip and returns whether it started. `done(heard)` |
 | `voice.cancel()` | ends your app's recording, playback, sends and fetches |
 
 A callback that is not a function, `opts` that is not a map or anything but a clip for `voice.play()`
-raises `value_error`. `voice.send()` with anything but a clip or a text answers `voice.BAD`.
+or `voice.send()` raises `value_error`. To send text, use [`http`](../guides/scripting/network.md#http-calls).
 
 ## A clip
 
@@ -34,7 +34,7 @@ raises `value_error`. `voice.send()` with anything but a clip or a text answers 
 
 | Option | Meaning | Default |
 |---|---|---|
-| `as` | for a clip: `'form'` or `'raw'` | `'form'` |
+| `as` | `'form'` or `'raw'` | `'form'` |
 | `field` | for a form: the name of the clip's field | `'file'` |
 | `fields` | for a form: a map of further text fields, at most 16 | none |
 | `method` | the HTTP method | `POST` |
@@ -42,8 +42,8 @@ raises `value_error`. `voice.send()` with anything but a clip or a text answers 
 | `find`, `keep`, `cap` | as in [`http`](../guides/scripting/network.md#http-calls) | |
 | `timeout` | whole seconds for the whole request, also while it waits for the first byte, 1–120. Connecting has its own 3 seconds | 30 |
 
-[`{secret:key}`](../guides/scripting/network.md#api-keys) works in the address, in `headers` and in a
-text, not in a clip or in `fields`.
+[`{secret:key}`](../guides/scripting/network.md#api-keys) works in the address and in `headers`, not in
+a clip or in `fields`.
 
 ## Options of `voice.fetch`
 
