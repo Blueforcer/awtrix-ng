@@ -181,6 +181,7 @@ nav:
       - Limits: reference/limits.md
   - Release notes:
       - All releases: releases/index.md
+      - "1.2.3": releases/1.2.3.md
       - "1.2.2": releases/1.2.2.md
   - Under the hood:
       - Architecture overview: developers/index.md
