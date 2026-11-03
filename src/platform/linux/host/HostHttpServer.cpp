@@ -206,7 +206,10 @@ bool HostHttpServer::begin(uint16_t port, CoreEngine& engine, Canvas& screen,
     logf("host http: cannot bind port %u", static_cast<unsigned>(port));
     return false;
   }
-  im->listener = std::thread([im] { im->svr->listen_after_bind(); });
+  im->listener = std::thread([im] {
+    im->svr->listen_after_bind();
+    im->listenerEnded = true;
+  });
   return true;
 }
 
@@ -228,6 +231,9 @@ void HostHttpServer::stop() {
     impl_->stopping = true;
     impl_->cv.notify_all();
   }
+  // httplib's stop() does nothing until the listener runs, and the join below would then never return.
+  while (impl_->listener.joinable() && !impl_->svr->is_running() && !impl_->listenerEnded)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   if (impl_->svr) impl_->svr->stop();
   if (impl_->connections) impl_->connections->disconnectAll(kAnswerGrace);
   if (impl_->listener.joinable()) impl_->listener.join();

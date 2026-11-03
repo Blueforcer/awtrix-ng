@@ -4,6 +4,7 @@
 #include "core/api/FilesApi.h"
 #include "platform/linux/host/vendor/httplib.h"
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -16,6 +17,7 @@ struct HostHttpServer::Impl {
   std::unique_ptr<httplib::Server> svr;
   host_http::ConnectionTrackingServer* connections = nullptr;
   std::thread listener;
+  std::atomic<bool> listenerEnded{false};
   uint16_t port = 8080;
 
   std::mutex m;

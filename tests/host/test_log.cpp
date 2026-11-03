@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <new>
+#include <random>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -97,6 +98,89 @@ void aLineIsCutAtTheOldLimit() {
   for (const std::string& line : lines) check(line == std::string(line.size(), 'y'), "cut lines stay intact");
   const std::size_t start = json.find("\"lines\":[\"") + 10;
   check(json.find('"', start) - start == 119, "119 characters and the terminator, as before");
+}
+
+void aCutKeepsWholeCharacters() {
+  for (const char* character : {"\xC3\xA9", "\xE2\x82\xAC", "\xF0\x9F\x98\x80"}) {
+    const std::string unit = character;
+    for (std::size_t pad = 0; pad < unit.size(); ++pad) {
+      std::string text(pad, 'p');
+      while (text.size() < 200) text += unit;
+      const uint32_t mark = logMark();
+      logf("%s", text.c_str());
+      const std::string kept = linesAfter(mark).at(0);
+      check(text.compare(0, kept.size(), kept) == 0, "the kept part is unchanged");
+      check((kept.size() - pad) % unit.size() == 0, "the cut falls between two characters");
+      const std::string json = logAfter(mark);
+      const std::size_t start = json.find("\"lines\":[\"") + 10;
+      const std::size_t whole = json.find('"', start) - start;
+      check(whole <= 119 && whole + unit.size() > 119, "only the character that did not fit goes");
+    }
+  }
+}
+
+void brokenBytesBecomeQuestionMarks() {
+  const struct {
+    const char* in;
+    const char* out;
+  } broken[] = {
+      {"a\x80z", "a?z"},             // No lead byte.
+      {"\xC3(", "?("},               // No continuation.
+      {"\xE2\x82z", "??z"},          // Too few continuations.
+      {"\xF5\xFF", "??"},            // Never part of UTF-8.
+      {"\xC0\xAF", "??"},            // Overlong, three lengths.
+      {"\xE0\x80\xAF", "???"},
+      {"\xF0\x80\x80\xAF", "????"},
+      {"\xED\xA0\x80", "???"},       // Surrogate.
+      {"\xF4\x90\x80\x80", "????"},  // Past U+10FFFF.
+      {"z\xE2\x82", "z"},            // Ends inside a character, as a cut does.
+  };
+  for (const auto& line : broken) {
+    const uint32_t mark = logMark();
+    logf("%s", line.in);
+    check(linesAfter(mark) == std::vector<std::string>({line.out}), "broken bytes do not survive");
+  }
+  // The first and last character on each side of the rules above.
+  for (const char* whole : {"\xC2\x80", "\xDF\xBF", "\xE0\xA0\x80", "\xED\x9F\xBF", "\xEE\x80\x80", "\xEF\xBF\xBF",
+                            "\xF0\x90\x80\x80", "\xF4\x8F\xBF\xBF"}) {
+    const uint32_t mark = logMark();
+    logf("%s", whole);
+    check(linesAfter(mark) == std::vector<std::string>({whole}), "whole characters stay as they are");
+  }
+}
+
+// As strict as Python's decoder. It judges the decoded code point where the firmware judges byte
+// ranges, so the two do not share a mistake.
+bool validUtf8(const std::string& text) {
+  static const uint32_t kLeast[] = {0, 0x80, 0x800, 0x10000};
+  for (std::size_t at = 0; at < text.size();) {
+    const auto lead = static_cast<unsigned char>(text[at]);
+    const int extra = lead < 0x80 ? 0 : (lead & 0xE0) == 0xC0 ? 1 : (lead & 0xF0) == 0xE0 ? 2 : (lead & 0xF8) == 0xF0 ? 3 : -1;
+    if (extra < 0 || at + static_cast<std::size_t>(extra) >= text.size()) return false;
+    uint32_t code = extra ? lead & (0x3Fu >> extra) : lead;
+    for (int i = 1; i <= extra; ++i) {
+      const auto next = static_cast<unsigned char>(text[at + static_cast<std::size_t>(i)]);
+      if ((next & 0xC0) != 0x80) return false;
+      code = code << 6 | (next & 0x3F);
+    }
+    if (code < kLeast[extra] || code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF)) return false;
+    at += static_cast<std::size_t>(extra) + 1;
+  }
+  return true;
+}
+
+void anyBytesComeOutValid() {
+  // Mostly the bytes where the rules change, so whole characters turn up between the broken ones.
+  static const unsigned char kBytes[] = {'z',  0x7F, 0x80, 0x8F, 0x90, 0x9F, 0xA0, 0xBF, 0xC0, 0xC1, 0xC2, 0xDF,
+                                         0xE0, 0xE1, 0xEC, 0xED, 0xEE, 0xEF, 0xF0, 0xF1, 0xF3, 0xF4, 0xF5, 0xFF};
+  std::mt19937 random(1);
+  for (int i = 0; i < 5000; ++i) {
+    std::string text(random() % 160, 'z');
+    for (char& byte : text) byte = static_cast<char>(kBytes[random() % sizeof kBytes]);
+    const uint32_t mark = logMark();
+    logf("%s", text.c_str());
+    check(validUtf8(logAfter(mark)), "any input comes out as valid UTF-8");
+  }
 }
 
 // Every length, so a line starts, and its length byte sits, on every offset around the wrap.
@@ -228,11 +312,14 @@ int main() {
   sequenceNumbersSelectTheTail();
   theRingHoldsAtLeastTheOldLineCountAtAverageLength();
   aLineIsCutAtTheOldLimit();
+  aCutKeepsWholeCharacters();
+  brokenBytesBecomeQuestionMarks();
+  anyBytesComeOutValid();
   everyLengthSurvivesTheWrap();
   loggingNeedsNoHeap();
   concurrentWritersNeverGarbleTheRing();
   check(::dup2(saved, STDERR_FILENO) >= 0, "restore stderr");
   ::close(saved);
   std::fclose(nowhere);
-  std::puts("host log: shared clock epoch, uptime stamp, stderr output, byte ring and its concurrency passed");
+  std::puts("host log: shared clock epoch, uptime stamp, stderr output, byte ring, valid UTF-8 and concurrency passed");
 }

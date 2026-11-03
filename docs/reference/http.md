@@ -3056,7 +3056,8 @@ To follow the log, pass the last `next` as `after` in the next request. AWTRIX k
 **last 34 lines**, each up to 120 characters. Short lines leave room for more, and at their longest
 22 fit. Older lines are dropped. Each line starts with the time
 `HH:MM:SS ` once the clock has the time from the internet, before that with the seconds since start,
-`[   123s] `.
+`[   123s] `. Every line is valid UTF-8: a character cut at the end of a line is left out, and other
+bytes that are not UTF-8 show as `?`.
 
 <!-- only tc002 -->
 The log also shows messages from the clock's system about Wi-Fi, the network address, the time

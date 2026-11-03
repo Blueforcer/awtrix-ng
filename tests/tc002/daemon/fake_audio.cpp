@@ -5,7 +5,7 @@
 // <dir of argv[0]>/helper-mode:
 //   ok         exit 0 as soon as the socket closes
 //   slow       stay 500 ms after the socket closes (a successor must wait for the reap)
-//   linger     after the socket closes ignore SIGTERM and wait to be killed
+//   linger     ignore SIGTERM from before the report on; after the socket closes wait to be killed
 //   preflight  exit 3 right away
 // Any process of the same user may ptrace it, so a test can hold it unreapable.
 #include <fcntl.h>
@@ -51,6 +51,7 @@ int main(int argc, char** argv) {
   const std::string directory = directoryOf(argv[0]);
   const std::string mode = readMode(directory + "/helper-mode");
   if (mode == "preflight") return 3;
+  if (mode == "linger") ::signal(SIGTERM, SIG_IGN);
   std::string problem;
   int type = 0;
   socklen_t length = sizeof type;
@@ -71,7 +72,6 @@ int main(int argc, char** argv) {
   }
   if (mode == "slow") ::usleep(500000);
   if (mode == "linger") {
-    ::signal(SIGTERM, SIG_IGN);
     for (;;) ::pause();
   }
   return 0;

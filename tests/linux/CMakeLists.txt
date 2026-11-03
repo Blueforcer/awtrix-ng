@@ -31,6 +31,7 @@ add_awtrix_test(NAME linux-ble-script SOURCES test_ble_script.cpp
   LIBRARIES awtrix_ble_script awtrix_host)
 add_awtrix_test(NAME http-body-limit SOURCES test_http_body_limit.cpp
   LIBRARIES awtrix_host TIMEOUT 15)
+add_awtrix_test(NAME linux-http-stop SOURCES test_http_stop.cpp LIBRARIES awtrix_host TIMEOUT 60)
 add_awtrix_test(NAME linux-file-download SOURCES test_file_download.cpp LIBRARIES awtrix_host awtrix_posix
   TIMEOUT 20)
 add_awtrix_test(NAME linux-multipart SOURCES test_multipart.cpp LIBRARIES awtrix_host)

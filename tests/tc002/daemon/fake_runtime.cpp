@@ -159,8 +159,9 @@ void reportReady(bool valid) {
                      : "{\"v\":2,\"type\":\"ready\",\"board\":\"tc002\",\"width\":32,\"height\":8,\"input\":false}");
 }
 
+// Not pause(): a SIGTERM between the check and the call would be lost.
 void waitForTerm() {
-  while (!terminated) ::pause();
+  while (!terminated) ::poll(nullptr, 0, 20);
 }
 
 }
@@ -168,6 +169,14 @@ void waitForTerm() {
 int main(int argc, char** argv) {
   ::prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
   const std::string data = argc > 8 ? argv[8] : "";
+  std::string mode = readAll(data + "/mode");
+  while (!mode.empty() && (mode.back() == '\n' || mode.back() == ' ')) mode.pop_back();
+  if (mode.empty()) mode = "ok";
+  // Set up before the report: tests send SIGTERM as soon as they have read it.
+  struct sigaction action{};
+  action.sa_handler = mode == "stubborn" ? SIG_IGN : onTerm;
+  sigemptyset(&action.sa_mask);
+  sigaction(SIGTERM, &action, nullptr);
   bool audio = false;
   std::string voice;
   std::string wake;
@@ -191,23 +200,16 @@ int main(int argc, char** argv) {
     std::string heard = "no helper message";
     pollfd item{104, POLLIN, 0};
     char buffer[256];
-    if (::poll(&item, 1, 2000) > 0) {
+    if (::poll(&item, 1, 30000) > 0) {
       const ssize_t count = ::recv(104, buffer, sizeof buffer, 0);
       heard = count > 0 ? std::string(buffer, static_cast<std::size_t>(count)) : "helper closed";
     }
     writeAll(data + "/audio-" + std::to_string(::getpid()), heard + "\n", false);
   }
-  std::string mode = readAll(data + "/mode");
-  while (!mode.empty() && (mode.back() == '\n' || mode.back() == ' ')) mode.pop_back();
-  if (mode.empty()) mode = "ok";
   writeAll(data + "/report-" + std::to_string(::getpid()), problem.empty() ? "valid\n" : "invalid: " + problem + "\n",
            false);
   std::printf("fake runtime pid %d mode %s\n", static_cast<int>(::getpid()), mode.c_str());
   std::fflush(stdout);
-  struct sigaction action{};
-  action.sa_handler = onTerm;
-  sigemptyset(&action.sa_mask);
-  sigaction(SIGTERM, &action, nullptr);
 
   if (mode == "crash") return 1;
   if (mode == "closed") {
@@ -216,7 +218,6 @@ int main(int argc, char** argv) {
     return 1;
   }
   if (mode == "stubborn") {
-    ::signal(SIGTERM, SIG_IGN);
     for (;;) ::pause();
   }
   if (mode == "silent") {

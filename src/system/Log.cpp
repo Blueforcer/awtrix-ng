@@ -63,6 +63,39 @@ void load(size_t lengthAt, char* line) {
   line[length] = '\0';
 }
 
+// The log's reply is JSON, which has to be valid UTF-8 for a strict parser, and a line holds whatever
+// a script or a server sent. A character the line ends inside of goes, which is also what the cut
+// leaves. Any other byte that is not part of a character becomes one '?'.
+void keepUtf8(char* text) {
+  auto* at = reinterpret_cast<uint8_t*>(text);
+  while (*at) {
+    const uint8_t lead = *at;
+    if (lead < 0x80) {
+      ++at;
+      continue;
+    }
+    const int size = lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4;
+    bool whole = lead >= 0xC2 && lead <= 0xF4;
+    // The second byte's range is what rules out overlong forms, surrogates and U+110000 upwards.
+    uint8_t low = lead == 0xE0 ? 0xA0 : lead == 0xF0 ? 0x90 : 0x80;
+    uint8_t high = lead == 0xED ? 0x9F : lead == 0xF4 ? 0x8F : 0xBF;
+    for (int i = 1; whole && i < size; ++i) {
+      if (!at[i]) {
+        *at = 0;
+        return;
+      }
+      whole = at[i] >= low && at[i] <= high;
+      low = 0x80;
+      high = 0xBF;
+    }
+    if (whole) {
+      at += size;
+    } else {
+      *at++ = '?';
+    }
+  }
+}
+
 void writeLine(const char* fmt, va_list ap) {
   char line[kLineMax];
   int stamp;
@@ -76,6 +109,7 @@ void writeLine(const char* fmt, va_list ap) {
     stamp = snprintf(line, kLineMax, "[%6lus] ", static_cast<unsigned long>(monotonicMs() / 1000));
   }
   vsnprintf(line + stamp, kLineMax - stamp, fmt, ap);
+  keepUtf8(line + stamp);
   store(line, std::strlen(line));
   writeLogLine(line);
 }

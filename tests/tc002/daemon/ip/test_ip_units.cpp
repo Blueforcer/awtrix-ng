@@ -453,7 +453,8 @@ void testSntpClient() {
 
   clock.realtime = serverTime - 200 * 1000000;
   client.setServer("localhost", nowMs());
-  drive(client, server, [&] { return answered == 2 && client.nextDeadlineMs() > nowMs() + 60000; }, serve);
+  drive(client, server,
+        [&] { return answered == 2 && client.nextDeadlineMs() > nowMs() + 60000 && !client.childRunning(); }, serve);
   check(answered == 2 && clock.slews.size() == 1 && clock.steps.size() == 1, "resolver child path, small offset slews");
   check(!client.childRunning(), "resolver child reaped");
 

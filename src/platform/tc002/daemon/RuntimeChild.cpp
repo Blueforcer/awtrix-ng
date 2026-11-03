@@ -548,7 +548,8 @@ bool RuntimeChild::onChildExit(pid_t pid, int status, int64_t nowMs) {
   pid_ = -1;
   killAt_ = readyDeadline_ = healthyAt_ = -1;
   if (helperPid_ > 0) helperStopAt_ = nowMs + options_.helperExitGraceMs;
-  if (stopRequested_) {
+  // A reboot request read with the exit: the stop reaches this service only later in this pass.
+  if (stopRequested_ || rebootPending_) {
     state_ = State::Stopped;
     return true;
   }

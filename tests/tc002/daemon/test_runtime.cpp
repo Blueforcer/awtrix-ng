@@ -17,6 +17,7 @@
 
 #include "platform/tc002/daemon/RuntimeChild.h"
 #include "platform/tc002/daemon/ForwardedLog.h"
+#include "platform/tc002/daemon/Process.h"
 #include "../../ManualClock.h"
 #include "support.h"
 
@@ -34,6 +35,10 @@ namespace {
 
 std::string fakeBinary;
 std::string fakeAudio;
+
+// A ceiling only decides when a failing check gives up, and under load a fresh runtime takes seconds.
+constexpr int kLoadFactor = 10;
+constexpr int kServiceStopMs = 30000;
 
 bool signalChild(pid_t pid, int signal) { return pid > 0 && ::kill(pid, signal) == 0; }
 
@@ -134,9 +139,13 @@ struct Rig {
     options.home = data;
     options.bootAttemptsPaths = {dir / "data/state/boot-attempts", dir / "tmp/awtrix-loader.attempts"};
     options.httpPort = 8080;
-    options.readyTimeoutMs = 1500;
+    // Beyond anything load can delay, so they only run out when a test calls advance(). The stop
+    // grace stays below kServiceStopMs: advancing past that ends the loop before its SIGKILL.
+    options.readyTimeoutMs = 60000;
+    options.stopGraceMs = 20000;
+    options.rebootExitGraceMs = 20000;
+    options.helperExitGraceMs = 20000;
     options.healthyMs = 700;
-    options.stopGraceMs = 400;
     options.prepareRetryMs = 20;
     options.backoffMs = {100, 200, 400, 800, 1600};
     if (tweak) tweak(options);
@@ -162,7 +171,7 @@ struct Rig {
       loop.requestStop("reboot requested by the runtime");
     };
     runtime = std::make_unique<RuntimeChild>(state, hardware, options, links);
-    loop.add(*runtime, 3000);
+    loop.add(*runtime, kServiceStopMs);
     loop.start();
   }
   ~Rig() {
@@ -178,7 +187,13 @@ struct Rig {
     writeFile(data + "/outbox.tmp", lines);
     ::rename((data + "/outbox.tmp").c_str(), (data + "/outbox").c_str());
   }
-  bool until(const std::function<bool()>& done, int timeoutMs) { return runUntil(loop, done, timeoutMs); }
+  bool until(const std::function<bool()>& done, int timeoutMs) {
+    return runUntil(loop, done, timeoutMs * kLoadFactor);
+  }
+  // Keeps the loop running for a check that something does not happen.
+  void settle(int milliseconds) {
+    runUntil(loop, [] { return false; }, milliseconds);
+  }
   void advance(int64_t milliseconds) {
     awtrix_test::advanceClock(milliseconds);
     loop.runOnce(0);
@@ -213,7 +228,7 @@ struct Rig {
 };
 
 bool exitedUnreaped(pid_t pid, int timeoutMs) {
-  const int64_t deadline = posix::monotonicMs() + timeoutMs;
+  const int64_t deadline = posix::monotonicMs() + timeoutMs * kLoadFactor;
   for (;;) {
     siginfo_t info{};
     if (::waitid(P_PID, static_cast<id_t>(pid), &info, WEXITED | WNOHANG | WNOWAIT) == 0 && info.si_pid == pid)
@@ -290,11 +305,11 @@ void unreapableChildren() {
     rig.loop.requestStop("test");
     rig.loop.runOnce(0);
     rig.advance(rig.options.stopGraceMs);
-    rig.advance(3000);
+    rig.advance(kServiceStopMs);
     check(rig.until([&] { return rig.loop.finished(); }, 5000) && rig.rt().pid() == pid,
           "the stop sequence gives up on a runtime that cannot be reaped");
     const int64_t begin = posix::monotonicMs();
-    check(finishesWithin(tracer, 3000, [&] { rig.runtime.reset(); }) && posix::monotonicMs() - begin < 500,
+    check(finishesWithin(tracer, 3000, [&] { rig.runtime.reset(); }) && posix::monotonicMs() - begin < kReapGraceMs,
           "the destructor leaves an unreapable runtime that was already sent SIGKILL to init");
     tracer.release();
     ::waitpid(pid, nullptr, 0);
@@ -307,7 +322,7 @@ void unreapableChildren() {
     check(tracer.attached(), "tracer holds the helper");
     rig.loop.requestStop("test");
     check(rig.until([&] { return rig.rt().pid() < 0; }, 1000), "runtime reaped before helper deadline");
-    rig.advance(3000);
+    rig.advance(kServiceStopMs);
     check(rig.until([&] { return rig.loop.finished(); }, 5000) && rig.rt().helperPid() == helper,
           "the stop sequence gives up on a helper that cannot be reaped");
     const int64_t begin = posix::monotonicMs();
@@ -349,13 +364,18 @@ void bootCounter() {
 }
 
 void requestsBeforeExit() {
-  Rig rig("abrupt", [](RuntimeOptions& options) { options.healthyMs = 60000; });
+  // Without a backoff a restart would fall into the pass of the loop that reads the requests.
+  Rig rig("abrupt", [](RuntimeOptions& options) {
+    options.healthyMs = 60000;
+    options.backoffMs = {0};
+  });
   check(rig.until([&] { return rig.running() && rig.rt().helloReceived(); }, 3000), "abrupt runtime ready");
   const pid_t pid = rig.rt().pid();
   rig.send("{\"v\":2,\"type\":\"factoryReset\"}\n{\"v\":2,\"type\":\"reboot\"}\n");
   check(exitedUnreaped(pid, 3000), "runtime exited right after sending its requests");
   check(rig.until([&] { return rig.loop.finished(); }, 3000) && rig.reboot,
         "a reboot request read together with the runtime's exit is honoured");
+  check(rig.rt().spawns() == 1, "no new runtime starts behind a reboot request read with the exit");
   check(rig.controls.calls == std::vector<std::string>({"erase"}),
         "a factory reset sent just before the exit erases the credentials");
   check(rig.countersCleared(), "the ready runtime's reboot cleared the boot counters");
@@ -363,7 +383,7 @@ void requestsBeforeExit() {
 
 void speakerHelper() {
   {
-    Rig rig("ok", [](RuntimeOptions& options) { options.helperExitGraceMs = 1500; }, true, "slow");
+    Rig rig("ok", {}, true, "slow");
     check(rig.until([&] { return rig.running(); }, 3000), "runtime with speaker helper ready");
     const pid_t first = rig.rt().pid();
     check(rig.report(first) == "valid\n", "launch contract with fd 104: " + rig.report(first));
@@ -402,8 +422,9 @@ void speakerHelper() {
           "a missing helper turns the speaker off, so there is no audio fd: " + rig.report(rig.rt().pid()));
   }
   {
-    Rig rig("ok", [](RuntimeOptions& options) { options.helperExitGraceMs = 200; }, true, "linger");
-    check(rig.until([&] { return rig.running(); }, 3000), "runtime with lingering helper ready");
+    Rig rig("ok", {}, true, "linger");
+    check(rig.until([&] { return rig.running() && rig.audio(rig.rt().pid()) == "helper ok\n"; }, 3000),
+          "runtime with lingering helper ready");
     rig.rt().restart(posix::monotonicMs());
     check(rig.until([&] { return rig.rt().pid() < 0; }, 1000), "runtime exits while its helper lingers");
     rig.advance(rig.options.helperExitGraceMs);
@@ -555,7 +576,7 @@ void healthyRun() {
            "{\"v\":2,\"type\":\"setupAccessPoint\"}\n"
            "{\"v\":2,\"type\":\"factoryReset\"}\n");
   check(rig.until([&] { return rig.controls.calls.size() >= 7; }, 2000), "runtime commands dispatched");
-  rig.until([] { return false; }, 100);
+  rig.settle(100);
   check(rig.controls.calls == std::vector<std::string>({"wifi Home hunter22", "ntp time.example", "hostname clock",
                                                         "hostname clock2", "scan", "setup access point", "erase"}),
         "runtime commands dispatched in order; repeated values are idempotent");
@@ -588,7 +609,7 @@ void healthyRun() {
   check(rig.until([&] { return rig.rt().helloReceived(); }, 2000), "new runtime said hello");
   const std::size_t results = occurrences(rig.received(), "wifiScanResult");
   if (staleScan) staleScan({{"Late", -60, true}});
-  rig.until([] { return false; }, 200);
+  rig.settle(200);
   check(occurrences(rig.received(), "wifiScanResult") == results, "a scan finishing after a restart is dropped");
 
   const std::string log = readFile(rig.dir / "daemon.log");
@@ -648,13 +669,20 @@ void readinessTimeout() {
   check(rig.until([&] { return rig.report(rig.rt().pid()) == "valid\n"; }, 1000), "silent runtime launched");
   rig.advance(rig.options.readyTimeoutMs);
   check(rig.until([&] { return rig.rt().spawns() >= 2; }, 4000), "runtime without readiness is restarted");
-  check(rig.rt().lastExit() == "exit 0" && rig.rt().consecutiveFailures() >= 1, "missing readiness counts as failure");
+  check(rig.rt().lastExit() == "exit 0" && rig.rt().consecutiveFailures() >= 1,
+        "missing readiness counts as failure: " + rig.rt().lastExit());
 }
 
 void stubbornChild() {
-  Rig rig("stubborn", [](RuntimeOptions& options) { options.readyTimeoutMs = 300; });
+  Rig rig("stubborn");
+  check(rig.until([&] { return rig.report(rig.rt().pid()) == "valid\n"; }, 1000), "stubborn runtime launched");
+  rig.setMode("ok");
+  rig.advance(rig.options.readyTimeoutMs);
+  rig.settle(100);
+  check(rig.rt().pid() > 0 && rig.rt().spawns() == 1, "SIGTERM ignored, the runtime keeps its grace period");
+  rig.advance(rig.options.stopGraceMs);
   check(rig.until([&] { return rig.rt().spawns() >= 2; }, 3000), "restarted after SIGKILL");
-  check(rig.rt().lastExit() == "signal 9", "SIGTERM ignored, SIGKILL after the grace period");
+  check(rig.rt().lastExit() == "signal 9", "SIGKILL after the grace period: " + rig.rt().lastExit());
 }
 
 void startReasons() {
@@ -716,13 +744,13 @@ void deviceId() {
     Rig rig("ok");
     check(rig.until([&] { return rig.running(); }, 3000), "runtime ready without a device id file");
     rig.publishMac("AA:BB:CC:00:11:22");
-    rig.until([] { return false; }, 200);
+    rig.settle(200);
     check(rig.uids() == std::vector<std::string>{"none"} && rig.rt().spawns() == 1,
           "no --uid and no restart without a place to keep the id");
   }
   {
-    Rig rig("ok", keptUid("", 5000));
-    rig.until([] { return false; }, 300);
+    Rig rig("ok", keptUid("", 60000));
+    rig.settle(300);
     check(rig.rt().spawns() == 0, "the first start waits for the Wi-Fi MAC while no id is kept");
     rig.publishMac("AA:BB:CC:00:11:22");
     check(rig.until([&] { return rig.running(); }, 1000), "the MAC ends the wait at once");
@@ -731,21 +759,21 @@ void deviceId() {
           "the runtime gets the MAC's id, and the id is kept");
   }
   {
-    Rig rig("ok", keptUid("aabbcc001122", 5000));
+    Rig rig("ok", keptUid("aabbcc001122", 60000));
     check(rig.until([&] { return rig.running(); }, 1000), "a kept id starts the runtime without waiting");
     rig.publishMac("aa:bb:cc:00:11:22");
-    rig.until([] { return false; }, 200);
+    rig.settle(200);
     check(rig.uids() == std::vector<std::string>{"aabbcc001122"} && rig.rt().spawns() == 1,
           "the same MAC changes nothing");
   }
   {
-    Rig rig("ok", keptUid("0123456789ab", 5000));
+    Rig rig("ok", keptUid("0123456789ab", 60000));
     check(rig.until([&] { return rig.running(); }, 1000), "runtime ready with the kept id");
     rig.publishMac("AA:BB:CC:00:11:22");
     check(rig.until([&] { return rig.rt().spawns() == 2 && rig.running(); }, 3000),
           "a runtime with another id is restarted");
     rig.publishMac("AA:BB:CC:00:11:33");
-    rig.until([] { return false; }, 300);
+    rig.settle(300);
     check(rig.uids() == std::vector<std::string>{"0123456789ab", "aabbcc001122"} &&
               rig.starts().back() == "software" && rig.rt().spawns() == 2 &&
               readFile(rig.options.uidPath) == "aabbcc001133\n",
@@ -760,8 +788,8 @@ void deviceId() {
     check(rig.uids() == std::vector<std::string>{"none", "aabbcc001122"}, "without an id first, then with it");
   }
   {
-    Rig rig("ok", keptUid("not-an-id", 300));
-    rig.until([] { return false; }, 150);
+    Rig rig("ok", keptUid("not-an-id", 60000));
+    rig.settle(150);
     check(rig.rt().spawns() == 0, "a malformed kept id counts as none");
   }
 }
@@ -875,7 +903,7 @@ void microphoneLifecycle() {
     check(signalChild(pid, SIGCONT), "PCM: resume runtime consumption");
     check(rig.until([&] { return rig.received().find(expected) != std::string::npos; }, 3000),
           "PCM: nonreplaceable completion survives supervisor backpressure");
-    rig.until([] { return false; }, 120);
+    rig.settle(120);
     check(occurrences(rig.received(), expected) == 1 && rig.pcmRequests == std::vector<int>{7},
           "PCM: completion delivered once without repeating the capture");
   }
@@ -970,7 +998,7 @@ void hardwareGate() {
   {
     Rig gated("ok");
     gated.hardware.ready = false;
-    gated.until([] { return false; }, 200);
+    gated.settle(200);
     check(gated.rt().spawns() == 0 && gated.hardware.prepares == 0, "no start before the lease holds the inputs");
     gated.hardware.ready = true;
     check(gated.until([&] { return gated.running(); }, 3000), "starts once the lease holds the inputs");
@@ -978,8 +1006,8 @@ void hardwareGate() {
   {
     Rig blocked("ok");
     blocked.hardware.prepareOk = false;
-    blocked.until([] { return false; }, 200);
-    check(blocked.rt().spawns() == 0 && blocked.hardware.prepares >= 3, "prepare retried until the lease agrees");
+    check(blocked.until([&] { return blocked.hardware.prepares >= 3; }, 200) && blocked.rt().spawns() == 0,
+          "prepare retried until the lease agrees");
     blocked.hardware.prepareOk = true;
     check(blocked.until([&] { return blocked.running(); }, 3000), "starts once the lease agrees");
   }
