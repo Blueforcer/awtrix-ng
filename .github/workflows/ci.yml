@@ -16,12 +16,12 @@ jobs:
     if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Cache PlatformIO
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.platformio
@@ -39,8 +39,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - uses: actions/setup-node@v7
@@ -70,8 +70,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - uses: actions/setup-node@v7
@@ -97,8 +97,8 @@ jobs:
     if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
@@ -140,16 +140,16 @@ jobs:
           - env: awtrix_s3_quad
             ota: firmware-awtrix-ng-s3-quad.bin
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       # scripts/build_webui.py minifies the web UI through npx before it embeds it.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Cache PlatformIO
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.platformio
@@ -175,7 +175,7 @@ jobs:
         # the app slot and never the partition table, so one file serves every
         # flash size of its chip.
         run: cp .pio/build/${{ matrix.env }}/firmware.bin dist/${{ matrix.ota }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           # The release job of a tag publishes these. The USB images' usb- prefix
           # comes from factory_image.asset_name.
@@ -190,8 +190,8 @@ jobs:
     if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install the check's only dependency
@@ -258,7 +258,7 @@ jobs:
       # the assets exist -- see the last step.
       actions: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Check the tag against the version and its release notes
         # The release body only links the release notes page of the docs, so a
         # tag without that page would publish a dead link.
@@ -317,7 +317,7 @@ jobs:
         # uploaded and the announcement points at a release with nothing to
         # download for the next few minutes. A draft carries no such event, so
         # the assets land first and the next step flips it live.
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           body_path: release-body.md
