@@ -2,6 +2,7 @@
 #include <chrono>
 #include "core/input/ButtonWebhook.h"
 #include "platform/linux/host/vendor/httplib.h"
+#include "platform/posix/StartThread.h"
 
 namespace awtrix {
 namespace {
@@ -14,7 +15,7 @@ void LinuxButtonWebhook::begin() {
   std::lock_guard<std::mutex> lock(mutex_);
   if (worker_.joinable()) return;
   stopping_ = false;
-  worker_ = std::thread([this] { run(); });
+  began_ = true;
 }
 
 void LinuxButtonWebhook::stop() {
@@ -51,13 +52,14 @@ void LinuxButtonWebhook::turn(const std::string& url, int direction) {
 void LinuxButtonWebhook::enqueue(Call call) {
   if (call.url.rfind(kScheme, 0) != 0 || call.url.size() == std::char_traits<char>::length(kScheme)) return;
   std::lock_guard<std::mutex> lock(mutex_);
-  if (stopping_ || !worker_.joinable()) return;
+  if (stopping_ || !began_) return;
   if (call.turn && !queue_.empty() && queue_.back().turn && queue_.back().url == call.url) {
     queue_.back().turn += call.turn;
     if (!queue_.back().turn) queue_.pop_back();
     return;
   }
   if (queue_.size() >= kQueueLimit) return;
+  if (!worker_.joinable() && !posix::startThread(worker_, [this] { run(); })) return;
   queue_.push_back(std::move(call));
   ready_.notify_one();
 }

@@ -795,7 +795,7 @@ std::unique_ptr<const Frontend> Frontend::parse(std::string_view text, std::stri
         return nullptr;
       }
     }
-    frontend->lexicon_ = lexicon;
+    frontend->lexicon_.assign(lexicon);
     frontend->lexiconWords_ = words;
     frontend->lexiconBlocks_ = blocks;
     frontend->lexiconStride_ = stride;

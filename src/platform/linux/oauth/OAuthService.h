@@ -113,6 +113,7 @@ class Service final : public script::PerScriptStore {
   void eraseLocked(const std::string& app);
   void grantLocked(const std::string& app, const TokenResult& token);
   HttpReply callUnlocked(std::unique_lock<std::mutex>& lock, const HttpCall& call);
+  bool haveWorker();
   Renewal refreshLocked(std::unique_lock<std::mutex>& lock, const std::string& app);
   void revokeLocked(const std::string& app);
   void run();
@@ -127,6 +128,7 @@ class Service final : public script::PerScriptStore {
   std::mutex mutex_;
   std::condition_variable ready_;
   std::thread worker_;
+  bool began_ = false;
   bool stopping_ = false;
   uint32_t nextId_ = 1;
   std::map<std::string, Parsed> specs_;

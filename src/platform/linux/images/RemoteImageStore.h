@@ -84,6 +84,7 @@ class RemoteImageStore final : public media::IRemoteImages {
   std::mutex mutex_;
   std::condition_variable wake_;
   std::thread worker_;
+  bool began_ = false;
   bool stopping_ = false;
   std::list<Entry> entries_;
   std::deque<Slot> waiting_;

@@ -5,6 +5,9 @@ target_link_options(posix-files-test PRIVATE -Wl,--wrap=fsync)
 add_awtrix_test(NAME posix-worker-thread SOURCES test_worker_thread.cpp LIBRARIES awtrix_posix)
 add_awtrix_test(NAME posix-private-store SOURCES test_private_store.cpp LIBRARIES awtrix_posix)
 add_awtrix_test(NAME linux-own-page SOURCES test_own_page.cpp LIBRARIES awtrix_host)
+add_awtrix_test(NAME linux-on-demand-workers SOURCES test_on_demand_workers.cpp LIBRARIES awtrix_host TIMEOUT 60)
+add_awtrix_test(NAME linux-cover-fetch SOURCES test_cover_fetch.cpp "${linux}/iphone/LinuxCoverFetch.cpp"
+  LIBRARIES awtrix_iphone)
 
 add_awtrix_test(NAME linux-login SOURCES test_login.cpp "${linux}/LinuxLanLogin.cpp"
   LIBRARIES awtrix_host)

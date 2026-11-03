@@ -3,13 +3,19 @@
 // weights (tests/tc002/runtime/speech) and what the model's reference runtime made of four
 // utterances. Also the loader's refusals, the token contract, the
 // chunks, cancelling, and the real-time factor of a voice of the shipped size.
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iterator>
@@ -19,6 +25,7 @@
 #include <thread>
 #include <vector>
 
+#include "platform/posix/UniqueFd.h"
 #include "platform/tc002/speech/SpeechKernels.h"
 #include "platform/tc002/speech/SpeechModel.h"
 #include "platform/tc002/speech/SpeechModelVoice.h"
@@ -26,6 +33,7 @@
 #include "platform/tc002/speech/SpeechTokens.h"
 
 using namespace awtrix::speech;
+namespace posix = awtrix::posix;
 using Clock = std::chrono::steady_clock;
 
 namespace {
@@ -212,6 +220,42 @@ void testLoader(const std::string& dir, const std::vector<uint8_t>& file) {
   }
   check(!SpeechModel::load(dir + "/missing.atts", error) && error == "No such file or directory", "a missing file");
   check(!SpeechModel::load(dir, error) && error == "not a file", "a directory");
+
+  // A file loads as the same bytes parse() takes, damaged or not, and nothing writes to the mapping.
+  const std::string path = std::filesystem::temp_directory_path() / ("speech-model-" + std::to_string(::getpid()));
+  const auto store = [&](const std::vector<uint8_t>& bytes) {
+    std::filesystem::remove(path);
+    std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    ::chmod(path.c_str(), 0444);
+  };
+  store(file);
+  const auto mapped = SpeechModel::load(path, error);
+  const auto copied = SpeechModel::parse(file.data(), file.size(), error);
+  check(mapped && copied && mapped->phoneCount == copied->phoneCount && mapped->frontendText == copied->frontendText &&
+            std::equal(mapped->phones, mapped->phones + mapped->phoneCount * mapped->encoderWidth(), copied->phones),
+        "a read-only file loads like the same bytes in memory: " + error);
+  std::vector<uint8_t> damaged = file;
+  damaged[damaged.size() / 2] ^= 1;
+  store(damaged);
+  check(!SpeechModel::load(path, error) && error == "checksum mismatch", "a damaged file is refused: " + error);
+  damaged[damaged.size() / 2] ^= 1;
+  damaged[17] ^= 1;
+  store(damaged);
+  check(!SpeechModel::load(path, error) && error == "checksum mismatch", "so is a damaged checksum: " + error);
+  damaged = file;
+  damaged.resize(32);
+  store(damaged);
+  check(!SpeechModel::load(path, error) && error == "not an ATTS file", "and a file shorter than a header: " + error);
+  store(file);
+  uint32_t sum = 0;
+  {
+    const posix::UniqueFd fd(::open(path.c_str(), O_RDONLY | O_CLOEXEC));
+    check(fileChecksum(fd.get(), file.size(), sum) && sum == u32(file.data() + 16), "the checksum of a file");
+    errno = 0;
+    check(!fileChecksum(fd.get(), file.size() + 1, sum) && errno == EIO, "a file that ends early fails, it is no sum");
+  }
+  check(!fileChecksum(-1, file.size(), sum) && errno == EBADF, "and so does a read that fails");
+  std::filesystem::remove(path);
 
   expectRefusal(file, "empty", "not an ATTS file", [](auto& f) { f.clear(); }, false);
   expectRefusal(file, "magic", "not an ATTS file", [](auto& f) { f[0] = 'X'; }, false);

@@ -112,15 +112,21 @@ bool readRegularFile(int directory, const std::string& path, std::size_t maximum
 
 MappedFile::MappedFile(const std::string& path, std::size_t maximum) {
   const UniqueFd fd(::open(path.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK));
+  if (fd.valid()) map(fd.get(), maximum);
+}
+
+MappedFile::MappedFile(int fd, std::size_t maximum) { map(fd, maximum); }
+
+void MappedFile::map(int fd, std::size_t maximum) {
   struct stat info{};
-  if (!fd.valid() || ::fstat(fd.get(), &info) < 0) return;
+  if (::fstat(fd, &info) < 0) return;
   if (!S_ISREG(info.st_mode) || info.st_size < 0 || uint64_t(info.st_size) > maximum) {
     errno = EINVAL;
     return;
   }
   const std::size_t size = static_cast<std::size_t>(info.st_size);
   if (size > 0) {
-    void* const data = ::mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd.get(), 0);
+    void* const data = ::mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (data == MAP_FAILED) return;
     data_ = data;
     size_ = size;

@@ -13,7 +13,7 @@ namespace {
 class ModelUtterance final : public SpeechUtterance {
  public:
   ModelUtterance(std::shared_ptr<const SpeechModel> model, const Plan& plan, const std::vector<Chunk>& chunks)
-      : model_(std::move(model)), scratch_(*model_), acoustic_(*model_, scratch_),
+      : model_(std::move(model)), hold_(*model_), scratch_(*model_), acoustic_(*model_, scratch_),
         vocoder_(*model_, scratch_, acoustic_.maxFrames()), mel_(acoustic_.maxFrames() * model_->mels),
         samples_(vocoder_.maxSamples()), tokens_(plan.count + chunks.size()) {
     offsets_.push_back(0);
@@ -52,6 +52,7 @@ class ModelUtterance final : public SpeechUtterance {
   }
 
   const std::shared_ptr<const SpeechModel> model_;
+  const SpeechModel::Hold hold_;
   SpeechScratch scratch_;
   AcousticStream acoustic_;
   VocoderStream vocoder_;

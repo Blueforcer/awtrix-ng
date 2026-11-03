@@ -1,6 +1,7 @@
 #include "../support.h"
 #include "../LogLines.h"
 #include <arpa/inet.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -12,6 +13,7 @@
 #include <functional>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <openssl/evp.h>
 #include <openssl/pem.h>
@@ -22,6 +24,7 @@
 #include "platform/linux/host/HostStore.h"
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/LinuxMqttTls.h"
+#include "platform/linux/net/HttpClient.h"
 #include "platform/linux/tls/BrokerTrust.h"
 #include "platform/linux/tls/BrokerTrustApi.h"
 #include "platform/linux/tls/ServerIdentity.h"
@@ -309,6 +312,69 @@ void unusableCa(const std::filesystem::path& data) {
   setPublicAnchors(nullptr);
 }
 
+// A named bundle is only read by the first connection that checks a certificate, once however many
+// threads ask, and until it can be read nothing is trusted.
+void publicRootsLoadOnFirstUse(const std::filesystem::path& data) {
+  const Pair ca = issued("", nullptr), leaf = issued("DNS:localhost", &ca);
+  Broker server(Pair{leaf.certificate + ca.certificate, leaf.key});
+  const std::string bundle = (data / "bundle.pem").string();
+  setPublicAnchorsFile(bundle);
+  uint32_t mark = logMark();
+  check(publicAnchorsNamed(), "a named bundle counts as public roots");
+  BrokerTrust broker("");
+  httplib::Server plain;
+  plain.Get("/", [](const httplib::Request&, httplib::Response& response) { response.set_content("ok", "text/plain"); });
+  const int plainPort = plain.bind_to_any_port("127.0.0.1");
+  std::thread plainThread([&] { plain.listen_after_bind(); });
+  plain.wait_until_ready();
+  {
+    httplib::Client client("http://127.0.0.1:" + std::to_string(plainPort));
+    net::configure(client, {3000, 2, false});
+    const auto answer = client.Get("/");
+    check(answer && answer->status == 200, "plain HTTP goes on without a bundle");
+  }
+  plain.stop();
+  plainThread.join();
+  check(logSince(mark).find("no certificates") == std::string::npos, "and neither that nor a broker's setup read it");
+
+  const auto https = [&] {
+    httplib::Client client("https://localhost:" + std::to_string(server.port));
+    net::configure(client, {3000, 2, false});
+    return static_cast<bool>(client.Get("/nothing"));
+  };
+  check(!https(), "without the file HTTPS is refused");
+  check(has(logSince(mark), "tls: no certificates in " + bundle + "; HTTPS connections will fail"), "and logged");
+  check(!https() && !has(logSince(mark), "no certificates"), "refused again, logged once");
+  check(!publicAnchors() && !newTrustedTlsContext(), "there are no anchors and no context");
+  check(host::writeFile(bundle, "not a certificate"), "a broken bundle");
+  check(!https() && !publicAnchors(), "a broken bundle trusts nothing either");
+  check(!connects(broker.peer(), "localhost", server.port), "and leaves a broker untrusted");
+  check(!broker.peer()->pending().empty(), "which then waits for the user's decision, as without roots");
+
+  check(host::writeFile(bundle, ca.certificate), "the bundle arrives");
+  std::vector<std::shared_ptr<const TrustAnchors>> seen(8);
+  std::vector<std::thread> threads;
+  for (auto& slot : seen) threads.emplace_back([&slot] { slot = publicAnchors(); });
+  for (std::thread& thread : threads) thread.join();
+  check(seen[0] != nullptr, "the next asker reads it");
+  setPublicAnchorsFile(bundle);
+  const int priority = ::getpriority(PRIO_PROCESS, 0);
+  const std::size_t running = awtrix::test::threadCount();
+  check(publicAnchors() != nullptr, "read again after being named again");
+  check(::getpriority(PRIO_PROCESS, 0) == priority, "the asker's thread keeps its priority");
+  check(awtrix::test::threadCount() == running, "and the parsing leaves no thread behind");
+  seen.assign(8, publicAnchors());
+  for (const auto& anchors : seen) check(anchors == seen[0], "every thread gets the same anchors");
+  check(publicAnchors() == seen[0], "and later ones too");
+  check(https(), "HTTPS now verifies against it");
+  check(connects(broker.peer(), "localhost", server.port), "and so does the broker");
+  std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)> context(newTrustedTlsContext(), SSL_CTX_free);
+  check(context != nullptr, "and a client context");
+
+  setPublicAnchors(nullptr);
+  check(!publicAnchorsNamed() && !publicAnchors(), "taking them away leaves none");
+}
+
 // One connection attempt as MqttLink makes it: handshake, the CONNECT, then waiting for an answer.
 bool attempt(LinuxMqttTls& transport, int port) {
   const auto handshake = [&transport, port] {
@@ -419,6 +485,7 @@ int main() {
   brokerTrust();
   brokerTrustApi(data);
   unusableCa(data);
+  publicRootsLoadOnFirstUse(data);
   brokerAlerts();
   settings();
   std::error_code ignored;

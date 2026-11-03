@@ -10,7 +10,7 @@ namespace awtrix::tc002::wake {
 
 inline constexpr char kNotAModel[] = "not a TensorFlow Lite model";
 
-bool loadGraphs(const std::vector<uint8_t>& file, std::vector<WakeModel::Graph>& graphs, std::vector<uint8_t>& arena,
-                std::string& error);
+bool loadGraphs(const uint8_t* file, std::size_t size, std::vector<WakeModel::Graph>& graphs,
+                std::vector<uint8_t>& arena, std::string& error);
 
 }

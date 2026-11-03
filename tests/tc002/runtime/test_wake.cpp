@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "platform/posix/Files.h"
 #include "platform/tc002/wake/ModelStream.h"
 #include "platform/tc002/wake/WakeDetector.h"
 #include "platform/tc002/wake/WakeFrontend.h"
@@ -179,6 +180,25 @@ void checkModel(const std::string& name, const std::vector<uint8_t>& file, const
     compare(("clip" + std::to_string(k)).c_str(), trainerInput(values, *model));
   }
   std::printf("%s: %zu invokes bit-exact (%zu wrong), stride %zu\n", name.c_str(), invokes, wrong, model->frames());
+}
+
+// A model read in place, from a read-only mapping that a write would crash on.
+void testMapped(const std::string& path, const std::vector<uint8_t>& file) {
+  std::string error;
+  auto mapped = std::make_shared<const awtrix::posix::MappedFile>(path, file.size());
+  require(mapped->valid(), path);
+  std::unique_ptr<WakeModel> fromFile = WakeModel::load(mapped, error);
+  require(fromFile != nullptr, "mapped: " + error);
+  mapped.reset();
+  std::unique_ptr<WakeModel> fromMemory = WakeModel::load(file.data(), file.size(), error);
+  require(fromMemory != nullptr, "in memory: " + error);
+  const std::vector<int8_t> frames = randomFrames(400);
+  check(runModel(*fromFile, frames) == runModel(*fromMemory, frames),
+        "a model in a read-only mapping answers like the same model in memory, and keeps its mapping");
+  check(!WakeModel::load(std::shared_ptr<const awtrix::posix::MappedFile>(), error) && !error.empty(),
+        "no file is no model");
+  ModelStream stream;
+  check(!stream.load(std::shared_ptr<const awtrix::posix::MappedFile>(), error) && !stream.model(), "a stream takes none");
 }
 
 uint64_t invokePosition(std::size_t invoke, std::size_t stride) {
@@ -471,6 +491,7 @@ int main(int argc, char** argv) {
     checkModel(argv[i], readFile(argv[i + 1]), golden, values);
   }
   const std::vector<uint8_t> model = readFile(argv[3]);
+  testMapped(argv[3], model);
   const std::string reference = std::string(argv[4]) + "/" + argv[2] + ".signal.bin";
   testStream(reference, model, pcm);
   testDetector(reference, model, pcm);

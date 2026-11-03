@@ -152,7 +152,35 @@ void hostileAnswersEndWithAStatus() {
 
 }
 
+void aThreadOnlyForARequest() {
+  const std::size_t before = awtrix::test::threadCount();
+  std::atomic<int> answers{0};
+  awtrix::LinuxScriptHttp http;
+  script::HttpRequest request;
+  request.id = 1;
+  request.method = "GET";
+  request.url = "http://127.0.0.1:9/";
+  check(!http.request(request), "a request before begin is refused");
+  http.begin([&](script::HttpResult) { ++answers; });
+  check(awtrix::test::threadCount() == before, "begin runs no thread");
+  request.url = "no url";
+  check(!http.request(request) && awtrix::test::threadCount() == before, "a refused request starts none");
+  request.url = "http://127.0.0.1:9/";
+  check(http.request(request) && awtrix::test::threadCount() == before + 1, "the first request starts it");
+  for (int i = 0; i < 500 && !answers; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  check(answers == 1, "and it answers");
+  http.stop();
+  check(awtrix::test::threadCount() == before, "stop ends it");
+  check(!http.request(request), "and nothing is taken after it");
+  {
+    awtrix::LinuxScriptHttp unused;
+    unused.begin([](script::HttpResult) {});
+  }
+  check(awtrix::test::threadCount() == before, "one that never worked ends too");
+}
+
 int main() {
+  aThreadOnlyForARequest();
   Rig rig;
   script::HttpResult result = rig.get(1, "/key", "refuse");
   check(result.id == 1 && result.status == 0 && !result.ok && rig.server.takeKeys().empty(),

@@ -29,6 +29,7 @@ class WakeDetector {
   WakeDetector() = default;
 
   bool load(std::string_view bytes, std::string& error);
+  bool load(std::shared_ptr<const posix::MappedFile> file, std::string& error);
   bool configure(const WakeConfig& config, std::string& error);
   void setSensitivity(WakeSensitivity level);
 

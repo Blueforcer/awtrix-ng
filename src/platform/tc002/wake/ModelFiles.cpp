@@ -49,7 +49,8 @@ bool readModelFiles(const std::string& modelPath, ModelFiles& out, std::string& 
     error = out.settingsPath + ": feature_step_size must be " + std::to_string(kFrontendStepMs);
     return false;
   }
-  if (!posix::readText(modelPath, out.model, kModelLimit)) {
+  out.model = std::make_shared<const posix::MappedFile>(modelPath, kModelLimit);
+  if (!out.model->valid()) {
     error = "cannot read " + modelPath;
     return false;
   }

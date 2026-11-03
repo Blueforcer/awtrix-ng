@@ -39,7 +39,7 @@ bool VoiceCapture::prepare(std::string& error) {
   wake::ModelFiles files;
   if (!wake::readModelFiles(modelPath_, files, error)) return false;
   wake::Endpointer& endpointer = endpointer_.emplace();
-  if (!endpointer.load(files.model, error)) {
+  if (!endpointer.load(files.model->bytes(), error)) {
     endpointer_.reset();
     return false;
   }

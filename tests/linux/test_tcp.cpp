@@ -371,7 +371,30 @@ void resolverContracts() {
   if (accepted >= 0) ::close(accepted);
 }
 
+void aThreadOnlyForAConnection() {
+  const std::size_t before = awtrix::test::threadCount();
+  {
+    TcpClients unused(TcpClients::systemLookup);
+    unused.forget("nobody");
+    TcpEvent event;
+    check(!unused.pop(event) && !unused.send("nobody", 1, "x"), "without a connection there is nothing to do");
+    check(awtrix::test::threadCount() == before, "and no thread does it");
+  }
+  check(awtrix::test::threadCount() == before, "ending it joins nothing");
+  TcpClients clients([](const std::string&, uint16_t) { return std::vector<TcpAddress>{}; });
+  check(clients.connect("", "host", 1, 100) == 0, "a connection that is refused at once");
+  check(awtrix::test::threadCount() == before, "starts no thread");
+  const uint32_t id = clients.connect("app", "host", 1, 1000);
+  check(id != 0 && awtrix::test::threadCount() > before, "the first connection does");
+  TcpEvent event;
+  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+  while (!clients.pop(event) && std::chrono::steady_clock::now() < end)
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  check(event.kind == TcpEvent::Kind::Closed && event.data == "dns", "and it serves it");
+}
+
 int main() {
+  aThreadOnlyForAConnection();
   resolverContracts();
   scriptCallbacksAndRemovalUseThePlatformAdapter();
   echoesLines();

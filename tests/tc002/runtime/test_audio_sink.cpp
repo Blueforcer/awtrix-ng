@@ -1024,6 +1024,27 @@ void test_mix_source() {
   MixSource again(cache);
   check(again.addEffect(fx) && drainSource(again) == single, "the cached effect sounds the same");
 
+  EffectCache forgetting;
+  check(forgetting.keep(0, false) == -1, "without clips no time needs to pass");
+  auto clip = std::make_shared<Clip>();
+  clip->samples.assign(100, 1);
+  forgetting.put(fx, clip);
+  check(forgetting.keep(1000, true) == -1 && forgetting.find(fx), "a playing mixer keeps the clips");
+  check(forgetting.keep(1000, false) == EffectCache::kQuietMs, "the quiet counts from the last sound");
+  check(forgetting.keep(1000 + EffectCache::kQuietMs - 1, false) == 1 && forgetting.find(fx), "and they stay until it is over");
+  check(forgetting.keep(5000, true) == -1 && forgetting.keep(5000 + EffectCache::kQuietMs - 1, false) == 1 && forgetting.find(fx),
+        "a sound starts it again");
+  check(forgetting.keep(5000 + EffectCache::kQuietMs, false) == -1 && !forgetting.find(fx) && forgetting.bytes() == 0,
+        "after it they are gone");
+  check(forgetting.keep(5000 + 2 * EffectCache::kQuietMs, false) == -1, "and nothing is left to wait for");
+  check(clip.use_count() == 1, "the cache holds no reference");
+  MixSource redecoded(forgetting);
+  check(redecoded.addEffect(fx) && drainSource(redecoded) == single, "the effect then decodes again, sounding the same");
+  check(forgetting.find(fx) != nullptr, "and is kept again");
+  check(forgetting.keep(6 * EffectCache::kQuietMs, true) == -1 &&
+            forgetting.keep(6 * EffectCache::kQuietMs, false) == EffectCache::kQuietMs,
+        "the quiet counts anew after it");
+
   MixSource two(cache);
   check(two.addEffect(fx) && two.addEffect(fx) && two.voices() == 2, "two effects at once");
   const std::vector<int16_t> both = drainSource(two);

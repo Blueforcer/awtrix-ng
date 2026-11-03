@@ -30,8 +30,14 @@ class TrustAnchors {
   x509_store_st* store_;
 };
 
-// The public roots (--ca-file) that every outgoing connection trusts unless told otherwise.
+// The public roots (--ca-file) that every outgoing connection trusts unless told otherwise. A bundle
+// costs hundreds of KB once parsed, so a named file is read by the first publicAnchors(), which waits
+// for that on the thread of the first TLS connection and hands every thread the same anchors. While
+// the file cannot be read there are none, a connection fails, and the next call tries again.
 void setPublicAnchors(std::shared_ptr<const TrustAnchors> anchors);
+void setPublicAnchorsFile(const std::string& path);
+// Whether connections are to check against public roots, without reading them.
+bool publicAnchorsNamed();
 std::shared_ptr<const TrustAnchors> publicAnchors();
 
 // Server name indication and the name a verified chain must carry: a DNS name or an IP literal.
@@ -46,8 +52,12 @@ bool chainTrusted(const TrustAnchors* anchors, ssl_st* ssl, const std::string& h
 class PeerTrust {
  public:
   enum class Verdict { Trusted, Pending, Refused };
+  struct PublicRoots {};
   PeerTrust(std::shared_ptr<const TrustAnchors> anchors, bool pinning);
+  // Checks against publicAnchors(), which only the first check reads.
+  PeerTrust(PublicRoots, bool pinning);
   void setAnchors(std::shared_ptr<const TrustAnchors> anchors, bool pinning);
+  void usePublicRoots(bool pinning);
   void setPin(const std::string& fingerprint);
   Verdict check(ssl_st* ssl, const std::string& host);
   bool pinning() const;
@@ -58,6 +68,7 @@ class PeerTrust {
  private:
   mutable std::mutex mutex_;
   std::shared_ptr<const TrustAnchors> anchors_;
+  bool publicRoots_ = false;
   bool pinning_;
   std::string pin_, pending_;
   bool announced_ = true;
@@ -67,8 +78,7 @@ class PeerTrust {
 
 namespace awtrix {
 // Outgoing HTTPS of scripts, covers, radio and voice verifies against the public anchors; with
-// none loaded every connection fails.
-bool loadTlsTrust(const std::string& caFile, std::string& error);
+// none loaded every connection fails. Plain HTTP reads nothing.
 void useTlsTrust(httplib::Client& client);
 // A TLS 1.2+ client context that verifies peers against the public anchors during the handshake;
 // nullptr while none are loaded.

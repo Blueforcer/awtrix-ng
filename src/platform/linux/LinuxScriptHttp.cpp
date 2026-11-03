@@ -4,13 +4,14 @@
 #include "core/script/ModbusTcp.h"
 #include "core/script/ScriptBindings.h"
 #include "platform/linux/host/compat/WiFiClient.h"
+#include "platform/posix/StartThread.h"
 #include "system/Log.h"
 
 namespace awtrix {
 LinuxScriptHttp::~LinuxScriptHttp() { stop(); }
 void LinuxScriptHttp::begin(std::function<void(script::HttpResult)> result) {
+  std::lock_guard<std::mutex> lock(mutex_);
   result_ = std::move(result);
-  worker_ = std::thread([this] { run(); });
 }
 void LinuxScriptHttp::stop() {
   {
@@ -32,11 +33,12 @@ bool LinuxScriptHttp::request(const script::HttpRequest& req) {
     if (!net::validUrl(req.url)) return false;
   }
   std::lock_guard<std::mutex> lock(mutex_);
-  if (stopping_ || !worker_.joinable()) return false;
+  if (stopping_ || !result_) return false;
   if (queue_.size() >= 8) {
     if (script::modbus::isUrl(req.url)) logf("modbus: queue full");
     return false;
   }
+  if (!worker_.joinable() && !posix::startThread(worker_, [this] { run(); })) return false;
   queue_.push_back({script::BindingScope::currentScript(), req});
   ready_.notify_one();
   return true;

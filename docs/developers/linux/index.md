@@ -97,7 +97,7 @@ There are two other network modes:
 | `--webui FILE` | `webui/index.html` | The web UI file; an absolute path avoids depending on the working directory. A name ending in `.gz` is served gzip-encoded |
 | `--lan` | off | Network service with the web UI login, as on the ESP32 |
 | `--listen IPv4_ADDRESS` | `0.0.0.0` with `--lan`, `127.0.0.1` with `--hardened` | Listen address; only allowed with `--lan` or `--hardened` |
-| `--ca-file FILE` | – | PEM root certificates that every HTTPS client of the program verifies against, read once at start |
+| `--ca-file FILE` | – | PEM root certificates that every HTTPS client of the program verifies against, read once by the first HTTPS connection |
 | `--boot-intro` | off | Show the power-on intro before the first app |
 | `--performance-report FILE` | – | Write frame-timing statistics as private JSON to a new file at exit |
 | `--help` | – | Print usage and exit |

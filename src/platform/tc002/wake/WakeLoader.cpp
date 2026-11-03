@@ -83,8 +83,8 @@ bool planArena(std::vector<WakeModel::Graph>& graphs, std::vector<Variable>& var
 
 class Loader {
  public:
-  Loader(const std::vector<uint8_t>& file, std::vector<WakeModel::Graph>& graphs, std::string& error)
-      : flat_(file.data(), file.size()), graphs_(graphs), error_(error) {}
+  Loader(const uint8_t* file, std::size_t size, std::vector<WakeModel::Graph>& graphs, std::string& error)
+      : flat_(file, size), graphs_(graphs), error_(error) {}
 
   bool parse();
   bool prepare();
@@ -300,9 +300,9 @@ bool Loader::simulate(std::size_t graph) {
 
 }
 
-bool loadGraphs(const std::vector<uint8_t>& file, std::vector<WakeModel::Graph>& graphs, std::vector<uint8_t>& arena,
-                std::string& error) {
-  Loader loader(file, graphs, error);
+bool loadGraphs(const uint8_t* file, std::size_t size, std::vector<WakeModel::Graph>& graphs,
+                std::vector<uint8_t>& arena, std::string& error) {
+  Loader loader(file, size, graphs, error);
   return loader.parse() && loader.prepare() && loader.plan(arena);
 }
 

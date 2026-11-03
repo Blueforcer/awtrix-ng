@@ -3,8 +3,10 @@
 #include "platform/tc002/speech/SpeechModel.h"
 
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cmath>
@@ -12,11 +14,13 @@
 #include <map>
 
 #include "platform/posix/Files.h"
+#include "platform/posix/StartThread.h"
 
 namespace awtrix::speech {
 namespace {
 
 constexpr std::size_t kHeaderBytes = 64;
+constexpr std::size_t kChecksumAt = 16, kChecksumBytes = 4;
 constexpr std::size_t kEntryBytes = 64;
 constexpr std::size_t kNameBytes = 40;
 constexpr std::size_t kMaxTensors = 1024;
@@ -207,10 +211,31 @@ bool checkEntry(const uint8_t* file, std::size_t size, std::size_t header, const
   }
 }
 
+uint32_t memoryChecksum(const uint8_t* file, std::size_t size) {
+  constexpr uint8_t kZero[kChecksumBytes]{};
+  uint32_t crc = crc32Update(0xffffffffu, file, kChecksumAt);
+  crc = crc32Update(crc, kZero, kChecksumBytes);
+  return ~crc32Update(crc, file + kChecksumAt + kChecksumBytes, size - kChecksumAt - kChecksumBytes);
+}
+
 }
 
 uint32_t crc32(const uint8_t* data, std::size_t size) {
   return ~crc32Update(0xffffffffu, data, size);
+}
+
+bool fileChecksum(int fd, std::size_t size, uint32_t& out) {
+  std::array<uint8_t, 4096> chunk;
+  uint32_t crc = 0xffffffffu;
+  for (std::size_t at = 0; at < size;) {
+    const std::size_t count = std::min(size - at, chunk.size());
+    if (!posix::preadAll(fd, at, chunk.data(), count)) return false;
+    if (!at && count >= kChecksumAt + kChecksumBytes) std::memset(chunk.data() + kChecksumAt, 0, kChecksumBytes);
+    crc = crc32Update(crc, chunk.data(), count);
+    at += count;
+  }
+  out = ~crc;
+  return true;
 }
 
 std::shared_ptr<const SpeechModel> SpeechModel::load(const std::string& path, std::string& error) {
@@ -229,13 +254,22 @@ std::shared_ptr<const SpeechModel> SpeechModel::load(const std::string& path, st
     return nullptr;
   }
   const auto size = static_cast<std::size_t>(info.st_size);
-  std::shared_ptr<SpeechModel> model(new SpeechModel);
-  model->storage_.resize((size + 15) / 16);
-  if (!posix::readAll(fd.get(), model->storage_.data(), size)) {
+  // Read once through the descriptor first: a flash error is an error here, and the release's voice
+  // takes over. Through the mapping it would be a signal, on every start.
+  uint32_t checksum = 0;
+  if (!fileChecksum(fd.get(), size, checksum)) {
     error = std::strerror(errno);
     return nullptr;
   }
-  if (!model->resolve(size, error)) return nullptr;
+  auto mapped = std::make_shared<const posix::MappedFile>(fd.get(), size);
+  if (!mapped->valid()) {
+    error = std::strerror(errno);
+    return nullptr;
+  }
+  std::shared_ptr<SpeechModel> model(new SpeechModel);
+  model->mapped_ = std::move(mapped);
+  const std::string_view file = model->mapped_->bytes();
+  if (!model->resolve(reinterpret_cast<const uint8_t*>(file.data()), file.size(), checksum, error)) return nullptr;
   return model;
 }
 
@@ -247,12 +281,49 @@ std::shared_ptr<const SpeechModel> SpeechModel::parse(const uint8_t* data, std::
   std::shared_ptr<SpeechModel> model(new SpeechModel);
   model->storage_.resize((size + 15) / 16);
   if (size) std::memcpy(model->storage_.data(), data, size);
-  if (!model->resolve(size, error)) return nullptr;
+  const auto* file = reinterpret_cast<const uint8_t*>(model->storage_.data());
+  if (!model->resolve(file, size, size < kHeaderBytes ? 0 : memoryChecksum(file, size), error)) return nullptr;
   return model;
 }
 
-bool SpeechModel::resolve(std::size_t size, std::string& error) {
-  const auto* file = reinterpret_cast<const uint8_t*>(storage_.data());
+namespace {
+
+// The part of a mapped file an utterance reads: all of it but a lexicon at its end, the frontend's.
+// Tensors start on 16 bytes, so the file can end in up to 15 more.
+std::string_view weightsOf(std::string_view file, std::string_view lexicon) {
+  if (lexicon.empty()) return file;
+  const std::size_t start = static_cast<std::size_t>(lexicon.data() - file.data());
+  return file.size() - (start + lexicon.size()) < 16 ? file.substr(0, start) : file;
+}
+
+}
+
+SpeechModel::~SpeechModel() {
+  // The last reader can be the audio thread, and letting go of a file that was replaced or removed
+  // writes to flash: JFFS2 frees it then. That is another thread's wait.
+  std::thread releaser;
+  if (mapped_ && posix::startThread(releaser, [mapped = std::move(mapped_)] {})) releaser.detach();
+}
+
+SpeechModel::Hold::Hold(const SpeechModel& model) : model_(model) {
+  if (!model_.mapped_) return;
+  std::lock_guard<std::mutex> lock(model_.holdMutex_);
+  if (model_.holds_++ == 0) {
+    const std::string_view weights = weightsOf(model_.mapped_->bytes(), model_.frontendLexicon);
+    ::mlock(weights.data(), weights.size());
+  }
+}
+
+SpeechModel::Hold::~Hold() {
+  if (!model_.mapped_) return;
+  std::lock_guard<std::mutex> lock(model_.holdMutex_);
+  if (--model_.holds_ == 0) {
+    const std::string_view weights = weightsOf(model_.mapped_->bytes(), model_.frontendLexicon);
+    ::munlock(weights.data(), weights.size());
+  }
+}
+
+bool SpeechModel::resolve(const uint8_t* file, std::size_t size, uint32_t checksum, std::string& error) {
   const auto fail = [&](std::string reason) {
     error = std::move(reason);
     return false;
@@ -261,13 +332,7 @@ bool SpeechModel::resolve(std::size_t size, std::string& error) {
   version = posix::le32(file + 4);
   if (version != 1 && version != 2) return fail("version " + std::to_string(version) + " not supported");
   if (posix::le32(file + 12) != size) return fail("size mismatch");
-  std::array<uint8_t, 4> stored;
-  std::memcpy(stored.data(), file + 16, 4);
-  uint8_t* field = reinterpret_cast<uint8_t*>(storage_.data()) + 16;
-  std::memset(field, 0, 4);
-  const uint32_t crc = crc32(file, size);
-  std::memcpy(field, stored.data(), 4);
-  if (crc != posix::le32(stored.data())) return fail("checksum mismatch");
+  if (checksum != posix::le32(file + kChecksumAt)) return fail("checksum mismatch");
 
   const uint32_t count = posix::le32(file + 20);
   const uint64_t header = (kHeaderBytes + uint64_t{kEntryBytes} * count + 15) / 16 * 16;

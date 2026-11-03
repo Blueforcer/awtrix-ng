@@ -259,6 +259,14 @@ pack that `awtrix-linux --speech-voice FILE` names (the supervisor passes
 refuses is logged as `speech: <path>: <reason>` and the next one is tried. The routes below exist
 when the clock has a speaker.
 
+A loaded pack is read in place: `SpeechModel::load` reads the file once through its descriptor for the
+checksum, so a flash error is a refusal, then maps it read-only. The weights stay in the page cache,
+which gives them up under memory pressure. An utterance reads them back on its worker thread before
+the first sample and locks them in memory until it ends (`SpeechModel::Hold`), so speech under way
+never waits for flash, which a file being written can keep busy for longer than the ring holds. The
+loop thread runs `prepare()`, which must not wait for flash either, so the frontend keeps its own copy
+of the lexicon.
+
 | Request | Does |
 |---|---|
 | `GET /api/v1/speech/voice` | `name`, `language`, `version`, `bytes`, `uploaded` of the active pack (`name` null without one), and `maxBytes` |
@@ -268,8 +276,8 @@ when the clock has a speaker.
 A refused upload answers `400 validationFailed` with the loader's reason, `507 insufficientStorage`
 when the pack would leave less than the upload reserve free on `/data`. The sink holds the voice
 behind a lock: `playSpeech` reads the text with the voice of that moment and hands both to the
-one-shot, so a sentence already speaking keeps its voice while the next one speaks with the new
-pack. The web UI shows the active voice under **System → Clock voice**, with upload, a way back to
+one-shot, so a sentence already speaking keeps its voice and its file, replaced or removed, while
+the next one speaks with the new pack. The web UI shows the active voice under **System → Clock voice**, with upload, a way back to
 the built-in voice and a test line.
 
 ## The English lexicon

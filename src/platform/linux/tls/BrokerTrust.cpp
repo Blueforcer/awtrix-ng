@@ -11,7 +11,7 @@ namespace {
 const char* const kUploadedCa = "/tls/mqtt-ca.pem";
 }
 
-BrokerTrust::BrokerTrust(const std::string& pin) : peer_(std::make_shared<PeerTrust>(publicAnchors(), true)) {
+BrokerTrust::BrokerTrust(const std::string& pin) : peer_(std::make_shared<PeerTrust>(PeerTrust::PublicRoots{}, true)) {
   peer_->setPin(pin);
   const std::string path = host::hostPath(kUploadedCa);
   std::error_code error;
@@ -43,7 +43,7 @@ bool BrokerTrust::removeCa() {
   std::error_code error;
   std::filesystem::remove(host::hostPath(kUploadedCa), error);
   if (error) return false;
-  peer_->setAnchors(publicAnchors(), true);
+  peer_->usePublicRoots(true);
   ca_ = Ca::Public;
   return true;
 }

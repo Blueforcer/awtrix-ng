@@ -8,6 +8,7 @@
 #include "platform/linux/host/HostHttpInternal.h"
 #include "platform/linux/host/HostHttpBody.h"
 #include "platform/linux/host/HttpConnections.h"
+#include "platform/linux/host/OnDemandWorkers.h"
 
 namespace awtrix {
 using namespace host_http;
@@ -17,6 +18,8 @@ namespace {
 // httplib only ends a connection stalled in a read or write at its timeout. Stopping gives an
 // answer under way this long to reach its client, then shuts down every connection still open.
 constexpr auto kAnswerGrace = std::chrono::milliseconds(500);
+// Longer than a browser's pause between two polls, so a page in use keeps its threads.
+constexpr auto kWorkerIdle = std::chrono::seconds(30);
 
 bool ownPageRequest(const httplib::Request& req) {
   const api::MethodResolution resolved = api::resolveHttpMethod(
@@ -80,6 +83,7 @@ bool HostHttpServer::begin(uint16_t port, CoreEngine& engine, Canvas& screen,
     im->svr = im->options.listenerFactory();
   } else {
     auto listener = std::make_unique<ConnectionTrackingServer>();
+    listener->new_task_queue = [] { return new OnDemandWorkers(1, CPPHTTPLIB_THREAD_POOL_COUNT, kWorkerIdle); };
     im->connections = listener.get();
     im->svr = std::move(listener);
   }

@@ -1,5 +1,7 @@
 #include "platform/linux/iphone/LinuxCoverFetch.h"
 
+#include "platform/posix/StartThread.h"
+
 namespace awtrix {
 namespace {
 constexpr std::size_t kMaxAnswerBytes = 64 * 1024;
@@ -10,8 +12,7 @@ LinuxCoverFetch::~LinuxCoverFetch() { stop(); }
 
 void LinuxCoverFetch::begin() {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (worker_.joinable() || stopping_) return;
-  worker_ = std::thread([this] { run(); });
+  began_ = true;
 }
 
 void LinuxCoverFetch::stop() {
@@ -26,7 +27,8 @@ void LinuxCoverFetch::stop() {
 
 bool LinuxCoverFetch::lookup(const std::string& artist, const std::string& title, int size) {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (stopping_ || !worker_.joinable() || busy_) return false;
+  if (stopping_ || !began_ || busy_) return false;
+  if (!worker_.joinable() && !posix::startThread(worker_, [this] { run(); })) return false;
   job_ = Job{artist, title, size};
   busy_ = queued_ = true;
   finished_ = false;

@@ -13,8 +13,10 @@ add_awtrix_test(NAME tc002-speech-voice SOURCES test_speech_voice.cpp ${TC002_SP
   "${TC002_SPEECH_DIR}/SpeechFrontend.cpp" LIBRARIES awtrix_core awtrix_posix COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/speech"
   TIMEOUT 120)
 target_compile_options(tc002-speech-voice-test PRIVATE ${TC002_EXACT_FLOAT_OPTIONS})
+add_awtrix_test(NAME tc002-voice-packs SOURCES test_voice_packs.cpp LIBRARIES tc002_audio
+  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/speech/voice.atts" "${PROJECT_SOURCE_DIR}/assets/speech/voice.atts" TIMEOUT 60)
 add_awtrix_test(NAME tc002-wake SOURCES test_wake.cpp ${TC002_WAKE_SOURCES} INCLUDES "${PROJECT_SOURCE_DIR}/src"
-  COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/wake"
+  LIBRARIES awtrix_posix COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/wake"
   hey_awtrix "${PROJECT_SOURCE_DIR}/assets/tc002/wake/hey_awtrix.tflite" "${CMAKE_CURRENT_SOURCE_DIR}/wake"
   vad "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.tflite" "${CMAKE_CURRENT_SOURCE_DIR}/wake" TIMEOUT 120)
 target_compile_options(tc002-wake-test PRIVATE ${TC002_EXACT_FLOAT_OPTIONS})

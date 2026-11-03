@@ -47,6 +47,8 @@ std::string parentDirectory(const std::string& path);
 class MappedFile {
  public:
   MappedFile(const std::string& path, std::size_t maximum);
+  // The file behind a descriptor the caller keeps.
+  MappedFile(int fd, std::size_t maximum);
   ~MappedFile();
   MappedFile(const MappedFile&) = delete;
   MappedFile& operator=(const MappedFile&) = delete;
@@ -55,6 +57,8 @@ class MappedFile {
   std::string_view bytes() const { return {static_cast<const char*>(data_), size_}; }
 
  private:
+  void map(int fd, std::size_t maximum);
+
   void* data_ = nullptr;
   std::size_t size_ = 0;
   bool valid_ = false;

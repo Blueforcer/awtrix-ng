@@ -33,6 +33,7 @@ class LinuxCoverFetch : public iphone::CoverSource {
   std::mutex mutex_;
   std::condition_variable ready_;
   std::thread worker_;
+  bool began_ = false;
   bool stopping_ = false;
   bool queued_ = false;
   bool busy_ = false;

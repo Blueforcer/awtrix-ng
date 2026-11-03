@@ -37,6 +37,7 @@ class LinuxButtonWebhook {
   std::condition_variable ready_;
   std::deque<Call> queue_;
   std::thread worker_;
+  bool began_ = false;
   httplib::Client* activeClient_ = nullptr;
   bool stopping_ = false;
 };

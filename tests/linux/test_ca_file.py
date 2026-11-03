@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""--ca-file: every script HTTPS request verifies chain and host name against one store read at
-startup, and an unreadable bundle fails closed without stopping the runtime."""
+"""--ca-file: every script HTTPS request verifies chain and host name against one store read by the
+first of them, and an unreadable bundle fails closed without stopping the runtime."""
 
 from __future__ import annotations
 import sys

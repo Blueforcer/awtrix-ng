@@ -152,7 +152,7 @@ int main(int argc, char** argv) {
   require(readModelFiles(argv[1], files, error), error);
   check(files.cutoff == 0.5 && files.window == 5, "the manifest's settings under micro");
   Endpointer endpointer;
-  require(endpointer.load(files.model, error), error);
+  require(endpointer.load(files.model->bytes(), error), error);
   check(!endpointer.configure(1.5f, 5, error) && error == "the cutoff must be within 0..1",
         "a cutoff above 1 is refused");
   check(!endpointer.configure(0.5f, 65, error) && error == "the window must be within 1..64",

@@ -102,6 +102,32 @@ void pressesArriveInOrder() {
   require(calls[2] == call("{\"button\":\"middle\",\"state\":true,\"uid\":\"uid1\"}"), "middle down body");
 }
 
+void aThreadOnlyForAPress() {
+  const std::size_t before = awtrix::test::threadCount();
+  const std::string nobody = "http://127.0.0.1:9/";
+  {
+    LinuxButtonWebhook idle("unused");
+    idle.press(nobody, "left", true);
+    require(awtrix::test::threadCount() == before, "a press before begin starts nothing");
+    idle.begin();
+    require(awtrix::test::threadCount() == before, "begin starts no thread");
+  }
+  LinuxButtonWebhook webhook("uid0");
+  webhook.begin();
+  webhook.press("ftp://elsewhere/", "left", true);
+  require(awtrix::test::threadCount() == before, "neither does a press that goes nowhere");
+  webhook.press(nobody, "left", true);
+  require(awtrix::test::threadCount() == before + 1, "the first call starts it");
+  webhook.stop();
+  require(awtrix::test::threadCount() == before, "stop ends it");
+  webhook.press(nobody, "left", false);
+  require(awtrix::test::threadCount() == before, "and a stopped webhook takes nothing");
+  Listener listener;
+  webhook.begin();
+  webhook.press(listener.url(), "left", false);
+  require(listener.waitFor(1), "begun again it calls again");
+}
+
 void waitingTurnsMerge() {
   Listener listener;
   LinuxButtonWebhook webhook("uid2");
@@ -188,6 +214,7 @@ void stopCancelsAHangingListener() {
 }
 
 int main() {
+  aThreadOnlyForAPress();
   pressesArriveInOrder();
   waitingTurnsMerge();
   cancellingTurnsSendNothing();

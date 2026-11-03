@@ -1,4 +1,5 @@
 #include "platform/posix/Files.h"
+#include "platform/posix/StartThread.h"
 #include "platform/linux/script/TcpClients.h"
 
 #include <fcntl.h>
@@ -37,12 +38,6 @@ std::vector<TcpAddress> TcpClients::systemLookup(const std::string& host, uint16
 TcpClients::TcpClients(Lookup lookup) : lookup_(std::move(lookup)) {
   wake_ = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
   if (wake_ < 0) throw std::system_error(errno, std::generic_category(), "tcp wake");
-  try {
-    worker_ = std::thread([this] { run(); });
-  } catch (...) {
-    ::close(wake_);
-    throw;
-  }
 }
 
 TcpClients::~TcpClients() {
@@ -51,7 +46,7 @@ TcpClients::~TcpClients() {
     quit_ = true;
   }
   wake();
-  worker_.join();
+  if (worker_.joinable()) worker_.join();
   for (auto& kv : conns_)
     if (kv.second.fd >= 0) ::close(kv.second.fd);
   ::close(wake_);
@@ -69,6 +64,7 @@ uint32_t TcpClients::connect(const std::string& app, const std::string& host, ui
     if (kv.second.app == app) ++mine;
   }
   if (mine >= kPerApp || open >= kTotal) return 0;
+  if (!worker_.joinable() && !posix::startThread(worker_, [this] { run(); })) return 0;
   while (!next_ || next_ > 0x7fffffffu || conns_.count(next_)) {
     if (!next_ || next_ > 0x7fffffffu) next_ = 1;
     else ++next_;

@@ -5,7 +5,7 @@ only: [tc002]
 # TC002 CA certificates
 
 A TC002 release ships the Mozilla CA store in PEM form as `share/ca-certificates.crt`.
-`awtrix-linux` loads it once (`--ca-file`) and verifies every HTTPS connection of scripts and
+`awtrix-linux` loads it once, at the first HTTPS connection (`--ca-file`), and verifies every HTTPS connection of scripts and
 radio streams against it. The recipe lives in
 [`tools/tc002/ca/`](https://github.com/Blueforcer/awtrix-ng/tree/main/tools/tc002/ca), and
 `build_bundle.sh` runs it (see [Install tools](install-tools.md)).

@@ -175,8 +175,26 @@ void testStore() {
   RemoteImage image;
   {
     FakeLoader loader;
+    const std::size_t threads = awtrix::test::threadCount();
     images::RemoteImageStore store(loader, clock);
     check(store.get("https://a/1.jpg", 16, 16, image) == RemoteState::kFailed, "nothing is fetched before start");
+    store.start();
+    check(awtrix::test::threadCount() == threads, "start alone runs no thread");
+    check(store.get("https://a/1.jpg", 16, 16, image) == RemoteState::kPending, "the first picture starts it");
+    check(awtrix::test::threadCount() == threads + 1, "one thread");
+    check(until([&] { return store.get("https://a/1.jpg", 16, 16, image) == RemoteState::kReady; }), "and it is fetched");
+    store.stop();
+    check(awtrix::test::threadCount() == threads, "stop ends it");
+    check(store.get("https://a/2.jpg", 16, 16, image) == RemoteState::kFailed, "and nothing is fetched after it");
+  }
+  {
+    FakeLoader loader;
+    images::RemoteImageStore neverUsed(loader, clock);
+    neverUsed.start();
+  }
+  {
+    FakeLoader loader;
+    images::RemoteImageStore store(loader, clock);
     store.start();
     loader.hold = true;
     const uint32_t before = store.generation();

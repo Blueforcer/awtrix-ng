@@ -9,8 +9,7 @@ using awtrix::tc002::voice::WebSocket;
 int main(int argc, char** argv) {
   if (argc != 6) return 2;
   const std::string trust = argv[4], mode = argv[5];
-  std::string error;
-  if (!trust.empty() && !awtrix::loadTlsTrust(trust, error)) return 7;
+  if (!trust.empty()) awtrix::tls::setPublicAnchorsFile(trust);
   const bool refused = mode == "reject" || mode == "notrust" || mode == "badaccept";
   const bool failing = refused || mode == "oversize" || mode == "binary" || mode == "masked";
   WebSocket socket;

@@ -27,6 +27,7 @@ class WakeListener {
   static constexpr std::size_t kQueueBlocks = 16;
   static constexpr int64_t kModelOffMs = 60000;
 
+  // Refuses a model it could not listen with, and keeps none in memory until it is asked to listen.
   static std::unique_ptr<WakeListener> open(const std::string& modelPath, MicrophonePort microphone,
                                             std::unique_ptr<posix::Executor> worker, std::string& error);
   ~WakeListener();
@@ -47,8 +48,7 @@ class WakeListener {
     WakeSensitivity sensitivity = WakeSensitivity::Normal;
   };
 
-  WakeListener(std::string modelPath, std::unique_ptr<WakeDetector> detector, MicrophonePort microphone,
-               std::unique_ptr<posix::Executor> worker);
+  WakeListener(std::string modelPath, MicrophonePort microphone, std::unique_ptr<posix::Executor> worker);
   bool loadDetector(int64_t now);
   void unloadDetector();
   void apply(MicrophoneClient::Report report, int64_t now);

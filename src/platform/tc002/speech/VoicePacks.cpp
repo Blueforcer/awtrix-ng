@@ -132,6 +132,11 @@ bool VoicePacks::install(const std::string& data, int& status, std::string& erro
     error = std::string("write failed: ") + std::strerror(errno);
     return false;
   }
+  // From flash the voice costs no heap; the copy above only stands in when that cannot be read.
+  Active stored;
+  std::string notStored;
+  if (open(userPath_, true, stored, notStored)) next = std::move(stored);
+  else logf("speech: %s: %s; keeping the upload in memory", userPath_.c_str(), notStored.c_str());
   activate(std::move(next));
   return true;
 }

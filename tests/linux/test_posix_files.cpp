@@ -79,6 +79,12 @@ int main() {
   check(!MappedFile(root + "/link", 100).valid(), "refuse mapping a file symlink");
   check(!MappedFile(root + "/pipe", 100).valid(), "refuse mapping a FIFO without blocking");
   check(!MappedFile(root, 100).valid(), "refuse mapping a directory");
+  {
+    const UniqueFd held(::open((root + "/mapped-by-fd").c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600));
+    check(writeAll(held.get(), "abc", 3) && MappedFile(held.get(), 3).bytes() == "abc", "a descriptor maps its file");
+    check(!MappedFile(held.get(), 2).valid(), "bounded by descriptor too");
+    check(!MappedFile(-1, 3).valid(), "a bad descriptor maps nothing");
+  }
   check(replaceText(root + "/empty", "") && MappedFile(root + "/empty", 0).valid() &&
             MappedFile(root + "/empty", 0).bytes().empty(),
         "an empty file maps to no bytes");

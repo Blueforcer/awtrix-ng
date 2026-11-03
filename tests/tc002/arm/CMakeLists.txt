@@ -18,10 +18,10 @@ add_awtrix_test(NAME tc002-arm-flasher SOURCES "${PROJECT_SOURCE_DIR}/tests/tc00
 
 set(runtime "${PROJECT_SOURCE_DIR}/tests/tc002/runtime")
 add_awtrix_test(NAME tc002-arm-speech-voice SOURCES "${runtime}/test_speech_voice.cpp" ${TC002_SPEECH_VOICE_SOURCES}
-  LIBRARIES awtrix_posix COMMAND "${runtime}/speech" TIMEOUT 300)
+  "${TC002_SPEECH_DIR}/SpeechFrontend.cpp" LIBRARIES awtrix_core awtrix_posix COMMAND "${runtime}/speech" TIMEOUT 300)
 target_compile_options(tc002-arm-speech-voice-test PRIVATE ${TC002_EXACT_FLOAT_OPTIONS})
 add_awtrix_test(NAME tc002-arm-wake SOURCES "${runtime}/test_wake.cpp" ${TC002_WAKE_SOURCES}
-  INCLUDES "${PROJECT_SOURCE_DIR}/src" COMMAND "${runtime}/wake"
+  INCLUDES "${PROJECT_SOURCE_DIR}/src" LIBRARIES awtrix_posix COMMAND "${runtime}/wake"
   hey_awtrix "${PROJECT_SOURCE_DIR}/assets/tc002/wake/hey_awtrix.tflite" "${runtime}/wake"
   vad "${PROJECT_SOURCE_DIR}/assets/tc002/vad/vad.tflite" "${runtime}/wake" TIMEOUT 600)
 target_compile_options(tc002-arm-wake-test PRIVATE ${TC002_EXACT_FLOAT_OPTIONS})

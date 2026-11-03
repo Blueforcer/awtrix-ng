@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -310,6 +311,44 @@ void theModelLeavesMemoryWhileOff(const Fixture& f) {
   check(pending.worker->pending() == 0, "a block still queued finds the model");
 }
 
+void openingKeepsNoModel(const Fixture& f) {
+  f.firesAlways();
+  const fs::path moved = f.dir / "moved.tflite";
+  Rig rig(f.model);
+  require(rig.listener != nullptr, rig.error);
+  fs::rename(f.model, moved);
+  rig.listener->tick(rig.now, Listen::On);
+  check(rig.sent.empty(), "the model checked at the start is gone: without its file nothing starts");
+  rig.listener->tick(rig.now, Listen::Off);
+  fs::rename(moved, f.model);
+  rig.now += 30000;
+  rig.listen();
+  check(rig.feed(40).size() + rig.feed(40).size() > 0, "with the file back it loads and hears");
+
+  Rig off(f.model);
+  require(off.listener != nullptr, off.error);
+  off.listener->tick(off.now, Listen::Off);
+  off.now += 2 * WakeListener::kModelOffMs;
+  off.listener->tick(off.now, Listen::Off);
+  check(off.sent.empty(), "with the wake word off the microphone stays off");
+  off.listener->cancel();
+}
+
+void aModelItCannotListenWithIsRefused(const Fixture& f) {
+  f.firesAlways();
+  const std::string good = [&] {
+    std::ifstream in(f.model, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(in), {});
+  }();
+  writeFile(f.model, "not a model");
+  Rig damaged(f.model);
+  check(damaged.listener == nullptr && !damaged.error.empty(), "a damaged model opens nothing: " + damaged.error);
+  writeFile(f.model, "");
+  Rig empty(f.model);
+  check(empty.listener == nullptr, "nor does an empty file");
+  writeFile(f.model, good);
+}
+
 void theLevelApplies(const Fixture& f) {
   writeFile(f.settings, R"({"probability_cutoff":0.44,"sliding_window_size":1})");
   Rig rig(f.model);
@@ -421,6 +460,8 @@ int main(int argc, char** argv) {
   mutedKeepsTheStream(fixture);
   offStopsTheStream(fixture);
   theModelLeavesMemoryWhileOff(fixture);
+  openingKeepsNoModel(fixture);
+  aModelItCannotListenWithIsRefused(fixture);
   theLevelApplies(fixture);
   aStopWithoutAnswerEnds(fixture);
   failuresBackOff(fixture);

@@ -103,9 +103,7 @@ int LinuxRuntime::openChannels() {
     std::fprintf(stderr, "Cannot read web UI: %s\n", o_.webui.c_str()); return 2;
   }
   ::umask(0077);
-  std::string trustError;
-  if (!o_.caFile.empty() && !loadTlsTrust(o_.caFile, trustError))
-    logf("tls: %s; HTTPS connections will fail", trustError.c_str());
+  if (!o_.caFile.empty()) tls::setPublicAnchorsFile(o_.caFile);
   if (o_.webUpdate()) {
     if (o_.updateOptions.releaseRoot.empty())
       o_.updateOptions.releaseRoot =

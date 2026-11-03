@@ -8,6 +8,12 @@ bool WakeDetector::load(std::string_view bytes, std::string& error) {
   return true;
 }
 
+bool WakeDetector::load(std::shared_ptr<const posix::MappedFile> file, std::string& error) {
+  if (!stream_.load(std::move(file), error)) return false;
+  forgetDetections();
+  return true;
+}
+
 bool WakeDetector::configure(const WakeConfig& config, std::string& error) {
   if (!window_.configure(config.cutoff, config.window, error)) return false;
   modelCutoff_ = config.cutoff;

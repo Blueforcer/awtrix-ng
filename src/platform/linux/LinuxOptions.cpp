@@ -39,7 +39,7 @@ void usage() {
   std::puts("  [--performance-report NEW_FILE] (private aggregate JSON written at exit)\n"
             "  [--boot-intro [--boot-sound FILE]] (power-on intro before the first app; the MP3 FILE\n"
             "   plays with it on the TC002 speaker)\n"
-            "  [--ca-file FILE] (PEM roots every HTTPS client verifies against, read once)\n"
+            "  [--ca-file FILE] (PEM roots every HTTPS client verifies against, read by the first one)\n"
             "  [--update-state FILE --update-dir DIRECTORY\n"
             "   [--release-root DIRECTORY]] (supervised only: POST /update\n"
             "   takes awtrix-ng-tc002.awup packages, stages them in the update directory and\n"

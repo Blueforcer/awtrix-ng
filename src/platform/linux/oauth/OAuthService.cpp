@@ -8,6 +8,7 @@
 #include "platform/linux/oauth/OAuthText.h"
 #include "platform/linux/net/UrlPolicy.h"
 #include "platform/posix/Digest.h"
+#include "platform/posix/StartThread.h"
 
 namespace awtrix::oauth {
 namespace {
@@ -51,7 +52,13 @@ void Service::begin() {
   std::lock_guard<std::mutex> lock(mutex_);
   if (worker_.joinable()) return;
   stopping_ = false;
-  worker_ = std::thread([this] { run(); });
+  began_ = true;
+}
+
+// With mutex_ held. Before begin() jobs wait in the queue for it; a new thread takes the lock when the
+// caller lets go of it.
+bool Service::haveWorker() {
+  return !began_ || stopping_ || worker_.joinable() || posix::startThread(worker_, [this] { run(); });
 }
 
 void Service::stop() {
@@ -173,6 +180,11 @@ bool Service::submitCode(const std::string& app, const std::string& code, const 
   job.code = code;
   job.verifier = p->second.verifier;
   job.generation = generation_[app];
+  if (!haveWorker()) {
+    p->second.exchanging = false;
+    error = "no thread";
+    return false;
+  }
   jobs_.push_front(std::move(job));
   ready_.notify_one();
   return true;
@@ -238,6 +250,7 @@ uint32_t Service::request(const std::string& app, const std::string& method, con
   job.id = nextId_++;
   if (job.id == 0) job.id = nextId_++;
   const uint32_t id = job.id;
+  if (!haveWorker()) return 0;
   jobs_.push_back(std::move(job));
   ready_.notify_one();
   return id;

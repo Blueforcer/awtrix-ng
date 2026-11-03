@@ -25,10 +25,16 @@ struct Clip {
 class EffectCache {
  public:
   static constexpr std::size_t kBudgetBytes = 2u * 1024u * 1024u;
+  // After so long without any sound the clips go, as a game's do once it was left. Its effects then
+  // decode while they play, as they do the first time after every start.
+  static constexpr int64_t kQuietMs = 5 * 60 * 1000;
 
   std::shared_ptr<const Clip> find(const std::string& path);
   void put(const std::string& path, std::shared_ptr<const Clip> clip);
   std::size_t bytes() const { return bytes_; }
+  // Told the time and whether the mixer plays. The milliseconds until the clips go, or -1 when no
+  // time needs to pass.
+  int64_t keep(int64_t nowMs, bool mixing);
 
  private:
   struct Entry {
@@ -43,6 +49,7 @@ class EffectCache {
   std::map<std::string, Entry> entries_;
   std::size_t bytes_ = 0;
   uint64_t clock_ = 0;
+  int64_t heardAtMs_ = 0;
 };
 
 // Sums one-shot, effects and loop to 44.1 kHz mono in 10 ms blocks through the Limiter,

@@ -31,18 +31,12 @@ std::unique_ptr<WakeDetector> readDetector(const std::string& modelPath, std::st
 
 std::unique_ptr<WakeListener> WakeListener::open(const std::string& modelPath, MicrophonePort microphone,
                                                  std::unique_ptr<posix::Executor> worker, std::string& error) {
-  auto detector = readDetector(modelPath, error);
-  if (!detector) return nullptr;
-  return std::unique_ptr<WakeListener>(
-      new WakeListener(modelPath, std::move(detector), std::move(microphone), std::move(worker)));
+  if (!readDetector(modelPath, error)) return nullptr;
+  return std::unique_ptr<WakeListener>(new WakeListener(modelPath, std::move(microphone), std::move(worker)));
 }
 
-WakeListener::WakeListener(std::string modelPath, std::unique_ptr<WakeDetector> detector, MicrophonePort microphone,
-                           std::unique_ptr<posix::Executor> worker)
-    : modelPath_(std::move(modelPath)),
-      microphone_(std::move(microphone)),
-      detector_(std::move(detector)),
-      worker_(std::move(worker)) {}
+WakeListener::WakeListener(std::string modelPath, MicrophonePort microphone, std::unique_ptr<posix::Executor> worker)
+    : modelPath_(std::move(modelPath)), microphone_(std::move(microphone)), worker_(std::move(worker)) {}
 
 WakeListener::~WakeListener() {
   cancel();

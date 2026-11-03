@@ -1,5 +1,7 @@
 #include "platform/linux/tls/TlsTrust.h"
 
+#include <sys/resource.h>
+
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -9,12 +11,31 @@
 
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/tls/TlsPolicy.h"
+#include "platform/posix/StartThread.h"
+#include "system/Log.h"
 
 namespace awtrix::tls {
 namespace {
 
 std::mutex g_publicMutex;
+std::string g_publicFile;
+bool g_publicFileFailed = false;
 std::shared_ptr<const TrustAnchors> g_public;
+constexpr int kParseNice = 10;
+
+// Half a second of a core on the TC002, which speech that just started needs more: its ring is barely
+// filled. So the parsing yields, on a thread of its own, which also leaves the asker's priority alone.
+std::shared_ptr<const TrustAnchors> parseInBackground(const std::string& path) {
+  std::shared_ptr<const TrustAnchors> anchors;
+  std::thread parser;
+  if (!posix::startThread(parser, [&] {
+        ::setpriority(PRIO_PROCESS, 0, kParseNice);
+        anchors = TrustAnchors::fromFile(path);
+      }))
+    return TrustAnchors::fromFile(path);
+  parser.join();
+  return anchors;
+}
 
 bool expectName(X509_VERIFY_PARAM* parameters, const std::string& name) {
   if (name.empty() || name.find('\0') != std::string::npos) return false;
@@ -62,11 +83,30 @@ std::shared_ptr<const TrustAnchors> TrustAnchors::fromFile(const std::string& pa
 
 void setPublicAnchors(std::shared_ptr<const TrustAnchors> anchors) {
   std::lock_guard<std::mutex> lock(g_publicMutex);
+  g_publicFile.clear();
   g_public = std::move(anchors);
+}
+
+void setPublicAnchorsFile(const std::string& path) {
+  std::lock_guard<std::mutex> lock(g_publicMutex);
+  g_publicFile = path;
+  g_publicFileFailed = false;
+  g_public.reset();
+}
+
+bool publicAnchorsNamed() {
+  std::lock_guard<std::mutex> lock(g_publicMutex);
+  return g_public || !g_publicFile.empty();
 }
 
 std::shared_ptr<const TrustAnchors> publicAnchors() {
   std::lock_guard<std::mutex> lock(g_publicMutex);
+  if (!g_public && !g_publicFile.empty()) {
+    g_public = parseInBackground(g_publicFile);
+    if (!g_public && !g_publicFileFailed)
+      logf("tls: no certificates in %s; HTTPS connections will fail", g_publicFile.c_str());
+    g_publicFileFailed = !g_public;
+  }
   return g_public;
 }
 
@@ -92,9 +132,20 @@ bool chainTrusted(const TrustAnchors* anchors, SSL* ssl, const std::string& host
 PeerTrust::PeerTrust(std::shared_ptr<const TrustAnchors> anchors, bool pinning)
     : anchors_(std::move(anchors)), pinning_(pinning) {}
 
+PeerTrust::PeerTrust(PublicRoots, bool pinning) : publicRoots_(true), pinning_(pinning) {}
+
 void PeerTrust::setAnchors(std::shared_ptr<const TrustAnchors> anchors, bool pinning) {
   std::lock_guard<std::mutex> lock(mutex_);
   anchors_ = std::move(anchors);
+  publicRoots_ = false;
+  pinning_ = pinning;
+  pending_.clear();
+}
+
+void PeerTrust::usePublicRoots(bool pinning) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  anchors_.reset();
+  publicRoots_ = true;
   pinning_ = pinning;
   pending_.clear();
 }
@@ -107,10 +158,13 @@ void PeerTrust::setPin(const std::string& fingerprint) {
 
 PeerTrust::Verdict PeerTrust::check(SSL* ssl, const std::string& host) {
   std::shared_ptr<const TrustAnchors> anchors;
+  bool publicRoots;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     anchors = anchors_;
+    publicRoots = publicRoots_;
   }
+  if (publicRoots) anchors = publicAnchors();
   const bool chained = chainTrusted(anchors.get(), ssl, host);
   const std::string presented = fingerprint(SSL_get0_peer_certificate(ssl));
   std::lock_guard<std::mutex> lock(mutex_);
@@ -152,18 +206,8 @@ bool PeerTrust::takeNewPending(std::string& fingerprint) {
 
 namespace awtrix {
 
-bool loadTlsTrust(const std::string& caFile, std::string& error) {
-  auto anchors = tls::TrustAnchors::fromFile(caFile);
-  if (!anchors) {
-    error = "no certificates in " + caFile;
-    return false;
-  }
-  tls::setPublicAnchors(std::move(anchors));
-  return true;
-}
-
 void useTlsTrust(httplib::Client& client) {
-  if (!tls::publicAnchors()) return;
+  if (!tls::publicAnchorsNamed()) return;
   client.set_server_certificate_verifier([](SSL* ssl) {
     const char* name = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
     const auto anchors = tls::publicAnchors();

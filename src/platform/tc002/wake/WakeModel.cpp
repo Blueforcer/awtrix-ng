@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "platform/posix/Files.h"
 #include "platform/tc002/wake/WakeGraph.h"
 #include "platform/tc002/wake/WakeKernels.h"
 #include "platform/tc002/wake/WakeLoader.h"
@@ -17,8 +18,26 @@ std::unique_ptr<WakeModel> WakeModel::load(const uint8_t* data, std::size_t size
     return nullptr;
   }
   std::unique_ptr<WakeModel> model(new WakeModel());
-  model->file_.assign(data, data + size);
-  if (!loadGraphs(model->file_, model->graphs_, model->arena_, error)) return nullptr;
+  model->copy_.assign(data, data + size);
+  const uint8_t* const held = model->copy_.data();
+  return prepare(std::move(model), held, size, error);
+}
+
+std::unique_ptr<WakeModel> WakeModel::load(std::shared_ptr<const posix::MappedFile> file, std::string& error) {
+  error.clear();
+  const std::string_view bytes = file ? file->bytes() : std::string_view();
+  if (bytes.size() < 8 || bytes.size() > (std::size_t{64} << 20)) {
+    error = kNotAModel;
+    return nullptr;
+  }
+  std::unique_ptr<WakeModel> model(new WakeModel());
+  model->mapped_ = std::move(file);
+  return prepare(std::move(model), reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), error);
+}
+
+std::unique_ptr<WakeModel> WakeModel::prepare(std::unique_ptr<WakeModel> model, const uint8_t* data, std::size_t size,
+                                              std::string& error) {
+  if (!loadGraphs(data, size, model->graphs_, model->arena_, error)) return nullptr;
 
   const Graph& main = model->graphs_[0];
   const Tensor& in = main.tensors[main.inputs[0]];

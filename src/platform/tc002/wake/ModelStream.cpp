@@ -8,8 +8,14 @@ namespace awtrix::tc002::wake {
 static_assert(WakeModel::kFeatures == WakeFrontend::kChannels, "the model takes the frontend's channels");
 
 bool ModelStream::load(std::string_view bytes, std::string& error) {
-  std::unique_ptr<WakeModel> model =
-    WakeModel::load(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), error);
+  return use(WakeModel::load(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), error));
+}
+
+bool ModelStream::load(std::shared_ptr<const posix::MappedFile> file, std::string& error) {
+  return use(WakeModel::load(std::move(file), error));
+}
+
+bool ModelStream::use(std::unique_ptr<WakeModel> model) {
   if (!model) return false;
   for (std::size_t k = 0; k < quantized_.size(); ++k) {
     const float q = std::nearbyint(static_cast<float>(k) / model->inputScale()) +

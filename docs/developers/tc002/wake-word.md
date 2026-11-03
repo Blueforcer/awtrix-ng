@@ -49,10 +49,11 @@ settings cannot be used writes `wake word: …` to the log and runs without the 
 `GET /api/v1/voice` then answers `wakeWordAvailable: false`, and the web UI hides the Wake word
 rows.
 
-The listener checks the model once at boot, which decides `wakeWordAvailable`. After a minute without
-being wanted (`WakeListener::kModelOffMs`, the setting is off by default) it frees the model, the
-copy of the file and the arena, and reads it again before the next stream. If the file cannot be used
-by then, it writes that to the log and tries again every 30 s.
+The listener checks the model once at boot, which decides `wakeWordAvailable`, and keeps none of it.
+It reads the model before the first stream, with the file mapped because the graphs only read their
+constants. After a minute without being wanted (`WakeListener::kModelOffMs`, the setting is off by
+default) it frees the model, the mapping and the arena, and reads it again before the next stream. If
+the file cannot be used by then, it writes that to the log and tries again every 30 s.
 
 To ship another model, replace both files with the trainer's `model.tflite` and `custom.json` under
 these names. The bundle tools accept the two files only together.

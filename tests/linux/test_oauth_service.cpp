@@ -99,7 +99,9 @@ int main() {
         return it == sources.end() ? std::string() : it->second;
       },
       [&] { return now.load(); });
+  const std::size_t threads = awtrix::test::threadCount();
   service.begin();
+  check(awtrix::test::threadCount() == threads, "begin runs no thread");
 
   std::string error, url;
   check(service.status("Spot").declared && service.status("Spot").state == "signedOut", "starts signed out");
@@ -112,7 +114,9 @@ int main() {
   check(oauth_test::stateMember(state, "r") == "http://192.168.1.50" && oauth_test::stateMember(state, "a") == "Spot",
         "state names the way back");
   check(!service.submitCode("Spot", "c0de", "wrong", error) && error == "sign-in expired or unknown", "state checked");
+  check(awtrix::test::threadCount() == threads, "nor does anything before the first job");
   check(service.submitCode("Spot", "c0de", state, error), "code accepted");
+  check(awtrix::test::threadCount() == threads + 1, "which starts it");
   check(waitState(service, "signedIn"), "signed in after the exchange");
   check(fake.count() == 1 && fake.calls[0].body.find("code_verifier=") != std::string::npos, "verifier sent");
   check(!service.submitCode("Spot", "c0de", state, error), "a state is used once");

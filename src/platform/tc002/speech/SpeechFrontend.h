@@ -18,8 +18,9 @@ namespace awtrix::speech {
 // parse() checks everything once; prepare() only reads, so any number of threads may share it.
 class Frontend {
  public:
-  // `text` is the pack's fe.text, `lexicon` its fe.lexicon (may be empty), which must outlive the
-  // frontend: it is read in place. nullptr and a short reason when either is malformed.
+  // `text` is the pack's fe.text, `lexicon` its fe.lexicon (may be empty). The frontend keeps its own
+  // copy of the lexicon: prepare() runs on the loop thread, which must not wait for flash.
+  // nullptr and a short reason when either is malformed.
   static std::unique_ptr<const Frontend> parse(std::string_view text, std::string_view lexicon, std::string& error);
 
   // UTF-8 text as a plan. A text longer than a plan holds ends with the last word that fits. False
@@ -107,7 +108,7 @@ class Frontend {
   std::vector<Phone> onsetPhones_;
   std::vector<std::u32string> unstressedPrefixes_;
   std::map<std::string, Variant, std::less<>> variants_;
-  std::string_view lexicon_;
+  std::string lexicon_;
   uint32_t lexiconWords_ = 0, lexiconBlocks_ = 0, lexiconStride_ = 0;
 };
 

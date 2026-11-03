@@ -74,6 +74,16 @@ void checkHostileLexicon() {
   refused("a phone outside the inventory", [&](std::string& l) { l[phones + 1] = char(0x3F); });
   refused("a lexicon cut short", [&](std::string& l) { l.resize(l.size() - 3); });
 }
+// prepare() runs on the loop thread, so the frontend reads its own lexicon and never the pack's file.
+void checkLexiconIsItsOwn() {
+  std::string lexicon(g_pack->frontendLexicon), error;
+  const auto frontend = Frontend::parse(g_pack->frontendText, lexicon, error);
+  check(frontend != nullptr, ("the frontend parses: " + error).c_str());
+  Frontend::Word before, after;
+  check(frontend->lookup("hello", false, before) && before.count > 0, "the lexicon knows a word");
+  std::fill(lexicon.begin(), lexicon.end(), '\0');
+  check(frontend->lookup("hello", false, after) && after.count == before.count, "and still does without the pack's bytes");
+}
 // A one-block fe.lexicon as Frontend::parse() reads it, keys in byte order, one pronunciation each:
 // a phone's id in 6 bits, a vowel's stress in 2 more.
 std::string lexiconOf(const std::vector<std::pair<std::string, std::vector<Phone>>>& entries) {
@@ -239,6 +249,7 @@ int main(int argc, char** argv) {
   if (argc != 2) { std::fprintf(stderr, "usage: tc002-speech-test PACK\n"); return 2; }
   loadPack(argv[1]);
   checkHostileLexicon();
+  checkLexiconIsItsOwn();
   checkHyphenatedWords();
   checkAbbreviationsAndAcronyms();
   checkNumberReadings();

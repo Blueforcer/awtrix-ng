@@ -111,6 +111,18 @@ void EffectCache::put(const std::string& path, std::shared_ptr<const Clip> clip)
   trim();
 }
 
+int64_t EffectCache::keep(int64_t nowMs, bool mixing) {
+  if (mixing || entries_.empty()) {
+    heardAtMs_ = nowMs;
+    return -1;
+  }
+  const int64_t left = heardAtMs_ + kQuietMs - nowMs;
+  if (left > 0) return left;
+  entries_.clear();
+  bytes_ = 0;
+  return -1;
+}
+
 void EffectCache::trim() {
   while (bytes_ > kBudgetBytes && !entries_.empty()) {
     auto oldest = entries_.begin();

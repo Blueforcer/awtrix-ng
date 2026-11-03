@@ -502,7 +502,7 @@
       "version": null
     },
     {
-      "files_sha256": "7f5226ba8a175f0170905a0bb16726a941f7465c0e38540f8253f50b1d83f41e",
+      "files_sha256": "5596e5673a8e9ce34c7bfd0848dd7cf27105341ced6b81b85d580d0f39d60ee9",
       "id": "tflite-micro-port",
       "license": {
         "file": "LICENSES/Apache-2.0.txt",

@@ -5,6 +5,8 @@
 #include <iterator>
 #include <utility>
 
+#include "platform/posix/StartThread.h"
+
 namespace awtrix::images {
 
 RemoteImageStore::RemoteImageStore(IPictureLoader& loader, std::function<int64_t()> clock, StoreLimits limits)
@@ -14,8 +16,7 @@ RemoteImageStore::~RemoteImageStore() { stop(); }
 
 void RemoteImageStore::start() {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (worker_.joinable() || stopping_) return;
-  worker_ = std::thread([this] { run(); });
+  began_ = true;
 }
 
 void RemoteImageStore::stop() {
@@ -35,10 +36,11 @@ media::RemoteState RemoteImageStore::get(std::string_view url, int width, int he
     return e.width == width && e.height == height && e.url == url;
   });
   if (found == entries_.end()) {
-    if (stopping_ || !worker_.joinable()) return media::RemoteState::kFailed;
+    if (stopping_ || !began_) return media::RemoteState::kFailed;
     if (waiting_.size() >= limits_.maxWaiting) return media::RemoteState::kPending;
     makeRoom(url.size(), 1);
     if (entries_.size() >= limits_.maxEntries) return media::RemoteState::kPending;
+    if (!worker_.joinable() && !posix::startThread(worker_, [this] { run(); })) return media::RemoteState::kFailed;
     entries_.emplace_front();
     Entry& entry = entries_.front();
     entry.url.assign(url.data(), url.size());
