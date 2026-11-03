@@ -65,17 +65,26 @@ class FilterSink : public Stream {
 }
 
 void ScriptHttpWorker::begin(ResultFn onResult) {
-  if (started_) return;
-  onResult_ = std::move(onResult);
-  if (!onResult_) return;
-  started_ = true;
-  xTaskCreatePinnedToCore(taskEntry, "scripthttp", kStackBytes, this, kPriority, nullptr, kCore);
+  if (!onResult_) onResult_ = std::move(onResult);
+}
+
+// The task and its stack exist from the first request on, so a clock whose scripts never fetch
+// does not pay for them. A failed start leaves no state behind and the next request tries again.
+bool ScriptHttpWorker::startTask() {
+  if (taskStarted_) return true;
+  taskStarted_ = xTaskCreatePinnedToCore(taskEntry, "scripthttp", kStackBytes, this, kPriority,
+                                         nullptr, kCore) == pdPASS;
+  if (!taskStarted_)
+    logf("script http: no memory for the worker (%u largest)",
+         static_cast<unsigned>(heap_caps_get_largest_free_block(kGuardHeapCaps)));
+  return taskStarted_;
 }
 
 // Called from the script VM on the main loop. Queues and returns immediately; the answer arrives
-// later through the result callback. False means it was not even accepted.
+// later through the result callback. False means it was not even accepted, which the script sees
+// as cb(nil, 0).
 bool ScriptHttpWorker::request(const script::HttpRequest& req) {
-  if (!started_) return false;
+  if (!onResult_) return false;
   if (!WiFi.isConnected()) {
     if (script::modbus::isUrl(req.url)) logf("modbus: offline");
     return false;
@@ -90,6 +99,8 @@ bool ScriptHttpWorker::request(const script::HttpRequest& req) {
     if (script::modbus::isUrl(req.url)) logf("modbus: queue full");
     return false;
   }
+
+  if (!startTask()) return false;
 
   script::HttpRequest queued = req;
   if (queued.maxBytes == 0) queued.maxBytes = script::kMaxHttpBody;

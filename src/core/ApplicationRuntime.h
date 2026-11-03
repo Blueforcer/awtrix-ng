@@ -56,7 +56,7 @@ class ApplicationRuntime {
   EffectRegistry& effects() { return effects_; }
   EffectRegistry& overlays() { return overlays_; }
   // Admission is performed before a platform registers its permanent LED output buffer.
-  bool ready() { return canvas_.valid() && power_.ready() && pipeline_.prepareFrames(); }
+  bool ready() { return canvas_.valid() && pipeline_.prepareFrames(); }
 
   // Adds the shared engine bindings, preserving the caller's platform I/O services.
   void configureScripts(script::ScriptServices& services);

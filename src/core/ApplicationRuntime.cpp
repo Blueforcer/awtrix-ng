@@ -57,7 +57,7 @@ ApplicationRuntime::ApplicationRuntime(int width, int height, ApplicationService
                                        AppRegistry apps)
     : services_(std::move(services)), ownedEffects_(new Effects), apps_(std::move(apps)),
       engine_(services_.audio, services_.display, services_.system, apps_.ids()), canvas_(width, height),
-      power_(width, height), pipeline_(width, height, renderDeps()) {
+      pipeline_(width, height, renderDeps()) {
   ownedEffects_->install(effects_, overlays_);
   engine_.setEffectRegistry(&effects_);
   engine_.setOverlayRegistry(&overlays_);

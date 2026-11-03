@@ -3052,8 +3052,9 @@ Reads the device log shown in the web UI console, a few lines at a time.
 | `next` | integer | number of the newest line. `0` when the log is empty |
 | `lines` | array of strings | every line numbered higher than `after` |
 
-To follow the log, pass the last `next` as `after` in the next request. AWTRIX keeps the **last 34
-lines**, each up to 120 characters. Older lines are dropped. Each line starts with the time
+To follow the log, pass the last `next` as `after` in the next request. AWTRIX keeps about the
+**last 34 lines**, each up to 120 characters. Short lines leave room for more, and at their longest
+22 fit. Older lines are dropped. Each line starts with the time
 `HH:MM:SS ` once the clock has the time from the internet, before that with the seconds since start,
 `[   123s] `.
 

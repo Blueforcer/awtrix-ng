@@ -2,7 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <deque>
+#include <list>
 #include <string>
 
 #include "core/payload/AppSpec.h"
@@ -34,7 +34,8 @@ class NotificationManager {
   void invalidateContent(bool assets);
 
  private:
-  std::deque<AppSpec> queue_;
+  // A list because it is empty nearly always, and a std::deque keeps a map and a node even then.
+  std::list<AppSpec> queue_;
   std::size_t capacity_;
   int64_t currentStartMs_ = 0;
   uint32_t generation_ = 0;

@@ -4,7 +4,8 @@ Import("env")
 def _audio_o2(node):
     return env.Object(
         node,
-        CCFLAGS=env["CCFLAGS"] + ["-O2"],
+        # Decodes whatever a stream delivers, so it counts as input code. See stack_protector.py.
+        CCFLAGS=env.InputCodeFlags(env["CCFLAGS"]) + ["-O2"],
         CPPPATH=env["CPPPATH"] + ["$PROJECT_SRC_DIR", "$PROJECT_INCLUDE_DIR"],
     )
 

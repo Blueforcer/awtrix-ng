@@ -191,6 +191,12 @@ void applyTimeConfig(const DeviceConfig& cfg, bool force) {
 
 }
 
+// Scripts compile and run on this task, and the Berry parser and json.load recurse per nesting
+// level. Installing a small script with one callback took 7.7 KB of the default 8 KB, and 18 nested
+// parentheses or 120 levels of JSON overflowed it. Measured on a TC001 at 12 KB: 4.1 KB left after
+// that script, 24 parentheses and 180 levels of JSON pass.
+SET_LOOP_TASK_STACK_SIZE(12 * 1024);
+
 void setup() {
   Serial.begin(115200);
   Serial.println();

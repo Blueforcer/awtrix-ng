@@ -28,6 +28,7 @@ class ScriptHttpWorker : public script::IScriptHttp {
     int64_t notBeforeMs = 0;
   };
 
+  bool startTask();
   static void taskEntry(void* self);
   void run();
   void fetch(const script::HttpRequest& req);
@@ -37,7 +38,7 @@ class ScriptHttpWorker : public script::IScriptHttp {
   script::AsyncQueue<Queued, kQueueCap> queue_;
   ResultFn onResult_;
   std::atomic<unsigned> pending_{0};
-  bool started_ = false;
+  bool taskStarted_ = false;
   int64_t connectedAtMs_ = -1;
 };
 

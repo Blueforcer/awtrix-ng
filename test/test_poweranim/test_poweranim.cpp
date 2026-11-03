@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <cstdlib>
+#include <new>
 #include <string>
 
 #include "core/render/PowerAnimator.h"
@@ -12,27 +13,37 @@ using awtrix::render::PowerAnimator;
 
 using Phase = PowerAnimator::Phase;
 
-void setUp() {}
-void tearDown() { render::setFrameAllocator({std::malloc, std::free}); }
+// The animator holds its frame through nothrow new[]; everything else here is counted separately.
+namespace {
+int heldFrames = 0;
+int heldAllocations = 0;
+// volatile: the compiler may assume operator new reads no globals, and drop a plain store to this.
+volatile bool refuseHeldFrames = false;
+}
+
+void* operator new[](std::size_t bytes, const std::nothrow_t&) noexcept {
+  if (refuseHeldFrames) return nullptr;
+  ++heldAllocations;
+  ++heldFrames;
+  return std::malloc(bytes ? bytes : 1);
+}
+void operator delete[](void* pointer) noexcept {
+  if (pointer) --heldFrames;
+  std::free(pointer);
+}
+void operator delete[](void* pointer, std::size_t) noexcept { operator delete[](pointer); }
+
+void setUp() {
+  heldFrames = 0;
+  heldAllocations = 0;
+  refuseHeldFrames = false;
+}
+void tearDown() {}
 
 namespace {
 
 constexpr int kW = 32;
 constexpr int kH = 8;
-
-std::size_t frameAllocations = 0;
-std::size_t failFrameAllocation = 0;
-
-void* allocateFrame(std::size_t bytes) {
-  if (++frameAllocations == failFrameAllocation) return nullptr;
-  return std::malloc(bytes);
-}
-
-void probeFrames(std::size_t failAt) {
-  frameAllocations = 0;
-  failFrameAllocation = failAt;
-  render::setFrameAllocator({allocateFrame, std::free});
-}
 
 uint32_t pattern(int x, int y) {
   uint32_t h = (static_cast<uint32_t>(x + 1) * 2654435761u) ^ (static_cast<uint32_t>(y + 1) * 40503u);
@@ -100,7 +111,7 @@ void runLive(PowerAnimator& a, Canvas& out, int64_t& nowMs, int frames) {
 }
 
 static void test_steady_states_are_not_busy() {
-  PowerAnimator a(kW, kH);
+  PowerAnimator a;
   Canvas out(kW, kH);
   int64_t now = 1000;
   runLive(a, out, now, 4);
@@ -116,7 +127,7 @@ static void test_steady_states_are_not_busy() {
 }
 
 static void test_fade_out_starts_on_the_last_live_frame() {
-  PowerAnimator a(kW, kH);
+  PowerAnimator a;
   Canvas out(kW, kH), live(kW, kH);
   fillLive(live);
   int64_t now = 1000;
@@ -129,7 +140,7 @@ static void test_fade_out_starts_on_the_last_live_frame() {
 }
 
 static void test_fade_out_ends_black_and_stays_black() {
-  PowerAnimator a(kW, kH);
+  PowerAnimator a;
   Canvas out(kW, kH);
   int64_t now = 1000;
   runLive(a, out, now, 4);
@@ -157,7 +168,7 @@ static void test_fade_out_ends_black_and_stays_black() {
 }
 
 static void test_fade_out_darkens_from_the_top() {
-  PowerAnimator a(kW, kH);
+  PowerAnimator a;
   Canvas out(kW, kH);
   int64_t now = 1000;
   runLive(a, out, now, 4);
@@ -180,7 +191,7 @@ static void test_fade_out_darkens_from_the_top() {
 }
 
 static void test_fade_in_rains_down_from_the_top() {
-  PowerAnimator a(kW, kH);
+  PowerAnimator a;
   Canvas out(kW, kH);
   int64_t now = 1000;
   runLive(a, out, now, 2);
@@ -209,7 +220,7 @@ static void test_fade_in_rains_down_from_the_top() {
 }
 
 static void test_fade_in_ends_on_the_live_frame() {
-  PowerAnimator a(kW, kH);
+  PowerAnimator a;
   Canvas out(kW, kH), live(kW, kH);
   fillLive(live);
   int64_t now = 1000;
@@ -231,7 +242,7 @@ static void test_fade_in_ends_on_the_live_frame() {
 }
 
 static void test_reversal_resumes_instead_of_restarting() {
-  PowerAnimator a(kW, kH);
+  PowerAnimator a;
   Canvas out(kW, kH);
   int64_t now = 1000;
   runLive(a, out, now, 2);
@@ -253,7 +264,7 @@ static void test_reversal_resumes_instead_of_restarting() {
 }
 
 static void test_immediate_reversal_settles() {
-  PowerAnimator a(kW, kH);
+  PowerAnimator a;
   Canvas out(kW, kH);
   int64_t now = 1000;
   runLive(a, out, now, 2);
@@ -268,7 +279,7 @@ static void test_immediate_reversal_settles() {
 }
 
 static void test_coarse_and_stalled_clocks() {
-  PowerAnimator a(kW, kH);
+  PowerAnimator a;
   Canvas out(kW, kH);
   int64_t now = 1000;
   runLive(a, out, now, 2);
@@ -279,7 +290,7 @@ static void test_coarse_and_stalled_clocks() {
   TEST_ASSERT_TRUE(a.phase() == Phase::Off);
   TEST_ASSERT_TRUE(allBlack(out));
 
-  PowerAnimator b(kW, kH);
+  PowerAnimator b;
   Canvas held(kW, kH);
   int64_t frozen = 5000;
   stepFrame(b, held, true, frozen);
@@ -289,7 +300,7 @@ static void test_coarse_and_stalled_clocks() {
 }
 
 static void test_canvas_resize_is_absorbed() {
-  PowerAnimator a(kW, kH);
+  PowerAnimator a;
   Canvas small(kW, kH);
   int64_t now = 1000;
   runLive(a, small, now, 2);
@@ -304,23 +315,136 @@ static void test_canvas_resize_is_absorbed() {
   TEST_ASSERT_TRUE(allBlack(wide));
 }
 
-static void test_failed_power_buffer_allocation_is_safe_and_can_recover() {
+static void test_live_frames_cost_no_memory() {
+  PowerAnimator a;
   Canvas out(kW, kH);
-  for (std::size_t failAt : {1u, 2u}) {
-    probeFrames(failAt);
-    PowerAnimator a(kW, kH);
-    TEST_ASSERT_FALSE(a.ready());
-    failFrameAllocation = 0;
-    fillLive(out);
-    a.finish(out);
-    TEST_ASSERT_TRUE(a.ready());
-    a.update(false, 1000);
-    a.composeOut(out);
-    for (int y = 0; y < kH; ++y)
-      for (int x = 0; x < kW; ++x)
-        TEST_ASSERT_EQUAL_HEX32(pattern(x, y), out.getPixel(x, y));
-    render::setFrameAllocator({std::malloc, std::free});
+  int64_t now = 1000;
+  runLive(a, out, now, 8);
+  TEST_ASSERT_EQUAL_INT(0, heldAllocations);
+}
+
+static void test_a_fade_out_holds_one_frame_until_the_panel_is_dark() {
+  PowerAnimator a;
+  Canvas out(kW, kH);
+  int64_t now = 1000;
+  runLive(a, out, now, 2);
+
+  const int64_t offAt = now;
+  while (now < offAt + kPowerFadeMs) {
+    stepFrame(a, out, false, now);
+    TEST_ASSERT_EQUAL_INT(1, heldFrames);
+    now += 25;
   }
+  stepFrame(a, out, false, now);
+  TEST_ASSERT_TRUE(a.phase() == Phase::Off);
+  TEST_ASSERT_EQUAL_INT(1, heldAllocations);
+  TEST_ASSERT_EQUAL_INT(0, heldFrames);
+}
+
+static void test_a_fade_in_holds_one_frame_until_the_panel_is_live() {
+  PowerAnimator a;
+  Canvas out(kW, kH);
+  int64_t now = 1000;
+  runLive(a, out, now, 2);
+  stepFrame(a, out, false, now);
+  now += kPowerFadeMs;
+  stepFrame(a, out, false, now);
+  heldAllocations = 0;
+
+  const int64_t onAt = now;
+  while (now < onAt + kPowerFadeMs) {
+    stepFrame(a, out, true, now);
+    TEST_ASSERT_EQUAL_INT(1, heldFrames);
+    now += 25;
+  }
+  stepFrame(a, out, true, now);
+  TEST_ASSERT_TRUE(a.phase() == Phase::Live);
+  TEST_ASSERT_EQUAL_INT(1, heldAllocations);
+  TEST_ASSERT_EQUAL_INT(0, heldFrames);
+}
+
+static void test_flipping_mid_fade_keeps_one_frame_and_continues_from_the_picture() {
+  PowerAnimator a;
+  Canvas out(kW, kH);
+  int64_t now = 1000;
+  runLive(a, out, now, 2);
+
+  stepFrame(a, out, false, now);
+  now += kPowerFadeMs / 2;
+  stepFrame(a, out, false, now);
+  stepFrame(a, out, true, now);
+  TEST_ASSERT_TRUE(a.phase() == Phase::In);
+  now += 25;
+  stepFrame(a, out, true, now);
+  const int litBefore = litPixels(out);
+  TEST_ASSERT_GREATER_THAN_INT(0, litBefore);
+  TEST_ASSERT_LESS_THAN_INT(kW * kH, litBefore);
+
+  // Back to fading out: the part-lit picture on the panel is what falls away, not a full frame.
+  stepFrame(a, out, false, now);
+  TEST_ASSERT_TRUE(a.phase() == Phase::Out);
+  TEST_ASSERT_LESS_OR_EQUAL_INT(litBefore, litPixels(out));
+  TEST_ASSERT_EQUAL_INT(1, heldAllocations);
+  TEST_ASSERT_EQUAL_INT(1, heldFrames);
+
+  now += kPowerFadeMs;
+  stepFrame(a, out, false, now);
+  TEST_ASSERT_TRUE(a.phase() == Phase::Off);
+  TEST_ASSERT_TRUE(allBlack(out));
+  TEST_ASSERT_EQUAL_INT(0, heldFrames);
+}
+
+static void test_no_memory_for_the_fade_out_is_a_hard_cut() {
+  PowerAnimator a;
+  Canvas out(kW, kH);
+  int64_t now = 1000;
+  runLive(a, out, now, 2);
+
+  refuseHeldFrames = true;
+  stepFrame(a, out, false, now);
+  TEST_ASSERT_TRUE(a.phase() == Phase::Off);
+  TEST_ASSERT_FALSE(a.busy());
+  TEST_ASSERT_TRUE(allBlack(out));
+
+  // The next fade tries again and works.
+  refuseHeldFrames = false;
+  stepFrame(a, out, true, now);
+  TEST_ASSERT_TRUE(a.phase() == Phase::In);
+  TEST_ASSERT_EQUAL_INT(1, heldFrames);
+}
+
+static void test_no_memory_for_the_fade_in_is_a_hard_cut() {
+  PowerAnimator a;
+  Canvas out(kW, kH), live(kW, kH);
+  fillLive(live);
+  int64_t now = 1000;
+  runLive(a, out, now, 2);
+  stepFrame(a, out, false, now);
+  now += kPowerFadeMs;
+  stepFrame(a, out, false, now);
+
+  refuseHeldFrames = true;
+  stepFrame(a, out, true, now);
+  TEST_ASSERT_TRUE(a.phase() == Phase::Live);
+  TEST_ASSERT_FALSE(a.busy());
+  TEST_ASSERT_TRUE(samePixels(out, live));
+
+  // Off again with memory back: an ordinary fade.
+  refuseHeldFrames = false;
+  now += 25;
+  stepFrame(a, out, false, now);
+  TEST_ASSERT_TRUE(a.phase() == Phase::Out);
+  TEST_ASSERT_TRUE(samePixels(out, live));
+}
+
+static void test_off_before_the_first_frame_goes_dark_without_fading_the_boot_screen() {
+  PowerAnimator a;
+  Canvas boot(kW, kH);
+  fillLive(boot);
+  stepFrame(a, boot, false, 1000);
+  TEST_ASSERT_TRUE(a.phase() == Phase::Off);
+  TEST_ASSERT_TRUE(allBlack(boot));
+  TEST_ASSERT_EQUAL_INT(0, heldAllocations);
 }
 
 int main(int, char**) {
@@ -335,6 +459,12 @@ int main(int, char**) {
   RUN_TEST(test_immediate_reversal_settles);
   RUN_TEST(test_coarse_and_stalled_clocks);
   RUN_TEST(test_canvas_resize_is_absorbed);
-  RUN_TEST(test_failed_power_buffer_allocation_is_safe_and_can_recover);
+  RUN_TEST(test_live_frames_cost_no_memory);
+  RUN_TEST(test_a_fade_out_holds_one_frame_until_the_panel_is_dark);
+  RUN_TEST(test_a_fade_in_holds_one_frame_until_the_panel_is_live);
+  RUN_TEST(test_flipping_mid_fade_keeps_one_frame_and_continues_from_the_picture);
+  RUN_TEST(test_no_memory_for_the_fade_out_is_a_hard_cut);
+  RUN_TEST(test_no_memory_for_the_fade_in_is_a_hard_cut);
+  RUN_TEST(test_off_before_the_first_frame_goes_dark_without_fading_the_boot_screen);
   return UNITY_END();
 }

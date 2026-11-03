@@ -190,6 +190,13 @@ static void test_capability_lists_escape_names() {
   TEST_ASSERT_EQUAL_STRING(name.c_str(), decoded.c_str());
 }
 
+static void test_the_document_holds_no_spare_capacity() {
+  const std::vector<std::string> names(40, "AnEffectWithAFairlyLongName");
+  const std::string json = api::capabilitiesJson(names, names, names, {});
+  TEST_ASSERT_TRUE(json.size() > 1024);
+  TEST_ASSERT_EQUAL_UINT(json.size(), json.capacity());
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_linux_needs_remain_valid_but_missing_without_the_platform);
@@ -199,5 +206,6 @@ int main(int, char**) {
   RUN_TEST(test_capabilities_json_reports_every_table_entry);
   RUN_TEST(test_the_table_follows_the_hardware);
   RUN_TEST(test_url_and_clip_are_reported_but_not_a_need);
+  RUN_TEST(test_the_document_holds_no_spare_capacity);
   return UNITY_END();
 }

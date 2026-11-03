@@ -17,7 +17,6 @@ namespace {
 constexpr uint32_t kStackBytes = 4096;
 constexpr UBaseType_t kPriority = 1;
 constexpr BaseType_t kCore = 0;
-constexpr TickType_t kIdlePollTicks = pdMS_TO_TICKS(50);
 
 constexpr uint32_t kMdnsTimeoutMs = 3000;
 
@@ -26,7 +25,9 @@ constexpr uint32_t kMdnsTimeoutMs = 3000;
 constexpr uint32_t kResolveDeadlineMs = 20000;
 
 // mDNS and DNS lookups block for seconds, which the main loop cannot afford, so they run on a
-// worker task and callers poll resolve() until it stops returning Pending.
+// worker task and callers poll resolve() until it stops returning Pending. The task exits once it
+// has answered, so a resolver costs nothing between lookups. It must outlive that task and any
+// late DNS reply (see dnsAnswer_); both instances in the firmware live as long as the firmware.
 class HostResolverEsp32 : public IHostResolver {
  public:
   ResolveState resolve(const std::string& host) override {
@@ -50,8 +51,9 @@ class HostResolverEsp32 : public IHostResolver {
     if (inFlight_ && host != pendingHost_) forget();
 
     if (!inFlight_) {
-      start(host);
-      return ResolveState::Pending;
+      if (start(host)) return ResolveState::Pending;
+      error_ = LinkError::Timeout;
+      return ResolveState::Failed;
     }
 
     const uint8_t done = done_.load(std::memory_order_acquire);
@@ -115,39 +117,54 @@ class HostResolverEsp32 : public IHostResolver {
     }
   }
 
-  void start(const std::string& host) {
+  // False means there is no memory for the worker. Nothing stays behind, so the next call retries.
+  bool start(const std::string& host) {
+    pendingHost_ = host;
+    startedMs_ = millis();
+    inFlight_ = true;
+    bool needTask = false;
     {
       std::lock_guard<std::mutex> lock(requestMutex_);
       ++generation_;
       queryHost_ = host;
       queryGeneration_ = generation_;
+      done_.store(kPending, std::memory_order_release);
+      queued_ = true;
+      needTask = !taskAlive_;
+      taskAlive_ = true;
     }
-    pendingHost_ = host;
-    done_.store(kPending, std::memory_order_release);
-    startedMs_ = millis();
-    inFlight_ = true;
-    queued_.store(true, std::memory_order_release);
-    // The task is created on the first lookup and then lives forever, parked on core 0 so its
-    // multi-second blocking calls stay off the render core.
-    if (!started_) {
-      started_ = true;
-      xTaskCreatePinnedToCore(taskEntry, "mqttdns", kStackBytes, this, kPriority, nullptr, kCore);
+    if (!needTask) return true;
+    // Pinned to core 0 so its multi-second blocking calls stay off the render core.
+    if (xTaskCreatePinnedToCore(taskEntry, "mqttdns", kStackBytes, this, kPriority, nullptr, kCore) == pdPASS)
+      return true;
+    {
+      std::lock_guard<std::mutex> lock(requestMutex_);
+      queued_ = false;
+      taskAlive_ = false;
     }
+    inFlight_ = false;
+    logf("dns: no memory to look up %s", host.c_str());
+    return false;
   }
 
-  static void taskEntry(void* self) { static_cast<HostResolverEsp32*>(self)->run(); }
+  static void taskEntry(void* self) {
+    static_cast<HostResolverEsp32*>(self)->run();
+    vTaskDelete(nullptr);
+  }
 
   void run() {
     for (;;) {
-      if (!queued_.exchange(false, std::memory_order_acquire)) {
-        vTaskDelay(kIdlePollTicks);
-        continue;
-      }
-
       std::string host;
       uint32_t mine = 0;
       {
+        // Looking at the queue and declaring the task gone happen under one lock with start(), so a
+        // request either is seen here or makes start() create the next task.
         std::lock_guard<std::mutex> lock(requestMutex_);
+        if (!queued_) {
+          taskAlive_ = false;
+          return;
+        }
+        queued_ = false;
         host = queryHost_;
         mine = queryGeneration_;
       }
@@ -159,31 +176,24 @@ class HostResolverEsp32 : public IHostResolver {
       if (isMdnsName(host)) {
         found = MDNS.queryHost(mdnsLabel(host).c_str(), kMdnsTimeoutMs);
         if (static_cast<uint32_t>(found) != 0) via = kViaMdns;
-        IPAddress viaDns;
-        if (via == kViaNone && WiFi.hostByName(host.c_str(), viaDns) == 1) {
-          found = viaDns;
+        if (via == kViaNone && WiFi.hostByName(host.c_str(), dnsAnswer_) == 1) {
+          found = dnsAnswer_;
           via = kViaDns;
         }
-        if (via == kViaNone && WiFi.hostByName(mdnsLabel(host).c_str(), viaDns) == 1) {
-          found = viaDns;
+        if (via == kViaNone && WiFi.hostByName(mdnsLabel(host).c_str(), dnsAnswer_) == 1) {
+          found = dnsAnswer_;
           via = kViaLabel;
         }
-      } else {
-        IPAddress viaDns;
-        if (WiFi.hostByName(host.c_str(), viaDns) == 1) {
-          found = viaDns;
-          via = kViaDns;
-        }
+      } else if (WiFi.hostByName(host.c_str(), dnsAnswer_) == 1) {
+        found = dnsAnswer_;
+        via = kViaDns;
       }
-      via_.store(via, std::memory_order_relaxed);
 
       // Cancelled or superseded while we were blocked; publishing now would answer a question the
       // caller has already moved on from.
-      {
-        std::lock_guard<std::mutex> lock(requestMutex_);
-        if (mine != generation_) continue;
-      }
-
+      std::lock_guard<std::mutex> lock(requestMutex_);
+      if (mine != generation_) continue;
+      via_.store(via, std::memory_order_relaxed);
       if (static_cast<uint32_t>(found) != 0) {
         result_.store(static_cast<uint32_t>(found), std::memory_order_relaxed);
         done_.store(kReady, std::memory_order_release);
@@ -197,8 +207,13 @@ class HostResolverEsp32 : public IHostResolver {
   std::string queryHost_;
   uint32_t queryGeneration_ = 0;
   uint32_t generation_ = 0;
+  bool queued_ = false;
+  bool taskAlive_ = false;
 
-  std::atomic<bool> queued_{false};
+  // lwIP keeps this address while it waits, and hostByName() gives up after 15 s without telling
+  // it, so a later reply still lands here. On the task's stack that would be freed memory.
+  IPAddress dnsAnswer_;
+
   std::atomic<uint8_t> done_{kPending};
   std::atomic<uint32_t> result_{0};
   std::atomic<uint8_t> via_{kViaNone};
@@ -210,7 +225,6 @@ class HostResolverEsp32 : public IHostResolver {
   uint32_t startedMs_ = 0;
   bool have_ = false;
   bool inFlight_ = false;
-  bool started_ = false;
 };
 
 }

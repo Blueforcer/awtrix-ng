@@ -89,6 +89,58 @@ class StripLinuxOnly(unittest.TestCase):
         with self.assertRaises(build.MarkerError):
             build.strip_linux_only("//linux:begin\n", keep_regions=True)
 
+    def test_header_names_the_compressor(self):
+        self.assertIn("-> 3 B gzipped with zopfli (", build.render_header(b"r", b"m", b"abc", b"f", b"d"))
+        self.assertIn("-> 3 B gzipped with gzip -9 (",
+                      build.render_header(b"r", b"m", b"abc", b"f", b"d", "gzip -9"))
+
+    def test_without_zopfli_the_stream_is_plain_deterministic_gzip(self):
+        data = b"web ui " * 1000
+        first = build.compress(data, None)
+        self.assertEqual(first, build.compress(data, None))
+        self.assertEqual(first[:2], b"\x1f\x8b")
+        self.assertEqual(build.gzip.decompress(first), data)
+
+    def test_a_failing_install_falls_back_without_stopping_the_build(self):
+        with tempfile.TemporaryDirectory() as folder:
+            pinned = build.ZOPFLI
+            build.ZOPFLI = "zopfli-this-package-does-not-exist==0.0.0"
+            try:
+                self.assertIsNone(build.load_zopfli(folder))
+            finally:
+                build.ZOPFLI = pinned
+
+    def test_a_tool_that_will_not_load_falls_back_without_stopping_the_build(self):
+        with tempfile.TemporaryDirectory() as folder:
+            pinned = build.ZOPFLI
+            build.ZOPFLI = "broken==1"
+            target = Path(folder) / ".pio/webui-tools/broken-1/zopfli"
+            target.mkdir(parents=True)
+            (target / "gzip.py").write_text("raise ImportError('wheel for another platform')\n")
+            (target / "__init__.py").write_text("")
+            saved = {name: module for name, module in sys.modules.items() if name.split(".")[0] == "zopfli"}
+            for name in saved:
+                del sys.modules[name]
+            try:
+                self.assertIsNone(build.load_zopfli(folder))
+            finally:
+                build.ZOPFLI = pinned
+                for name in list(sys.modules):
+                    if name.split(".")[0] == "zopfli":
+                        del sys.modules[name]
+                sys.modules.update(saved)
+
+    def test_the_pinned_zopfli_is_deterministic_and_plain_gzip(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as folder:
+            zopfli_gzip = build.load_zopfli(folder)
+            if zopfli_gzip is None:
+                self.skipTest("the pinned zopfli cannot be installed here")
+            data = (ROOT / "webui/index.html").read_bytes()[:20000]
+            first = build.compress(data, zopfli_gzip)
+            self.assertEqual(first, build.compress(data, zopfli_gzip))
+            self.assertEqual(build.gzip.decompress(first), data)
+            self.assertLess(len(first), len(build.compress(data, None)))
+
     def test_header_guards_the_full_stream(self):
         header = build.render_header(b"raw", b"mini", b"\x1f\x8b\x01", b"full mini", b"\x1f\x8b\x02\x03")
         esp32, guarded = header.split("#if defined(AWTRIX_WEBUI_FULL)\n")

@@ -83,7 +83,8 @@ inline std::string capabilitiesJson(const std::vector<std::string>& effects,
   }
   if (platformMembers) platformMembers(writer);
   writer.endObject();
-  return out;
+  // Appending left up to twice the capacity it needs, and callers keep this for the whole uptime.
+  return std::string(out.data(), out.size());
 }
 
 }

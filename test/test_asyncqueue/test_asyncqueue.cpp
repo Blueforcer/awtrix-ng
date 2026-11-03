@@ -2,6 +2,8 @@
 #include <unity.h>
 
 #include <atomic>
+#include <cstdlib>
+#include <new>
 #include <set>
 #include <string>
 #include <thread>
@@ -11,6 +13,22 @@
 #include "core/script/ScriptServices.h"
 
 using namespace awtrix;
+
+namespace {
+std::atomic<long> liveBlocks{0};
+}
+
+void* operator new(std::size_t bytes) {
+  void* pointer = std::malloc(bytes ? bytes : 1);
+  if (!pointer) throw std::bad_alloc();
+  ++liveBlocks;
+  return pointer;
+}
+void operator delete(void* pointer) noexcept {
+  if (pointer) --liveBlocks;
+  std::free(pointer);
+}
+void operator delete(void* pointer, std::size_t) noexcept { operator delete(pointer); }
 
 void setUp() {}
 void tearDown() {}
@@ -75,6 +93,38 @@ static void test_carries_service_payloads() {
   TEST_ASSERT_EQUAL_STRING("hello", m.payload.c_str());
 }
 
+static void test_only_queued_items_hold_memory() {
+  const long before = liveBlocks;
+  script::AsyncQueue<script::HttpResult, 4> q;
+  TEST_ASSERT_EQUAL_INT(before, liveBlocks.load());
+
+  q.push(script::HttpResult{});
+  q.push(script::HttpResult{});
+  TEST_ASSERT_EQUAL_INT(before + 2, liveBlocks.load());
+
+  script::HttpResult out;
+  TEST_ASSERT_TRUE(q.pop(out));
+  TEST_ASSERT_TRUE(q.pop(out));
+  TEST_ASSERT_EQUAL_INT(before, liveBlocks.load());
+}
+
+static void test_overflow_keeps_the_newest_and_frees_the_oldest() {
+  const long before = liveBlocks;
+  script::AsyncQueue<script::HttpResult, 2> q;
+  for (uint32_t id = 1; id <= 5; ++id) {
+    script::HttpResult result;
+    result.id = id;
+    q.push(std::move(result));
+  }
+  TEST_ASSERT_EQUAL_INT(before + 2, liveBlocks.load());
+  script::HttpResult out;
+  TEST_ASSERT_TRUE(q.pop(out));
+  TEST_ASSERT_EQUAL_UINT32(4u, out.id);
+  TEST_ASSERT_TRUE(q.pop(out));
+  TEST_ASSERT_EQUAL_UINT32(5u, out.id);
+  TEST_ASSERT_FALSE(q.pop(out));
+}
+
 static void test_concurrent_producers_do_not_corrupt_the_queue() {
   constexpr int kProducers = 4;
   constexpr int kPerProducer = 2000;
@@ -129,6 +179,8 @@ int main(int, char**) {
   RUN_TEST(test_drain_then_refill);
   RUN_TEST(test_pop_on_empty_leaves_out_untouched);
   RUN_TEST(test_carries_service_payloads);
+  RUN_TEST(test_only_queued_items_hold_memory);
+  RUN_TEST(test_overflow_keeps_the_newest_and_frees_the_oldest);
   RUN_TEST(test_concurrent_producers_do_not_corrupt_the_queue);
   return UNITY_END();
 }

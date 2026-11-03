@@ -11,9 +11,12 @@ using namespace awtrix;
 // Live heap blocks: what the queue still holds shows up here without inspecting its slots.
 namespace {
 long liveBlocks = 0;
+// volatile: the compiler may assume operator new reads no globals, and drop a plain store to this.
+volatile bool refuseAllocations = false;
 }
 
 void* operator new(std::size_t bytes) {
+  if (refuseAllocations) throw std::bad_alloc();
   void* pointer = std::malloc(bytes ? bytes : 1);
   if (!pointer) throw std::bad_alloc();
   ++liveBlocks;
@@ -93,6 +96,8 @@ static void test_consumed_payloads_are_released_while_the_queue_is_alive() {
   Command source(CommandType::Notify);
   source.name.assign(128, 'n');
   source.payload.assign(8192, 'p');
+  Command first;
+  TEST_ASSERT_TRUE(b.push(Command(CommandType::NextApp)) && b.pop(first));
   const long before = liveBlocks;
   bool succeeded = true;
   {
@@ -106,6 +111,44 @@ static void test_consumed_payloads_are_released_while_the_queue_is_alive() {
   const long retained = liveBlocks - before;
   TEST_ASSERT_TRUE(succeeded);
   TEST_ASSERT_EQUAL_INT(0, retained);
+}
+
+static void test_the_slots_appear_with_the_first_command_and_stay() {
+  const long before = liveBlocks;
+  CommandBus b(16);
+  Command out;
+  TEST_ASSERT_EQUAL_UINT(16u, (unsigned)b.capacity());
+  TEST_ASSERT_FALSE(b.pop(out));
+  TEST_ASSERT_FALSE(b.full());
+  TEST_ASSERT_EQUAL_INT(before, liveBlocks);
+
+  TEST_ASSERT_TRUE(b.push(Command(CommandType::NextApp)));
+  TEST_ASSERT_EQUAL_INT(before + 1, liveBlocks);
+  TEST_ASSERT_TRUE(b.pop(out));
+  TEST_ASSERT_TRUE(b.push(Command(CommandType::NextApp)));
+  TEST_ASSERT_EQUAL_INT(before + 1, liveBlocks);
+}
+
+static void test_no_memory_for_the_slots_refuses_the_command_until_there_is() {
+  CommandBus b(2);
+  refuseAllocations = true;
+  const bool accepted = b.push(Command(CommandType::NextApp));
+  refuseAllocations = false;
+  TEST_ASSERT_FALSE(accepted);
+  TEST_ASSERT_TRUE(b.empty());
+
+  TEST_ASSERT_TRUE(b.push(Command(CommandType::Reboot)));
+  Command out;
+  TEST_ASSERT_TRUE(b.pop(out));
+  TEST_ASSERT_EQUAL_INT(ti(CommandType::Reboot), ti(out.type));
+  TEST_ASSERT_TRUE(b.empty());
+}
+
+static void test_a_ring_without_capacity_refuses_everything() {
+  CommandBus b(0);
+  Command out;
+  TEST_ASSERT_FALSE(b.push(Command(CommandType::NextApp)));
+  TEST_ASSERT_FALSE(b.pop(out));
 }
 
 static void test_moved_commands_transfer_their_payload() {
@@ -133,6 +176,9 @@ int main(int, char**) {
   RUN_TEST(test_ring_wraparound);
   RUN_TEST(test_payload_preserved);
   RUN_TEST(test_consumed_payloads_are_released_while_the_queue_is_alive);
+  RUN_TEST(test_the_slots_appear_with_the_first_command_and_stay);
+  RUN_TEST(test_no_memory_for_the_slots_refuses_the_command_until_there_is);
+  RUN_TEST(test_a_ring_without_capacity_refuses_everything);
   RUN_TEST(test_moved_commands_transfer_their_payload);
   return UNITY_END();
 }

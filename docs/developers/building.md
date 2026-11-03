@@ -256,7 +256,7 @@ The tab sources live in `webui/src/`; `manifest.json` lists their assembly order
 Linux. PlatformIO, CMake and the jsdom harness run the same assembler. Use
 `--check` to detect an outdated generated file without rewriting it.
 
-Before compiling, the `pre:scripts/build_webui.py` extra script assembles, minifies and gzips
+Before compiling, the `pre:scripts/build_webui.py` extra script assembles, minifies and compresses
 the HTML into `src/transport/http/WebUiAsset.h`. That header is generated and checked
 in. The compressed asset has a 92 KB budget; the build fails when it is exceeded. The header is
 rewritten only when `webui/index.html` has changed, so incremental builds stay incremental.
@@ -265,9 +265,40 @@ Minification runs `html-minifier-terser`, pinned to one exact version, through `
 has to be on `PATH`** whenever the web UI source has changed since the header was generated.
 Without `npx` the build stops rather than embedding an unminified asset.
 
+Compression uses Zopfli, whose output is ordinary gzip. The build installs the pinned `zopfli`
+Python package into `.pio/webui-tools` the first time it needs it. If that fails, it says so and
+falls back to `gzip -9`, which costs about 3 KB of flash. The size line at the top of the header
+names the compressor, so check it before committing a regenerated header.
+
 Commit source edits and generated HTML together. Merge the sources and rebuild;
 never merge `WebUiAsset.h` by hand. Commit a changed header separately. The TC002
 bundler checks that the HTML and embedded asset match their inputs.
+
+## Image size
+
+ESP32 images build with link-time optimisation, so a link takes about two and a half minutes.
+`post:scripts/firmware_size.py` edits the framework's link line for that. `src/system/SizeWraps.c`
+replaces mbedTLS error texts, C++ exception unwinding and heap poisoning. The script explains each
+one and what it saves.
+
+Every `__wrap_` function needs `__attribute__((used))`. Without it, the link fails with an
+undefined reference to that function.
+
+A corrupted heap block is not reported at `free()` in these builds. To hunt for one, remove the
+`multi_heap_` entries from `platformio.ini`.
+
+LTO takes stack canaries away from plain `char` buffers under the framework's `-fstack-protector`,
+so `pre:scripts/stack_protector.py` builds all code that handles outside input with
+`-fstack-protector-strong`. A new source file that parses network, file or script data belongs on
+its list. Berry's compiler stays off it, because it recurses per nesting level and its input is
+already code.
+
+Each of these changes how much stack a function takes. Scripts compile on the loop task, so after
+changing compiler flags, install a script with nested callbacks and check how much of its 12 KB
+stack is left, with `uxTaskGetStackHighWaterMark`.
+
+A panic on the classic ESP32 prints its backtrace and reboots, but writes no coredump. To get one
+from a clock, remove the two `esp_core_dump` entries from `[env:awtrix]`. The S3 writes them as usual.
 
 ## Partition tables are generated
 

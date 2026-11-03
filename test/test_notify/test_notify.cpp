@@ -1,8 +1,27 @@
 #include <unity.h>
 
+#include <cstdlib>
+#include <new>
+
 #include "core/notify/NotificationManager.h"
 
 using namespace awtrix;
+
+namespace {
+long liveBlocks = 0;
+}
+
+void* operator new(std::size_t bytes) {
+  void* pointer = std::malloc(bytes ? bytes : 1);
+  if (!pointer) throw std::bad_alloc();
+  ++liveBlocks;
+  return pointer;
+}
+void operator delete(void* pointer) noexcept {
+  if (pointer) --liveBlocks;
+  std::free(pointer);
+}
+void operator delete(void* pointer, std::size_t) noexcept { operator delete(pointer); }
 
 void setUp() {}
 void tearDown() {}
@@ -15,6 +34,16 @@ static AppSpec mk(const char* text, long durMs = 0, bool hold = false, bool stac
   s.hold = hold;
   s.stack = stack;
   return s;
+}
+
+static void test_only_queued_notifications_hold_memory() {
+  const long before = liveBlocks;
+  NotificationManager nm(4);
+  TEST_ASSERT_EQUAL_INT(before, liveBlocks);
+  nm.push(mk("a", 1000), 0);
+  TEST_ASSERT_GREATER_THAN_INT(before, liveBlocks);
+  nm.dismiss(0);
+  TEST_ASSERT_EQUAL_INT(before, liveBlocks);
 }
 
 static void test_push_and_current() {
@@ -170,6 +199,7 @@ int main(int, char**) {
   RUN_TEST(test_dismiss_named_removes_from_the_middle_without_disturbing_the_front);
   RUN_TEST(test_dismiss_named_on_the_front_advances_and_bumps_generation);
   RUN_TEST(test_dismiss_named_reports_a_miss);
+  RUN_TEST(test_only_queued_notifications_hold_memory);
   RUN_TEST(test_push_and_current);
   RUN_TEST(test_hold_keeps_a_notification_past_its_duration);
   RUN_TEST(test_hold_does_not_shorten_the_duration);
