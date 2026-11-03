@@ -58,13 +58,13 @@ jobs:
       # The runner context is not available in job-level env.
       - name: Keep the Cargo build cache outside the checkout
         run: echo "CARGO_TARGET_DIR=${{ runner.temp }}/tc002-cargo" >> "$GITHUB_ENV"
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: tools/tc002/desktop/package-lock.json
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: tc002-image-tools
           path: docs/assets/tc002/image/
@@ -89,7 +89,7 @@ jobs:
           suffix=""
           if [ "$RUNNER_OS" = "Windows" ]; then suffix=".exe"; fi
           "$CARGO_TARGET_DIR/${{ matrix.target }}/release/awtrix-tc002-installer-cli$suffix" --help
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7
         with:
           name: tc002-installer-${{ matrix.target }}
           path: ${{ runner.temp }}/tc002-installer/artifacts/
