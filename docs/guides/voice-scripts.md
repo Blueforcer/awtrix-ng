@@ -229,8 +229,9 @@ still play. A send or fetch of an app in the background leaves the music alone.
 
 This app does all of it: record, turn speech into text, ask a chat model, fetch the spoken answer and
 play it. Any service that speaks the OpenAI format works. Pick the app as described in
-[Choose the assistant](voice.md#choose-the-assistant) and enter the key in its settings. The
-[Assistant app](voice.md#assistant-app) is a larger version of it.
+[Choose the assistant](voice.md#choose-the-assistant) and enter the key in its settings.
+[Lumen Assistant](voice.md#lumen-assistant) is a larger version of it, built on the
+[AI Toolkit](https://awtrix.de/script/reB8AJ4QMchP) module.
 
 ```berry
 # @name    Ask
@@ -403,7 +404,7 @@ local service works without a key. For another service, change `hosts=` and ente
 
 ## Related
 
-- [Voice assistant](voice.md): choose who answers, and the Assistant app
+- [Voice assistant](voice.md): choose who answers, and Lumen Assistant
 - [Voice module](../reference/voice.md): every call, option and status value
 - [Network](scripting/network.md): `http`, and API keys with `@secret`
 - [Sound & music](scripting/sound.md): `sound.play()`, speech and music

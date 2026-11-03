@@ -1549,7 +1549,7 @@ cached.
 
 Lists every script with an `@secret` line, also one whose line is invalid.
 
-**Response:** `200` `{"apps": ["Assistant"]}`.
+**Response:** `200` `{"apps": ["LumenAssistant"]}`.
 
 #### GET /api/v1/secrets/{name}
 
@@ -1580,7 +1580,7 @@ Saves or erases keys. **Request:** a JSON object of keys and values, for example
 request changes nothing. **Response:** `200` `{"ok":true}`.
 
 ```bash
-curl -X PUT http://<awtrix-ip>/api/v1/secrets/Assistant \
+curl -X PUT http://<awtrix-ip>/api/v1/secrets/LumenAssistant \
   -H "Content-Type: application/json" \
   -H "X-Awtrix-Secret: 1" \
   -H "Origin: http://<awtrix-ip>" \
@@ -3401,7 +3401,7 @@ This route, `POST` and `DELETE` below exist only on clocks with a speaker. Other
 
 | Key | Type | Meaning |
 |---|---|---|
-| `name` | string or null | the voice's name, `null` when the clock has no voice |
+| `name` | string or null | the voice's name. `null` when the clock has no voice, and then only `maxBytes` follows |
 | `language` | string | its language, for example `en` or `de` |
 | `version` | string | the pack's version, `""` when it has none |
 | `bytes` | integer | the pack's size |

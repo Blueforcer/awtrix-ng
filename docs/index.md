@@ -4,13 +4,11 @@ hide:
   - toc
 ---
 
-<!-- only root -->
 <div class="home-hero" markdown>
 
 <img src="assets/hero.webp" alt="" class="home-hero__img">
 
 <div class="home-hero__text" markdown>
-<!-- /only -->
 
 # A pixel clock that shows what you want
 
@@ -24,10 +22,10 @@ small apps you write yourself.
 [Install AWTRIX NG](getting-started/tc002.md){ .md-button .md-button--primary }
 <!-- /only -->
 
-<!-- only root -->
 </div>
 </div>
 
+<!-- only root -->
 ## Choose your clock
 
 Each clock has its own documentation. It shows only what AWTRIX NG can do on that clock.
@@ -35,9 +33,24 @@ Each clock has its own documentation. It shows only what AWTRIX NG can do on tha
 <!-- clocks -->
 
 No clock yet? [Get a clock](getting-started/buy.md) lists where to buy the TC001 and TC002.
-<!-- /only -->
 
 <div class="home-hubs" markdown>
+<!-- /only -->
+<!-- only esp32 esp32-s3 tc002 -->
+## Up and running in four steps
+
+<!-- only esp32 esp32-s3 -->
+1. **Install** the firmware: [Install AWTRIX NG](getting-started/flashing.md).
+<!-- /only -->
+<!-- only tc002 -->
+1. **Install** the firmware: [Install AWTRIX NG](getting-started/tc002.md).
+<!-- /only -->
+2. **Connect to Wi-Fi** through the clock's setup hotspot: [Connect to Wi-Fi](getting-started/first-boot.md).
+3. **Find your clock** and open its address in a browser: [Find your clock](getting-started/discovery.md).
+4. **Look around** the built-in [web UI](getting-started/web-ui.md).
+
+<div class="home-hubs home-hubs--quiet" markdown>
+<!-- /only -->
 
 <div class="home-hub" markdown>
 
@@ -55,12 +68,14 @@ click **Send to AWTRIX**, and it is on your clock.
 
 </div>
 
+<!-- only root -->
 <div class="home-hub__tiles">
 <a class="home-hub__tile" href="https://awtrix.de/scripts" title="Games, clock faces, live data and animations that run on the clock."><strong>Scripts</strong><span>Games, clock faces, live data and animations that run on the clock.</span></a>
 <a class="home-hub__tile" href="https://awtrix.de/flows" title="Automations for Home Assistant, Node-RED, n8n, Domoticz and FHEM."><strong>Flows</strong><span>Automations for Home Assistant, Node-RED, n8n, Domoticz and FHEM.</span></a>
 <a class="home-hub__tile" href="https://awtrix.de/icons" title="Images and animations for your apps and notifications."><strong>Icons</strong><span>Images and animations for your apps and notifications.</span></a>
 <a class="home-hub__tile" href="https://awtrix.de/editor" title="Draw your own icons and animations in the browser."><strong>Studio</strong><span>Draw your own icons and animations in the browser.</span></a>
 </div>
+<!-- /only -->
 
 </div>
 
@@ -79,17 +94,14 @@ phone.<!-- only tc002 --> On the TC002 your phone also becomes a gamepad.<!-- /o
 
 </div>
 
+<!-- only root -->
 <div class="home-hub__tiles">
 <a class="home-hub__tile" href="guides/app/#see-the-clock-live" title="See what your clock shows right now, pixel for pixel."><strong>Live view</strong><span>See what your clock shows right now, pixel for pixel.</span></a>
 <a class="home-hub__tile" href="guides/app/#scripts-and-icons-from-the-hub" title="Send scripts to your clock with one tap, no address to type."><strong>Hub in your pocket</strong><span>Send scripts to your clock with one tap, no address to type.</span></a>
 <a class="home-hub__tile" href="guides/app/#notifications-from-your-phone" title="The apps you choose show their notifications on your clock."><strong>Notifications</strong><span>The apps you choose show their notifications on your clock.</span></a>
-<!-- only root tc002 -->
 <a class="home-hub__tile" href="guides/app/#play-with-your-phone" title="Play the games on your TC002 with your phone, alone or with a friend."><strong>Gamepad</strong><span>Play the games on your TC002 with your phone, alone or with a friend.</span></a>
-<!-- /only -->
-<!-- only esp32 esp32-s3 -->
-<a class="home-hub__tile" href="guides/app/#send-a-picture" title="Share a photo to your clock or save it as an icon."><strong>Pictures</strong><span>Share a photo to your clock or save it as an icon.</span></a>
-<!-- /only -->
 </div>
+<!-- /only -->
 
 </div>
 
@@ -128,18 +140,6 @@ same.
 <!-- /only -->
 
 <!-- only esp32 esp32-s3 tc002 -->
-## Up and running in four steps
-
-<!-- only esp32 esp32-s3 -->
-1. **Install** the firmware: [Install AWTRIX NG](getting-started/flashing.md).
-<!-- /only -->
-<!-- only tc002 -->
-1. **Install** the firmware: [Install AWTRIX NG](getting-started/tc002.md).
-<!-- /only -->
-2. **Connect to Wi-Fi** through the clock's setup hotspot: [Connect to Wi-Fi](getting-started/first-boot.md).
-3. **Find your clock** and open its address in a browser: [Find your clock](getting-started/discovery.md).
-4. **Look around** the built-in [web UI](getting-started/web-ui.md).
-
 ## Two ways to show your own content
 
 <div class="grid home-ways" markdown>

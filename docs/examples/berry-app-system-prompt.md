@@ -569,7 +569,7 @@ volume as usual. Holding a taken press does not start Home Assistant Voice.
 `http.get()` returns immediately and never blocks the panel: the request runs elsewhere and the
 callback fires between frames, once, some time later. **`body` is `nil` and `status` is `0` when
 nothing came back** - no Wi-Fi, DNS miss, refused connection, too many requests in flight, or no
-answer within 30 seconds. A real response always reaches the callback, 4xx and 5xx included, so
+answer in time. A real response always reaches the callback, 4xx and 5xx included, so
 branch on `status` only where the script must tell them apart.
 
 **All apps share one queue, and requests run one after another.** A slow request delays every other

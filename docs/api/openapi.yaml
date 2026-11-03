@@ -3274,7 +3274,7 @@ components:
     SpeechVoice:
       x-only: [tc002]
       type: object
-      required: [name, language, version, bytes, uploaded, maxBytes]
+      required: [name, maxBytes]
       properties:
         name: {type: [string, "null"], description: "The voice's name, null when the clock has no voice"}
         language: {type: string, description: "Its language, for example en or de"}

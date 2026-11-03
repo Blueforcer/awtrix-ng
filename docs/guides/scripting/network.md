@@ -59,7 +59,7 @@ first answer arrives, it shows `...`.
 - **`loop()` runs about once a second, also while your app is hidden.** Start requests there,
   spaced out with a counter, so the data is ready when your app comes round.
 - **Requests take turns.** All scripts share one queue, and a request runs when the one before it
-  has finished. So a slow service also delays the requests of every other script.
+  has finished. So a slow service also delays the requests of every other script.<!-- only tc002 --> Requests with `timeout` have a queue of their own.<!-- /only -->
 - **MQTT works the same way.** `mqtt.subscribe()` returns at once, and your callback runs for
   every message.
 
@@ -235,7 +235,7 @@ with its status, for example 302. Send such a request straight to the final addr
 
 Send the header only when the key may go to the address, and the same app also works with a service
 that wants no key. With one key per service, ask for each key, and send the one that fits. This is how
-the [Assistant app](../voice.md#assistant-app) picks its key, and how it talks to a local server:
+[Lumen Assistant](../voice.md#lumen-assistant) picks its key, and how it talks to a local server:
 
 ```berry
 var headers = {}
@@ -456,8 +456,7 @@ symbols the display can draw. Both run once per fetch, never per frame.
 
 Four habits worth copying:
 
-- **One `nil` check covers every network failure:** offline, refused, or no answer within 30
-  seconds. The checks after it catch an answer that is not the JSON you expect. This API needs no
+- **One `nil` check covers every network failure:** offline, refused, or no answer in time. The checks after it catch an answer that is not the JSON you expect. This API needs no
   login, so `status` is not checked. A script with a token would check it.
 - **`find()` instead of `[]`**, because `[]` raises on a missing key. If the API changes, your app
   should not break.

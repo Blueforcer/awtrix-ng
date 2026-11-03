@@ -5,7 +5,7 @@ only: [tc002]
 # Voice assistant
 
 This page lets you talk to the clock: hold the knob for a moment or say "Hey AWTRIX", then speak.
-Home Assistant's Assist, or an app such as the [Assistant app](#assistant-app), understands the
+Home Assistant's Assist, or an app such as [Lumen Assistant](#lumen-assistant), understands the
 request and answers through the clock's speaker.
 
 ## How it behaves
@@ -38,9 +38,10 @@ Assistant settings are hidden. The wake word works for both. An app that is swit
 If the display was off, it comes on for the app. It stays on while the app is open and while the
 clock speaks, and goes off again after that. An app that stays in the rotation counts as open until
 ten seconds after its last recording, playback or request. A radio station waits until then. While the
-clock speaks, or while the app still records, plays or waits for a service, a new start does nothing.
+clock speaks, or while the app still records, plays, sends or fetches, a new start does nothing. A running
+`http` request does not count.
 
-To talk to an AI service, use the [Assistant app](#assistant-app). To write such an app yourself,
+To talk to an AI service, use [Lumen Assistant](#lumen-assistant). To write such an app yourself,
 see [Voice in scripts](voice-scripts.md).
 
 ## What you need for Home Assistant
@@ -151,46 +152,55 @@ The button works only while **Status** shows *Ready*. With an app as the assista
 the app instead. Without discovery, publish an empty message to
 [`<prefix>/cmd/voice/start`](../reference/mqtt.md#voicestart).
 
-## Ask an AI with the Assistant app {#assistant-app}
+## Ask an AI with Lumen Assistant {#lumen-assistant}
 
-The Assistant app answers your question with an AI service and needs no Home Assistant. It sends
-what you say to a speech service, the text to a chat service, and reads the reply aloud. OpenAI
-works with the settings as they are. Any service with the same
-interface works too, also one on a computer in your own network.
+Lumen Assistant answers your question with an AI service and needs no Home Assistant. It sends what
+you say to a speech service, the text to a chat service, and reads the reply aloud. OpenAI works with
+the settings as they are. Any service with the same interface works too, also one on a computer in
+your own network.
 
-1. Install **Assistant** from the [AWTRIX Hub](hub.md).
-2. In the web UI, go to **System → Voice assistant**, open the **Assistant** list and pick the app
-   you just installed.
+1. Install [Lumen Assistant](https://awtrix.de/script/BPaUPcm3uFwb) from the [AWTRIX Hub](hub.md), and accept the `ai` module it asks for.
+2. In the web UI, go to **System → Voice assistant**, open the **Assistant** list and pick
+   **LumenAssistant**.
 3. Go to **Apps** and press **⚙** on the app's row. Under **API keys**, paste the key of your service
    into its field, for example **OpenAI key**, and press **Save**. See
-   [API keys](../getting-started/web-ui.md#api-keys). A local service needs no key. **Language** starts
-   as `de`, so change it if you speak something else.
+   [API keys](../getting-started/web-ui.md#api-keys). A local service needs no key.
 4. Hold the knob, or say "Hey AWTRIX" with **Wake word** on, and ask.
 
-The display shows what the app is doing: it listens, thinks and answers. After the answer it listens
-again, so you can simply ask a follow-up. If you say nothing for five seconds, it says goodbye and
-closes. The app remembers your last four questions. A press on the knob ends your question early or
-skips the rest of an answer. Opened from the device menu, the app waits ten seconds for a press.
+You can also ask it for the time and the date, to change the brightness or the volume, and to turn
+the display on or off.
+
+A wave on the display shows what the app is doing. It is blue and follows your voice while the app
+listens, purple while it thinks, and orange and follows the voice while it answers. After the answer
+it listens again, so you can simply ask a follow-up. If you say nothing for five seconds, it closes.
+The app remembers the conversation until it closes.
+
+A press on the knob or on select ends your question early. While the app thinks or answers, a press
+stops it, and it listens again. Holding select closes it.
 
 ### Its settings
 
 The settings are under **Apps → ⚙**.
 
-| Group | Setting | Key | Default | Meaning |
-|---|---|---|---|---|
-| Speech to text | **Address** | `stt_url` | `https://api.openai.com/v1/audio/transcriptions` | the service that turns your question into text |
-| | **Model** | `stt_model` | `gpt-4o-mini-transcribe` | its speech model |
-| | **Language** | `language` | `de` | the language you speak, for example `de` or `en`. Empty: the service detects it. Starting with `de`, the clock's messages are in German |
-| Chat | **Address** | `chat_url` | `https://api.openai.com/v1/chat/completions` | the service that answers |
-| | **Model** | `chat_model` | `gpt-4o-mini` | its chat model |
-| | **Instructions** | `system` | answer briefly in plain text | how the assistant should answer |
-| Answer | **Answer** | `reply` | `local` | `local`: the clock's own voice. `network`: the voice service below. `text`: the words run across the display, without a voice |
-| Follow-up | **Follow-up** | `followup` | on | listen again after an answer |
-| | **Wait** | `followup_wait` | 5 s | how long it waits for you to speak, 1 to 15 s |
-| | **Address** | `tts_url` | `https://api.openai.com/v1/audio/speech` | with `network`: the service that reads the answer aloud |
-| | **Model** | `tts_model` | `gpt-4o-mini-tts` | with `network`: its speech model |
-| | **Voice** | `tts_voice` | `alloy` | with `network`: its voice |
-| API keys | **OpenAI key**, **Groq key**, **OpenRouter key**, **Mistral key** | `openai_key`, `groq_key`, `openrouter_key`, `mistral_key` | empty | one key per service, see below |
+| Setting | Key | Default | Meaning |
+|---|---|---|---|
+| **Chat address** | `chat_url` | `https://api.openai.com/v1/chat/completions` | the service that answers your questions |
+| **Chat model** | `chat_model` | `gpt-5.4-nano` | its model |
+| **Speech address** | `hear_url` | `https://api.openai.com/v1/audio/transcriptions` | the service that turns your speech into text |
+| **Speech model** | `hear_model` | `gpt-4o-mini-transcribe` | its model |
+| **Reply address** | `say_url` | empty | the service that reads the answer aloud. Empty: the clock's own voice |
+| **Reply model** | `say_model` | empty | its model |
+| **Voice** | `say_voice` | empty | its voice |
+| **Language** | `language` | empty | the language you speak as a short code, for example `de` or `en`. Empty: the service detects it |
+| **Instruction** | `system` | answer briefly, in the language of the question | what the model is told before every question |
+| **Follow-up questions** | `followup` | on | listen again after an answer |
+| **Waiting time** | `wait` | 5 s | how long it waits for you to start talking, 1 to 15 s |
+| **Speech pause** | `pause` | 800 ms | after a pause this long your question counts as finished, 300 to 3000 ms |
+| **OpenAI key**, **Groq key**, **OpenRouter key**, **Mistral key** | `openai_key`, `groq_key`, `openrouter_key`, `mistral_key` | empty | one key per service, see below |
+
+For OpenAI's voice, set **Reply address** to `https://api.openai.com/v1/audio/speech`, **Reply model**
+to `gpt-4o-mini-tts` and **Voice** to `alloy`. The clock's own voice starts sooner, because a voice from
+a service has to arrive first.
 
 ### Other services and local ones
 
@@ -228,7 +238,7 @@ For each address, the app picks the key that may go there, so you can mix servic
 keys of the services you use. A local service needs no key.
 
 The app sends no key to a host that is not in this table. To use a key with another host, edit the
-app's code: on the **Scripts** tab, open **Assistant**, change `hosts=` in the `@secret` line of that
+app's code: on the **Scripts** tab, open **LumenAssistant**, change `hosts=` in the `@secret` line of that
 key to your host and save. The clock erases a key when its `hosts=` changes, so enter the key again.
 
 A key goes over `https://`, and over `http://` only to an address in your own network that its line
@@ -239,16 +249,20 @@ other address, and `http://` works there without one.
 
 | The display shows | What to do |
 |---|---|
-| **Nothing heard** (*Nichts gehört*) | Speak once the bars move, a little closer to the clock. |
-| **No network** (*Kein Netz*) | The service did not answer. Check its address, and that it can be reached from the clock. |
-| **Wrong address** (*Adresse falsch*) | The address in the settings is not valid, or the voice service answered with something other than sound. Check the address. |
-| **Microphone busy** (*Mikrofon belegt*) | Something else is using the microphone, or it stopped. Try again in a moment. |
-| **Key missing** (*Schlüssel fehlt*) | The service wants a key, and the app has none for this address. Enter it under **Apps → ⚙**, or see [Keys for each service](#keys-for-each-service). |
-| **Error 401**, **Error 404** (*Fehler 401*) | The service's own answer. 401 usually means a wrong key, 404 a wrong address or model. |
-| **Error -4** (*Fehler -4*) | The clock is short of memory. Try again in a moment. If it happens again, restart the clock. |
-| **Empty answer** (*Antwort leer*) | The service answered, but not in the expected format. Check the address. |
-
-If only the voice service fails, the answer stays on the display as text.
+| **MICROPHONE BUSY** | Something else is using the microphone, or it stopped. Try again in a moment. |
+| **NO CONNECTION** | The service did not answer. Check its address, and that it can be reached from the clock. |
+| **CHECK SETTINGS** | The address in the settings is not valid, or the voice service answered with something other than sound. Check the address. |
+| **KEY MISSING** | The service wants a key, and the app has none for this address. Enter it under **Apps → ⚙**, or see [Keys for each service](#keys-for-each-service). |
+| **WRONG KEY** | The service refused the key. Check it, and enter it again. |
+| **WRONG ADDRESS OR MODEL** | The service does not know this address or model. Check both in the settings. |
+| **CHECK ACCOUNT OR LIMIT** | The service refused because of your account. Check its credit and limits. |
+| **SERVICE ERROR** | The service has a problem. Try again later. |
+| **EMPTY ANSWER** | The service answered, but not in the expected format. Check the address. |
+| **TOO MANY STEPS** | The model did not finish its answer. Ask again. |
+| **OUT OF MEMORY** | The clock is short of memory. Try again in a moment. If it happens again, restart the clock. |
+| **RECORDING LOST** | The recording was gone before it could be sent. Ask again. |
+| **NO VOICE** | The clock's own voice could not start. Try again in a moment. |
+| **ERROR** and a number | The service's own answer, or a status from the clock. |
 
 ## When it does not work
 
@@ -297,8 +311,8 @@ to a speech service on the internet. Any app that uses voice can record while it
 when it is not the assistant. Its recordings stay in the clock's memory only while the app uses
 them.
 
-The Assistant app sends each question and the last four questions with their answers to the services
-in its settings. What those services do with them is up to them. With local services, nothing leaves
+Lumen Assistant sends each question and the earlier questions and answers of the conversation to the
+services in its settings. What those services do with them is up to them. With local services, nothing leaves
 your network.
 
 Without a [web login](../reference/http.md#authentication), any web page opened in a browser on the

@@ -60,6 +60,16 @@
   margin-bottom: 0;
 }
 
+.md-typeset .home-hero__text .md-button {
+  margin: 0;
+  padding: 0.7em 2.2em;
+  font-size: 1rem;
+}
+
+.home-hero:has(.md-button)::after {
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.6) 45%, rgba(0, 0, 0, 0) 80%);
+}
+
 .md-typeset .clock-chooser {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
@@ -344,6 +354,37 @@
   white-space: nowrap;
 }
 
+.md-typeset .home-hubs--quiet .home-hub {
+  border-color: var(--md-default-fg-color--lightest);
+  background: none;
+  color: inherit;
+}
+
+.md-typeset .home-hubs--quiet .home-hub h2,
+.md-typeset .home-hubs--quiet .home-hub__text p {
+  color: inherit;
+}
+
+.md-typeset .home-hubs--quiet .home-hub h2 {
+  font-size: 1rem;
+}
+
+.md-typeset .home-hubs--quiet .home-hub .md-button,
+.md-typeset .home-hubs--quiet .home-hub .md-button:not(.md-button--primary) {
+  border-color: var(--md-accent-fg-color);
+  background: none;
+  color: var(--md-accent-fg-color);
+}
+
+.md-typeset .home-hubs--quiet .home-hub .md-button:hover,
+.md-typeset .home-hubs--quiet .home-hub .md-button:focus,
+.md-typeset .home-hubs--quiet .home-hub .md-button:not(.md-button--primary):hover,
+.md-typeset .home-hubs--quiet .home-hub .md-button:not(.md-button--primary):focus {
+  border-color: var(--md-accent-fg-color);
+  background: var(--md-accent-fg-color);
+  color: var(--md-accent-bg-color);
+}
+
 .md-typeset .grid.home-ways {
   gap: 0 1rem;
 }
@@ -402,6 +443,10 @@
   .home-hero {
     min-height: 13rem;
     margin-top: 0;
+  }
+
+  .home-hero:has(.md-button)::after {
+    background: rgba(0, 0, 0, 0.62);
   }
 
   .md-typeset .home-hero__text {
