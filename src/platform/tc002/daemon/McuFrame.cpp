@@ -27,6 +27,21 @@ bool encodeQuery(uint8_t command, uint8_t (&out)[kQueryBytes]) {
   return true;
 }
 
+void encodeLedGain(uint8_t value, uint8_t (&out)[kLedGainBytes]) {
+  if (value > 63) value = 63;
+  out[0] = 0xff;
+  out[1] = 0x55;
+  out[2] = kLedGain;
+  out[3] = static_cast<uint8_t>(kLedGainPayloadBytes);
+  for (std::size_t channel = 0; channel < 3; ++channel) {
+    out[4 + channel * 2] = kLedRegister;
+    out[5 + channel * 2] = value;
+  }
+  const uint16_t sum = checksum(out, kLedGainBytes - 2);
+  out[kLedGainBytes - 2] = static_cast<uint8_t>(sum >> 8);
+  out[kLedGainBytes - 1] = static_cast<uint8_t>(sum);
+}
+
 void FrameParser::consume(std::size_t count) {
   std::memmove(bytes_, bytes_ + count, length_ - count);
   length_ -= count;

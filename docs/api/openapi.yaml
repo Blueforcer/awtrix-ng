@@ -4347,6 +4347,7 @@ components:
         ldrFactor: { x-only: [esp32, esp32-s3], type: number, default: 1.0, minimum: 0, maximum: 10 }
         ldrGamma: { x-only: [esp32, esp32-s3], type: number, default: 2.2, minimum: 0.1, maximum: 10, description: 1.0 = curve off (neutral) }
         ldrOnGround: { x-only: [esp32, esp32-s3], type: boolean, default: false, description: LDR wiring orientation }
+        ledGain: { x-only: [tc002], type: integer, default: 10, minimum: 0, maximum: 63, description: TC002 only. LED panel drive current, the vendor default is 30 and lower is dimmer. }
         brightnessSmoothing:
           x-only: [esp32, esp32-s3]
           type: integer

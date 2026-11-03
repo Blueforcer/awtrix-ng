@@ -38,6 +38,8 @@ struct McuOptions {
   std::string firmwareHelper;
   std::vector<std::string> firmwareHelperArguments;
   std::string firmwareCaFile;
+  std::string ledGainPath;
+  std::string deviceConfigPath;
 };
 
 class McuService : public Service {
@@ -86,6 +88,7 @@ class McuService : public Service {
   void finishStream(int64_t nowMs);
   void cancelPendingStream(const char* reason, int64_t nowMs);
   bool writeFrame(const uint8_t* bytes, std::size_t length, uint8_t command, int64_t nowMs);
+  void applyLedGain(int64_t nowMs);
 
   DeviceState& state_;
   McuOptions options_;
@@ -135,6 +138,12 @@ class McuService : public Service {
   uint16_t batteryWord_ = 0;
   int64_t usbSeenAt_ = 0, batterySeenAt_ = 0;
   BatteryGauge gauge_;
+
+  // The LED current gain is applied after every UART open and whenever the stored value changes,
+  // so an MCU restart or a power cut cannot leave the panel at the vendor default.
+  static constexpr int64_t kLedGainIntervalMs = 5000;
+  int ledGain_ = -1;
+  int64_t ledGainAt_ = -1;
 
   uint64_t rxBytes_ = 0, frames_ = 0, acks_ = 0, unknown_ = 0, queries_ = 0, timeouts_ = 0, writeErrors_ = 0;
 };

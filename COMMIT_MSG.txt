@@ -1,0 +1,25 @@
+feat(tc002): add the panel's LED current gain as a system setting
+
+The panel's driver has a per-channel current-gain register (0x16, 0..63). The stock
+Ulanzi app writes it and the stock firmware exposes it over HTTP; nothing in AWTRIX
+does, so after an MCU firmware update the register sits at its vendor default of 30
+and the panel comes back noticeably brighter at the same pixel values. On the TC002
+that is the "the night clock is too bright" report: the panel's own light floor
+(output code 50) is reached long before the display is dark, and this register is
+the only lever below it.
+
+ledGain joins the system configuration (0..63, default 10). The MCU service writes it
+through the same command the stock app uses (0x12, three register/value pairs) at
+startup and whenever the stored value changes, and applies it again after every UART
+open, so an MCU restart or a power cut cannot leave the panel bright. It is written only
+once the MCU has answered, so a UART that never came up sees no traffic at all. It stays out of
+the way while an MCU firmware transfer is running.
+
+The daemon owns the MCU UART and cannot see the runtime's settings, so it reads the
+value from the device configuration file (app/device.json), with a plain file in the
+data directory and the built-in default as fallbacks.
+
+Verified on a TC002 running 1.2.2: at the register's default the panel is clearly
+bright at the lowest brightness level, writing 5 makes it very dark, and the MCU
+reports the value back through queryLedRegister (0x13). The service logs "LED current
+gain set to 10" on every start.

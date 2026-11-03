@@ -13,6 +13,8 @@
 
 using namespace awtrix::tc002d;
 using tc002d_test::check;
+using tc002d_test::TempDir;
+using tc002d_test::writeFile;
 
 namespace {
 
@@ -30,6 +32,7 @@ struct Mcu {
   int master = -1;
   std::string slave;
   std::vector<uint8_t> received;
+  std::vector<uint8_t> pending;
 
   Mcu() {
     master = ::posix_openpt(O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
@@ -39,20 +42,36 @@ struct Mcu {
     if (master >= 0) ::close(master);
   }
   void send(const std::vector<uint8_t>& bytes) { (void)!::write(master, bytes.data(), bytes.size()); }
-  // Collects what the service wrote, waiting up to waitMs for the first byte.
+  // Collects what the service wrote, waiting up to waitMs for the first byte, and returns
+  // ONE frame: the service may write several in a single tick (a gain frame next to its
+  // queries), and the callers each expect exactly one.
   std::vector<uint8_t> take(int waitMs = 200) {
-    std::vector<uint8_t> out;
+    if (!pending.empty()) return popFrame();
     pollfd item{master, POLLIN, 0};
     int wait = waitMs;
     while (::poll(&item, 1, wait) > 0 && (item.revents & POLLIN)) {
       uint8_t buffer[256];
       const ssize_t count = ::read(master, buffer, sizeof buffer);
       if (count <= 0) break;
-      out.insert(out.end(), buffer, buffer + count);
+      pending.insert(pending.end(), buffer, buffer + count);
       wait = 20;
     }
-    received.insert(received.end(), out.begin(), out.end());
-    return out;
+    received.insert(received.end(), pending.begin(), pending.end());
+    if (pending.empty()) return {};
+    return popFrame();
+  }
+
+  // ff 55 <command> <length> <payload...> <sum hi> <sum lo>
+  std::vector<uint8_t> popFrame() {
+    const std::size_t whole = pending.size() < 6 ? pending.size() : 4u + pending[3] + 2u;
+    if (pending.size() < whole) {
+      std::vector<uint8_t> all(pending.begin(), pending.end());
+      pending.clear();
+      return all;
+    }
+    std::vector<uint8_t> one(pending.begin(), pending.begin() + whole);
+    pending.erase(pending.begin(), pending.begin() + whole);
+    return one;
   }
 };
 
@@ -88,6 +107,24 @@ void batteryConversion() {
   check(McuService::batteryMillivolts(3117) == 4125, "battery word 3117 rounds to 4125 mV");
   check(McuService::batteryMillivolts(0) == 0, "zero word");
   check(McuService::batteryMillivolts(65535) == -1, "out of protocol range becomes unknown");
+
+  // The LED current-gain frame the stock app uses: three register/value pairs on register 0x16.
+  for (const uint8_t value : {uint8_t{1}, uint8_t{10}, uint8_t{30}, uint8_t{63}}) {
+    uint8_t bytes[mcu::kLedGainBytes];
+    mcu::encodeLedGain(value, bytes);
+    const std::vector<uint8_t> expected = frame(0x12, {0x16, value, 0x16, value, 0x16, value});
+    bool same = sizeof bytes == expected.size();
+    for (std::size_t i = 0; same && i < expected.size(); ++i) same = bytes[i] == expected[i];
+    check(same, "led gain frame, register 0x16 on all three channels");
+  }
+  {
+    uint8_t bytes[mcu::kLedGainBytes];
+    mcu::encodeLedGain(64, bytes);
+    const std::vector<uint8_t> expected = frame(0x12, {0x16, 63, 0x16, 63, 0x16, 63});
+    bool same = sizeof bytes == expected.size();
+    for (std::size_t i = 0; same && i < expected.size(); ++i) same = bytes[i] == expected[i];
+    check(same, "a gain above 63 clamps to 63");
+  }
 }
 
 void conversation() {
@@ -106,6 +143,9 @@ void conversation() {
   state.onPower([&] { ++changes; });
   McuOptions options;
   options.path = device.slave;
+  TempDir gainDir;
+  options.ledGainPath = gainDir / "led-gain";
+  check(writeFile(options.ledGainPath, "10\n"), "stored LED gain file");
   McuService mcu(state, options);
   int64_t now = 10000;
   check(mcu.start(now) && mcu.open(), "service opens the UART");
@@ -128,6 +168,14 @@ void conversation() {
   device.send(std::vector<uint8_t>(version.begin() + 5, version.end()));
   serve(mcu, now);
   check(mcu.version() == "V1.0.17", "fragmented version after an empty 0xfe frame and noise");
+  {
+    const std::vector<uint8_t> applied = device.take();
+    uint8_t expected[mcu::kLedGainBytes];
+    mcu::encodeLedGain(10, expected);  // the value from the prepared led-gain file
+    bool same = applied.size() == sizeof expected;
+    for (std::size_t i = 0; same && i < applied.size(); ++i) same = applied[i] == expected[i];
+    check(same, "the LED gain is written once the MCU has answered");
+  }
   check(isQuery(device.take(), 0x08), "identity is probed even without a firmware bundle");
   device.send(frame(0x08, {}));
   serve(mcu, now);

@@ -43,6 +43,7 @@ struct DeviceConfig : PlatformConfig {
   float batteryDividerRatio = 1.79f;
   uint8_t lowBatteryThreshold = 0;
   uint8_t minBrightness = 10, maxBrightness = 220;
+  uint8_t ledGain = 10;
   float ldrFactor = 1.0f, ldrGamma = 2.2f;
   bool ldrOnGround = false;
   long brightnessSmoothing = 10000;

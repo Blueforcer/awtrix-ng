@@ -370,6 +370,7 @@ These six fields control auto-brightness. They are used **only** when `autoBrigh
 | `ldrGamma` | float | 0.1–10 | `2.2` | How brightness follows the light. `1.0` = in a straight line. 2.2 keeps the display dim in dim rooms. Outside 0.1–10 → `422`. | no |
 | `ldrOnGround` | bool | - | `false` | Set this when the light sensor is wired to ground instead of 3.3 V. | no |
 | `brightnessSmoothing` | long | 0–60000 ms | `10000` | How slowly the display follows a change in room light. `0` = at once. Only for **auto-brightness** – a manual `brightness` applies at once. The reported `lightLevel` is never smoothed. | no |
+| `ledGain` | uint8 | 0–63 | `10` | **TC002 only.** Drive current of the LED panel; the vendor default is 30 and lower is dimmer. Nothing else sets the register, so a panel dimmed by the stock app returns to the default after an MCU update. The panel's own light floor (output code 50) is reached long before the display is dark, so this is the lever below it. | no |
 
 `lightLevel` is a relative value from 0 to 100, **not lux**.
 

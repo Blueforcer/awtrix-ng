@@ -274,6 +274,8 @@ McuOptions makeMcuOptions(const DaemonOptions& options) {
   mcuOptions.firmwareHelper = options.root + "/bin/awtrix-linux";
   mcuOptions.firmwareHelperArguments = {"--prepare-mcu"};
   mcuOptions.firmwareCaFile = options.root + "/share/ca-certificates.crt";
+  mcuOptions.ledGainPath = options.data + "/led-gain";
+  mcuOptions.deviceConfigPath = options.data + "/app/device.json";
   return mcuOptions;
 }
 
