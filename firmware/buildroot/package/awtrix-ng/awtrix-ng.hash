@@ -1,7 +1,7 @@
 # Source content is pinned by the runner's Git revision and snapshot digest.
 # License hashes use Git blob bytes (LF), as exported by git archive.
 sha256  9a4e63f7b180a7896ef20b5d66ef996558c20f1c7e6c45e63420debdf6bdbd91  LICENSE.md
-sha256  99db20bdc435329c01e18f0c7ad2207a0867d251cd1b8c861efe385acf17e7c3  THIRD-PARTY-NOTICES.md
+sha256  16aeb4f793f35ca027bcb04daa2dd60677ca421e4c76a58bb4ad2e57d4075064  THIRD-PARTY-NOTICES.md
 sha256  ee13cc1b190b67260dcebd4ac32dc4ce3043ab1f4a673b13d92c3d57d7369add  LICENSES/MIT-Berry.txt
 sha256  4b45cbe16d7b71b89ae6127e26e0d90a029198ca5e958ad8e3d0b8bbed364d8b  LICENSES/MIT-cpp-httplib.txt
 sha256  7db5ddbfb3c4b6bc390f9406d4129a38094af37faaf16ed53666c379e51e596b  LICENSES/MIT-Matrix-Fonts.txt

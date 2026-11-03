@@ -1,20 +1,8 @@
 import {MAX_FILE_BYTES, MAX_ARCHIVE_BYTES, MAX_FILES, PRODUCTION_TARGET} from './constants.js';
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const HEX = /^[0-9a-f]{64}$/;
-const PUBLIC_FILES = [
-  'bin/awtrix-linux', 'bin/awtrix-tc002-audio-pcm', 'bin/awtrix-tc002-flash',
-  'bin/awtrix-tc002d', 'bin/dhcp-callback', 'bin/udhcpc', 'bin/wpa_supplicant',
-  'lib/libawtrix-loader.so', 'lib/modules/aic8800_bsp.ko', 'lib/modules/aic8800_fdrv.ko',
-  'lib/modules/awtrix_pcm.ko', 'lib/modules/loop.ko', 'share/boot.mp3', 'share/ca-certificates.crt',
-  'share/index.html.gz', 'share/licenses.txt.gz',
-].sort();
 const HELPER = 'bin/awtrix-tc002-flash';
 const HOST_FILES = ['lib/libawtrix-loader.so', 'lib/modules/loop.ko'];
-const MCU_PATCH = ['share/mcu/LICENSE.txt', 'share/mcu/extension.bin', 'share/mcu/manifest.json'];
-const SPEECH_VOICE = 'share/speech/voice.atts';
-const WAKE_WORD = ['share/wake/hey_awtrix.json', 'share/wake/hey_awtrix.tflite'];
-const VAD = ['share/vad/NOTICE', 'share/vad/vad.json', 'share/vad/vad.tflite'];
-const OPTIONAL_GROUPS = [[MCU_PATCH, 'MCU patch'], [WAKE_WORD, 'wake word'], [VAD, 'voice activity model']];
 const NOTICES = ['notices/LICENSE.md', 'notices/SOURCE-NOTICE.txt', 'notices/THIRD-PARTY-NOTICES.md'];
 const MANIFEST = 'bundle/manifest.json';
 const IMAGE = 'bundle/release.img';
@@ -167,15 +155,14 @@ function sourceReference(source) {
     'invalid source archive URL');
 }
 
-function publicFiles(paths) {
-  const expected = [...PUBLIC_FILES];
-  if (paths.includes(SPEECH_VOICE)) expected.push(SPEECH_VOICE);
-  for (const [group, label] of OPTIONAL_GROUPS) {
-    if (!group.some(path => paths.includes(path))) continue;
-    check(group.every(path => paths.includes(path)), `incomplete ${label}`);
-    expected.push(...group);
-  }
-  return expected.sort();
+// The installer writes the image and uses only the helper and the host files of this list. The other
+// files live inside the image, so a release can add one without a new installer.
+function bundleFiles(installed, host) {
+  check(Array.isArray(installed) && Array.isArray(host), 'invalid bundle file list');
+  const paths = installed.map(entry => entry?.path);
+  check(paths.every(safePath) && same(paths, [...new Set(paths)].sort()) &&
+    paths.includes(HELPER) && !HOST_FILES.some(path => paths.includes(path)) &&
+    same(host.map(entry => entry?.path), HOST_FILES), 'bundle file list differs from what the installer needs');
 }
 
 function releaseImage(data) {
@@ -204,16 +191,12 @@ function bundleMetadata(manifest) {
   fields(manifest.image, ['size', 'sha256']);
   check(Number.isSafeInteger(manifest.image.size) && manifest.image.size > 0 && manifest.image.size <= MAX_FILE_BYTES &&
     typeof manifest.image.sha256 === 'string' && HEX.test(manifest.image.sha256), 'invalid release image metadata');
-  for (const [listing, installed] of [[manifest.files, true], [manifest.hostOnly, false]]) {
-    check(Array.isArray(listing), 'invalid bundle file list');
-    const expected = publicFiles(listing.map(entry => entry?.path)).filter(path => installed !== HOST_FILES.includes(path));
-    check(same(listing.map(entry => entry?.path), expected), 'bundle file list differs from public files');
-    for (const entry of listing) {
-      fields(entry, ['path', 'size', 'sha256', 'mode']);
-      check(Number.isSafeInteger(entry.size) && entry.size >= 0 &&
-        typeof entry.sha256 === 'string' && HEX.test(entry.sha256) &&
-        entry.mode === (entry.path.startsWith('bin/') || entry.path.endsWith('.so') ? '0755' : '0644'), 'invalid bundle file metadata');
-    }
+  bundleFiles(manifest.files, manifest.hostOnly);
+  for (const entry of [...manifest.files, ...manifest.hostOnly]) {
+    fields(entry, ['path', 'size', 'sha256', 'mode']);
+    check(Number.isSafeInteger(entry.size) && entry.size >= 0 &&
+      typeof entry.sha256 === 'string' && HEX.test(entry.sha256) &&
+      ['0644', '0755'].includes(entry.mode), 'invalid bundle file metadata');
   }
 }
 

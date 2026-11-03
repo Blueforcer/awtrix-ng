@@ -221,20 +221,37 @@ test('identity, manifests, file modes and roles must agree', async () => {
   }
 });
 
-test('the wake word comes with its settings or not at all', async () => {
+// Changes the bundle's file list and renames the release to match, as a real build of those files would.
+function withBundleFiles(transform) {
   const entries = files();
+  let release;
   metadata(entries, 'bundle/manifest.json', value => {
-    value.files = value.files.filter(file => file.path !== 'share/wake/hey_awtrix.json');
+    transform(value.files);
+    const identity = value.files.map(entry => `${entry.path} ${entry.mode} ${entry.sha256}\n`).join('');
+    value.release = release = `${value.version}-${sha(identity).slice(0, 12)}`;
   });
-  await reject(pack(entries), /incomplete wake word/);
+  metadata(entries, outerName, value => { value.release = release; });
+  return pack(entries);
+}
+
+test('a file of the release image that the installer does not know still installs', async () => {
+  const { parsePackage } = await parser;
+  const added = { path: 'share/new/thing.bin', size: 1, sha256: 'd'.repeat(64), mode: '0755' };
+  const data = withBundleFiles(list => {
+    list.push(added);
+    list.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  });
+  assert.equal(Buffer.from((await parsePackage(data)).helper).toString(), 'bin/awtrix-tc002-flash\n'.repeat(3));
+  const gone = withBundleFiles(list => { list.splice(list.findIndex(file => file.path === 'share/wake/hey_awtrix.json'), 1); });
+  await parsePackage(gone);
 });
 
-test('the voice activity model comes with its manifest and NOTICE or not at all', async () => {
-  const entries = files();
-  metadata(entries, 'bundle/manifest.json', value => {
-    value.files = value.files.filter(file => file.path !== 'share/vad/NOTICE');
-  });
-  await reject(pack(entries), /incomplete voice activity model/);
+test('the bundle must list what the installer uses, with safe and sorted paths', async () => {
+  const remove = name => list => { list.splice(list.findIndex(file => file.path === name), 1); };
+  await reject(withBundleFiles(remove('bin/awtrix-tc002-flash')), /bundle file list differs/);
+  await reject(withBundleFiles(list => { list[0].path = '../private'; }), /bundle file list differs/);
+  await reject(withBundleFiles(list => { list.reverse(); }), /bundle file list differs/);
+  await reject(withBundleFiles(list => { list.push({ ...list[list.length - 1] }); }), /bundle file list differs/);
 });
 
 test('the release image must match both manifests and be a squashfs release image', async () => {
