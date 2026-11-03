@@ -1,19 +1,9 @@
 name: TC002 installers
 
-# Builds and tests the installers when their code changes, and on dispatch. Nothing is published:
+# Builds and tests the installers for pull requests that change their code, and on dispatch. Nothing is published:
 # the files users download are copied into installer/tc002 by hand (tools/tc002/desktop/README.md).
 on:
   workflow_dispatch:
-  push:
-    branches: ["**"]
-    paths:
-      - "tools/tc002/desktop/**"
-      - "tools/tc002/browser-image/**"
-      - "docs/assets/tc002/**"
-      - ".github/workflows/tc002-installer.yml"
-      - ".github/workflows/tc002-image-tools.yml"
-      - "LICENSE.md"
-      - "THIRD-PARTY-NOTICES.md"
   pull_request:
     paths:
       - "tools/tc002/desktop/**"

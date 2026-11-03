@@ -198,23 +198,24 @@ GPL/LGPL notices and corresponding sources. The application is under the reposit
 
 The [installer workflow](https://github.com/Blueforcer/awtrix-ng/blob/main/.github/workflows/tc002-installer.yml)
 builds the WASM once, runs the shared tests, then builds Windows x64, macOS Intel/ARM64 and Linux
-x64/ARM64 packages on native runners. It uses no signing keys and publishes nothing. It runs when
-the installer code changes and on dispatch.
+x64/ARM64 packages on native runners. It uses no signing keys and publishes nothing. It runs for
+pull requests that change the installer code and on dispatch, not on a push.
 
 ### Publishing
 
-To ship a new installer, take a successful run of the installer workflow and replace the folder
-from the repository root:
+To ship a new installer, build all five platforms from one clean commit, by hand or with a run of
+the installer workflow. Then put each platform's `artifacts/` folder into its own folder under
+`ARTIFACTS` and replace the folder from the repository root:
 
 ```sh
 gh run download RUN_ID --repo Blueforcer/awtrix-ng --pattern 'tc002-installer-*' --dir ARTIFACTS
 node tools/tc002/desktop/publish.mjs --from ARTIFACTS --out installer/tc002
 ```
 
-`publish.mjs` checks every file against its `artifact-manifest.json`, requires all five platforms
-to come from the same clean commit and version, and replaces `installer/tc002/` with the installers
-and terminal archives under version-free names. The source archives stay in the workflow artifacts.
-Commit the folder; the
+The first line applies only to a workflow run. `publish.mjs` checks every file against its
+`artifact-manifest.json`, requires all five platforms to come from the same clean commit and
+version, and replaces `installer/tc002/` with the installers and terminal archives under
+version-free names. It leaves the source archives out. Commit the folder; the
 [TC002 guide](https://blueforcer.github.io/awtrix-ng/tc002/getting-started/tc002/#get-the-installer)
 links to these file names.
 
