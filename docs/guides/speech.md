@@ -62,8 +62,9 @@ Celsius".
 
 ## Another voice or language
 
-A voice pack is one `.atts` file: a voice and the rules of its language. Ready-made packs are in the
-shop. After buying one, [install it](#install-a-voice-pack).
+A voice pack is one `.atts` file: a voice and the rules of its language. The shop has Lumi (female)
+and Milo (male) in several languages, or you can [order your own voice](#have-it-made). After buying
+a pack, [install it](#install-a-voice-pack).
 
 [:material-cart: Get a voice pack](https://ko-fi.com/blueforcer/shop){ .md-button .md-button--primary }
 
@@ -75,7 +76,7 @@ You have two ways to get a voice pack of your own: have it made, or build it you
 
 A pack is made from your own voice, or from another voice you have permission to use.
 
-1. Order the custom voice in the [shop](https://ko-fi.com/blueforcer/shop).
+1. [Order the custom voice](https://ko-fi.com/s/082d288a21) in the shop.
 2. Send a Ko-fi message, or write to the email address in your order confirmation. Include your
    order number and:
     - A recording of 10 to 30 seconds of natural speech by one speaker. WAV or FLAC is best, a

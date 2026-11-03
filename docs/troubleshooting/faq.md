@@ -100,9 +100,9 @@ with the [Scripting guide](../guides/scripting/index.md) and
 <!-- only tc002 -->
 ## Can the clock speak another language, or with my own voice?
 
-Yes. Ready-made voice packs and packs made from your own voice are in the
-[shop](https://ko-fi.com/blueforcer/shop). You can also
-[build a pack yourself](../developers/tc002/voice-packs.md). You upload a pack in the web UI. See
+Yes. The [shop](https://ko-fi.com/blueforcer/shop) has voice packs with Lumi (female) and Milo (male)
+in several languages, and you can [order a pack made from your own voice](https://ko-fi.com/s/082d288a21).
+You can also [build a pack yourself](../developers/tc002/voice-packs.md). You upload a pack in the web UI. See
 [Speech & voices](../guides/speech.md#another-voice-or-language).
 
 <!-- /only -->
