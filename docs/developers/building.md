@@ -27,8 +27,8 @@ ESP32 firmware.
 
 ## Build environments
 
-`platformio.ini` has six environments. Three build device firmware (`awtrix`,
-`awtrix_s3_octal`, `awtrix_s3_quad`). Two are measurement builds of it (`awtrix_probe`,
+`platformio.ini` has seven environments. Four build device firmware (`awtrix`,
+`awtrix_s3_octal`, `awtrix_s3_quad`, `awtrix_mono`). Two are measurement builds of it (`awtrix_probe`,
 `awtrix_s3_octal_probe`). One runs the host unit tests (`native`).
 
 ### `awtrix` - the ESP32 firmware
@@ -112,6 +112,26 @@ an image built for the other PSRAM type with `wrongChip` instead of installing i
 
 ```bash
 pio run -e awtrix_s3_quad
+```
+
+### `awtrix_mono` - the ESP32 firmware for MAX7219 panels
+
+The `awtrix` firmware for clocks built from MAX7219 8×8 LED modules instead of a WS2812 strip.
+Not released and not built by CI; build it yourself.
+
+| Property | Value |
+|---|---|
+| Driver | [LEDMatrixDriver](https://github.com/bartoszbielawski/LEDMatrixDriver), one module per 8 columns |
+| Wiring | SPI: SCK GPIO 18, MOSI (DIN) GPIO 23, CS GPIO 5 (`AWTRIX_MAX7219_CS_PIN`) |
+| Pixel | lit when the average of its red, green and blue is above 32, off otherwise |
+| Brightness | sets the modules' intensity (16 steps); 0 switches them off |
+
+`pinMatrix` is not used. Of the panel settings only `mirror` and `rotate` apply; the others
+describe strip wiring. The DFPlayer default pins are GPIO 18 and 23 as well, so keep `dfplayer`
+off or move its pins.
+
+```bash
+pio run -e awtrix_mono
 ```
 
 ### `awtrix_probe` - the heap measurement build

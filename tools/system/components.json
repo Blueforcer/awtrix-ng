@@ -634,6 +634,10 @@
       "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
     },
     {
+      "notice": "LEDMatrixDriver",
+      "reason": "resolved by PlatformIO from the pin in platformio.ini for the awtrix_mono ESP32 build only; not vendored; not part of the Linux application"
+    },
+    {
       "notice": "Adafruit BME280 Library",
       "reason": "resolved by PlatformIO from the pin in platformio.ini for ESP32 builds; not vendored; not part of the Linux application"
     },
