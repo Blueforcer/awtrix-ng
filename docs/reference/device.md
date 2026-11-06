@@ -520,7 +520,7 @@ tab. For the dots on the display see [Connection dots](#connection-dots).
 | `refused` | *(`mqtt` only)* Nothing accepted a connection at that address and port. | Check the port, and that the broker runs and is reachable from AWTRIX's network. |
 | `badCredentials` | The password was rejected – by the router for `wifi`, by the broker for `mqtt`. | Enter the Wi-Fi password again, or `mqttUser` and `mqttPass`. |
 | `rejected` | *(`mqtt` only)* The broker refused AWTRIX for another reason. | Check the broker's log. |
-| `timeout` | For `wifi`: the network did not answer in time while AWTRIX was starting. For `mqtt`: something answered at that address but it did not speak MQTT. | For Wi-Fi, usually range or a router that was still starting; AWTRIX keeps trying. For MQTT, usually the wrong port. |
+| `timeout` | For `wifi`: the network did not answer in time while AWTRIX was starting. For `mqtt`: something answered at that address but did not complete the MQTT login within 10 seconds. | For Wi-Fi, usually range or a router that was still starting; AWTRIX keeps trying. For MQTT, usually the wrong port; otherwise check the broker's log for a slow login. |
 | `lost` | The connection was up and dropped. | For Wi-Fi, usually range or a router restart. For MQTT, the same or a broker restart. AWTRIX reconnects by itself. |
 
 ### Retries back off

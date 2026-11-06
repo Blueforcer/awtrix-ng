@@ -227,7 +227,7 @@ verified TLS transport and a connection worker:
 | Limit | Value |
 |---|---|
 | TCP and TLS setup | 3 s deadline |
-| MQTT CONNACK | 2 s, off the render thread |
+| MQTT CONNACK | 10 s, off the render thread |
 | Partial incoming packets and queued writes | expire after 2 s |
 | Incoming packet size | 8192 bytes (the shared buffer) |
 | Queued outgoing bytes | 256 KiB |

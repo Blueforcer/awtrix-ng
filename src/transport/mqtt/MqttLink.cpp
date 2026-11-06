@@ -14,8 +14,14 @@ namespace {
 // notify commands are the reason it is this big. Outbound payloads are streamed and unaffected.
 constexpr uint16_t kMqttBufferBytes = 8192;
 
-// PubSubClient blocks the whole loop while it waits for CONNACK, so keep it short.
-constexpr uint16_t kHandshakeSeconds = 2;
+// PubSubClient blocks the whole loop while it waits for the rest of a packet, so keep it short.
+constexpr uint16_t kReadSeconds = 2;
+
+// CONNACK gets longer: a broker that checks the password against another service (the Home
+// Assistant Mosquitto add-on asks Home Assistant) can take several seconds to answer, and a
+// shorter wait turns that into a timeout on every attempt. Only a broker that accepted the TCP
+// connection is waited on this long; an unreachable one still fails on the connect deadline.
+constexpr uint16_t kConnackSeconds = 10;
 
 std::string endpointOf(const IPAddress& ip, uint16_t port) {
   std::string endpoint(ip.toString().c_str());
@@ -55,7 +61,7 @@ void MqttLink::begin(const DeviceConfig& cfg, const std::string& clientId,
   if (!client_->setBufferSize(kMqttBufferBytes))
     logf("mqtt: could not allocate a %u-byte packet buffer; large commands will be dropped",
          static_cast<unsigned>(kMqttBufferBytes));
-  client_->setSocketTimeout(kHandshakeSeconds);
+  client_->setSocketTimeout(kReadSeconds);
   client_->setDroppedCallback([](const char* topic, uint32_t size) {
     if (topic)
       logf("mqtt: dropped a %u-byte message on %s, limit %u", static_cast<unsigned>(size), topic,
@@ -164,10 +170,14 @@ bool MqttLink::tick(uint32_t nowMs, bool networkConnected) {
 // without saying goodbye.
 bool MqttLink::connectNow() {
   const std::string will = prefix_ + "/availability";
-  return (user_.empty() && pass_.empty())
-             ? client_->connect(clientId_.c_str(), will.c_str(), 0, true, "offline")
-             : client_->connect(clientId_.c_str(), user_.c_str(), pass_.c_str(), will.c_str(), 0,
-                                true, "offline");
+  client_->setSocketTimeout(kConnackSeconds);
+  const bool ok =
+      (user_.empty() && pass_.empty())
+          ? client_->connect(clientId_.c_str(), will.c_str(), 0, true, "offline")
+          : client_->connect(clientId_.c_str(), user_.c_str(), pass_.c_str(), will.c_str(), 0,
+                             true, "offline");
+  client_->setSocketTimeout(kReadSeconds);
+  return ok;
 }
 
 void MqttLink::noteFailure(uint32_t nowMs, LinkError why, int state) {
