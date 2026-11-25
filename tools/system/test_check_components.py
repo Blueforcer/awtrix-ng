@@ -518,6 +518,17 @@ class CommandLine(ManifestFixture):
             self.assertEqual(0, components.main([]))
         self.assertEqual("13 application components verified\n", out.getvalue())
 
+    def test_linux_component_paths_are_exported_in_application_snapshot(self):
+        manifest = components.load_manifest(components.MANIFEST)
+        for component in manifest["components"]:
+            if "linux" not in component["targets"]:
+                continue
+            for path in component["paths"]:
+                with self.subTest(component=component["id"], path=path):
+                    self.assertTrue(any(path == exported or path.startswith(exported + "/")
+                                        for exported in build.APP_PATHS),
+                                    f"component path not exported by APP_PATHS: {path}")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
