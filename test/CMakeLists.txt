@@ -51,7 +51,8 @@ foreach(TEST_DIR IN LISTS TEST_DIRS)
     target_include_directories("${TEST_NAME}" PRIVATE "${AWTRIX_ROOT}/lib/TJpg_Decoder/src")
   endif()
   # These compile a file that is ESP32-only against the fakes in esp32_fakes/.
-  if(TEST_NAME STREQUAL "test_scripthttpworker" OR TEST_NAME STREQUAL "test_hostresolver")
+  if(TEST_NAME STREQUAL "test_scripthttpworker" OR TEST_NAME STREQUAL "test_hostresolver"
+     OR TEST_NAME STREQUAL "test_sensorbus")
     target_include_directories("${TEST_NAME}" BEFORE PRIVATE "${CMAKE_CURRENT_LIST_DIR}/esp32_fakes")
   endif()
   target_compile_options("${TEST_NAME}" PRIVATE -O2)

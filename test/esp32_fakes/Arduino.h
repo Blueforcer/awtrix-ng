@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <utility>
@@ -85,6 +86,13 @@ inline void vTaskDelay(TickType_t) {
   if (fake::stopTasks) throw fake::TaskDeleted{};
   std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
+
+inline void delay(uint32_t ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
+
+using portMUX_TYPE = std::mutex;
+#define portMUX_INITIALIZER_UNLOCKED {}
+inline void portENTER_CRITICAL(portMUX_TYPE* mux) { mux->lock(); }
+inline void portEXIT_CRITICAL(portMUX_TYPE* mux) { mux->unlock(); }
 
 inline unsigned long millis() {
   return static_cast<unsigned long>(std::chrono::duration_cast<std::chrono::milliseconds>(
