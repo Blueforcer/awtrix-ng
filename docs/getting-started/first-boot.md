@@ -70,12 +70,7 @@ If nothing opens, type **`192.168.4.1`** into your browser.
 The setup page is the web UI in setup mode. It shows only the **System** tab, with a blue
 banner that asks you to connect to Wi-Fi.
 
-<!-- only esp32 esp32-s3 -->
 1. Enter your Wi-Fi name. You can also press **Scan** and choose from the networks nearby.
-<!-- /only -->
-<!-- only tc002 -->
-1. Type your Wi-Fi name.
-<!-- /only -->
 2. Enter your Wi-Fi password.
 3. Optional: enter a **hostname**, a name like `kitchen-clock`. You can then open the clock at
    `http://kitchen-clock.local` instead of a number that may change.
@@ -143,9 +138,11 @@ Login is off until you turn it on. See [Authentication](../reference/http.md#aut
 `AP MODE` after a restart means the clock could not join your network within about 15 seconds.
 The most common causes:
 
-- **Wrong Wi-Fi name or password.** Join the hotspot again and correct them.<!-- only esp32 esp32-s3 --> **Scan** helps you pick the right network.<!-- /only -->
+- **Wrong Wi-Fi name or password.** Join the hotspot again and correct them. **Scan** helps you
+  pick the right network.
 - **Your Wi-Fi is 5 GHz only.** The clock uses 2.4 GHz. A router that sends both bands under one
-  name is fine. If 2.4 GHz is switched off, the clock cannot see your network.<!-- only esp32 esp32-s3 --> It does not appear in the scan either.<!-- /only -->
+  name is fine. If 2.4 GHz is switched off, the clock cannot see your network. It does not appear
+  in the scan either.
 - **A fixed IP address that does not fit your network.** If you set a static address, switch back
   to automatic (DHCP).
 - **Your router is off.** The clock joins by itself once the router is back. You do not need to

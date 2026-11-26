@@ -3695,7 +3695,6 @@ components:
                 - scriptChanged         # 409, source changed or copy name exists
                 - scriptsOnHost         # 409, the scripts of this clock run on a script host
                 - gamepadsFull          # 409, gamepad slots are full
-                - scanUnavailable       # 503, Wi-Fi scan in setup mode
                 - notNewer              # 409, POST /update - not newer than the installed release
                 - updateBusy            # 409, POST /update - another update is running or being confirmed
                 - voiceUnavailable      # 409, POST /api/v1/voice/start - the assistant cannot start now

@@ -103,11 +103,6 @@ WifiService::WifiService(DeviceState& state, WifiOptions options, ControlRegistr
       json.beginObject().member("ok", false).member("error", "stopping").endObject();
       return out;
     }
-    if (accessPoint_) {
-      scan_.unavailable();
-      json.beginObject().member("ok", false).member("error", scan_.error()).endObject();
-      return out;
-    }
     startScan();
     json.beginObject().member("ok", true).member("scanning", true).endObject();
     return out;
@@ -265,7 +260,6 @@ void WifiService::beginSupplicant() {
   }
   if (!system_->interfacePresent()) { beginModules(); return; }
   if (!haveProfile_) accessPoint_ = true;
-  if (accessPoint_ && scan_.active()) finishScan({}, false);
   probeHidden_ = !accessPoint_ && scan_.hasResults() && !profileVisible();
   std::string apName = state_.network().hostname;
   if (!ip::validHostname(apName)) apName = ip::hostnameForMac(mac_);
@@ -303,7 +297,6 @@ void WifiService::beginAccessPoint() {
   stationDeadline_ = -1;
   addressDeadline_ = -1;
   applyProfileAt_ = -1;
-  if (scan_.active()) finishScan({}, false);
   setLink(WifiLink::Unconfigured);
   restartSupplicant();
 }
@@ -506,7 +499,6 @@ void WifiService::applyProfile() {
   lostAt_ = -1;
   stationDeadline_ = now_ + kStationAttemptMs;
   addressDeadline_ = -1;
-  scan_.clearError();
   failures_ = 0;
   const std::string ssid = wifi::displaySsid(profile_.ssid);
   if (ssid != ssid_) state_.networkReplaced();
@@ -572,8 +564,7 @@ void WifiService::eraseCredentials() {
 
 void WifiService::scan(ScanDone done) {
   now_ = system_->nowMs();
-  if (stopping_ || accessPoint_) {
-    if (accessPoint_) scan_.unavailable();
+  if (stopping_) {
     if (done) done(scan_.networks());
     return;
   }
@@ -582,7 +573,7 @@ void WifiService::scan(ScanDone done) {
 }
 
 void WifiService::startScan() {
-  if (accessPoint_ || !scan_.start(now_)) return;
+  if (!scan_.start(now_)) return;
   if (step_ == Step::Unconfigured) beginSupplicant();
 }
 
@@ -741,6 +732,10 @@ void WifiService::handleReply(Pending kind, const std::string& reply) {
 
 void WifiService::handleEvent(const std::string& message) {
   const wifi::WpaEvent event = wifi::parseEvent(message);
+  if (event.type == wifi::WpaEventType::ScanResults) {
+    scan_.resultsEvent(!accessPoint_ && !probeHidden_ && link_ != WifiLink::Connected);
+    return;
+  }
   if (accessPoint_) {
     if (event.type == wifi::WpaEventType::AccessPointEnabled) setLink(WifiLink::AccessPoint);
     else if (event.type == wifi::WpaEventType::AccessPointDisabled) setLink(WifiLink::Unconfigured);
@@ -751,10 +746,6 @@ void WifiService::handleEvent(const std::string& message) {
       wantAccessPointClients_ = false;
       accessPointEmptyAt_ = -1;
     }
-    return;
-  }
-  if (event.type == wifi::WpaEventType::ScanResults) {
-    scan_.resultsEvent(!probeHidden_ && link_ != WifiLink::Connected);
     return;
   }
   switch (event.type) {
@@ -1066,7 +1057,6 @@ std::string WifiService::statusJson() const {
       .member("supplicant", supplicant_ < 0 ? "none" : accessPoint_ ? "access-point" : "network")
       .member("driver", driver_)
       .member("scanning", scan_.active())
-      .member("scanError", scan_.error())
       .member("supplicantRestarts", supplicantRestarts_)
       .member("error", storeError_.empty() ? linkError_ : storeError_)
       .endObject();

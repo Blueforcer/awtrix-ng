@@ -113,7 +113,6 @@ These answers use the normal error body instead:
 | `storageError` | 500 | `/api/v1/icons/origins` | The icon links could not be read or saved. |
 <!-- only tc002 -->
 | `notSupported` | 501 | `POST /update` | This clock takes no update packages over the network. Update it over USB. |
-| `scanUnavailable` | 503 | `GET /api/v1/system/wifi-scan` | Wi-Fi scanning is unavailable while the setup hotspot is open. Enter the network name manually. |
 <!-- /only -->
 | `unavailable` | 503 | `GET /api/v1/apps/script/{name}`, `/api/v1/apps/{name}/config`, `PUT /api/v1/apps/script-update/{name}`, `GET /api/v1/scripts/shared`, `POST /api/v1/audio/play`<!-- only tc002 -->, `POST /api/v1/audio/clip`, `POST /api/v1/gamepad/pair`, `POST /api/v1/gamepad/remote`<!-- /only --> | This firmware has no scripting, scripting is switched off (`scriptingEnabled`; only for `PATCH` on `/config` and for `script-update`)<!-- only esp32 esp32-s3 --> or the device cannot play the sound you asked for (for a list: none of its entries)<!-- /only --><!-- only tc002 -->, the device cannot play the sound you asked for (for a list: none of its entries), Bluetooth is not running for `gamepad/pair`, or the phone port cannot be opened for `gamepad/remote` (`not available`)<!-- /only -->. `POST /api/v1/audio/stop` never answers 503. A `PUT` on the script path answers `500 internalError` instead. |
 | `serviceBusy` | 503 | script install<!-- only esp32-s3 -->, radio play<!-- /only --><!-- only tc002 -->, large bodies<!-- /only --> | AWTRIX is busy for a moment; try again shortly. This is not a full store like `insufficientStorage`. The answer has `Retry-After: 2`. Has `field: "name"` on a script install<!-- only esp32-s3 --> and `field: "station"` when a radio stream is refused for lack of memory<!-- /only -->.<!-- only tc002 --> A body over 64 KiB gets it while another large body is still arriving.<!-- /only --> |
@@ -362,7 +361,7 @@ While AWTRIX is in **setup mode**, these are the only available routes:
 |---|---|---|
 | `GET` | `/`, `/index.html` | Setup page |
 | `GET` | `/api/v1/device`, `/api/v1/capabilities`, `/api/v1/system` | Device and setup information, without secrets |
-| `GET` | `/api/v1/system/wifi-scan` | Wi-Fi scan<!-- only tc002 -->. It answers `503 scanUnavailable` while the setup hotspot is open<!-- /only --> |
+| `GET` | `/api/v1/system/wifi-scan` | Wi-Fi scan |
 | `PUT` | `/api/v1/system` | Only the string fields `wifiSsid`, `wifiPass` and `hostname` |
 | `POST` | `/api/v1/device/reboot` | Restart |
 | `POST` | `/api/v1/restore` | [Backup restore](http.md#post-apiv1restore), Wi-Fi included |

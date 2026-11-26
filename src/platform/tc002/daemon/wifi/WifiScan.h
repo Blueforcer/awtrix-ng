@@ -31,15 +31,11 @@ class WifiScan {
   bool hasResults() const { return lastAt_ >= 0; }
   bool contains(std::string_view ssid) const;
   const std::vector<tc002::WifiNetwork>& networks() const { return networks_; }
-  const std::string& error() const { return error_; }
-  void clearError() { error_.clear(); }
-  void unavailable() { error_ = "scan-unavailable-in-access-point"; }
   std::string json(int64_t now) const;
 
  private:
   bool active_ = false, sent_ = false, wantResults_ = false;
   int64_t giveUpAt_ = -1, eventDeadline_ = -1, lastAt_ = -1;
-  std::string error_;
   std::vector<Done> waiters_;
   std::vector<tc002::WifiNetwork> networks_;
 };

@@ -654,11 +654,6 @@ The first call starts a search and answers `202`. Ask again until you get `200`.
 `enc` is `true` for a network with a password and `false` for an open one. After the list has been
 returned once, it is gone; the next request starts a new search.
 
-<!-- only tc002 -->
-Searching does not work while the setup hotspot is open (`503 scanUnavailable`). Type the
-network name by hand. Searching works once the clock is connected to a network.
-<!-- /only -->
-
 ## Persistence and resets
 
 Every `PUT` is saved at once. A field you have never written keeps its default, so a firmware

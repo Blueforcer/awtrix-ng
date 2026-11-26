@@ -203,10 +203,6 @@ void SupervisedRuntime::writeMembers(api::JsonWriter& json) const {
 }
 
 int SupervisedRuntime::wifiScan(int64_t nowMs, std::string& body) {
-  if (accessPoint()) {
-    body = api::errorJson("scanUnavailable", "Enter the Wi-Fi network name manually while using the setup hotspot");
-    return 503;
-  }
   if (scan_ == Scan::Running && nowMs - scanStartedMs_ > kScanTimeoutMs) scan_ = Scan::Idle;
   if (scan_ == Scan::Ready) {
     body.clear();

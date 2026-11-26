@@ -594,7 +594,7 @@ bool signalled(const FakeSystem& system, pid_t pid, int number) {
   return false;
 }
 
-void testScanWithoutCredentials() {
+void testScanOnTheSetupAccessPoint() {
   const std::string root = makeRoot("scan-ap");
   Harness h(root, true);
   h.system->interface = true;
@@ -603,16 +603,33 @@ void testScanWithoutCredentials() {
   h.run(300);
   check(h.network().link == WifiLink::AccessPoint, "setup AP ready");
   unsigned answers = 0;
+  std::vector<awtrix::tc002::WifiNetwork> found;
   h.service->scan([&](const std::vector<awtrix::tc002::WifiNetwork>& networks) {
     ++answers;
-    check(networks.empty(), "no fabricated scan results in AP mode");
+    found = networks;
   });
-  check(answers == 1, "AP scan callback answers promptly");
-  check(contains(h.registry.call("wifi-scan", ""), "scan-unavailable-in-access-point"), "AP scan explicit failure");
-  check(contains(h.registry.call("wifi-scan-results", ""), "scan-unavailable-in-access-point"), "scan limitation reported");
+  check(h.registry.call("wifi-scan", "") == "{\"ok\":true,\"scanning\":true}", "AP scan accepted");
+  h.run(100);
+  check(h.system->supplicant.count("SCAN") == 1 && answers == 0, "AP scan uses the running AP supplicant");
+  check(h.system->supplicant.event("<3>CTRL-EVENT-SCAN-RESULTS "), "AP scan event");
+  h.run(100);
+  check(answers == 1 && found.size() == 2 && found[0].ssid == "Home" && found[1].ssid == "Caf\xc3\xa9",
+        "setup AP lists the networks nearby");
+  check(h.system->supplicants.size() == 1 && contains(h.system->configs.back(), "\tmode=2\n") &&
+            h.network().link == WifiLink::AccessPoint, "scan keeps the setup AP running");
+  const std::string results = h.registry.call("wifi-scan-results", "");
+  check(contains(results, "\"scanning\":false") && contains(results, "\"ssid\":\"Home\""), "AP scan results served");
+  h.system->supplicant.event("<3>CTRL-EVENT-SCAN-RESULTS ");
+  h.run(100);
+  check(h.system->supplicant.count("SCAN_RESULTS") == 1, "unrequested AP scan events fetch nothing");
+  h.service->scan(nullptr);
+  h.run(10500);
+  check(h.system->supplicant.count("SCAN") == 2 && h.system->supplicant.count("SCAN_RESULTS") == 2 &&
+            contains(h.service->statusJson(), "\"scanning\":false"),
+        "AP scan without an event fetches results after the event timeout");
   h.run(180000);
   check(h.system->supplicants.size() == 1 && h.network().link == WifiLink::AccessPoint &&
-            h.system->supplicant.count("SCAN") == 0 && h.system->supplicant.count("STA-FIRST") == 0,
+            h.system->supplicant.count("SCAN") == 2 && h.system->supplicant.count("STA-FIRST") == 0,
         "AP remains up indefinitely without stored credentials");
   removeTree(root);
 }
@@ -727,6 +744,32 @@ void storeProfile(const std::string& root, const char* ssid) {
   wifi::makeProfile(ssid, "password1", profile);
   int error = 0;
   wifi::CredentialStore(root + "/state/network").save(profile, error);
+}
+
+void testFallbackScanKeepsTheSetupAccessPoint() {
+  const std::string root = makeRoot("scan-fallback");
+  storeProfile(root, "Home");
+  Harness h(root, true);
+  h.system->interface = true;
+  h.system->stock = false;
+  check(h.service->start(h.now), "start unavailable router");
+  h.run(10000);
+  unsigned answers = 0;
+  std::vector<awtrix::tc002::WifiNetwork> found;
+  h.service->scan([&](const std::vector<awtrix::tc002::WifiNetwork>& networks) {
+    ++answers;
+    found = networks;
+  });
+  h.run(5600);
+  check(h.network().link == WifiLink::AccessPoint && h.system->supplicants.size() == 2 && answers == 0,
+        "a station scan in flight carries over to the setup AP");
+  h.run(100);
+  check(h.system->supplicant.count("SCAN") == 1, "the scan is sent to the AP supplicant");
+  h.system->supplicant.event("<3>CTRL-EVENT-SCAN-RESULTS ");
+  h.run(100);
+  check(answers == 1 && found.size() == 2 && h.network().link == WifiLink::AccessPoint &&
+            h.system->supplicants.size() == 2, "fallback AP answers the scan and stays up");
+  removeTree(root);
 }
 
 void testAccessPointFallbackAndRetry() {
@@ -1423,7 +1466,8 @@ int main() {
   testStoredCredentialsAndStuckStock();
   testControlInterfaceTimeout();
   testTamperedStoreAndDriverFailure();
-  testScanWithoutCredentials();
+  testScanOnTheSetupAccessPoint();
+  testFallbackScanKeepsTheSetupAccessPoint();
   testStationScanSharingAndTimeout();
   testSilentSupplicantKeepsScanCache();
   testAccessPointFallbackAndRetry();

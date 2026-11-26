@@ -161,7 +161,13 @@ class SupervisorChannel(unittest.TestCase):
                                    ('POST', '/api/v1/files?dir=/ICONS', 'not an icon')]:
             with self.subTest(method=method, path=path):
                 self.assertEqual(403, self.request(method, path, body, headers=headers)[0])
-        self.assertEqual(503, self.request('GET', '/api/v1/system/wifi-scan', headers=headers)[0])
+        self.assertEqual((202, {'scanning': True}),
+                         self.request('GET', '/api/v1/system/wifi-scan', headers=headers))
+        self.assertEqual({'type': 'wifiScan'}, self.receive())
+        self.send('wifiScanResult', networks=[{'ssid': 'Guest', 'rssi': -61, 'secure': False}])
+        self.assertEqual([{'ssid': 'Guest', 'rssi': -61, 'enc': False}],
+                         self.eventually(lambda: self.request('GET', '/api/v1/system/wifi-scan', headers=headers),
+                                         lambda result: result[0] == 200)[1])
         self.assertEqual(200, self.request('PUT', '/api/v1/system',
                          {'wifiSsid': 'Guest', 'wifiPass': ''}, headers=headers)[0])
         self.assertEqual({'type': 'wifi', 'ssid': 'Guest', 'password': ''}, self.receive())

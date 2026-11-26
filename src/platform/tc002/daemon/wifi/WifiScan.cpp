@@ -13,7 +13,6 @@ constexpr std::size_t kMaxControlReply = 4000;
 
 bool WifiScan::start(int64_t now) {
   if (active_) return false;
-  error_.clear();
   active_ = true;
   resetControl();
   giveUpAt_ = now + kGiveUpMs;
@@ -89,7 +88,7 @@ std::string WifiScan::json(int64_t now) const {
   for (;;) {
     std::string out;
     api::JsonWriter json(out);
-    json.beginObject().member("scanning", active_).member("error", error_)
+    json.beginObject().member("scanning", active_)
         .member("ageMs", lastAt_ < 0 ? int64_t(-1) : now - lastAt_);
     json.key("networks").beginArray();
     for (std::size_t i = 0; i < count; ++i)
