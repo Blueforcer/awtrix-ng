@@ -368,6 +368,31 @@ void theLevelApplies(const Fixture& f) {
   check(!rig.feed(60).empty(), "a model loaded again takes the level");
 }
 
+void aCutoffOfItsOwnApplies(const Fixture& f) {
+  writeFile(f.settings, R"({"probability_cutoff":0.44,"sliding_window_size":1})");
+  Rig rig(f.model);
+  require(rig.listener != nullptr, rig.error);
+  rig.listen();
+  check(rig.feed(100).empty(), "silence stays under the model's cutoff");
+  rig.listener->setCutoff(0.0f);
+  check(!rig.feed(60).empty(), "a cutoff of its own replaces the model's");
+  rig.listener->setCutoff(std::nullopt);
+  check(rig.feed(60).empty(), "without it the model's counts again");
+  rig.listener->setSensitivity(WakeSensitivity::High);
+  rig.listener->setCutoff(0.99f);
+  check(rig.feed(60).empty(), "it wins over the sensitivity");
+  rig.listener->setCutoff(std::nullopt);
+  check(!rig.feed(60).empty(), "and the sensitivity counts again without it");
+  check(rig.count(StreamControl::Probe) == 1 && rig.count(StreamControl::Stop) == 0, "all on the same stream");
+  rig.listener->setSensitivity(WakeSensitivity::Normal);
+  rig.listener->setCutoff(0.0f);
+  rig.listener->cancel();
+  rig.now += WakeListener::kModelOffMs;
+  rig.listener->tick(rig.now, Listen::Off);
+  rig.listen();
+  check(!rig.feed(60).empty(), "a model loaded again takes the cutoff");
+}
+
 void aStopWithoutAnswerEnds(const Fixture& f) {
   Firing rig(f);
   const int epoch = rig.listen();
@@ -512,6 +537,7 @@ int main(int argc, char** argv) {
   openingKeepsNoModel(fixture);
   aModelItCannotListenWithIsRefused(fixture);
   theLevelApplies(fixture);
+  aCutoffOfItsOwnApplies(fixture);
   aStopWithoutAnswerEnds(fixture);
   failuresBackOff(fixture);
   anUnavailableStreamWaits(fixture);

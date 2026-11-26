@@ -40,6 +40,18 @@ bool boolField(const api::JsonReader& r, const char* name, bool& value) {
   const auto member = api::memberValue(r, name);
   return !api::present(member) || member.asBool(value);
 }
+bool cutoffField(const api::JsonReader& r, std::optional<double>& value) {
+  const auto member = api::memberValue(r, "wakeCutoff");
+  if (!api::present(member)) return true;
+  if (member.isNull()) {
+    value.reset();
+    return true;
+  }
+  double cutoff = 0;
+  if (!member.asDouble(cutoff) || !(cutoff >= 0.3 && cutoff <= 0.99)) return false;
+  value = cutoff;
+  return true;
+}
 bool enabledField(const api::JsonReader& r, std::string& assistant) {
   const auto member = api::memberValue(r, "enabled");
   bool enabled = false;
@@ -57,9 +69,10 @@ std::string serialize(const Config& c, bool secret) {
   api::JsonWriter w(out);
   w.beginObject();
   if (!secret) w.member("enabled", c.assistant == kHomeAssistant);
-  w.member("wakeWord", c.wakeWord)
-      .member("wakeSensitivity", wake::wakeSensitivityName(c.wakeSensitivity))
-      .member("assistant", c.assistant)
+  w.member("wakeWord", c.wakeWord).member("wakeSensitivity", wake::wakeSensitivityName(c.wakeSensitivity));
+  if (c.wakeCutoff) w.member("wakeCutoff", *c.wakeCutoff);
+  else w.memberNull("wakeCutoff");
+  w.member("assistant", c.assistant)
       .member("url", c.url)
       .member("pipeline", c.pipeline)
       .member("device", c.device)
@@ -78,6 +91,7 @@ const char* applyConfig(std::string_view json, Config& c) {
   std::string sensitivity{wake::wakeSensitivityName(c.wakeSensitivity)};
   if (!stringField(r, "wakeSensitivity", sensitivity, 8) || !wake::parseWakeSensitivity(sensitivity, c.wakeSensitivity))
     return "wakeSensitivity";
+  if (!cutoffField(r, c.wakeCutoff)) return "wakeCutoff";
   if (!stringField(r, "assistant", c.assistant, 68) || !validAssistant(c.assistant)) return "assistant";
   if (!stringField(r, "url", c.url, 512)) return "url";
   if (!stringField(r, "token", c.token, 4096)) return "token";
@@ -137,6 +151,7 @@ bool onlyWakeChanged(const Config& before, const Config& after) {
   Config others = after;
   others.wakeWord = before.wakeWord;
   others.wakeSensitivity = before.wakeSensitivity;
+  others.wakeCutoff = before.wakeCutoff;
   const std::string saved = serialize(before, true);
   return saved == serialize(others, true) && saved != serialize(after, true);
 }

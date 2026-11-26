@@ -164,7 +164,7 @@ void WakeListener::queueAudio(const StreamEvent& event) {
     }
   }
   samples = event.samples;
-  queue({std::move(samples), false, event.firstSample, muted_, sensitivity_});
+  queue({std::move(samples), false, event.firstSample, muted_, sensitivity_, cutoff_});
 }
 
 void WakeListener::queue(Block block) {
@@ -197,6 +197,7 @@ void WakeListener::drain() {
       continue;
     }
     detector_->setSensitivity(block.sensitivity);
+    detector_->setCutoff(block.cutoff);
     const auto heard = detector_->feed(block.samples.data(), block.samples.size());
     lock.lock();
     if (heard && !block.muted) heard_.push_back({heard->score, detectorOrigin_ + static_cast<uint32_t>(heard->sample)});

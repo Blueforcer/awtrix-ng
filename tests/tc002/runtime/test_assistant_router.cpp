@@ -73,8 +73,10 @@ struct FakeVoice final : AssistantRouter::Voice {
   std::string app = "Chat";
   const std::string none;
   WakeSensitivity sensitivity = WakeSensitivity::Normal;
+  std::optional<float> cutoff;
   unsigned begins = 0;
   WakeSensitivity wakeSensitivity() const override { return sensitivity; }
+  std::optional<float> wakeCutoff() const override { return cutoff; }
   bool off() const override { return assistantOff; }
   bool homeAssistant() const override { return homeAssistantChosen; }
   const std::string& assistantApp() const override { return assistantOff || homeAssistantChosen ? none : app; }
@@ -658,6 +660,14 @@ void theVoiceSetsTheLevel(const fs::path& model) {
   rig.framesUntil([&rig] { return !rig.module.triggers.empty(); }, kWakeWithinMs);
   check(rig.module.triggers.size() == 1 && count(rig.wakeSent, StreamControl::Probe) == 1,
         "the level of the settings reaches the listener without a new stream");
+  Rig own(&doubtful);
+  own.keep();
+  own.frames(kWakeWithinMs);
+  check(own.module.triggers.empty(), "a second rig stays under the model's cutoff");
+  own.voice.cutoff = 0.0f;
+  own.framesUntil([&own] { return !own.module.triggers.empty(); }, kWakeWithinMs);
+  check(own.module.triggers.size() == 1 && count(own.wakeSent, StreamControl::Probe) == 1,
+        "the cutoff of the settings reaches the listener without a new stream");
 }
 
 void aLostMicrophoneComesBack(const fs::path& model) {

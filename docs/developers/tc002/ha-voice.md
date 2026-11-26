@@ -151,9 +151,9 @@ why the last request failed, one of the session's codes including `nothingUnders
 request keeps it. It goes with the next `begin`, after
 `AssistSession::kLastErrorMs` (five minutes) or with `cancel`. The web UI has a label and a fix for
 every code. `POST /api/v1/voice` saves the supplied
-fields (`assistant`, `url`, `token`, `pipeline`, `device`, `enabled`, `wakeWord`, `wakeSensitivity`)
-and reconnects, unless only `wakeWord` or `wakeSensitivity` changed: that leaves the connection and a
-running request alone.
+fields (`assistant`, `url`, `token`, `pipeline`, `device`, `enabled`, `wakeWord`, `wakeSensitivity`,
+`wakeCutoff`) and reconnects, unless only `wakeWord`, `wakeSensitivity` or `wakeCutoff` changed: that
+leaves the connection and a running request alone.
 
 `assistant` names who answers the knob, the wake word, MQTT and the API: `off` (the default), `ha` or
 `app:<name>`. It is the only stored state. `enabled` is not written to the file. Reading, it is true for

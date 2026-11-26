@@ -36,6 +36,7 @@ class WakeListener {
 
   std::optional<WakeHeard> tick(int64_t now, Listen listen);
   void setSensitivity(WakeSensitivity level) { sensitivity_ = level; }
+  void setCutoff(std::optional<float> cutoff) { cutoff_ = cutoff; }
   bool microphoneLost() const { return lost_; }
   bool streamMissing() const { return lost_ && error_ == kStreamUnavailable; }
   void receive(const StreamEvent& event, int64_t now);
@@ -48,6 +49,7 @@ class WakeListener {
     uint32_t firstSample = 0;
     bool muted = false;
     WakeSensitivity sensitivity = WakeSensitivity::Normal;
+    std::optional<float> cutoff = std::nullopt;
   };
 
   WakeListener(std::string modelPath, MicrophonePort microphone, std::unique_ptr<posix::Executor> worker);
@@ -68,6 +70,7 @@ class WakeListener {
   unsigned failures_ = 0;
   bool muted_ = false, wanted_ = false, lost_ = false;
   WakeSensitivity sensitivity_ = WakeSensitivity::Normal;
+  std::optional<float> cutoff_;
 
   std::mutex mutex_;
   std::deque<Block> blocks_;

@@ -3297,6 +3297,7 @@ This route, `POST` below and [`POST /api/v1/voice/start`](#post-apiv1voicestart)
 | `config.enabled` | boolean | `true` while `config.assistant` is `ha`, otherwise `false` |
 | `config.wakeWord` | boolean | saying "Hey AWTRIX" starts the assistant |
 | `config.wakeSensitivity` | string | how easily the clock hears the wake word: `low`, `normal` or `high` |
+| `config.wakeCutoff` | number or `null` | how sure the clock must be that it heard the wake word, `0.3` to `0.99`. It replaces `config.wakeSensitivity` while set. `null` when not set |
 | `config.url` | string | the Home Assistant address, `""` when none is set |
 | `config.pipeline` | string | the chosen Assist pipeline ID, `""` for Home Assistant's default |
 | `config.device` | string | the Home Assistant device ID whose area is the clock's room, `""` when none is set |
@@ -3317,8 +3318,9 @@ curl http://<awtrix-ip>/api/v1/voice
 
 Changes the voice assistant settings.
 
-**Request:** any of `assistant`, `enabled`, `wakeWord`, `wakeSensitivity`, `url`, `pipeline`,
-`device`, `token`, or `"clearToken": true` to delete the token. Fields you leave out keep their value.
+**Request:** any of `assistant`, `enabled`, `wakeWord`, `wakeSensitivity`, `wakeCutoff`, `url`,
+`pipeline`, `device`, `token`, or `"clearToken": true` to delete the token. Fields you leave out keep
+their value.
 
 * `assistant` is `off` (the default), `ha` or `app:<name>`. The name follows the rules for app names:
   1 to 32 letters, digits, `_` or `-`, and not `active`, `next`, `previous` or `order`. With an app, the
@@ -3334,6 +3336,9 @@ Changes the voice assistant settings.
   ready.
 * `wakeSensitivity` is `low` (fewer false starts), `normal` (the default) or `high` (hears more easily).
   A change counts at once.
+* `wakeCutoff` is a number from `0.3` to `0.99`: how sure the clock must be that it heard "Hey AWTRIX".
+  While it is set, it replaces `wakeSensitivity`. A lower value hears you from further away and starts
+  by mistake more often. `null` removes it, and `wakeSensitivity` counts again. A change counts at once.
 * After you change the address, send the token again.
 
 This route accepts requests only from the device's own web UI: it needs the header
@@ -3348,7 +3353,7 @@ other web pages and scripts from changing these settings. The scripts on the clo
 | Status | Condition |
 |---|---|
 | 403 | `forbiddenOrigin`: not sent from the device's own web UI |
-| 422 | `validationFailed`: `field` names the wrong value: `assistant`, `url`, `token`, `pipeline`, `device`, `enabled`, `wakeWord` or `wakeSensitivity` |
+| 422 | `validationFailed`: `field` names the wrong value: `assistant`, `url`, `token`, `pipeline`, `device`, `enabled`, `wakeWord`, `wakeSensitivity` or `wakeCutoff` |
 | 500 | `internalError`: the settings could not be saved |
 
 ```bash

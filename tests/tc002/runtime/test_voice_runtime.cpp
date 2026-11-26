@@ -229,6 +229,21 @@ void wakeWordKeepsTheConnection(const fs::path& root) {
             !has(rig.call("GET", "/api/v1/voice"), R"("state":"offline")") &&
             has(rig.call("GET", "/api/v1/voice"), R"("wakeSensitivity":"low")"),
         "changing the sensitivity keeps it too");
+  check(!rig.runtime.wakeCutoff() && has(rig.call("GET", "/api/v1/voice"), R"("wakeCutoff":null)"),
+        "the wake word has no cutoff of its own at first");
+  response = rig.call("POST", "/api/v1/voice", R"({"wakeCutoff":0.6})");
+  rig.runtime.tick(1001, true);
+  check(sent(response) == 200 && rig.probes() == 1 && rig.runtime.wakeCutoff() == 0.6f &&
+            !has(rig.call("GET", "/api/v1/voice"), R"("state":"offline")") &&
+            has(rig.call("GET", "/api/v1/voice"), R"("wakeCutoff":0.6)"),
+        "a cutoff of its own keeps the connection and is shown");
+  response = rig.call("POST", "/api/v1/voice", R"({"wakeCutoff":1.2})");
+  check(sent(response) == 422 && has(response, R"("field":"wakeCutoff")") && rig.runtime.wakeCutoff() == 0.6f,
+        "a cutoff out of range is refused: " + response.body);
+  response = rig.call("POST", "/api/v1/voice", R"({"wakeCutoff":null})");
+  check(sent(response) == 200 && !rig.runtime.wakeCutoff() &&
+            has(rig.call("GET", "/api/v1/voice"), R"("wakeCutoff":null)"),
+        "null removes it");
   response = rig.call("POST", "/api/v1/voice", R"({"wakeSensitivity":"loud"})");
   check(sent(response) == 422 && has(response, R"("field":"wakeSensitivity")"), "an unknown level is refused: " + response.body);
   response = rig.call("POST", "/api/v1/voice", R"({"pipeline":"p"})");

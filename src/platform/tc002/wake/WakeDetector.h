@@ -32,6 +32,7 @@ class WakeDetector {
   bool load(std::shared_ptr<const posix::MappedFile> file, std::string& error);
   bool configure(const WakeConfig& config, std::string& error);
   void setSensitivity(WakeSensitivity level);
+  void setCutoff(std::optional<float> cutoff);
 
   std::optional<WakeEvent> feed(const int16_t* samples, std::size_t count);
   std::optional<WakeEvent> decide(uint8_t probability, uint64_t sample);
@@ -39,11 +40,13 @@ class WakeDetector {
 
  private:
   void forgetDetections();
+  float cutoff() const;
 
   ModelStream stream_;
   ProbabilityWindow window_;
   float modelCutoff_ = 0.0f;
   WakeSensitivity sensitivity_ = WakeSensitivity::Normal;
+  std::optional<float> cutoff_;
   uint64_t cooloff_ = 0;
   uint64_t warmup_ = 0;
   uint64_t last_ = 0;

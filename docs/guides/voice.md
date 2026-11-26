@@ -121,6 +121,10 @@ saved at once. **Low** starts by
 mistake less often and needs a clearer word. **High** hears you more easily and starts by mistake more
 often. **Normal** suits most rooms.
 
+For a finer step than the three levels, choose **Custom** and enter a **Cutoff** from 0.30 to 0.99.
+It is saved when you leave the field or press Enter. A lower value hears you from further away and
+starts by mistake more often. Choosing a level again replaces it.
+
 ## Commands for the clock's room
 
 Assist can take "turn on the lights" to mean the lights in the room the clock stands in. For that,

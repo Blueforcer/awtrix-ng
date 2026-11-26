@@ -34,6 +34,7 @@ class AssistantRouter {
     virtual const std::string& assistantApp() const = 0;
     virtual bool wakeWord() const = 0;
     virtual wake::WakeSensitivity wakeSensitivity() const = 0;
+    virtual std::optional<float> wakeCutoff() const = 0;
     virtual bool ready() const = 0;
     virtual bool busy() const = 0;
     virtual bool starting() const = 0;

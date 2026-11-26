@@ -651,9 +651,10 @@ which player it plays. See [Gamepad](../guides/gamepad.md).
 **Assistant** chooses who answers the knob, the wake word, the **Assist** button in Home Assistant,
 MQTT and HTTP: **Off** for nobody, Home Assistant or an installed app that can answer. **Status** shows whether it is ready and
 what to do if it is not. **Wake word** switches the experimental "Hey AWTRIX" on and off, and **Sensitivity** sets how
-easily the clock hears it. For Home Assistant, enter the address and an access token under **Home
-Assistant settings** and press **Connect**. With the clock connected, you also find **HA assistant**
-and **Room device** there. See [Voice assistant](../guides/voice.md).
+easily the clock hears it. **Custom** adds a **Cutoff** field for a finer value. For Home Assistant,
+enter the address and an access token under **Home Assistant settings** and press **Connect**. With
+the clock connected, you also find **HA assistant** and **Room device** there. See
+[Voice assistant](../guides/voice.md).
 
 ### iPhone
 

@@ -50,6 +50,7 @@ void AssistantRouter::tick(int64_t now, bool knob) {
   using Listen = wake::WakeListener::Listen;
   const Listen listen = !listening() ? Listen::Off : ready ? Listen::On : Listen::Muted;
   parts_.wake->setSensitivity(parts_.voice.wakeSensitivity());
+  parts_.wake->setCutoff(parts_.voice.wakeCutoff());
   if (const auto heard = parts_.wake->tick(now, listen))
     startFrom(VoiceTrigger::Wake, parts_.wakeMicrophone.markOf(heard->sample), now);
 }

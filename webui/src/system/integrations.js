@@ -76,9 +76,22 @@ function voiceSection(page){
   const wakeHint=el('span');
   const wake=mkSwitch(false,()=>store({wakeWord:wake.input.checked}));
   const wakeRow=actionRow(t('vcWake'),wakeHint,[wake.node]);
-  const sens=el('select',{'aria-label':t('vcSens')},['low','normal','high'].map(v=>el('option',{value:v},t('vcSens'+v))));
-  sens.addEventListener('change',()=>store({wakeSensitivity:sens.value}));
-  const sensRow=actionRow(t('vcSens'),t('vcSensH'),[sens]);
+  const sens=el('select',{'aria-label':t('vcSens')},['low','normal','high','custom'].map(v=>el('option',{value:v},t('vcSens'+v))));
+  const cut=el('input',{type:'number',min:'0.3',max:'0.99',step:'0.01',placeholder:'0.30–0.99','aria-label':t('vcCut')});
+  let custom=false;
+  sens.addEventListener('change',()=>{
+    custom=sens.value==='custom';
+    if(!custom)return store({wakeSensitivity:sens.value,wakeCutoff:null});
+    cut.value='';
+    show([cutRow],true);
+    cut.focus();
+  });
+  cut.addEventListener('change',()=>{
+    const v=+cut.value;
+    if(cut.value&&v>=.3&&v<=.99)store({wakeCutoff:v});
+    else toast(t('vcfwakeCutoff'),false);
+  });
+  const sensRow=actionRow(t('vcSens'),t('vcSensH'),[sens]),cutRow=actionRow(t('vcCut'),t('vcCutH'),[cut]);
   const url=el('input',{type:'text',inputmode:'url',autocomplete:'off',spellcheck:'false',placeholder:'http://homeassistant.local:8123','aria-label':t('vcUrl')});
   const token=el('input',{type:'password',autocomplete:'new-password',spellcheck:'false','aria-label':t('vcToken')});
   const clear=armable(el('button',null,t('seRemove')),()=>store({clearToken:true}));
@@ -139,11 +152,15 @@ function voiceSection(page){
     const hears=d.wakeWordAvailable&&!off&&setUp;
     const waiting=c.wakeWord&&!d.wakeListening&&(d.state==='ready'||!linked);
     wake.input.checked=c.wakeWord;
-    sens.value=c.wakeSensitivity;
+    const cutoff=typeof c.wakeCutoff==='number';
+    if(cutoff)custom=false;
+    sens.value=cutoff||custom?'custom':c.wakeSensitivity;
+    if(cutoff&&document.activeElement!==cut)cut.value=c.wakeCutoff;
     wakeHint.replaceChildren(t(waiting?'vcWakeWait':'vcWakeH'));
     warn(wakeHint,waiting);
     show([wakeRow],hears);
     show([sensRow],hears&&c.wakeWord);
+    show([cutRow],hears&&c.wakeWord&&sens.value==='custom');
     show([box],ha);
     const want=ha&&(!setUp||(!linked&&!!d.error))?true:linked?false:opened;
     if(want!==opened&&!box.contains(document.activeElement?.closest('input'))){opened=want;box.open=want;}
@@ -183,7 +200,7 @@ function voiceSection(page){
     store(body);
   });
   for(const field of[url,token])field.addEventListener('keydown',e=>{if(e.key==='Enter'&&!connect.disabled)connect.click();});
-  const details=[stateRow,wakeRow,sensRow,box];
+  const details=[stateRow,wakeRow,sensRow,cutRow,box];
   show(details,false);
   page.section('voice',t('vcSection'),t('vcSectionH'),[actionRow(t('vcAssist'),t('vcAssistH'),[assist]),...details]);
   poller(load,2000);

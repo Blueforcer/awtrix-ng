@@ -73,6 +73,10 @@ these names. The bundle tools accept the two files only together.
 So a replaced model keeps three usable levels: 0.97 gives 0.983 and 0.946. A scale never passes 1.0,
 as a fixed offset would, and a result below 0 counts as 0.
 
+`wakeCutoff` (`0.3` to `0.99`, default `null`) is a cutoff of the user's own. While it is set,
+`WakeDetector::cutoff` uses it as it is and ignores the level and the model's value. It travels the
+same way as the level.
+
 `AssistantRouter::tick` hands the level to the listener each frame, and the listener passes it to the
 worker with every audio block, as it does the mute flag. `WakeDetector::setSensitivity` changes only
 the window's threshold: the window, the warm-up and the cooloff go on. A model loaded again starts on
@@ -173,8 +177,10 @@ three sensitivity levels on a steady probability and on the reference signal, an
 `tests/tc002/arm/` runs the same test on Cortex-A7 under qemu-arm. `test_wake_listener.cpp` covers the
 settings file, the stream states, detections, muting, the stop while Voice is busy, restarts, gaps,
 the model leaving memory while the setting is off, a level that applies at once and to a model
-loaded again, the lost microphone and the back-off that starts over when listening is wanted again. `test_assist_session.cpp` covers the `wakeWord` and `wakeSensitivity` settings. `test_endpointer.cpp` covers the endpointer's decisions on exact voice patterns and the model
-on speech of the English voice pack, a pause within a sentence and room noise, also on qemu-arm. No
+loaded again, a cutoff of its own, the lost microphone and the back-off that starts over when
+listening is wanted again. `test_assist_session.cpp` covers the `wakeWord`, `wakeSensitivity` and
+`wakeCutoff` settings. `test_endpointer.cpp` covers the endpointer's decisions on exact voice patterns
+and the model on speech of the English voice pack, a pause within a sentence and room noise, also on qemu-arm. No
 test prints arena sizes or run times.
 
 ## Related

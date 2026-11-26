@@ -96,6 +96,49 @@ void assistantSetting() {
   ::unlink((std::string(folder) + "/voice.json").c_str());
   ::rmdir(folder);
 }
+void wakeCutoffSetting() {
+  char folder[] = "/tmp/voice-cutoff-XXXXXX";
+  check(::mkdtemp(folder) != nullptr, "a private folder");
+  {
+    ConfigStore store(folder);
+    ConfigStore::Rejection rejection;
+    const auto shows = [&store](const std::string& text) {
+      return store.publicJson().find("\"wakeCutoff\":" + text) != std::string::npos;
+    };
+    check(store.load() && !store.get().wakeCutoff && shows("null"), "no cutoff of its own on a fresh clock");
+    check(store.update(R"({"wakeCutoff":0.6})", rejection) && store.get().wakeCutoff == 0.6 && shows("0.6"),
+          "a cutoff is taken and shown");
+    for (const char* edge : {R"({"wakeCutoff":0.3})", R"({"wakeCutoff":0.99})"}) {
+      rejection = {};
+      check(store.update(edge, rejection), std::string("the range ends are taken: ") + edge);
+    }
+    check(store.update(R"({"wakeCutoff":0.55})", rejection), "back to 0.55");
+    for (const char* bad : {R"({"wakeCutoff":0.29})", R"({"wakeCutoff":0.995})", R"({"wakeCutoff":1})",
+                            R"({"wakeCutoff":-0.5})", R"({"wakeCutoff":"0.6"})", R"({"wakeCutoff":true})"}) {
+      rejection = {};
+      check(!store.update(bad, rejection) && rejection.field == "wakeCutoff" && rejection.message == "invalid value" &&
+                store.get().wakeCutoff == 0.55,
+            std::string("refused: ") + bad);
+    }
+    check(store.update(R"({"wakeWord":true})", rejection) && store.get().wakeCutoff == 0.55,
+          "a request without it keeps it");
+    Config cutoff = store.get();
+    cutoff.wakeCutoff = 0.7;
+    check(onlyWakeChanged(store.get(), cutoff), "the cutoff is no connection setting");
+  }
+  {
+    ConfigStore saved(folder);
+    ConfigStore::Rejection rejection;
+    check(saved.load() && saved.get().wakeCutoff == 0.55, "the cutoff survives a restart");
+    check(saved.update(R"({"wakeCutoff":null})", rejection) && !saved.get().wakeCutoff &&
+              saved.publicJson().find("\"wakeCutoff\":null") != std::string::npos,
+          "null removes it");
+  }
+  ConfigStore cleared(folder);
+  check(cleared.load() && !cleared.get().wakeCutoff, "and it stays removed after a restart");
+  check(cleared.erase(), "erase");
+  ::rmdir(folder);
+}
 void savedFilesKeepTheirMeaning() {
   struct Shape {
     const char* file;
@@ -339,6 +382,7 @@ int main() {
     ::rmdir(directory);
   }
   assistantSetting();
+  wakeCutoffSetting();
   savedFilesKeepTheirMeaning();
   enabledFollowsTheAssistant();
   aBlockingReasonOutlivesTheRetry();

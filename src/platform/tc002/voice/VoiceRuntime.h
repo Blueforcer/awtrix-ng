@@ -31,6 +31,10 @@ class VoiceRuntime : public AssistantRouter::Voice {
   }
   bool wakeWord() const override { return config_.get().wakeWord; }
   wake::WakeSensitivity wakeSensitivity() const override { return config_.get().wakeSensitivity; }
+  std::optional<float> wakeCutoff() const override {
+    const std::optional<double>& cutoff = config_.get().wakeCutoff;
+    return cutoff ? std::optional<float>(static_cast<float>(*cutoff)) : std::nullopt;
+  }
   bool busy() const override {
     return pendingStart_ || errorFeedback_ || session_.busy();
   }

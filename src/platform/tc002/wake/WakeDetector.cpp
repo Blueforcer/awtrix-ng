@@ -17,7 +17,7 @@ bool WakeDetector::load(std::shared_ptr<const posix::MappedFile> file, std::stri
 bool WakeDetector::configure(const WakeConfig& config, std::string& error) {
   if (!window_.configure(config.cutoff, config.window, error)) return false;
   modelCutoff_ = config.cutoff;
-  window_.setCutoff(wakeCutoff(modelCutoff_, sensitivity_));
+  window_.setCutoff(cutoff());
   cooloff_ = uint64_t{config.cooloffMs} * WakeFrontend::kSamplesPerMs;
   warmup_ = uint64_t{config.warmupMs} * WakeFrontend::kSamplesPerMs;
   forgetDetections();
@@ -27,8 +27,16 @@ bool WakeDetector::configure(const WakeConfig& config, std::string& error) {
 void WakeDetector::setSensitivity(WakeSensitivity level) {
   if (level == sensitivity_) return;
   sensitivity_ = level;
-  window_.setCutoff(wakeCutoff(modelCutoff_, level));
+  window_.setCutoff(cutoff());
 }
+
+void WakeDetector::setCutoff(std::optional<float> own) {
+  if (own == cutoff_) return;
+  cutoff_ = own;
+  window_.setCutoff(cutoff());
+}
+
+float WakeDetector::cutoff() const { return cutoff_ ? *cutoff_ : wakeCutoff(modelCutoff_, sensitivity_); }
 
 void WakeDetector::reset() {
   stream_.reset();

@@ -22,7 +22,7 @@ function voiceMock(window, vc) {
     if (body.clearToken) next.tokenSet = false;
     if (body.token) next.tokenSet = true;
     if (vc.reject) return new Response(JSON.stringify({ error: { code: 'validationFailed', field: vc.reject, message: 'invalid value' } }), { status: 422 });
-    for (const k of ['wakeWord', 'wakeSensitivity', 'url', 'pipeline', 'device', 'tokenSet', 'assistant']) vc.config[k] = next[k];
+    for (const k of ['wakeWord', 'wakeSensitivity', 'wakeCutoff', 'url', 'pipeline', 'device', 'tokenSet', 'assistant']) vc.config[k] = next[k];
     return new Response('{"ok":true}');
   };
   return log;
@@ -30,7 +30,7 @@ function voiceMock(window, vc) {
 
 function state(overrides = {}) {
   return { state: 'offline', error: '', lastError: '', pipelines: [], wakeWordAvailable: true, wakeListening: false, assistantApps: [], ...overrides,
-    config: { wakeWord: false, wakeSensitivity: 'normal', url: '', pipeline: '', device: '', tokenSet: false, assistant: 'ha', ...overrides.config } };
+    config: { wakeWord: false, wakeSensitivity: 'normal', wakeCutoff: null, url: '', pipeline: '', device: '', tokenSet: false, assistant: 'ha', ...overrides.config } };
 }
 
 const ready = (overrides = {}) => state({ state: 'ready', pipelines: PIPES, ...overrides, config: { ...HA, ...overrides.config } });
@@ -52,12 +52,12 @@ async function open(voice, vc) {
   const wake = sec && sec.querySelector('input[type=checkbox]');
   return { window, log, vc, sec, tr, shown, status,
     posts: () => log.filter(l => l.method === 'POST'),
-    toast: () => window.document.querySelector('.toast')?.textContent || '',
+    toast: () => [...window.document.querySelectorAll('.toast')].pop()?.textContent || '',
     hint: status && status.closest('.frow').querySelector('.help'),
     url: sec && sec.querySelector('input[inputmode=url]'), token: sec && sec.querySelector('input[type=password]'),
     dev: sec && sec.querySelector('input[placeholder="' + tr('vcDevP') + '"]'),
     wake, wakeHint: wake && wake.closest('.frow').querySelector('.help'),
-    assist: selects[0], sens: selects[1], pipe: selects[2],
+    assist: selects[0], sens: selects[1], pipe: selects[2], cut: sec && sec.querySelector('input[type=number]'),
     box: sec && sec.querySelector('details'),
     connect: buttons.find(b => b.textContent === tr('vcConnect')),
     clear: buttons.find(b => b.textContent === tr('seRemove')) };
@@ -81,6 +81,12 @@ async function pick(c, select, value) {
 async function type(c, input, value) {
   input.value = value;
   input.dispatchEvent(new c.window.Event('input'));
+}
+
+async function commit(c, input, value) {
+  input.value = value;
+  input.dispatchEvent(new c.window.Event('change'));
+  await flush(80);
 }
 
 async function toggle(c, value) {
@@ -250,13 +256,13 @@ async function wakeWord() {
   });
 
   await card(ready({ wakeListening: true, config: { wakeWord: true, wakeSensitivity: 'high' } }), async c => {
-    assert.deepEqual([...c.sens.options].map(o => o.value), ['low', 'normal', 'high'], 'three levels');
-    const levels = ['vcSenslow', 'vcSensnormal', 'vcSenshigh'];
+    assert.deepEqual([...c.sens.options].map(o => o.value), ['low', 'normal', 'high', 'custom'], 'three levels and a value of your own');
+    const levels = ['vcSenslow', 'vcSensnormal', 'vcSenshigh', 'vcSenscustom'];
     for (const key of levels) assert.notEqual(c.tr(key), key, key + ' has a text');
     assert.deepEqual([...c.sens.options].map(o => o.textContent), levels.map(c.tr));
     assert.equal(c.sens.value, 'high', 'the level of the device');
     await pick(c, c.sens, 'low');
-    assert.deepEqual(c.posts().map(p => p.body), [{ wakeSensitivity: 'low' }], 'the level saves at once and only itself');
+    assert.deepEqual(c.posts().map(p => p.body), [{ wakeSensitivity: 'low', wakeCutoff: null }], 'the level saves at once and drops a value of your own');
     assert.equal(c.toast(), c.tr('saved'));
     assert.equal(c.sens.value, 'low');
   });
@@ -281,6 +287,85 @@ async function wakeWord() {
 
   await card(ready({ wakeWordAvailable: false, config: { wakeWord: true } }), async c => {
     for (const node of [c.wake, c.sens]) assert.equal(c.shown(node), false, 'without a wake word on the clock the rows are hidden');
+  });
+}
+
+async function customCutoff() {
+  await card(ready({ wakeListening: true, config: { wakeWord: true } }), async c => {
+    for (const key of ['vcCut', 'vcCutH', 'vcfwakeCutoff']) assert.notEqual(c.tr(key), key, key + ' has a text');
+    assert.equal(c.sens.value, 'normal');
+    assert.equal(c.shown(c.cut), false, 'no field while a level is chosen');
+    await pick(c, c.sens, 'custom');
+    assert.equal(c.posts().length, 0, 'Custom alone stores nothing');
+    assert.equal(c.shown(c.cut), true, 'Custom shows the field');
+    assert.equal(c.cut.value, '', 'empty without a stored value');
+    assert.equal(c.cut.placeholder, '0.30–0.99', 'and names the range');
+    assert.equal(c.window.document.activeElement, c.cut, 'ready to type');
+    assert.deepEqual([c.cut.min, c.cut.max, c.cut.step], ['0.3', '0.99', '0.01']);
+
+    const reads = c.log.length;
+    c.cut.blur();
+    await flush(2300);
+    assert.ok(c.log.length > reads, 'the page polled meanwhile');
+    assert.equal(c.sens.value, 'custom', 'the poll keeps a fresh Custom');
+    assert.equal(c.shown(c.cut), true, 'and its field');
+
+    for (const bad of ['0.2', '1', '']) {
+      await commit(c, c.cut, bad);
+      assert.equal(c.posts().length, 0, bad + ' is not sent');
+      assert.equal(c.toast(), c.tr('vcfwakeCutoff'), 'and the range is named');
+    }
+
+    await commit(c, c.cut, '0.6');
+    assert.deepEqual(c.posts().map(p => p.body), [{ wakeCutoff: 0.6 }], 'a valid value saves at once and only itself');
+    assert.equal(c.toast(), c.tr('saved'));
+    assert.equal(c.sens.value, 'custom');
+    assert.equal(c.cut.value, '0.6');
+
+    c.vc.config.wakeCutoff = null;
+    await flush(2300);
+    assert.equal(c.sens.value, 'normal', 'once stored, Custom follows the device again');
+    assert.equal(c.shown(c.cut), false);
+
+    await pick(c, c.sens, 'high');
+    assert.deepEqual(c.posts()[1].body, { wakeSensitivity: 'high', wakeCutoff: null }, 'a level replaces the value in one request');
+    assert.equal(c.vc.config.wakeCutoff, null);
+    assert.equal(c.sens.value, 'high');
+    assert.equal(c.shown(c.cut), false, 'and hides the field');
+
+    await pick(c, c.sens, 'custom');
+    assert.equal(c.cut.value, '', 'Custom again starts empty, not with the dropped value');
+    assert.equal(c.posts().length, 2);
+  });
+
+  await card(ready({ wakeListening: true, config: { wakeWord: true, wakeSensitivity: 'low', wakeCutoff: 0.55 } }), async c => {
+    assert.equal(c.sens.value, 'custom', 'a stored value shows as Custom');
+    assert.equal(c.shown(c.cut), true);
+    assert.equal(c.cut.value, '0.55', 'with the value in the field');
+
+    c.cut.focus();
+    c.cut.value = '0.7';
+    c.vc.config.wakeCutoff = 0.8;
+    await flush(2300);
+    assert.equal(c.cut.value, '0.7', 'a poll does not overwrite the field being typed in');
+    c.cut.blur();
+    await flush(2300);
+    assert.equal(c.cut.value, '0.8', 'once left, the field shows what the device has');
+
+    c.vc.config.wakeCutoff = null;
+    await flush(2300);
+    assert.equal(c.sens.value, 'low', 'a value removed elsewhere shows the level again');
+    assert.equal(c.shown(c.cut), false);
+
+    c.vc.config.wakeCutoff = 0.5;
+    await toggle(c, false);
+    for (const node of [c.sens, c.cut]) assert.equal(c.shown(node), false, 'without the wake word neither row shows');
+  });
+
+  await card(ready({ reject: 'wakeCutoff', wakeListening: true, config: { wakeWord: true, wakeCutoff: 0.5 } }), async c => {
+    await commit(c, c.cut, '0.7');
+    assert.deepEqual(c.posts().map(p => p.body), [{ wakeCutoff: 0.7 }]);
+    assert.equal(c.toast(), c.tr('vcfwakeCutoff'), 'a refused value is explained the same way');
   });
 }
 
@@ -454,9 +539,10 @@ async function reasons() {
   await homeAssistantFromScratch();
   await states();
   await wakeWord();
+  await customCutoff();
   await saving();
   await removeToken();
   await assistant();
   await reasons();
-  console.log('voice-card: gating, setup from scratch, states and reasons, wake word, saving, confirmed token removal, assistant choice and reason texts passed');
+  console.log('voice-card: gating, setup from scratch, states and reasons, wake word, custom cutoff, saving, confirmed token removal, assistant choice and reason texts passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

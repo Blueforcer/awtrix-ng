@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -12,6 +13,7 @@ struct Config {
   std::string url, token, pipeline, device;
   std::string assistant{kAssistantOff};
   wake::WakeSensitivity wakeSensitivity = wake::WakeSensitivity::Normal;
+  std::optional<double> wakeCutoff = std::nullopt;
 };
 bool onlyWakeChanged(const Config& before, const Config& after);
 // An origin only: credentials, paths, queries and fragments are rejected.
