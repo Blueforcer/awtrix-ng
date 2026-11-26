@@ -18,7 +18,14 @@ export async function runInstaller(deps) {
     const percent = Math.floor(Math.max(0, Math.min(1, value)) * 10) * 10;
     if (Number.isFinite(percent) && percent !== lastProgress) { lastProgress = percent; status(`${percent}%`); }
   };
-  const options = () => ({usb, identity, signal, onStatus: event => status(connectionMessage(event))});
+  const options = () => {
+    const shown = new Set();
+    return {usb, identity, signal, onStatus: event => {
+      const text = connectionMessage(event);
+      if (event?.phase === 'reconnecting') { if (shown.has(text)) return; shown.add(text); }
+      status(text);
+    }};
+  };
   const askWifi = async () => {
     for (;;) {
       const ssid = await ask('Wi-Fi network name (optional; press Enter to use the hotspot later): ');

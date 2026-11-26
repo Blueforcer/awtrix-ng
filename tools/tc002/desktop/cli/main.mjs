@@ -1,5 +1,5 @@
-import {resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {realpathSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {createNativeBridge} from '../ui/native.js';
 import {GUARDED_PHASES} from '../ui/controller.js';
 import {createRpc} from './rpc.mjs';
@@ -35,6 +35,8 @@ export async function main() {
   }
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+const realPath = file => { try { return realpathSync(file); } catch { return null; } };
+const entry = process.argv[1] && realPath(process.argv[1]);
+if (entry && entry === realPath(fileURLToPath(import.meta.url))) {
   main().catch(error => { process.stderr.write(`${error?.message || 'The installer could not finish.'}\n`); process.exitCode ||= 1; });
 }

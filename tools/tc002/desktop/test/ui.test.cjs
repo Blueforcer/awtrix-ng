@@ -393,6 +393,24 @@ test('a superseded package parser cannot overwrite the selected bundle after it 
   await f.ui.destroy();
 });
 
+test('desktop UI shows the USB error while it retries and keeps it when USB gives up', async () => {
+  const connection = deferred(), error = 'unknown (error 0xe00002ed)';
+  const f = await fixture({connect: () => connection.promise});
+  const settings = f.calls.find(value => value?.connect).connect;
+  settings.onStatus({phase: 'opening', message: 'TC002 found. Opening its USB connection…'});
+  assert.equal(f.get('status').textContent, 'Clock found. Connecting…');
+  settings.onStatus({phase: 'reconnecting', message: error});
+  assert.equal(f.get('status').textContent, `Connecting to the clock… (${error})`);
+  settings.onStatus({phase: 'reconnecting', message: 'The USB connection changed.', detail: 'A transfer error has occurred.'});
+  assert.equal(f.get('status').textContent, 'Connecting to the clock… (A transfer error has occurred.)');
+  connection.reject(Object.assign(new Error(`The clock is on USB but does not answer: ${error}. Switch it off and on, or try another cable or USB port.`), {code: 'unresponsive'}));
+  await settle();
+  assert.equal(f.ui.phase, 'failed');
+  assert.match(f.get('error').textContent, /does not answer: unknown \(error 0xe00002ed\)/);
+  assert.equal(f.root.querySelector('[data-action=retry]').hidden, false);
+  await f.ui.destroy();
+});
+
 test('choosing firmware aborts waiting USB and closes a late connection without using the old bundle', async () => {
   const connection = deferred(); let loads = 0, lateClosed = false;
   const f = await fixture({chooseFirmware: async () => true, connect: () => connection.promise,

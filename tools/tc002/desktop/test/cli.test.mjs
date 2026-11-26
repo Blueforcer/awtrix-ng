@@ -1,14 +1,17 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {PassThrough} from 'node:stream';
-import {readFile} from 'node:fs/promises';
+import {spawnSync} from 'node:child_process';
+import {mkdir, mkdtemp, readFile, rm, symlink, writeFile} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import {runInstaller} from '../cli/runner.mjs';
 import {createRpc} from '../cli/rpc.mjs';
 import {loadImageTools} from '../../../../docs/assets/tc002/image/node.mjs';
 import {provisionWifi} from '../../../../docs/assets/tc002/install.js';
 
 const identity = {vendorId: 0x18d1, productId: 0xd002, serialNumber: 'synthetic'};
-async function fixture({answers = ['', 'INSTALL'], interrupt = false, downloadFailure = false, firmware, parseFailure = false, control} = {}) {
+async function fixture({answers = ['', 'INSTALL'], interrupt = false, downloadFailure = false, firmware, parseFailure = false, control, connect} = {}) {
   const calls = [], messages = [], prompts = [], instances = [];
   let downloads = 0;
   const session = {identity, async close() { calls.push('close'); }, async controlRequest(command, payload) {
@@ -37,7 +40,7 @@ async function fixture({answers = ['', 'INSTALL'], interrupt = false, downloadFa
     }},
     usb: {}, Tc002Installer: Installer, async preload() { calls.push('preload'); },
     async parsePackage() { calls.push('parse'); if (parseFailure) throw new Error('Invalid firmware package.'); return {version: '1.2.3'}; },
-    async connectGranted(options) { calls.push({connect: options.identity}); return session; },
+    async connectGranted(options) { calls.push({connect: options.identity}); return connect ? connect(options, session) : session; },
     buildResImage() {}, validateWifi(ssid, password) { if (password && password.length < 8) throw new Error('Password is too short.'); },
     async prompt(text, secret) { prompts.push({text, secret}); if (!answers.length) throw new Error('Unexpected prompt'); return answers.shift(); },
     async message(text) { messages.push(text); }, async sleep() {}, provisionWifi,
@@ -81,6 +84,28 @@ test('terminal recovery preserves the exact prepared instance and reconnects onl
   assert.equal(f.calls.filter(call => call === 'install').length, 2);
   assert.deepEqual(f.calls.filter(call => call && typeof call === 'object' && 'connect' in call)[1].connect, identity);
   assert.ok(f.messages.some(text => text.includes('Do not restart')));
+});
+
+test('terminal shows each USB error once while the engine keeps retrying', async () => {
+  const error = 'unknown (error 0xe00002ed)', failure = 'The clock is on USB but does not answer: unknown (error 0xe00002ed). Switch it off and on, or try another cable or USB port.';
+  let attempts = 0;
+  const f = await fixture({answers: ['y', '', 'INSTALL'], connect: async (options, session) => {
+    options.onStatus({phase: 'connecting', message: 'Waiting for USB.'});
+    options.onStatus({phase: 'opening', message: 'TC002 found. Opening its USB connection…'});
+    for (let i = 0; i < 200; i++) {
+      options.onStatus({phase: 'reconnecting', message: error});
+      options.onStatus({phase: 'reconnecting', message: 'The USB operation timed out.'});
+    }
+    if (++attempts === 1) throw Object.assign(new Error(failure), {code: 'unresponsive'});
+    options.onStatus({phase: 'reconnecting', message: error});
+    return session;
+  }});
+  assert.equal(f.result.installed, true);
+  assert.equal(f.messages.filter(text => text === `Connecting to the clock… (${error})`).length, 2);
+  assert.equal(f.messages.filter(text => text === 'Connecting to the clock… (The USB operation timed out.)').length, 2);
+  assert.equal(f.messages.filter(text => text === 'Clock found. Connecting…').length, 2);
+  assert.ok(f.messages.includes(failure));
+  assert.ok(f.messages.length < 40);
 });
 
 test('terminal retries downloading explicitly and never connects before a valid package exists', async () => {
@@ -189,6 +214,28 @@ test('terminal RPC accepts a real firmware-sized binary response without regular
   const result = new Uint8Array(await pending);
   assert.equal(result.length, bytes.length); assert.equal(result.at(-1), 0x7b);
   rpc.close();
+});
+
+test('terminal installer starts when its folder is reached through a symlink', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'awtrix-desktop-cli-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  const real = path.join(root, 'real'), link = path.join(root, 'link');
+  const files = {
+    'package.json': '{"type":"module"}',
+    'cli/main.mjs': await readFile(new URL('../cli/main.mjs', import.meta.url), 'utf8'),
+    'cli/rpc.mjs': 'export const createRpc = () => ({async invoke() {}, async listen() {}, close() {}});',
+    'cli/runner.mjs': 'export async function runInstaller() { process.stdout.write("started"); return {}; }',
+    'ui/native.js': 'export const createNativeBridge = () => ({desktop: {async phase() {}}, usb: {}, async destroy() {}});',
+    'ui/controller.js': 'export const GUARDED_PHASES = new Set();',
+    'shared/adb.js': '', 'shared/package.js': '', 'shared/install.js': '', 'shared/image/core.js': '', 'shared/image/node.mjs': '',
+  };
+  for (const [name, text] of Object.entries(files)) {
+    await mkdir(path.dirname(path.join(real, name)), {recursive: true});
+    await writeFile(path.join(real, name), text);
+  }
+  try { await symlink(real, link, 'junction'); } catch { t.skip('symlinks are unavailable'); return; }
+  const result = spawnSync(process.execPath, [path.join(link, 'cli', 'main.mjs')], {input: '', encoding: 'utf8'});
+  assert.deepEqual({status: result.status, stdout: result.stdout, stderr: result.stderr}, {status: 0, stdout: 'started', stderr: ''});
 });
 
 test('terminal image preflight and builder run the real shared WASM tools without a browser', async () => {

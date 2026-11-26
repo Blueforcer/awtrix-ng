@@ -28,6 +28,11 @@ class Clock {
   clearTimeout(id) { clearTimeout(id); }
 }
 
+class QuickClock extends Clock {
+  setTimeout(fn, ms) { return setImmediate(() => { this.time += ms; this.advance?.(ms); fn(); }); }
+  clearTimeout(id) { clearImmediate(id); }
+}
+
 class USB extends EventTarget {
   constructor() { super(); this.devices = []; this.requests = []; }
   requestDevice(options) { this.requests.push(options); return Promise.resolve(this.devices[0]); }
@@ -522,6 +527,65 @@ test('native permission and driver failures stop discovery instead of being hidd
       assert.ok(clock.time < 120000);
     });
   }
+});
+
+test('a clock that stays on USB but never answers backs off, then names its USB error', async t => {
+  for (const [name, failure, text] of [
+    ['native', {code: 'transport', message: 'unknown (error 0xe00002ed)'}, 'unknown (error 0xe00002ed)'],
+    ['browser', new DOMException('A transfer error has occurred.', 'NetworkError'), 'A transfer error has occurred'],
+  ]) await t.test(name, async () => {
+    const api = await loaded, clock = new Clock(), usb = new USB(), device = new Device(clock), opens = [], events = [];
+    device.transferOut = async () => { throw failure; };
+    const open = device.open.bind(device);
+    device.open = async () => { opens.push(clock.now()); await open(); };
+    usb.devices = [device];
+    await assert.rejects(api.connectGranted({usb, clock, onStatus: event => events.push(event)}), error =>
+      error.code === 'unresponsive' && error.message ===
+        `The clock is on USB but does not answer: ${text}. Switch it off and on, or try another cable or USB port.`);
+    assert.ok(clock.time >= 30000 && clock.time < 35000, String(clock.time));
+    assert.ok(opens.length < 60, `${opens.length} attempts`);
+    const gaps = opens.slice(1).map((time, i) => ({at: opens[i], gap: time - opens[i]}));
+    assert.ok(gaps.filter(item => item.at < 3000).every(item => item.gap === 150));
+    assert.equal(opens.filter(time => time < 2700).length, 18);
+    assert.equal(Math.max(...gaps.map(item => item.gap)), 2000);
+    assert.equal(events.filter(event => event.phase === 'opening').length, 1);
+    const retries = events.filter(event => event.phase === 'reconnecting');
+    assert.equal(retries.length, opens.length);
+    assert.ok(retries.every(event => (event.detail || event.message).startsWith(text)));
+    assert.equal(device.opened, false);
+  });
+});
+
+test('a power cycle during the back-off is tried at once', {timeout: 20000}, async () => {
+  const api = await loaded, clock = new Clock(), usb = new USB(), failing = new Device(clock), replacement = new Device(clock);
+  failing.transferOut = async () => { throw {code: 'transport', message: 'unknown (error 0xe00002ed)'}; };
+  let held = null, heldAt, openedAt;
+  const schedule = clock.setTimeout.bind(clock);
+  clock.setTimeout = (fn, ms) => {
+    if (ms === 2000 && !held) { held = fn; heldAt = clock.now(); return -1; }
+    return schedule(fn, ms);
+  };
+  const open = replacement.open.bind(replacement);
+  replacement.open = async () => { openedAt ??= clock.now(); await open(); };
+  usb.devices = [failing];
+  const pending = api.connectGranted({usb, clock});
+  while (!held) await new Promise(resolve => setImmediate(resolve));
+  usb.disconnect(failing); usb.devices = [replacement];
+  const session = await pending;
+  assert.equal(session.connected, true); assert.equal(openedAt, heldAt);
+  await session.close();
+});
+
+test('the USB timeout tells a missing clock from one that kept failing', async () => {
+  const api = await loaded;
+  await assert.rejects(api.connectGranted({usb: new USB(), clock: new QuickClock()}), error => error.code === 'timeout' &&
+    error.message === 'No TC002 found on USB. Use a data cable, connect it directly to the computer and switch the TC002 off and on.');
+  const clock = new QuickClock(), usb = new USB(), device = new Device(clock);
+  device.open = async () => { throw {code: 'timeout', message: 'The USB operation timed out.'}; };
+  usb.devices = [device];
+  clock.advance = () => { if (clock.time >= 1000) usb.devices = []; };
+  await assert.rejects(api.connectGranted({usb, clock}), error => error.code === 'timeout' && error.message ===
+    'USB did not become stable: The USB operation timed out. Check the data cable and switch the TC002 off and on.');
 });
 
 test('a transient native open failure remains retryable and reports reconnecting', async () => {

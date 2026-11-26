@@ -8,6 +8,10 @@ const VERSION = 0x01000000;
 const MAX_PACKET = 4096;
 const MAX_FILE = 64 * 1024 * 1024;
 const MAX_SHELL = 1024 * 1024;
+const RETRY_FAST_MS = 3000;
+const RETRY_MAX_MS = 2000;
+const RETRY_GIVE_UP_MS = 30000;
+const RETRYABLE = ['transport', 'timeout', 'aborted', 'disconnected'];
 const COMMANDS = {CNXN: 0x4e584e43, OPEN: 0x4e45504f, OKAY: 0x59414b4f,
   CLSE: 0x45534c43, WRTE: 0x45545257, AUTH: 0x48545541};
 const clockDefault = {now: () => performance.now(), setTimeout: (fn, ms) => setTimeout(fn, ms),
@@ -16,7 +20,10 @@ export const USB_FILTERS = [{vendorId: 0x18d1, productId: 0xd002}];
 export const USB_KEEPER = "k=; [ -f /tmp/awtrix-usb-keeper.pid ] && read -r k </tmp/awtrix-usb-keeper.pid; case $k in ''|*[!0-9]*) k=0;; esac; if [ $k -gt 0 ] && [ -d /proc/$k ]; then echo awtrix-usb-keeper running $k; else trap '' HUP; ( read -r s x </proc/uptime; s=${s%%.*}; end=$((s + 1200)); next=0; last=-1; seen=-1; while [ $s -lt $end ]; do if [ $s -ne $last ]; then last=$s; if [ -f /tmp/awtrix-loader.log ] && [ ! -f /tmp/awtrix-loader.vendor ]; then [ $seen -lt 0 ] && seen=$s; [ $s -ge $((seen + 2)) ] && break; else seen=-1; r=; read -r r </sys/bus/platform/devices/soc:usbotg/otg_role; case $r in usb_host|usb_null) if [ $s -ge $next ]; then echo -n usb_device >/sys/bus/platform/devices/soc:usbotg/otg_role; next=$((s + 10)); fi;; esac; fi; fi; sleep 1; read -r s x </proc/uptime; s=${s%%.*}; done; rm -f /tmp/awtrix-usb-keeper.pid ) </dev/null >/dev/null 2>&1 & echo $! >/tmp/awtrix-usb-keeper.pid; echo awtrix-usb-keeper started $!; fi";
 
 export class AdbError extends Error {
-  constructor(code, message) { super(message); this.name = 'AdbError'; this.code = code; }
+  constructor(code, message, detail) {
+    super(message); this.name = 'AdbError'; this.code = code;
+    if (detail) this.detail = detail;
+  }
 }
 
 function fail(code, message) { throw new AdbError(code, message); }
@@ -29,7 +36,8 @@ function usbFailure(error) {
     return new AdbError('denied', 'USB access was denied. Check the device permissions and USB driver.');
   if (error?.name === 'NotSupportedError') return new AdbError('unsupported', 'The USB interface is not supported by its current driver.');
   if (error?.name === 'AbortError') return aborted();
-  return new AdbError('transport', 'The USB connection changed. Waiting for the clock to reconnect…');
+  return new AdbError('transport', 'The USB connection changed. Waiting for the clock to reconnect…',
+    typeof error?.message === 'string' ? error.message.slice(0, 200) : undefined);
 }
 function limit(value, maximum, name) {
   if (!Number.isSafeInteger(value) || value < 1 || value > maximum) fail('argument', `Invalid ${name}.`);
@@ -83,12 +91,19 @@ class Deadline {
   }
 }
 
-function sleep(clock, milliseconds, signal) {
+function sleep(clock, milliseconds, signal, onWake) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(aborted()); return; }
-    const cancel = () => { clock.clearTimeout(timer); reject(aborted()); };
-    const timer = clock.setTimeout(() => { signal?.removeEventListener('abort', cancel); resolve(); }, milliseconds);
+    let done = false;
+    const finish = error => {
+      if (done) return; done = true;
+      clock.clearTimeout(timer); signal?.removeEventListener('abort', cancel); onWake?.(null);
+      if (error) reject(error); else resolve();
+    };
+    const cancel = () => finish(aborted());
+    const timer = clock.setTimeout(() => finish(), milliseconds);
     signal?.addEventListener('abort', cancel, {once: true});
+    onWake?.(() => finish());
   });
 }
 
@@ -395,32 +410,48 @@ async function establish(selected, options, env) {
   if (selected && !supported(selected)) fail('device', 'Select the TC002 USB device.');
   let identity = selected ? {vendorId: selected.vendorId, productId: selected.productId,
     serialNumber: selected.serialNumber || ''} : options.identity;
-  let session, stableSince, readyAt, settleEnd;
+  let session, stableSince, readyAt, settleEnd, seen = Boolean(selected), last = null, streak = null, wake = null;
   const deadline = new Deadline(clock, USB_CONNECT_WAIT_MS, [signal]);
+  const changed = () => { streak = null; wake?.(); };
+  const wireStatus = event => { if (!streak || event.phase !== 'opening') onStatus(event); };
+  const retry = error => {
+    const failure = usbFailure(error);
+    if (!RETRYABLE.includes(failure.code)) throw failure;
+    const text = (failure.detail || failure.message).replace(/[\s.…]+$/, '') || failure.code, now = clock.now();
+    if (streak?.text === text) ++streak.count;
+    else streak = {text, count: 1, since: now, delay: USB_CONNECT_POLL_MS};
+    last = text;
+    onStatus({phase: 'reconnecting', message: failure.message, ...(failure.detail && {detail: failure.detail})});
+    if (streak.count >= 3 && now - streak.since >= RETRY_GIVE_UP_MS)
+      fail('unresponsive', `The clock is on USB but does not answer: ${text}. Switch it off and on, or try another cable or USB port.`);
+    if (now - streak.since >= RETRY_FAST_MS) streak.delay = Math.min(RETRY_MAX_MS, streak.delay * 2);
+  };
+  usb.addEventListener('connect', changed); usb.addEventListener('disconnect', changed);
   onStatus({phase: 'connecting', message: 'Waiting for USB. Connect one TC002 and switch it off and on if needed.'});
   try {
     while (clock.now() < (settleEnd ?? deadline.end)) {
       const device = await granted(usb, identity, deadline);
+      if (!device) streak = null;
+      else seen = true;
       if (!device || !session?.connected) {
         if (session) await session.close();
         session = null; stableSince = readyAt = undefined;
         if (device) {
           identity ??= {vendorId: device.vendorId, productId: device.productId,
             serialNumber: device.serialNumber || ''};
-          const wire = new Wire(device, usb, clock, signal, onStatus);
+          const wire = new Wire(device, usb, clock, signal, wireStatus);
           try {
             await wire.open(); session = new Session(wire);
             const reply = await session.rawShell(USB_KEEPER, {maxBytes: 1024});
             if (!/awtrix-usb-keeper (?:started|running) \d+/.test(reply)) fail('keeper', 'The USB keeper did not start.');
             settleEnd ??= clock.now() + USB_CONNECT_SETTLE_MS; deadline.end = settleEnd;
+            streak = last = null;
             onStatus({phase: 'keeper', message: 'USB keeper is running. Waiting for a stable connection.'});
             stableSince = clock.now();
           } catch (error) {
             await wire.close(); session = null;
             if (signal?.aborted) throw aborted();
-            const failure = usbFailure(error);
-            if (!['transport', 'timeout', 'aborted', 'disconnected'].includes(failure.code)) throw failure;
-            onStatus({phase: 'reconnecting', message: failure.message});
+            retry(error);
           }
         }
       }
@@ -433,19 +464,20 @@ async function establish(selected, options, env) {
           } catch (error) {
             await session.close(); session = null; stableSince = readyAt = undefined;
             if (signal?.aborted) throw aborted();
-            const failure = usbFailure(error);
-            if (!['transport', 'timeout', 'aborted', 'disconnected'].includes(failure.code)) throw failure;
-            onStatus({phase: 'reconnecting', message: failure.message});
+            retry(error);
           }
         }
         if (session?.connected && readyAt !== undefined && clock.now() >= readyAt) {
           onStatus({phase: 'ready', message: 'USB connection is ready.'}); return session;
         }
       }
-      await sleep(clock, USB_CONNECT_POLL_MS, signal);
+      await sleep(clock, streak?.delay ?? USB_CONNECT_POLL_MS, signal, fn => { wake = fn; });
     }
-    fail('timeout', 'USB did not become stable. Check the data cable and switch the TC002 off and on.');
+    if (!seen) fail('timeout', 'No TC002 found on USB. Use a data cable, connect it directly to the computer and switch the TC002 off and on.');
+    fail('timeout', last ? `USB did not become stable: ${last}. Check the data cable and switch the TC002 off and on.` :
+      'USB did not become stable. Check the data cable and switch the TC002 off and on.');
   } catch (error) { if (session) await session.close(); throw error; }
+  finally { usb.removeEventListener('connect', changed); usb.removeEventListener('disconnect', changed); }
 }
 
 export function connect(options = {}) {

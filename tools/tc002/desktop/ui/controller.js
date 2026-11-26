@@ -19,7 +19,9 @@ const connectionSteps = {connecting: 'Waiting for your TC002…', opening: 'Cloc
   keeper: 'Connected. Getting the clock ready…', ready: 'Connected.'};
 
 export function connectionMessage(event) {
-  return connectionSteps[event?.phase] ?? event?.message ?? '';
+  const step = connectionSteps[event?.phase], error = event?.detail || event?.message;
+  if (event?.phase === 'reconnecting' && typeof error === 'string' && error) return `${step} (${error})`;
+  return step ?? event?.message ?? '';
 }
 
 export function mountInstaller(root, dependencies) {
