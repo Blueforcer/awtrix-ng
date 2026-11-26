@@ -36,6 +36,8 @@ class WakeListener {
 
   std::optional<WakeHeard> tick(int64_t now, Listen listen);
   void setSensitivity(WakeSensitivity level) { sensitivity_ = level; }
+  bool microphoneLost() const { return lost_; }
+  bool streamMissing() const { return lost_ && error_ == kStreamUnavailable; }
   void receive(const StreamEvent& event, int64_t now);
   void cancel();
 
@@ -64,7 +66,7 @@ class WakeListener {
   std::string error_;
   int64_t retryAt_ = 0, wantedAt_ = 0;
   unsigned failures_ = 0;
-  bool muted_ = false;
+  bool muted_ = false, wanted_ = false, lost_ = false;
   WakeSensitivity sensitivity_ = WakeSensitivity::Normal;
 
   std::mutex mutex_;

@@ -44,6 +44,7 @@ class Firmware {
   const std::string& extension() const { return extension_; }
   bool valid() const { return !blocked_ && !extension_.empty(); }
   bool pending() const { return pending_; }
+  bool strictTransfer() const { return strictTransfer_; }
 
  private:
   void setStatus(std::string_view status);
@@ -56,7 +57,7 @@ class Firmware {
   unsigned attempts_ = 0;
   Identity target_, pendingTarget_;
   std::vector<uint8_t> image_;
-  bool blocked_ = false, pending_ = false, retrying_ = false;
+  bool blocked_ = false, pending_ = false, retrying_ = false, strictTransfer_ = false;
   std::function<void(const std::string&)> listener_;
 };
 

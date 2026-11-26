@@ -24,22 +24,23 @@ std::string VoiceApi::status() const {
   const AssistSession& session = runtime_.session();
   const bool app = !config.assistantApp().empty();
   const std::string problem = app ? hooks_.appProblem() : "";
+  const std::string wakeProblem = hooks_.wakeProblem();
+  std::string error = !runtime_.loaded() ? errors::configUnavailable
+                      : app              ? problem
+                      : session.state() == AssistSession::State::Ready && !session.microphoneAvailable()
+                          ? errors::microphoneUpdate
+                          : session.error();
+  if (error.empty()) error = wakeProblem;
   std::string json;
   api::JsonWriter writer(json);
   writer.beginObject()
       .key("config")
       .raw(config.publicJson())
       .member("state", !app ? AssistSession::name(session.state()) : problem.empty() ? "ready" : "error")
-      .member("error",
-              !runtime_.loaded() ? errors::configUnavailable
-              : app              ? problem
-              : session.state() == AssistSession::State::Ready &&
-                      !session.microphoneAvailable()
-                  ? errors::microphoneUpdate
-                  : session.error())
+      .member("error", error)
       .member("lastError", session.lastError())
       .member("wakeWordAvailable", wakeWordAvailable_)
-      .member("wakeListening", hooks_.wakeListening())
+      .member("wakeListening", hooks_.wakeListening() && wakeProblem.empty())
       .key("assistantApps")
       .beginArray();
   for (const std::string& name : hooks_.assistantApps()) writer.value(name);

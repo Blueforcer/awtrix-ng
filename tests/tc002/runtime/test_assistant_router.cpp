@@ -660,6 +660,34 @@ void theVoiceSetsTheLevel(const fs::path& model) {
         "the level of the settings reaches the listener without a new stream");
 }
 
+void aLostMicrophoneComesBack(const fs::path& model) {
+  Rig rig(&model);
+  rig.voice.homeAssistantChosen = true;
+  rig.voice.isReady = true;
+  rig.frames(600);
+  require(rig.daemon.streaming() && rig.router->listening() && *rig.router->wakeProblem() == '\0',
+          "the wake word listens");
+  rig.hub.receive(rig.daemon.end("MCU microphone acquisition error", rig.now), rig.now);
+  check(rig.router->listening() && rig.router->wakeProblem() == std::string(tc002::voice::errors::microphoneFailed),
+        "an upstream error leaves the wake word wanted but without the microphone");
+  rig.framesUntil([&rig] { return *rig.router->wakeProblem() == '\0'; }, 3000);
+  check(rig.daemon.streaming() && count(rig.wakeSent, StreamControl::Probe) == 2,
+        "after its back-off it takes the microphone again");
+  rig.framesUntil([&rig] { return rig.voice.begins != 0; }, kWakeWithinMs);
+  check(rig.voice.begins == 1, "and hears the wake word again");
+  rig.hub.receive(rig.daemon.end("MCU microphone acquisition error", rig.now), rig.now);
+  const unsigned probes = count(rig.wakeSent, StreamControl::Probe);
+  rig.voice.wakeWordOn = false;
+  rig.frame();
+  check(*rig.router->wakeProblem() == '\0', "with the wake word off nothing is lost");
+  rig.voice.wakeWordOn = true;
+  rig.frame();
+  check(count(rig.wakeSent, StreamControl::Probe) == probes + 1 && *rig.router->wakeProblem() != '\0',
+        "turned off and on, it asks for the microphone at once and is lost until it has it");
+  rig.frames(300);
+  check(rig.daemon.streaming() && *rig.router->wakeProblem() == '\0', "and it has it again");
+}
+
 void offStartsNothing() {
   Rig rig;
   rig.voice.assistantOff = true;
@@ -791,6 +819,7 @@ int main(int argc, char** argv) {
   holdConditions();
   wakeGating(model);
   theVoiceSetsTheLevel(model);
+  aLostMicrophoneComesBack(model);
   offStartsNothing();
   homeAssistant();
   aFrameAllocatesNothing();

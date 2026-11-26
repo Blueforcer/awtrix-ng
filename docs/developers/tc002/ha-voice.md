@@ -133,8 +133,9 @@ Voice never writes microphone audio to a file. The recordings of the
 
 `GET /api/v1/voice` returns the redacted configuration (`config`), `state`, the codes `error` and
 `lastError`, `wakeWordAvailable` (the runtime loaded a wake word; the web UI shows the Wake word rows
-only then), `wakeListening` (`AssistantRouter::listening`, the condition that subscribes the listener),
-`assistantApps` and the bounded list of Home Assistant `pipelines`. `assistantApps`
+only then), `wakeListening` (`AssistantRouter::listening`, the condition that subscribes the listener,
+while `AssistantRouter::wakeProblem` names nothing), `assistantApps` and the bounded list of Home
+Assistant `pipelines`. `assistantApps`
 names the installed scripts whose `@needs` names `voice`, whose source holds `on_assistant` and that
 are neither modules nor headless, switched on or off; the web UI offers them under **Assistant**. With
 an app as the target, `state` is
@@ -143,9 +144,11 @@ an app as the target, `state` is
 the session was busy when it failed. `error` is what blocks the assistant: `connectionLost` (also no
 answer while connecting), `tokenRejected`, `haError`, `pipelineIncomplete`, `microphoneUpdate` (the MCU
 does not offer the stream yet) or `configUnavailable`. It survives `connecting`, so a retry does not
-hide it, and goes with `Ready`. `lastError` is why the last request failed, one of the session's codes
-including `nothingUnderstood`, `audioTooSlow`, `timeout`, `microphoneFailed` and `playbackFailed`. The
-reconnect after a failed request keeps it. It goes with the next `begin`, after
+hide it, and goes with `Ready`. When none of these applies, `error` is `AssistantRouter::wakeProblem`:
+the wake word is wanted but has no stream ([Wake word](wake-word.md#how-it-listens)). `lastError` is
+why the last request failed, one of the session's codes including `nothingUnderstood`,
+`audioTooSlow`, `timeout`, `microphoneFailed` and `playbackFailed`. The reconnect after a failed
+request keeps it. It goes with the next `begin`, after
 `AssistSession::kLastErrorMs` (five minutes) or with `cancel`. The web UI has a label and a fix for
 every code. `POST /api/v1/voice` saves the supplied
 fields (`assistant`, `url`, `token`, `pipeline`, `device`, `enabled`, `wakeWord`, `wakeSensitivity`)

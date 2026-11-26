@@ -40,7 +40,7 @@ struct Rig {
   Speaker speaker;
   std::vector<StreamControl> microphone;
   bool startable = true, listening = false;
-  std::string appProblem;
+  std::string appProblem, wakeProblem;
   unsigned starts = 0;
   VoiceRuntime runtime;
   VoiceApi api;
@@ -59,6 +59,7 @@ struct Rig {
                               return startable;
                             },
                             [this] { return listening; },
+                            [this] { return wakeProblem.c_str(); },
                             [this] { return appProblem.c_str(); }}) {}
 
   httplib::Response call(const std::string& method, const std::string& path, const std::string& body = {},
@@ -129,6 +130,26 @@ void settingsAnswer(const fs::path& root) {
   check(has(rig.call("GET", "/api/v1/voice"), R"("wakeListening":false)"), "it does not listen yet");
   rig.listening = true;
   check(has(rig.call("GET", "/api/v1/voice"), R"("wakeListening":true)"), "and says so once it does");
+}
+
+void aLostMicrophoneIsReported(const fs::path& root) {
+  Rig rig(root, true);
+  auto state = [&rig] { return rig.call("GET", "/api/v1/voice"); };
+  require(sent(rig.call("POST", "/api/v1/voice", R"({"assistant":"app:Chat","wakeWord":true})")) == 200,
+          "an app with the wake word is chosen");
+  rig.listening = true;
+  check(has(state(), R"("state":"ready")") && has(state(), R"("error":"")") && has(state(), R"("wakeListening":true)"),
+        "the wake word listens: " + state().body);
+  rig.wakeProblem = "microphoneFailed";
+  check(has(state(), R"("state":"ready")") && has(state(), R"("error":"microphoneFailed")") &&
+            has(state(), R"("wakeListening":false)"),
+        "without the microphone it says so: " + state().body);
+  rig.appProblem = "appOff";
+  check(has(state(), R"("error":"appOff")"), "a reason of the app comes first: " + state().body);
+  rig.appProblem.clear();
+  rig.wakeProblem.clear();
+  check(has(state(), R"("error":"")") && has(state(), R"("wakeListening":true)"),
+        "and all is well once it has the microphone again: " + state().body);
 }
 
 void offConnectsNothing(const fs::path& root) {
@@ -227,6 +248,7 @@ int main() {
   const fs::path root = name;
   startFromTheApi(root / "api");
   settingsAnswer(root / "get");
+  aLostMicrophoneIsReported(root / "lost");
   offConnectsNothing(root / "off");
   statusNamesTheChosenAssistant(root / "status");
   wakeWordKeepsTheConnection(root / "post");

@@ -111,7 +111,13 @@ the window's threshold: the window, the warm-up and the cooloff go on. A model l
   ([microphone hub](microphone.md#microphone-hub)). The hub ends the listener's stream when
   keepalives stop for 2 s.
 - A stream that ends with an error restarts after 1, 2, 5, 10 and then 30 s. An MCU without the
-  stream is asked again after 30 s.
+  stream is asked again after 30 s. Listening that stops and is wanted again, for example the setting
+  switched off and on, starts over at once with the back-off at 1 s.
+- Until a stream runs again, the listener counts as without its microphone
+  (`WakeListener::microphoneLost`). While it is wanted, `AssistantRouter::wakeProblem` then names
+  `microphoneUpdate` for an MCU without the stream and `microphoneFailed` for anything else, and
+  `GET /api/v1/voice` shows that code as `error` with `wakeListening: false`. The next started stream
+  writes `wake word: microphone stream back` to the log.
 - A jump in the sample position, or a full worker queue (16 blocks), resets the detector.
 - While it listens, `music.level()`, `music.bands()` and `music.pitch()` read the hub's stream
   instead of separate snapshots.
@@ -166,8 +172,8 @@ for bit with pymicro_features and the LiteRT reference kernels on committed fixt
 three sensitivity levels on a steady probability and on the reference signal, and refuses truncated and mutated files. `tools/tc002/wake/make_golden.py` writes the fixtures.
 `tests/tc002/arm/` runs the same test on Cortex-A7 under qemu-arm. `test_wake_listener.cpp` covers the
 settings file, the stream states, detections, muting, the stop while Voice is busy, restarts, gaps,
-the model leaving memory while the setting is off and a level that applies at once and to a model
-loaded again. `test_assist_session.cpp` covers the `wakeWord` and `wakeSensitivity` settings. `test_endpointer.cpp` covers the endpointer's decisions on exact voice patterns and the model
+the model leaving memory while the setting is off, a level that applies at once and to a model
+loaded again, the lost microphone and the back-off that starts over when listening is wanted again. `test_assist_session.cpp` covers the `wakeWord` and `wakeSensitivity` settings. `test_endpointer.cpp` covers the endpointer's decisions on exact voice patterns and the model
 on speech of the English voice pack, a pause within a sentence and room noise, also on qemu-arm. No
 test prints arena sizes or run times.
 

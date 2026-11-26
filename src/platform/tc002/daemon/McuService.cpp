@@ -319,7 +319,7 @@ void McuService::pump(int64_t nowMs) {
         prepareFirmware(nowMs) && firmware_.recordAttempt()) {
       parser_.clear();
       upgrading_ = true;
-      upgrade_.start(firmware_.image(), nowMs);
+      upgrade_.start(firmware_.image(), nowMs, firmware_.strictTransfer(), firmware_.attempts() == 1);
       upgrade_.flush(uart_.get(), nowMs);
       firmwareProgress(nowMs);
       return;

@@ -16,6 +16,7 @@ class VoiceApi {
     std::function<std::vector<std::string>()> assistantApps;
     std::function<bool()> startAssistant;
     std::function<bool()> wakeListening;
+    std::function<const char*()> wakeProblem;
     std::function<const char*()> appProblem;
   };
   VoiceApi(VoiceRuntime& runtime, bool wakeWordAvailable, Hooks hooks);

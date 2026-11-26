@@ -275,6 +275,7 @@ other address, and `http://` works there without one.
 | Token refused | Create a new long-lived access token, paste it into **Token** and press **Connect**. |
 | Speech not set up | The voice assistant needs speech-to-text and text-to-speech. Add them in Home Assistant, or pick another one under **HA assistant**. |
 | Home Assistant error | Home Assistant reported a problem. Its log says which. |
+| Microphone error | The wake word lost the microphone. The clock tries again by itself. Switching **Wake word** off and on tries at once. If the message stays, restart the clock. |
 | Microphone update pending | Keep the clock on USB power. The update installs by itself within a few minutes. If the message stays, restart the clock on USB power. If it still stays after three restarts, see [Microphone controller updates](updating.md#mcu-updates). |
 | Settings unreadable | The saved settings cannot be read. Choose the assistant and set it up again. |
 | App not available | The app is not installed or cannot answer. Install it again or pick another assistant. |

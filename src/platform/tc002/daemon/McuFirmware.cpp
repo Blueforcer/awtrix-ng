@@ -5,9 +5,12 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <iterator>
 #include <set>
+#include <string_view>
 
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
@@ -26,6 +29,8 @@ std::string firmwareHash(const std::string& data) {
   return encoded;
 }
 namespace {
+constexpr std::string_view kVendors[] = {"V1.0.16", "V1.0.17"};
+
 bool object(const std::string& text) {
   api::JsonReader r(text);
   if (!api::isWellFormed(text) || !r.enterObject()) return false;
@@ -178,7 +183,10 @@ bool Firmware::needed(const std::string& vendor, const Identity* current, bool m
       else setStatus(current->version == target_.version ? "current" : "newer compatible MCU retained");
       return false;
     }
-  } else if (vendor != "V1.0.17") { setStatus("unknown legacy MCU; update blocked"); return false; }
+  } else if (std::find(std::begin(kVendors), std::end(kVendors), vendor) == std::end(kVendors)) {
+    setStatus("unknown legacy MCU; update blocked"); return false;
+  }
+  strictTransfer_ = !current && vendor != "V1.0.17";
   if (pending_ && !retrying_) {
     retrying_ = true;
     setStatus("retry " + std::to_string(nextAttempt()) + " of " + std::to_string(kMaxAttempts) +

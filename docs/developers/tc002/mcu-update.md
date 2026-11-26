@@ -98,8 +98,10 @@ awtrix-linux --prepare-mcu PATCH_DIRECTORY PRIVATE_CACHE CA_BUNDLE --offline
 2. A matching build is left alone. A newer build with the same ABI and family and the required
    features is kept, also after a Linux rollback. Equal versions with a different tag, an
    incompatible identity or malformed replies block installation.
-3. An MCU without `0x08` support is eligible only after bounded probe attempts and an exact
-   `V1.0.17` vendor answer. The identity is a compatibility contract, not a hardware attestation.
+3. An MCU without `0x08` support is eligible only after bounded probe attempts and a vendor
+   answer of exactly `V1.0.16` or `V1.0.17`. Any other answer blocks installation with
+   `unknown legacy MCU; update blocked`. A `V1.0.16` MCU gets a stricter transfer (see
+   [Transfer](#transfer)). The identity is a compatibility contract, not a hardware attestation.
 4. The service waits for a healthy runtime, the confirmation of any pending Linux update, no Linux
    update hand-off or shutdown, and a fresh USB-power report of `1`.
 5. After preparation and a fresh power check, before the handshake, the service writes and fsyncs
@@ -142,8 +144,21 @@ The MCU updater remembers how far an interrupted transfer got. When a later requ
 same file CRC, its configuration reply offers that block position instead of `0`, and it keeps
 offering it for every attempt with that image. `McuUpgrade` continues from the offered block and
 logs `transfer continued an interrupted one from byte N`. An offer past the end of the image or off
-a block boundary aborts the transfer before any data is sent. The preparation child never
-opens the UART, and the daemon never runs a shell flasher or starts a competing serial owner.
+a block boundary aborts the transfer before any data is sent. Every attempt logs the
+configuration reply once, as `transfer offer: offset N, block N, packet N, enabled N`.
+
+The running MCU application only receives the image into a staging area. The updater that
+rewrites the application ships inside our image. The manufacturer updates `V1.0.16` with the same
+`V1.0.17` original over the same protocol. No `V1.0.16` clock has been tested with AWTRIX NG, so a
+`V1.0.16` MCU must offer what `V1.0.17` offers: blocks of 512 bytes, packets of 522 bytes and, on
+the first attempt with an image, position `0`. Any other offer stops the attempt before the first
+block with `MCU offer differs from V1.0.17`. That counts as one of the three attempts. A later
+attempt may continue from an offered block. There is no separate probe before the transfer: on
+`V1.0.17` an aborted exchange made the MCU answer `enabled` 0 for that image afterwards, so the
+transfer itself is the check.
+
+The preparation child never opens the UART, and the daemon never runs a shell flasher or starts a
+competing serial owner.
 Source: `McuFirmware`, `McuUpgrade`, `McuService` in
 [`src/platform/tc002/daemon/`](https://github.com/Blueforcer/awtrix-ng/tree/main/src/platform/tc002/daemon).
 
@@ -152,10 +167,10 @@ Source: `McuFirmware`, `McuUpgrade`, `McuService` in
 Host tests (`tests/tc002/daemon/test_mcufirmware.cpp` and neighbours,
 `tools/tc002/mcu/test_bundle.py`, `test_prepare.py`) cover extension and image integrity, refusal of
 full-image manifests, missing or corrupt originals, helper cancellation and download failure, the
-boot version policy, the durable attempt and verification, serial fragmentation, `EAGAIN`, packet
-and block geometry, retry sequence numbers, a final `ff`, refusal, resume and invalid resume
-offers, the attempt count and its limit, errors and timeouts, health and USB gating, and deferred
-shutdown.
+boot version policy with the accepted vendor versions, the durable attempt and verification, serial
+fragmentation, `EAGAIN`, packet and block geometry, retry sequence numbers, a final `ff`, refusal,
+resume and invalid resume offers, the stricter `V1.0.16` offer, the attempt count and its limit,
+errors and timeouts, health and USB gating, and deferred shutdown.
 
 ## Limits
 

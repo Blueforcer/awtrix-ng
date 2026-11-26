@@ -40,6 +40,7 @@ VoiceStack::VoiceStack(const Setup& setup)
                VoiceApi::Hooks{[this] { return router_->apps(); },
                                [this] { return start(VoiceTrigger::Api); },
                                [this] { return router_->listening(); },
+                               [this] { return router_->wakeProblem(); },
                                [this] { return router_->appProblem(); }});
 }
 

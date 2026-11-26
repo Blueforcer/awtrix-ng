@@ -106,6 +106,7 @@ class AssistantRouter {
   bool start(VoiceTrigger trigger, int64_t now);
   void tick(int64_t now, bool knob);
   bool listening() const;
+  const char* wakeProblem() const;
   const char* appProblem() const;
 
  private:

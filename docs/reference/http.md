@@ -3302,10 +3302,10 @@ This route, `POST` below and [`POST /api/v1/voice/start`](#post-apiv1voicestart)
 | `config.device` | string | the Home Assistant device ID whose area is the clock's room, `""` when none is set |
 | `config.tokenSet` | boolean | an access token is saved. The token itself is never returned |
 | `state` | string | with `ha`: `offline`, `connecting`, `ready`, `starting`, `listening`, `processing`, `speaking` or `error`. With an app: `ready` or `error`. With `off`: `offline` |
-| `error` | string | what stops the assistant now, as a code such as `tokenRejected`. It stays while the clock tries again and goes once the clock is connected. `""` when nothing does. With an app: `appMissing` (not installed or cannot answer), `appOff` (switched off on the **Apps** tab) or `appBroken` (the script has an error) |
+| `error` | string | what stops the assistant now, as a code such as `tokenRejected`. It stays while the clock tries again and goes once the clock is connected. `""` when nothing does. With an app: `appMissing` (not installed or cannot answer), `appOff` (switched off on the **Apps** tab) or `appBroken` (the script has an error). `microphoneFailed` while the wake word has lost the microphone. The clock takes it again by itself |
 | `lastError` | string | why the last request failed, as a code such as `nothingUnderstood`. The assistant stays ready. `""` once the next request starts, after five minutes or when a setting other than the wake word changes |
 | `wakeWordAvailable` | boolean | the clock can hear "Hey AWTRIX". When `false`, `config.wakeWord` does nothing |
-| `wakeListening` | boolean | the clock listens for "Hey AWTRIX" right now. `false` while the wake word is off, the assistant is off, Home Assistant is not connected or the app cannot answer |
+| `wakeListening` | boolean | the clock listens for "Hey AWTRIX" right now. `false` while the wake word is off, the assistant is off, Home Assistant is not connected, the app cannot answer or the wake word has lost the microphone |
 | `assistantApps` | array | the names of the installed apps that can be the assistant: scripts that name `voice` in their [`@needs`](../guides/scripting/sharing.md#what-your-script-asks-of-the-clock) and have an `on_assistant` method, but no modules and no headless scripts. Apps switched off on the **Apps** tab are listed too |
 | `pipelines` | array | the voice assistants of Home Assistant (its Assist pipelines) once connected. `[]` before |
 

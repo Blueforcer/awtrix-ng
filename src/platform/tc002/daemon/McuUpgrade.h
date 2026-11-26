@@ -10,7 +10,7 @@ namespace awtrix::tc002d::mcu {
 // Timeouts are terminal: a missing ACK is not permission to retransmit flash data.
 class Upgrade {
  public:
-  void start(const std::vector<uint8_t>& image, int64_t now);
+  void start(const std::vector<uint8_t>& image, int64_t now, bool strict = false, bool firstAttempt = false);
   void receive(const uint8_t* data, std::size_t size, int64_t now);
   void flush(int fd, int64_t now);
   void tick(int64_t now);
@@ -36,6 +36,7 @@ class Upgrade {
   std::size_t sent_ = 0, offset_ = 0, resumedAt_ = 0, block_ = 0, packet_ = 0, blockSent_ = 0, blockBytes_ = 0;
   uint8_t txSeq_ = 1, rxSeq_ = 0;
   unsigned attempts_ = 0;
+  bool strict_ = false, firstAttempt_ = false;
   int64_t expires_ = -1, totalExpires_ = -1;
   std::string error_;
 };

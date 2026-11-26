@@ -84,8 +84,11 @@ void decisions() {
   mcu::Firmware f; a.load(f);
   check(f.valid() && f.image().empty(), "extension alone never becomes a flash image");
   check(f.loadPrepared(a.dir/"fixture.pot") && f.image()==a.image,"local image digest and headers verified");
-  check(f.needed("V1.0.17",nullptr,false), "known legacy image eligible");
-  check(!f.needed("V1.0.18",nullptr,false), "unknown vendor image blocked");
+  check(f.needed("V1.0.17",nullptr,false) && !f.strictTransfer(), "known legacy image eligible");
+  check(f.needed("V1.0.16",nullptr,false) && f.strictTransfer(), "V1.0.16 eligible with a strict transfer");
+  for (const char* vendor : {"V1.0.15","V1.0.18","V1.0.1","V1.0.160","v1.0.16","V1.0.16 ","1.0.16",""})
+    check(!f.needed(vendor,nullptr,false) && f.status() == "unknown legacy MCU; update blocked",
+          std::string("unknown vendor image blocked: ") + vendor);
   check(!f.needed("V1.0.17",nullptr,true), "malformed identity is not treated as legacy");
   check(!f.needed("V1.0.17",&a.target,false) && f.status() == "current", "matching build skips flash");
   auto newer = a.target; newer.version++;
@@ -95,6 +98,7 @@ void decisions() {
   alien = a.target; alien.tag++;
   check(!f.needed("V1.0.17",&alien,false), "same version different tag blocked");
   auto old = a.target; old.version--;
+  check(f.needed("V1.0.16",&old,false) && !f.strictTransfer(), "a running AWTRIX build receives like V1.0.17");
   check(f.needed("V1.0.17",&old,false) && f.recordAttempt(), "older build records durable intent");
   mcu::Firmware boot; a.load(boot);
   check(boot.pending() && boot.needed("V1.0.17",&old,false), "unconfirmed attempt is retried while the old build runs");
@@ -118,15 +122,16 @@ std::string journal(const mcu::Identity& i, const std::string& digest, int attem
   return text;
 }
 
-void retries() {
+void retries(const char* vendor) {
   Artifact a;
   const auto path = a.dir/"journal.json";
   auto counted = [&](int n) { return tc002d_test::readFile(path).find("\"attempts\":" + std::to_string(n)) != std::string::npos; };
   for (unsigned attempt = 1; attempt <= mcu::Firmware::kMaxAttempts; ++attempt) {
     std::vector<std::string> seen;
     mcu::Firmware f; f.onStatus([&](const std::string& s) { seen.push_back(s); }); a.load(f);
-    check(f.loadPrepared(a.dir/"fixture.pot") && f.needed("V1.0.17",nullptr,false) && f.needed("V1.0.17",nullptr,false) &&
-          f.recordAttempt() && counted(attempt), "each boot repeats an unconfirmed attempt and counts it");
+    check(f.loadPrepared(a.dir/"fixture.pot") && f.needed(vendor,nullptr,false) && f.needed(vendor,nullptr,false) &&
+          f.strictTransfer() == (std::string(vendor) != "V1.0.17") && f.recordAttempt() && counted(attempt) &&
+          f.attempts() == attempt, "each boot repeats an unconfirmed attempt and counts it");
     check(attempt == 1 ? seen.size() == 2
                        : seen.size() == 3 && seen[0] == "retry " + std::to_string(attempt) +
                                                         " of 3 after an unconfirmed attempt: timeout " + std::to_string(attempt - 1),
@@ -138,35 +143,35 @@ void retries() {
   std::vector<std::string> seen;
   mcu::Firmware f; f.onStatus([&](const std::string& s) { seen.push_back(s); }); a.load(f);
   auto old = a.target; old.version--;
-  check(!f.needed("V1.0.17",nullptr,false) && !f.needed("V1.0.17",&old,false) && seen.size() == 1 &&
+  check(!f.needed(vendor,nullptr,false) && !f.needed(vendor,&old,false) && seen.size() == 1 &&
         f.status() == "MCU update unconfirmed after 3 attempts (last: timeout 3); automatic retry blocked",
         "the attempt limit blocks further attempts and names the last failure");
   tc002d_test::writeFile(path, journal(a.target,a.digest,0));
   a.load(f);
-  check(f.loadPrepared(a.dir/"fixture.pot") && f.needed("V1.0.17",nullptr,false) && f.recordAttempt() && counted(2),
+  check(f.loadPrepared(a.dir/"fixture.pot") && f.needed(vendor,nullptr,false) && f.recordAttempt() && counted(2),
         "a journal without a counter is one attempt");
   auto other = a.target; other.tag++;
   tc002d_test::writeFile(path, journal(other,a.digest,3));
   a.load(f);
-  check(f.loadPrepared(a.dir/"fixture.pot") && f.needed("V1.0.17",nullptr,false) && f.recordAttempt() && counted(1),
+  check(f.loadPrepared(a.dir/"fixture.pot") && f.needed(vendor,nullptr,false) && f.recordAttempt() && counted(1),
         "another image starts counting again");
   tc002d_test::writeFile(path, journal(a.target,a.digest,-1));
   a.load(f);
-  check(!f.needed("V1.0.17",nullptr,false), "an invalid counter fails closed");
+  check(!f.needed(vendor,nullptr,false), "an invalid counter fails closed");
   auto text = journal(a.target,a.digest,1);
   text.insert(text.size()-1, ",\"error\":5");
   tc002d_test::writeFile(path, text);
   a.load(f);
-  check(!f.needed("V1.0.17",nullptr,false), "a failure that is not text fails closed");
+  check(!f.needed(vendor,nullptr,false), "a failure that is not text fails closed");
 }
 
 struct Transport {
   int fds[2]{-1,-1};
   mcu::Upgrade update;
   Bytes image;
-  Transport(std::size_t size = 1024) : image(size,0xa5) {
+  Transport(std::size_t size = 1024, bool strict = false, bool first = false) : image(size,0xa5) {
     check(::socketpair(AF_UNIX,SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC,0,fds)==0,"transport socket pair");
-    update.start(image,0);
+    update.start(image,0,strict,first);
     check(sent()==hello,"exact OEM handshake CRC");
   }
   ~Transport() { ::close(fds[0]); ::close(fds[1]); }
@@ -210,6 +215,36 @@ void protocol() {
           first[6]==0 && first[7]==2,"resume starts at the offered block");
     t.reply(wire({0x90,1,0xff}));
     check(t.update.succeeded() && t.update.progress()==1024 && t.update.resumedAt()==512,"resumed transfer completes");
+  }
+  {
+    Transport t(1024,false,true); t.configure(config(1,512));
+    t.sent(); t.reply(wire({0x90,1,0xff}));
+    check(t.update.succeeded() && t.update.resumedAt()==512,"V1.0.17 takes a resume offer on a first attempt too");
+  }
+  for (bool first : {true,false}) {
+    for (const auto& c : {config(1,0,256,522),config(1,0,1024,522),config(1,0,512,128),config(1,0,512,4096)}) {
+      Transport t(1024,true,first); t.configure(c);
+      check(!t.update.active() && t.update.error()=="MCU offer differs from V1.0.17" && t.sent().empty(),
+            "a strict transfer needs block 512 and packet 522 before the first block");
+    }
+  }
+  {
+    Transport t(1024,true,true); t.configure(config(1,512));
+    check(!t.update.active() && t.update.error()=="MCU offer differs from V1.0.17" && t.sent().empty(),
+          "a strict first attempt needs offset 0 before the first block");
+  }
+  {
+    Transport t(1024,true,true); t.configure();
+    check(t.sent().size()==526,"a strict offer of block 512, packet 522, offset 0 sends the first block");
+    t.reply(wire({0x90,1,0})); t.sent(); t.reply(wire({0x90,2,0xff}));
+    check(t.update.succeeded() && t.update.progress()==1024,"a strict transfer completes");
+  }
+  {
+    Transport t(1024,true,false); t.configure(config(1,512));
+    auto first=t.sent();
+    check(first.size()==526 && first[2]==0 && first[3]==2,"a strict retry continues from the offered block");
+    t.reply(wire({0x90,1,0xff}));
+    check(t.update.succeeded() && t.update.resumedAt()==512,"a strict resumed transfer completes");
   }
   for (const Bytes& ack : {wire({0x90,2,0}),wire({0x90,1,0xf7}),wire({0x90,1,0xfa}),Bytes{0x90,1,0,0,0,0,0}}) {
     Transport t; t.configure(); t.sent(); t.reply(ack);
@@ -272,11 +307,12 @@ struct Clock {
       if (::poll(&p,1,100)>0) service.onReady(p.fd,p.revents,now);
     }
   }
-  void probe(McuService& service, uint32_t version, int64_t now, uint8_t usb = 1) {
+  void probe(McuService& service, uint32_t version, int64_t now, uint8_t usb = 1, const std::string& vendor = "V1.0.17") {
     check(take()==normal(0x11),"boot asks version");
-    send(service,normal(0x11,{'V','1','.','0','.','1','7'}),now);
+    send(service,normal(0x11,Bytes(vendor.begin(),vendor.end())),now);
     check(take()==normal(8),"boot asks build identity");
-    send(service,normal(8,identity(version)),now);
+    if (version) send(service,normal(8,identity(version)),now);
+    else service.onTime(now += options.replyTimeoutMs);
     check(take()==normal(2),"USB queried before install");
     send(service,normal(2,{usb}),now);
   }
@@ -345,6 +381,58 @@ void bootFlow(bool stopDuringTransfer, bool earlierAttempt = false, bool decline
   service.requestStop(2503);
 }
 
+void legacyBoot(const std::string& vendor, bool retry, const Bytes& offer, std::size_t data, const std::string& error = {}) {
+  Clock clock;
+  clock.options.versionAttempts = 1;
+  if (retry) tc002d_test::writeFile(clock.options.firmwareJournal,journal(clock.artifact.target,clock.artifact.digest,1));
+  std::vector<std::string> lines;
+  Log::forwardTo([&](const char* component, std::string_view text) { lines.push_back(std::string(component) + ": " + std::string(text)); });
+  McuService service(clock.state,clock.options);
+  bool healthy=false;
+  service.allowFirmwareUpdate([&]{ return healthy; });
+  service.start(0);
+  clock.probe(service,0,0,1,vendor);
+  check(clock.take()==normal(3),"legacy MCU answers no identity, polling continues");
+  clock.send(service,normal(3,{90,12,20}),500); clock.take();
+  healthy=true; service.onTime(501);
+  check(clock.take().empty() && service.firmwareBusy(),vendor + " starts preparation");
+  int result=0; const auto child=::waitpid(-1,&result,0);
+  check(child>0 && service.onChildExit(child,result,502),"preparation child reaped");
+  service.onTime(502);
+  check(clock.take()==normal(2),"power is checked again after preparation");
+  clock.send(service,normal(2,{1}),503);
+  check(clock.take()==hello,vendor + " gets the handshake");
+  clock.send(service,hello,503);
+  check(clock.take().size()==18,"service routes handshake");
+  clock.send(service,offer,503);
+  const auto sent=clock.take();
+  const auto journalText=tc002d_test::readFile(clock.options.firmwareJournal);
+  if (data) {
+    check(sent.size()==data,vendor + " gets the first block");
+    clock.send(service,wire({0x90,1,0xff}),503);
+    check(service.firmwareBusy() && journalText.find("\"error\"")==std::string::npos,vendor + " transfer acknowledged");
+  } else {
+    check(sent.empty() && !service.firmwareBusy(),vendor + " offer stops the attempt before the first block");
+    check(journalText.find("\"error\":\"" + error + "\"")!=std::string::npos &&
+          std::count(lines.begin(),lines.end(),"mcu: update: " + error)==1,"the reason is logged and kept: " + error);
+  }
+  check(journalText.find(retry ? "\"attempts\":2" : "\"attempts\":1")!=std::string::npos,"the attempt is counted");
+  check(std::count_if(lines.begin(),lines.end(),[](const std::string& l){ return l.rfind("mcu: transfer offer: ",0)==0; })==1,
+        "the offer is logged once per attempt");
+  service.requestStop(504);
+  Log::forwardTo(nullptr);
+}
+
+void unknownLegacy() {
+  Clock clock;
+  clock.options.versionAttempts = 1;
+  McuService service(clock.state,clock.options);
+  service.allowFirmwareUpdate([]{return true;}); service.start(0); clock.probe(service,0,0,1,"V1.0.15");
+  check(clock.take()==normal(3) && !service.firmwareBusy() && !tc002d_test::exists(clock.options.firmwareJournal),
+        "V1.0.15 is neither prepared nor flashed");
+  service.requestStop(501);
+}
+
 void usbGate() {
   Clock clock; McuService service(clock.state,clock.options);
   service.allowFirmwareUpdate([]{return true;}); service.start(0); clock.probe(service,2,0,0);
@@ -384,7 +472,14 @@ void preparationFailure(bool shutdown) {
 
 int main() {
   tc002d_test::quietLogs();
-  decisions(); retries(); protocol(); bootFlow(false); bootFlow(true); bootFlow(false,true); bootFlow(false,false,true); usbGate(); currentNeedsNoPreparation();
+  decisions(); retries("V1.0.17"); retries("V1.0.16"); protocol(); bootFlow(false); bootFlow(true); bootFlow(false,true); bootFlow(false,false,true); usbGate(); currentNeedsNoPreparation();
+  legacyBoot("V1.0.16",false,config(),526);
+  legacyBoot("V1.0.16",false,config(1,0,512,128),0,"MCU offer differs from V1.0.17");
+  legacyBoot("V1.0.16",false,config(1,512),0,"MCU offer differs from V1.0.17");
+  legacyBoot("V1.0.16",true,config(1,512),0,"MCU offered invalid resume position 512");
+  legacyBoot("V1.0.17",false,config(1,0,512,128),544);
+  legacyBoot("V1.0.17",false,config(1,512),0,"MCU offered invalid resume position 512");
+  unknownLegacy();
   preparationFailure(false); preparationFailure(true);
   return tc002d_test::finish("MCU firmware");
 }

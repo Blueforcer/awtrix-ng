@@ -2680,7 +2680,7 @@ paths:
                   error:
                     type: string
                     description: |
-                      What stops the assistant now. It stays while the clock tries again and goes once the clock is connected. "" when nothing does. One of connectionLost, tokenRejected, haError, pipelineIncomplete, microphoneUpdate, configUnavailable, appMissing, appOff, appBroken. Later versions may add codes.
+                      What stops the assistant now. It stays while the clock tries again and goes once the clock is connected. "" when nothing does. One of connectionLost, tokenRejected, haError, pipelineIncomplete, microphoneUpdate, microphoneFailed (the wake word lost the microphone), configUnavailable, appMissing, appOff, appBroken. Later versions may add codes.
                   lastError:
                     type: string
                     description: |

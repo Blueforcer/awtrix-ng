@@ -1,6 +1,7 @@
 #include "platform/posix/Bytes.h"
 #include "core/payload/Crc.h"
 #include "platform/tc002/daemon/McuUpgrade.h"
+#include "platform/tc002/daemon/Log.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -17,9 +18,11 @@ uint32_t Upgrade::crc(const uint8_t* data, std::size_t size, bool file) {
   return file ? value ^ 0xffffffff : value;
 }
 
-void Upgrade::start(const std::vector<uint8_t>& image, int64_t now) {
+void Upgrade::start(const std::vector<uint8_t>& image, int64_t now, bool strict, bool firstAttempt) {
   *this = Upgrade{};
   image_ = &image;
+  strict_ = strict;
+  firstAttempt_ = firstAttempt;
   if (image.empty() || image.size() > 262144) return fail("invalid image size");
   totalExpires_ = now + kLimitMs;
   phase_ = Phase::Handshake;
@@ -111,11 +114,15 @@ void Upgrade::reply(const std::vector<uint8_t>& b, int64_t now) {
     if (b.size() != 19 || b[0] != 0x92 || b[2] != 2 || b[3] != 11) return fail("unexpected MCU configuration");
     block_ = posix::le32(b.data()+8);
     packet_ = b[12] | unsigned(b[13]) << 8;
-    if (b[14] != 1) return fail("MCU declined update (enabled != 1)");
-    if (!block_ || block_ > 65536 || !packet_ || packet_ > 4096) return fail("unsupported MCU transfer geometry");
     // The OEM updater keeps the position of an interrupted transfer and offers it again only
     // for the same file CRC. Every later attempt with this image gets the same offer.
     const std::size_t resume = posix::le32(b.data()+4);
+    Log::line("mcu", "transfer offer: offset %zu, block %zu, packet %zu, enabled %u", resume, block_, packet_,
+              static_cast<unsigned>(b[14]));
+    if (b[14] != 1) return fail("MCU declined update (enabled != 1)");
+    if (!block_ || block_ > 65536 || !packet_ || packet_ > 4096) return fail("unsupported MCU transfer geometry");
+    if (strict_ && (block_ != 512 || packet_ != 522 || (firstAttempt_ && resume)))
+      return fail("MCU offer differs from V1.0.17");
     if (resume >= image_->size() || resume % block_) return fail("MCU offered invalid resume position " + std::to_string(resume));
     rxSeq_ = static_cast<uint8_t>(b[1] + 1);
     offset_ = resumedAt_ = resume;

@@ -426,6 +426,55 @@ void anUnavailableStreamWaits(const Fixture& f) {
         "an MCU without the stream is asked again after 30 s");
 }
 
+void aLostMicrophoneIsKnownUntilItStarts(const Fixture& f) {
+  Firing rig(f);
+  rig.listen();
+  check(!rig.listener->microphoneLost(), "a running stream has the microphone");
+  rig.fail("MCU microphone acquisition error");
+  check(rig.listener->microphoneLost() && !rig.listener->streamMissing(),
+        "a stream that ended with an error has lost it");
+  rig.now += 1000;
+  rig.listener->tick(rig.now, Listen::On);
+  rig.answer(StreamEvent::Kind::Support);
+  check(rig.last().operation == StreamControl::Start && rig.listener->microphoneLost(),
+        "it stays lost while the next stream starts");
+  rig.answer(StreamEvent::Kind::Started);
+  check(!rig.listener->microphoneLost(), "a started stream has it back");
+  rig.listener->tick(rig.now, Listen::Off);
+  rig.answer(StreamEvent::Kind::Ended);
+  rig.listener->tick(rig.now, Listen::On);
+  check(!rig.listener->microphoneLost(), "a stop it asked for loses nothing");
+  rig.answer(StreamEvent::Kind::Support, false);
+  check(rig.listener->microphoneLost() && rig.listener->streamMissing(), "an MCU without the stream counts as lost");
+}
+
+void offAndOnAsksAgainAtOnce(const Fixture& f) {
+  Firing rig(f);
+  const char* const error = "MCU microphone acquisition error";
+  rig.listener->tick(rig.now, Listen::On);
+  rig.fail(error);
+  for (const int64_t ms : {1000, 2000, 5000, 10000}) {
+    rig.now += ms;
+    rig.listener->tick(rig.now, Listen::On);
+    rig.fail(error);
+  }
+  const std::size_t before = rig.sent.size();
+  rig.now += 1000;
+  rig.listener->tick(rig.now, Listen::On);
+  check(rig.sent.size() == before, "after five failures it waits 30 s");
+  rig.listener->tick(rig.now, Listen::Off);
+  rig.now += kFrameMs;
+  rig.listener->tick(rig.now, Listen::On);
+  check(rig.sent.size() == before + 1 && rig.last().operation == StreamControl::Probe,
+        "turned off and on, it asks again at once");
+  rig.fail(error);
+  rig.listener->tick(rig.now + 999, Listen::On);
+  check(rig.sent.size() == before + 1, "and the back-off starts over");
+  rig.now += 1000;
+  rig.listener->tick(rig.now, Listen::On);
+  check(rig.sent.size() == before + 2 && rig.last().operation == StreamControl::Probe, "at 1 s");
+}
+
 void theShippedWakeWordOpens(const fs::path& model) {
   Rig rig(model);
   check(rig.listener != nullptr, "the wake word the release ships opens with its settings: " + rig.error);
@@ -466,6 +515,8 @@ int main(int argc, char** argv) {
   aStopWithoutAnswerEnds(fixture);
   failuresBackOff(fixture);
   anUnavailableStreamWaits(fixture);
+  aLostMicrophoneIsKnownUntilItStarts(fixture);
+  offAndOnAsksAgainAtOnce(fixture);
   cancelAndWithdraw(fixture);
   theShippedWakeWordOpens(argv[1]);
   return awtrix::test::finish("wake listener");

@@ -58,6 +58,11 @@ bool AssistantRouter::listening() const {
   return parts_.wake && ports_.allowed() && parts_.voice.wakeWord() && present();
 }
 
+const char* AssistantRouter::wakeProblem() const {
+  if (!listening() || !parts_.wake->microphoneLost()) return "";
+  return parts_.wake->streamMissing() ? errors::microphoneUpdate : errors::microphoneFailed;
+}
+
 const char* AssistantRouter::appProblem() const {
   const std::string& app = parts_.voice.assistantApp();
   if (!canBeAssistant(app)) return errors::appMissing;

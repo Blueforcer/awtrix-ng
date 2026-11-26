@@ -52,7 +52,13 @@ std::optional<WakeHeard> WakeListener::tick(int64_t now, Listen listen) {
     heard.swap(heard_);
   }
   muted_ = listen != Listen::On;
-  if (listen != Listen::Off) wantedAt_ = now;
+  const bool wanted = listen != Listen::Off;
+  if (wanted && !wanted_) {
+    retryAt_ = 0;
+    failures_ = 0;
+  }
+  wanted_ = wanted;
+  if (wanted) wantedAt_ = now;
   if (microphone_.phase() == MicrophoneClient::Phase::Idle) {
     if (listen == Listen::Off) {
       if (now - wantedAt_ >= kModelOffMs) unloadDetector();
@@ -113,6 +119,8 @@ void WakeListener::apply(MicrophoneClient::Report report, int64_t now) {
     case MicrophoneClient::Report::Unavailable:
       return unavailable(now);
     case MicrophoneClient::Report::Started:
+      if (lost_) logf("wake word: microphone stream back");
+      lost_ = false;
       failures_ = 0;
       error_.clear();
       return restart(0);
@@ -129,8 +137,9 @@ void WakeListener::apply(MicrophoneClient::Report report, int64_t now) {
 }
 
 void WakeListener::unavailable(int64_t now) {
-  if (error_.empty()) logf("wake word: %s", kStreamUnavailable);
-  error_ = "unavailable";
+  if (error_ != kStreamUnavailable) logf("wake word: %s", kStreamUnavailable);
+  error_ = kStreamUnavailable;
+  lost_ = true;
   retryAt_ = now + kBackoffMs.back();
 }
 
@@ -139,6 +148,7 @@ void WakeListener::failed(int64_t now) {
   const std::string& error = microphone_.error();
   if (error != error_) logf("wake word: microphone stream ended%s%s", error.empty() ? "" : ": ", error.c_str());
   error_ = error;
+  lost_ = true;
   retryAt_ = now + kBackoffMs[std::min<std::size_t>(failures_++, kBackoffMs.size() - 1)];
 }
 
