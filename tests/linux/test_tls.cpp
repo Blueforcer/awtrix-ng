@@ -375,21 +375,23 @@ void publicRootsLoadOnFirstUse(const std::filesystem::path& data) {
   check(!publicAnchorsNamed() && !publicAnchors(), "taking them away leaves none");
 }
 
-// One connection attempt as MqttLink makes it: handshake, the CONNECT, then waiting for an answer.
+// One connection attempt as MqttLink makes it: handshake and the CONNECT on the worker, then
+// waiting for an answer on the loop thread.
 bool attempt(LinuxMqttTls& transport, int port) {
   const auto handshake = [&transport, port] {
     if (transport.connect("127.0.0.1", static_cast<uint16_t>(port)) != 1) return false;
     const uint8_t connect[] = {0x10, 0x00};
     transport.write(connect, sizeof(connect));
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-    while (std::chrono::steady_clock::now() < deadline && transport.connected() && !transport.available())
-      std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    return transport.available() > 0;
+    return true;
   };
   net::ResolveState state;
   while ((state = transport.connectStep(handshake)) == net::ResolveState::Pending)
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
-  return state == net::ResolveState::Ready;
+  if (state != net::ResolveState::Ready) return false;
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+  while (std::chrono::steady_clock::now() < deadline && transport.connected() && !transport.available())
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  return transport.available() > 0;
 }
 
 size_t count(const std::string& text, const std::string& part) {

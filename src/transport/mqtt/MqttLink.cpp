@@ -73,7 +73,7 @@ void MqttLink::begin(const DeviceConfig& cfg, const std::string& clientId,
 }
 
 // Drives one step of the connect state machine and returns whether the link is usable right now.
-// Everything here is non-blocking except the connect attempt itself.
+// Everything here is non-blocking except the TCP connect itself.
 bool MqttLink::tick(uint32_t nowMs, bool networkConnected) {
   if (!client_) return false;
 
@@ -84,6 +84,7 @@ bool MqttLink::tick(uint32_t nowMs, bool networkConnected) {
     }
     sawWifi_ = false;
     haveServer_ = false;
+    awaitingConnack_ = false;
     status_->phase = LinkPhase::Offline;
     status_->setError(LinkError::NoWifi);
     status_->retryInMs = 0;
@@ -136,7 +137,8 @@ bool MqttLink::tick(uint32_t nowMs, bool networkConnected) {
   }
 
   status_->phase = LinkPhase::Connecting;
-  const auto result = socket_.connectStep([this] { return connectNow(); });
+  status_->retryInMs = 0;
+  const auto result = handshake(nowMs);
   if (result == ResolveState::Pending) return false;
   if (result == ResolveState::Failed) {
     const int state = client_->state();
@@ -166,18 +168,27 @@ bool MqttLink::tick(uint32_t nowMs, bool networkConnected) {
   return true;
 }
 
+ResolveState MqttLink::handshake(uint32_t nowMs) {
+  if (!awaitingConnack_) {
+    const auto sent = socket_.connectStep([this] { return sendConnect(); });
+    if (sent != ResolveState::Ready) return sent;
+    awaitingConnack_ = true;
+    connectSentMs_ = nowMs;
+  }
+  const int answer = client_->pollConnect(nowMs - connectSentMs_ >= kConnackSeconds * 1000u);
+  if (answer == 0) return ResolveState::Pending;
+  awaitingConnack_ = false;
+  return answer > 0 ? ResolveState::Ready : ResolveState::Failed;
+}
+
 // Registers a retained "offline" will, so the broker publishes it for us if the device drops off
 // without saying goodbye.
-bool MqttLink::connectNow() {
+bool MqttLink::sendConnect() {
   const std::string will = prefix_ + "/availability";
-  client_->setSocketTimeout(kConnackSeconds);
-  const bool ok =
-      (user_.empty() && pass_.empty())
-          ? client_->connect(clientId_.c_str(), will.c_str(), 0, true, "offline")
-          : client_->connect(clientId_.c_str(), user_.c_str(), pass_.c_str(), will.c_str(), 0,
-                             true, "offline");
-  client_->setSocketTimeout(kReadSeconds);
-  return ok;
+  const bool anonymous = user_.empty() && pass_.empty();
+  return client_->beginConnect(clientId_.c_str(), anonymous ? nullptr : user_.c_str(),
+                               anonymous ? nullptr : pass_.c_str(), will.c_str(), 0, true,
+                               "offline", true);
 }
 
 void MqttLink::noteFailure(uint32_t nowMs, LinkError why, int state) {

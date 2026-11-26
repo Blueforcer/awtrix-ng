@@ -31,6 +31,16 @@ This addresses an out-of-bounds topic copy in upstream 2.8: for example,
 `30 02 FF FF` declares a 65535-byte topic inside a two-byte MQTT body. It previously
 reached `memmove` without checking that the topic existed in the packet/buffer.
 
+Local patch `awtrix.3` splits `connect()` into `beginConnect()`, which opens the
+TCP connection and sends CONNECT, and `pollConnect(expired)`, which reads CONNACK
+only once bytes have arrived and never waits for them. It returns 0 while nothing
+has arrived, 1 when the broker accepted, and -1 on a refusal, a malformed answer
+or, with `expired` set, a timeout (`MQTT_CONNECTION_TIMEOUT`). `connect()` is these
+two calls around the old busy wait on `setSocketTimeout`, so the CONNECT bytes and
+the CONNACK handling have one code path. `MqttLink` calls them across loop ticks
+with its own deadline, so the loop keeps running while a slow broker checks a
+password. `tests/host/test_mqtt_link.cpp` covers it.
+
 All ESP32, Linux and cross-build targets use this same local source.
 There is no additional receive buffer. `tests/mqtt_parser` exercises valid traffic
 and malformed packets against it, with AddressSanitizer/UndefinedBehaviorSanitizer

@@ -31,7 +31,8 @@ class MqttLink {
  private:
   static constexpr uint16_t kReresolveAfterFailures = 3;
 
-  bool connectNow();
+  net::ResolveState handshake(uint32_t nowMs);
+  bool sendConnect();
   void noteFailure(uint32_t nowMs, net::LinkError why, int state);
   static net::LinkError mapState(int pubSubState);
 
@@ -43,10 +44,12 @@ class MqttLink {
   std::function<void()> onOnline_;
 
   std::string host_, user_, pass_, prefix_, clientId_;
+  uint32_t connectSentMs_ = 0;
   uint16_t port_ = 1883;
   uint16_t failuresAgainstAddress_ = 0;
   bool enabled_ = false;
   bool haveServer_ = false;
+  bool awaitingConnack_ = false;
   bool wasConnected_ = false;
   bool sawWifi_ = false;
   net::LinkError loggedError_ = net::LinkError::None;

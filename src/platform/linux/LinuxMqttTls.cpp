@@ -148,6 +148,7 @@ struct LinuxMqttTls::Impl {
       }
       if (input.empty()) inputStarted = Clock::now();
       input.insert(input.end(), bytes.begin(), bytes.begin() + n);
+      reported = -1;
       frame();
       if (readyUntil > offset) return;
     }
@@ -181,10 +182,7 @@ net::ResolveState LinuxMqttTls::connectStep(std::function<bool()> handshake) {
   const int result = state.handshakeResult.load(std::memory_order_acquire);
   if (result < 0) return net::ResolveState::Pending;
   state.handshake.join();
-  if (result == 1) {
-    state.reported = -1;
-    return net::ResolveState::Ready;
-  }
+  if (result == 1) return net::ResolveState::Ready;
   state.report();
   return net::ResolveState::Failed;
 }

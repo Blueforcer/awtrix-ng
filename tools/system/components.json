@@ -116,7 +116,7 @@
       "version": "1.1.0"
     },
     {
-      "files_sha256": "f8be54500875535a4ab457ca5686f23439a0058d9f1733c19c92540271f4c140",
+      "files_sha256": "9e169657bce38727f1f0efcb87e66b7987e092438d60b118b9a40fd8af6d704f",
       "id": "pubsubclient",
       "license": {
         "file": "LICENSES/MIT-PubSubClient.txt",
@@ -140,7 +140,7 @@
             "lib/PubSubClient/README.awtrix.md",
             "lib/PubSubClient/library.json"
           ],
-          "summary": "awtrix.1: inbound length validation before topic and packet-id access; awtrix.2: oversized PUBLISH drained and dropped, QoS1 still acknowledged; documented in lib/PubSubClient/README.awtrix.md, which records the original file hashes"
+          "summary": "awtrix.1: inbound length validation before topic and packet-id access; awtrix.2: oversized PUBLISH drained and dropped, QoS1 still acknowledged; awtrix.3: connect split into beginConnect and a non-blocking pollConnect for CONNACK; documented in lib/PubSubClient/README.awtrix.md, which records the original file hashes"
         }
       ],
       "paths": [
