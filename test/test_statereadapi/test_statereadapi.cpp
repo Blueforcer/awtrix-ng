@@ -334,8 +334,58 @@ void test_unmatched_requests_leave_the_body_untouched_and_repeated_reads_replace
 void setUp() {}
 void tearDown() {}
 
+void test_the_script_host_status_comes_from_the_platform() {
+  Rig r;
+  TEST_ASSERT_FALSE_MESSAGE(r.get("/api/v1/scripthost").matched, "a platform without one has no route");
+  const api::ScriptHostFn status = [](bool withKey) { return std::string(withKey ? "{\"key\":1}" : "{\"mode\":\"off\"}"); };
+  r.context.scriptHost = &status;
+  const auto result = r.get("/api/v1/scripthost");
+  TEST_ASSERT_TRUE(result.matched);
+  TEST_ASSERT_EQUAL_INT(200, result.status);
+  TEST_ASSERT_EQUAL_STRING("application/json", result.contentType);
+  TEST_ASSERT_EQUAL_STRING("{\"mode\":\"off\"}", r.body.c_str());
+  r.context.secrets = true;
+  r.get("/api/v1/scripthost");
+  TEST_ASSERT_EQUAL_STRING_MESSAGE("{\"key\":1}", r.body.c_str(), "a request for secrets asks for the key");
+}
+
+void test_a_paired_clock_sends_script_reads_to_its_host() {
+  Rig r;
+  int reads = 0;
+  r.source = [&](const std::string&, std::string& out) {
+    ++reads;
+    out = "x";
+    return true;
+  };
+  r.store = r.source;
+  r.context.scriptsOnHost = true;
+  for (const char* path : {"/api/v1/apps/script/weather", "/api/v1/apps/weather/config", "/api/v1/apps/weather/data"}) {
+    const auto result = r.get(path);
+    TEST_ASSERT_TRUE(result.matched);
+    TEST_ASSERT_EQUAL_INT(409, result.status);
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, r.body.find("scriptsOnHost"));
+  }
+  TEST_ASSERT_EQUAL_INT(0, reads);
+  const auto builtin = r.get("/api/v1/apps/builtin/Time/config");
+  TEST_ASSERT_NOT_EQUAL_MESSAGE(409, builtin.status, "built-in apps stay on the clock");
+}
+
+void test_a_paired_clock_reports_scripting_while_its_link_runs() {
+  Rig r;
+  r.device = [](bool scripting) { return scripting ? "{\"scriptingRunning\":true}" :
+                                                   "{\"scriptingRunning\":false}"; };
+  r.context.scriptsOnHost = true;
+  r.get("/api/v1/device");
+  TEST_ASSERT_EQUAL_STRING("{\"scriptingRunning\":false}", r.body.c_str());
+  r.context.hostScriptsRun = true;
+  r.get("/api/v1/device");
+  TEST_ASSERT_EQUAL_STRING("{\"scriptingRunning\":true}", r.body.c_str());
+}
+
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_a_paired_clock_sends_script_reads_to_its_host);
+  RUN_TEST(test_a_paired_clock_reports_scripting_while_its_link_runs);
   RUN_TEST(test_device_state_comes_from_the_platform_and_defaults_to_an_empty_object);
   RUN_TEST(test_script_source_preserves_availability_validation_and_raw_text_contracts);
   RUN_TEST(test_script_configuration_combines_schema_defaults_with_persisted_values);
@@ -343,6 +393,7 @@ int main() {
   RUN_TEST(test_state_reads_preserve_json_shapes_and_native_screen_coordinates);
   RUN_TEST(test_app_inventory_uses_storage_only_when_the_script_host_is_unavailable);
   RUN_TEST(test_app_inventory_reports_whether_each_script_fits_this_device);
+  RUN_TEST(test_the_script_host_status_comes_from_the_platform);
   RUN_TEST(test_shared_state_requires_a_live_interpreter);
   RUN_TEST(test_configured_stations_are_readable_without_a_radio_output);
   RUN_TEST(test_audio_metadata_control_characters_round_trip_as_valid_json);

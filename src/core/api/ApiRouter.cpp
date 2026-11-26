@@ -433,7 +433,7 @@ RouteOutcome routeHttp(const std::string& method, const std::string& path,
       path == "/api/v1/display/screen" ||
       path == "/api/v1/capabilities" ||
       path == "/api/v1/version" || path == "/version" ||
-      path == "/api/v1/system/wifi-scan" || path == "/api/v1/logs") {
+      path == "/api/v1/system/wifi-scan" || path == "/api/v1/logs" || path == "/api/v1/scripthost") {
     if (get) return RouteOutcome::NoMatch;
     return methodNotAllowed("GET");
   }
@@ -621,6 +621,8 @@ ErrorShape shapeFor(DispatchResult r) {
       return {"notFound", 404, nullptr};
     case DispatchResult::Conflict:
       return {"scriptChanged", 409, "script changed"};
+    case DispatchResult::OnHost:
+      return {"scriptsOnHost", 409, "scripts run on the host"};
     case DispatchResult::Capacity:
       return {"insufficientStorage", 507, "storage full"};
     case DispatchResult::Unavailable:

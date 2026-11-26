@@ -17,7 +17,6 @@ void ButtonRouter::update(const ButtonState& physical, bool swapped, int64_t now
                                    swapped ? physical.left : physical.right};
   bool edge[kButtonCount];
   for (int i = 0; i < kButtonCount; ++i) edge[i] = down[i] && !down_[i];
-  const bool blocked = engine_->state().settings().blockNavigation;
   if (edge[kSelect]) selectDownMs_ = nowMs;
 
   if (down[kSelect] && claim_[kSelect] != Claim::Hold && nowMs - selectDownMs_ >= kMenuHoldMs)
@@ -41,22 +40,10 @@ void ButtonRouter::update(const ButtonState& physical, bool swapped, int64_t now
   if (hook_)
     for (int i = 0; i < kButtonCount; ++i) took[i] = hook_(i, down[i] && claim_[i] == Claim::None, down[i]);
 
-  const auto free = [&](int i) { return edge[i] && claim_[i] == Claim::None && !took[i]; };
-  const bool navigate = !blocked && !engine_->inSession();
-  if (free(kLeft) && navigate) engine_->submit(Command(CommandType::PreviousApp));
-  if (free(kRight) && navigate) engine_->submit(Command(CommandType::NextApp));
   // A taken press is not remembered, so it can never pair up with the next one into a double
   // press.
-  if (free(kSelect)) {
-    engine_->submit(Command(CommandType::DismissNotify));
-    if (!blocked && nowMs - lastSelectEdgeMs_ <= kDoublePressMs) {
-      Command c(CommandType::SetDisplay);
-      c.payload = engine_->state().runtime().matrixOff ? "{\"power\":true}" : "{\"power\":false}";
-      // Applied at once, so a following edge or API command reads the new power state.
-      engine_->execute(c);
-    }
-    lastSelectEdgeMs_ = nowMs;
-  }
+  for (const int i : {kLeft, kRight, kSelect})
+    if (edge[i] && claim_[i] == Claim::None && !took[i]) press(i, nowMs);
 
   for (int i = 0; i < kButtonCount; ++i) {
     if (!down[i]) claim_[i] = Claim::None;
@@ -68,6 +55,23 @@ void ButtonRouter::update(const ButtonState& physical, bool swapped, int64_t now
     engine_->state().emit(StateEvent::ButtonsChanged);
   }
   physical_ = physical;
+}
+
+void ButtonRouter::press(int button, int64_t nowMs) {
+  if (!engine_) return;
+  const bool blocked = engine_->state().settings().blockNavigation;
+  const bool navigate = !blocked && !engine_->inSession();
+  if (button == kLeft && navigate) engine_->submit(Command(CommandType::PreviousApp));
+  if (button == kRight && navigate) engine_->submit(Command(CommandType::NextApp));
+  if (button != kSelect) return;
+  engine_->submit(Command(CommandType::DismissNotify));
+  if (!blocked && nowMs - lastSelectEdgeMs_ <= kDoublePressMs) {
+    Command c(CommandType::SetDisplay);
+    c.payload = engine_->state().runtime().matrixOff ? "{\"power\":true}" : "{\"power\":false}";
+    // Applied at once, so a following edge or API command reads the new power state.
+    engine_->execute(c);
+  }
+  lastSelectEdgeMs_ = nowMs;
 }
 
 // Only a hold that did something takes the buttons held with it.

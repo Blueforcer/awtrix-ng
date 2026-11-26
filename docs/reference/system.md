@@ -74,7 +74,7 @@ page:
 ```
 <!-- /only -->
 
-`wifiPass`, `mqttPass` and `authPass` are **secrets** and are left out of a normal `GET`. Add
+`wifiPass`, `mqttPass`<!-- only tc002 --> and `authPass`<!-- /only --><!-- only esp32 esp32-s3 -->, `authPass` and `scriptHostKey`<!-- /only --> are **secrets** and are left out of a normal `GET`. Add
 `?secrets=1` – `GET /api/v1/system?secrets=1` – to get them too. The web UI's backup export uses
 this so that you can restore the backup later. In setup mode any `secrets` query parameter is refused with `403 forbidden`, because
 anyone nearby can join the open setup hotspot. A `PUT` answer never contains the secrets.
@@ -603,6 +603,10 @@ Universe and pixel mapping, the five-second hold time and security notes are in
 <!-- /only -->
 | `debugMode` | bool | - | `false` | Writes detailed messages about requests and commands to the serial port and the log console. Off keeps the log short. **Applies at once.** | no |
 | `scriptingEnabled` | bool | - | `true` | Main switch for [scripts](../guides/scripting/index.md). Off<!-- only esp32 esp32-s3 --> frees about 40 KB of memory and<!-- /only --> no script runs. Your scripts are not deleted, and you can still **list, read, edit and delete** them – so you can fix a script that made the clock unreachable. Changes take effect after the next restart with the switch on again.<!-- only esp32 esp32-s3 --> To switch it off on the clock itself, hold **left + right** for three seconds while switching the clock on ([troubleshooting](../troubleshooting/troubleshooting.md#scripts-eat-the-memory-and-awtrix-never-comes-up)).<!-- /only --> | yes |
+<!-- only esp32 esp32-s3 -->
+| `scriptHost` | string | host or host:port | `""` | The script host that runs this clock's scripts. Set together with `scriptHostKey` when you pair the clock with a host. While it is set, no script runs on the clock itself. `""` = scripts run on the clock. | yes |
+| `scriptHostKey` | string | 64 hex digits | `""` | The key from pairing with the script host. Needed whenever `scriptHost` is set. Secret: left out of a normal `GET`. | yes |
+<!-- /only -->
 
 Install, read and remove scripts with [`/api/v1/apps/script/{name}`](http.md#scripts); the script
 language is described in the [Scripting guide](../guides/scripting/index.md).

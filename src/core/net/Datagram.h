@@ -6,6 +6,10 @@
 namespace awtrix {
 namespace net {
 
+// The longest datagram the clock sends or takes. It stays below the Ethernet and Wi-Fi MTU, so
+// no datagram is ever fragmented on the way.
+constexpr std::size_t kMaxDatagram = 1400;
+
 // An IPv4 address and UDP port, both in host byte order.
 struct Endpoint {
   uint32_t address = 0;

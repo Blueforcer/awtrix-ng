@@ -22,7 +22,7 @@ struct Scripts : IScriptService {
   DispatchResult setScript(const std::string&, const std::string&, DispatchDetail&) override {
     return DispatchResult::Ok;
   }
-  void removeScript(const std::string&) override {}
+  DispatchResult removeScript(const std::string&, DispatchDetail&) override { return DispatchResult::Ok; }
   DispatchResult setScriptConfig(const std::string& n, const std::string& p,
                                  DispatchDetail& detail) override {
     name = n;

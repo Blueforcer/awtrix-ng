@@ -181,6 +181,13 @@ ResolveState MqttLink::handshake(uint32_t nowMs) {
   return answer > 0 ? ResolveState::Ready : ResolveState::Failed;
 }
 
+bool MqttLink::publish(const std::string& topic, const std::string& payload, bool retained) {
+  if (!client_ || !client_->beginPublish(topic.c_str(), static_cast<unsigned int>(payload.size()), retained))
+    return false;
+  if (!payload.empty()) client_->write(reinterpret_cast<const uint8_t*>(payload.data()), payload.size());
+  return client_->endPublish() != 0;
+}
+
 // Registers a retained "offline" will, so the broker publishes it for us if the device drops off
 // without saying goodbye.
 bool MqttLink::sendConnect() {

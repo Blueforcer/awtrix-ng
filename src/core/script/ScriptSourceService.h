@@ -26,8 +26,9 @@ class ScriptSourceService : public IScriptService {
     return DispatchResult::Ok;
   }
 
-  void removeScript(const std::string& name) override {
+  DispatchResult removeScript(const std::string& name, DispatchDetail&) override {
     if (remove_) remove_(name);
+    return DispatchResult::Ok;
   }
 
  private:

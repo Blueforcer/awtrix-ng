@@ -178,6 +178,32 @@ static void test_platform_needs_and_advertisement_follow_the_same_flags() {
   }
 }
 
+// What scripts can use when they run on a script host: on the host the network modules it adds to
+// what the clock has, on a paired clock exactly those, as an ESP32 clock reports them.
+static void test_scripts_on_a_host_see_the_host_modules() {
+  const layout::Limits layoutLimits;
+  for (bool scripting : {false, true}) {
+    LinuxCapabilities host(true, scripting, true, &layoutLimits);
+    host.hostOfClock();
+    LinuxCapabilities paired(true, scripting, true, &layoutLimits);
+    paired.scriptsOnHost();
+    for (const LinuxCapabilities* caps : {&host, &paired}) {
+      const bool expected = caps == &paired || scripting;
+      const std::string json = api::capabilitiesJson({}, {}, {}, {}, nullptr, nullptr,
+          [&](api::JsonWriter& writer) { caps->write(writer); });
+      const DeviceCapabilities needs = DeviceCapabilities::from({}, nullptr, caps->needs());
+      for (const char* name : remote::kHostModules) {
+        TEST_ASSERT_EQUAL(expected, needs.has(name));
+        TEST_ASSERT_EQUAL(expected, api::present(api::memberValue(api::JsonReader(json), name)));
+      }
+      for (const char* name : {"ble", "gamepad", "crypto", "layout", "voice", "layouts", "gamepadRemote"}) {
+        TEST_ASSERT_FALSE(needs.has(name));
+        TEST_ASSERT_FALSE(api::present(api::memberValue(api::JsonReader(json), name)));
+      }
+    }
+  }
+}
+
 static void test_capability_lists_escape_names() {
   const std::string name = "effect\"\\\n";
   const std::string json = api::capabilitiesJson({name}, {}, {}, {});
@@ -202,6 +228,7 @@ int main(int, char**) {
   RUN_TEST(test_linux_needs_remain_valid_but_missing_without_the_platform);
   RUN_TEST(test_platform_needs_and_advertisement_follow_the_same_flags);
   RUN_TEST(test_capability_lists_escape_names);
+  RUN_TEST(test_scripts_on_a_host_see_the_host_modules);
   RUN_TEST(test_the_table_names_exactly_the_shared_vocabulary);
   RUN_TEST(test_capabilities_json_reports_every_table_entry);
   RUN_TEST(test_the_table_follows_the_hardware);

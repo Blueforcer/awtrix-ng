@@ -15,9 +15,9 @@ function asset(name) {
   for (const full of [false, true]) {
     const html = asset(full ? 'WEBUI_FULL' : 'WEBUI');
     const { window, store } = await boot({ html, caps: {
-      transitions: [], audio: { mp3: full, rtttl: true, radio: full }, voice: full,
+      transitions: [], audio: { mp3: full, rtttl: true, radio: full }, voice: full, oauth: true,
       microphone: full, display: { width: full ? 52 : 32, height: full ? 16 : 8 }
-    }});
+    }, oauth: () => [{ apps: [] }, 200] });
     try {
       if (full) store.settings.musicSource = 'auto';
       await goto(window, '#/system');
@@ -30,7 +30,10 @@ function asset(name) {
         'voice styles ship only in the Linux asset');
       assert.equal(html.includes('musicSource'), full, 'music-source controls ship only in the Linux asset');
       assert.equal(html.includes('clockFace'), full, 'clock-face controls ship only in the Linux asset');
-      assert.equal(html.includes('/api/v1/secrets'), full, 'script keys ship only in the Linux asset');
+      assert.ok(html.includes('/api/v1/secrets'), 'script keys ship in both assets, for clocks with a script host');
+      await goto(window, '#/apps');
+      assert.ok(store.oauthCalls.some(c => c.method === 'GET' && c.path === '/api/v1/oauth'),
+        "sign-in sections follow the clock's capabilities in both assets");
     } finally {
       window.close();
     }

@@ -16,6 +16,10 @@ namespace awtrix::script {
 class ScriptHost;
 }
 
+namespace awtrix::remote {
+class RemoteApps;
+}
+
 namespace awtrix {
 
 class CoreEngine;
@@ -34,12 +38,19 @@ struct HostHttpOptions {
   std::function<bool(const httplib::Request&, httplib::Response&)> requestGuard;
   // LAN service as on the device: any Host, the device's cross-origin policy and its own login.
   std::function<bool(const httplib::Request&, httplib::Response&)> loginGuard;
+  bool keyLogin = false;
   // Runs on the loop for an accepted system configuration, before it is persisted.
   std::function<bool(const httplib::Request&, httplib::Response&)> routeGuard;
   std::function<void(DeviceConfig&)> configAccepted;
   // Answers GET /api/v1/system/wifi-scan (status, JSON body); without it the scan is always empty.
   std::function<int(std::string&)> wifiScan;
   std::function<std::string(bool)> deviceState;
+  // What GET /api/v1/scripthost answers; empty where the clock cannot have a script host.
+  std::function<std::string(bool withKey)> scriptHost;
+  bool scriptsOnHost = false;
+  bool hostScriptsRun = false;
+  // The script host's apps, whose sounds this clock keeps; null without a running link.
+  const remote::RemoteApps* hostApps = nullptr;
   // Takes POST /update on the listener thread, outside the loop and maxBodyBytes, for a request
   // body of at most updateUploadBytes. Without it /update answers 501.
   std::function<void(const httplib::Request&, httplib::Response&, const httplib::ContentReader&)> updateUpload;

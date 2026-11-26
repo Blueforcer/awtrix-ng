@@ -102,7 +102,7 @@ bool ScriptHttpWorker::startTask() {
 // Called from the script VM on the main loop. Queues and returns immediately; the answer arrives
 // later through the result callback. False means it was not even accepted, which the script sees
 // as cb(nil, 0).
-bool ScriptHttpWorker::request(const script::HttpRequest& req) {
+bool ScriptHttpWorker::request(script::HttpRequest req) {
   if (!onResult_) return false;
   if (!WiFi.isConnected()) {
     if (script::modbus::isUrl(req.url)) logf("modbus: offline");
@@ -121,11 +121,10 @@ bool ScriptHttpWorker::request(const script::HttpRequest& req) {
 
   if (!startTask()) return false;
 
-  script::HttpRequest queued = req;
-  if (queued.maxBytes == 0) queued.maxBytes = script::kMaxHttpBody;
+  if (req.maxBytes == 0) req.maxBytes = script::kMaxHttpBody;
 
   pending_.fetch_add(1, std::memory_order_relaxed);
-  queue_.push(Queued{std::move(queued), 0, 0, monotonicMs()});
+  queue_.push(Queued{std::move(req), 0, 0, monotonicMs()});
   return true;
 }
 

@@ -339,7 +339,7 @@ void HostHttpServer::Impl::route(const httplib::Request& req, httplib::Response&
     return;
   }
 
-  const api::scriptsounds::InstalledScripts installed(scripts, scriptSource);
+  const api::scriptsounds::InstalledScripts installed(scripts, scriptSource, options.hostApps);
   HostFiles files(installed, releaseFiles, onAssetsChanged);
   HostReply reply(res);
   const api::Request fileRequest{method, path, req.body,
@@ -428,7 +428,8 @@ bool HostHttpServer::Impl::serveState(const httplib::Request& req, const std::st
   if (method != "GET") return false;
   const api::StateReadContext context{*engine, *screen, capabilitiesJson, scripts,
                                       scriptSource, scriptStore, storedScripts, options.deviceState,
-                                      &deviceCapabilities};
+                                      &deviceCapabilities, &options.scriptHost, options.scriptsOnHost,
+                                      options.hostScriptsRun, req.has_param("secrets")};
   std::string body;
   const auto result = api::readState(method, req.path, context, body);
   if (result.matched) {

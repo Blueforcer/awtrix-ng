@@ -1,5 +1,6 @@
 #include "core/api/ScriptSoundsApi.h"
 
+#include "core/remote/RemoteApps.h"
 #include "core/script/ScriptHost.h"
 #include "core/script/ScriptMeta.h"
 #include "core/sound/SoundMp3.h"
@@ -66,6 +67,10 @@ bool isUpload(std::string_view path) {
 
 bool InstalledScripts::find(const std::string& name, std::string* title) const {
   if (!isValidAppName(name)) return false;
+  if (hosted_ && hosted_->owns(name)) {
+    if (title) *title = name;
+    return true;
+  }
   if (host_) {
     if (!host_->has(name)) return false;
     if (title) {
@@ -101,7 +106,7 @@ asset::UploadTarget uploadTarget(const std::string& script, const std::string& f
     target.result = asset::invalidMp3FileName();
     return target;
   }
-  if (!scripts.find(script)) {
+  if (!scripts.takesSounds(script)) {
     target.result = unknownScript();
     return target;
   }

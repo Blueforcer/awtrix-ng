@@ -21,6 +21,8 @@ add_awtrix_test(NAME host-resolver SOURCES test_resolver.cpp "${host}/HostResolv
   LIBRARIES Threads::Threads ${host_test})
 add_awtrix_test(NAME host-persistence SOURCES test_persistence.cpp "${host}/HostStore.cpp"
   "${host}/HostPendingWrites.cpp" LIBRARIES Threads::Threads awtrix_posix ${host_test})
+add_awtrix_test(NAME host-udp-port SOURCES test_udp_port.cpp "${AWTRIX_ROOT}/src/transport/net/UdpSocket.cpp"
+  "${AWTRIX_ROOT}/src/transport/net/UdpPort.cpp" ${host_test})
 if(TARGET awtrix_core)
   add_awtrix_test(NAME host-buttons SOURCES test_host_buttons.cpp "${host}/HostButtonInput.cpp"
     LIBRARIES awtrix_core)

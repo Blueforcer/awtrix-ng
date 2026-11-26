@@ -107,7 +107,7 @@ void ScriptHost::activate() {
 
 // Sits between the script binding and the real transport to record who asked. The owner is
 // taken from the active BindingScope, never from the script, so it cannot be spoofed.
-bool ScriptHost::HttpAdapter::request(const HttpRequest& req) {
+bool ScriptHost::HttpAdapter::request(HttpRequest req) {
   ScriptHost* h = host_;
   const std::string owner = BindingScope::currentScript();
   if (owner.empty()) return false;
@@ -119,9 +119,11 @@ bool ScriptHost::HttpAdapter::request(const HttpRequest& req) {
 
   if (!h->svc_.http) return false;
 
-  if (!h->svc_.http->request(req)) return false;
+  const uint32_t id = req.id;
+  const uint32_t timeoutSec = req.timeoutSec;
+  if (!h->svc_.http->request(std::move(req))) return false;
   const int64_t now = h->svc_.monotonicMs ? h->svc_.monotonicMs() : 0;
-  h->httpOwner_[req.id] = HttpOwner{owner, now + kHttpTimeoutMs + int64_t{req.timeoutSec} * 1000, req.timeoutSec != 0};
+  h->httpOwner_[id] = HttpOwner{owner, now + kHttpTimeoutMs + int64_t{timeoutSec} * 1000, timeoutSec != 0};
   return true;
 }
 
@@ -824,6 +826,11 @@ void ScriptHost::applySwitches() {
 bool ScriptHost::active(const std::string& name) const {
   if (!runningKnown_) return true;
   return std::find(running_.begin(), running_.end(), name) != running_.end();
+}
+
+bool ScriptHost::takesButtons(const std::string& name) const {
+  const auto it = apps_.find(name);
+  return it != apps_.end() && it->second->takesButtons();
 }
 
 bool ScriptHost::isHeadless(const std::string& name) const {

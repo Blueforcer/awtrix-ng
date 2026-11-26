@@ -88,7 +88,7 @@ These answers use the normal error body instead:
 <!-- /only -->
 | `unauthorized` | 401 | every route, when login is on | Missing or wrong username or password. See [Authentication](#authentication-401). |
 | `forbidden` | 403 | routes unavailable in setup mode | Not allowed while AWTRIX is in setup mode. See [Setup mode lockdown](#provisioning-lockdown-403). |
-| `forbiddenOrigin` | 403 | `GET /api/v1/system?secrets=1`, `PUT /api/v1/system`, `POST /api/v1/restore`, `POST /update`, `POST /api/v1/device/factory-reset`<!-- only tc002 -->, `POST /api/v1/voice`, `POST /api/v1/voice/start`, the script sign-in changes and the changes of an app's [API keys](http.md#api-keys)<!-- /only --> | The request came from a web page of another site: its `Origin` header names another host, or `Sec-Fetch-Site` is neither `same-origin` nor `none`. Nothing was done. See [Requests from other web pages](http.md#cross-origin). |
+| `forbiddenOrigin` | 403 | `GET /api/v1/system?secrets=1`, <!-- only esp32 esp32-s3 -->`GET /api/v1/scripthost?secrets=1`, <!-- /only -->`PUT /api/v1/system`, `POST /api/v1/restore`, `POST /update`, `POST /api/v1/device/factory-reset`<!-- only tc002 -->, `POST /api/v1/voice`, `POST /api/v1/voice/start`, the script sign-in changes and the changes of an app's [API keys](http.md#api-keys)<!-- /only --> | The request came from a web page of another site: its `Origin` header names another host, or `Sec-Fetch-Site` is neither `same-origin` nor `none`. Nothing was done. See [Requests from other web pages](http.md#cross-origin). |
 | `notFound` | 404 | many routes | Unknown route, or an app, sound or file with that name does not exist. |
 | `methodNotAllowed` | 405 | any known route | The path exists, but not for this method. `message` lists the allowed methods. |
 | `payloadTooLarge` | 413 | any route with a body | The body is larger than allowed for that route ([Limits](limits.md#requests)). Nothing was applied. |
@@ -97,6 +97,9 @@ These answers use the normal error body instead:
 <!-- /only -->
 | `unsupportedMediaType` | 415 | `PUT` / `PATCH` (except script uploads), file and MP3 uploads | The `Content-Type` is not `application/json` (see [Content-Type](#content-type-the-empty-body-trap)), or an uploaded file does not suit its folder: `/ICONS` takes GIF and JPEG, `/MELODIES` RTTTL text, `/PALETTES` `RRGGBB` lines, `/MP3` and script sounds MP3. Nothing is stored. |
 | `scriptChanged` | 409 | `PUT /api/v1/apps/script-update/{name}` | The stored source is no longer the `expected_source` you sent, or a script with that name already exists. See [Script updates](http.md#script-updates). |
+<!-- only esp32 esp32-s3 -->
+| `scriptsOnHost` | 409 | script routes of a clock paired with a script host | This clock's scripts run on a script host. Reading a script's source, settings or data: ask the script host. Changing a script while the clock cannot reach the script host: message `script host not reachable`. |
+<!-- /only -->
 <!-- only tc002 -->
 | `notNewer` | 409 | `POST /update` | The package is not newer than the installed version. Going back to an older version works over USB only. |
 | `gamepadsFull` | 409 | `POST /api/v1/gamepad/pair` | Both gamepad slots hold a gamepad. The message is `no free slot`. Forget one with `DELETE /api/v1/gamepad/{id}` first. |
@@ -711,7 +714,7 @@ whether it worked. A failure contains the **same error object** as over HTTP:
 {"ok":false,"error":{"code":"validationFailed","message":"out of range","field":"brightness"}}
 ```
 
-Success is `{"ok":true}`. Eight codes can appear over MQTT:
+Success is `{"ok":true}`. <!-- only tc002 -->Eight<!-- /only --><!-- only esp32 esp32-s3 -->Nine<!-- /only --> codes can appear over MQTT:
 
 | Code | When | `message` |
 | --- | --- | --- |
@@ -728,6 +731,9 @@ Success is `{"ok":true}`. Eight codes can appear over MQTT:
 <!-- /only -->
 | `internalError` | the command failed or was not understood | `command failed` |
 | `invalidName` | an app name in the topic is not `[A-Za-z0-9_-]{1,32}` or is a reserved name (`active`, `next`, `previous`, `order`) | `invalid name` |
+<!-- only esp32 esp32-s3 -->
+| `scriptsOnHost` | a script's settings changed while the clock cannot reach its script host | `script host not reachable` |
+<!-- /only -->
 
 All other codes are HTTP only. `methodNotAllowed`, `unauthorized`, `forbidden`, `forbiddenOrigin`,
 `unsupportedMediaType`, `payloadTooLarge` and `invalidMethodOverride` are about how an HTTP

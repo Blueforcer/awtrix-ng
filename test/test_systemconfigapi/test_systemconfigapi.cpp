@@ -187,6 +187,21 @@ void test_shared_route_uses_presence_of_secrets_and_ignores_other_paths() {
   TEST_ASSERT_EQUAL_INT(0, commits);
 }
 
+void test_unpairing_the_script_host_forgets_its_key() {
+  DeviceConfig config;
+  const std::string key(64, 'a');
+  auto ok = [] { return true; };
+  auto result = api::systemConfigRequest("PUT", R"({"scriptHost":"pi:8301","scriptHostKey":")" + key + R"("})",
+                                         false, config, ok);
+  TEST_ASSERT_EQUAL_INT(200, result.status);
+  TEST_ASSERT_EQUAL_STRING(key.c_str(), config.scriptHostKey.c_str());
+  TEST_ASSERT_TRUE_MESSAGE(result.body.find(key) == std::string::npos, "the key is a secret");
+  result = api::systemConfigRequest("PUT", R"({"scriptHost":""})", false, config, ok);
+  TEST_ASSERT_EQUAL_INT(200, result.status);
+  TEST_ASSERT_EQUAL_STRING("", config.scriptHost.c_str());
+  TEST_ASSERT_EQUAL_STRING_MESSAGE("", config.scriptHostKey.c_str(), "no host, no key");
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_shared_route_uses_presence_of_secrets_and_ignores_other_paths);
@@ -200,5 +215,6 @@ int main() {
   RUN_TEST(test_configurable_platform_lists_panel_and_pin_fields);
   RUN_TEST(test_fixed_display_saves_without_panel_or_pin_fields);
   RUN_TEST(test_fixed_display_restores_a_panel_backup_without_its_geometry_or_pins);
+  RUN_TEST(test_unpairing_the_script_host_forgets_its_key);
   return UNITY_END();
 }

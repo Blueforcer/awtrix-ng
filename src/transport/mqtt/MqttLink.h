@@ -25,6 +25,9 @@ class MqttLink {
   bool tick(uint32_t nowMs, bool networkConnected);
 
   PubSubClient* client() { return client_; }
+  // Streams the payload, so it is never copied into the packet buffer and a document larger than
+  // the buffer's spare room still goes out.
+  bool publish(const std::string& topic, const std::string& payload, bool retained);
   bool enabled() const { return enabled_; }
   bool online() const { return !socket_.connecting() && client_ != nullptr && client_->connected(); }
 

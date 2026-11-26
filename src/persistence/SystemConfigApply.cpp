@@ -29,6 +29,9 @@ bool apply(DeviceConfig& cfg, api::JsonReader obj, int& applied, ApplyError& err
     merged.wifiSsid = ssid;
     merged.wifiPass = pass;
   }
+  // Unpairing the script host also forgets its key: a secret cannot be cleared with "" otherwise,
+  // and a key left behind would still open the API.
+  if (merged.scriptHost.empty()) merged.scriptHostKey.clear();
   const cfgrules::IpSplit split = cfgrules::systemIpSplit(obj);
   if (split.present) {
     merged.ip = split.ip;
@@ -44,6 +47,7 @@ bool apply(DeviceConfig& cfg, api::JsonReader obj, int& applied, ApplyError& err
                                    merged.dns2, cerr) ||
       !cfgrules::validateMqttGate(merged.mqttEnabled, merged.mqttHost, cerr) ||
       !cfgrules::validateAuthGate(merged.authEnabled, merged.authUser, merged.authPass, cerr) ||
+      !cfgrules::validateScriptHost(merged.scriptHost, merged.scriptHostKey, cerr) ||
       !merged.validate(cerr) ||
       (merged.gpioConfigurable &&
        !cfgrules::validateAudioPins(merged.pinI2sBclk, merged.pinI2sLrclk, merged.pinI2sDout,

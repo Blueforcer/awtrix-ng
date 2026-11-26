@@ -52,6 +52,8 @@ void usage() {
             "  --hardened --credentials-file FILE --tls-cert FILE --tls-key FILE\n"
             "  --origin https://HOST:PORT [--listen IPv4_ADDRESS] [--mqtt-ca-file FILE]\n"
             "Hardened MQTT requires an explicit CA file and broker credentials.\n"
+            "Script host of one ESP32 clock (listens on all addresses, the key is the only login):\n"
+            "  --remote --remote-clock UID --remote-key-file FILE --remote-clock-url http://CLOCK\n"
             "SIGINT/SIGTERM flush application state and stop the process.");
 }
 
@@ -80,6 +82,9 @@ bool readValue(const std::string& arg, const char* value, LinuxOptions& o) {
     o.speakerRequested = true;
   }
   else if (arg == "--webui") o.webui = value;
+  else if (arg == "--remote-clock") return setOnce(o.remoteClock, value);
+  else if (arg == "--remote-key-file") return setOnce(o.remoteKeyFile, value);
+  else if (arg == "--remote-clock-url") return setOnce(o.remoteClockUrl, value);
   else if (arg == "--port") o.port = number(value, 1, 65535);
   else if (arg == "--width") o.width = number(value, 8, 128);
   else if (arg == "--height") o.height = number(value, 8, 32);
@@ -112,6 +117,7 @@ int parseLinuxOptions(int argc, char** argv, LinuxOptions& o) {
     if (arg == "--hardened") { o.administration.hardened = true; continue; }
     if (arg == "--lan") { o.administration.lan = true; continue; }
     if (arg == "--boot-intro") { o.bootIntro = true; continue; }
+    if (arg == "--remote") { o.remote = true; continue; }
     if (arg == tc002::kBluetoothFlag) { o.bluetooth = true; continue; }
     if (i + 1 == argc || !readValue(arg, argv[++i], o)) { usage(); return 2; }
   }
@@ -139,6 +145,14 @@ int parseLinuxOptions(int argc, char** argv, LinuxOptions& o) {
   if (o.data.empty() || o.port < 0 || o.width < 0 || o.height < 0) { usage(); return 2; }
   if (o.boardType != "headless" && o.boardType != "tc002") {
     std::fputs("Board must be headless or tc002\n", stderr); return 2;
+  }
+  const bool remoteParts = !o.remoteClock.empty() || !o.remoteKeyFile.empty() || !o.remoteClockUrl.empty();
+  if (o.remote && (o.remoteClock.empty() || o.remoteKeyFile.empty() || o.remoteClockUrl.empty())) {
+    std::fputs("--remote needs --remote-clock, --remote-key-file and --remote-clock-url\n", stderr); return 2;
+  }
+  if (!o.remote && remoteParts) { std::fputs("--remote-* options need --remote\n", stderr); return 2; }
+  if (o.remote && (o.supervised || o.boardType != "headless" || o.administration.lan || o.administration.hardened)) {
+    std::fputs("--remote runs headless and unsupervised, without --lan or --hardened\n", stderr); return 2;
   }
   if (!o.bootSound.empty() && !o.bootIntro) {
     std::fputs("--boot-sound requires --boot-intro\n", stderr); return 2;

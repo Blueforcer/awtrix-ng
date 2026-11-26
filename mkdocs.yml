@@ -139,6 +139,7 @@ nav:
       - MQTT: guides/mqtt.md
       - Art-Net: guides/artnet.md
       - Mirroring: guides/mirroring.md
+      - Script host: guides/script-host.md
   - Write your own apps:
       - Scripting guide:
           - Basics: guides/scripting/index.md

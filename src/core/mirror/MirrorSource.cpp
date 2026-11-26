@@ -4,34 +4,19 @@
 #include <new>
 
 #include "core/mirror/MirrorWire.h"
+#include "core/render/Fingerprint.h"
 
 namespace awtrix {
 namespace mirror {
 
 namespace {
-constexpr uint32_t kFnvOffset = 2166136261u;
-constexpr uint32_t kFnvPrime = 16777619u;
-
-uint32_t mix(uint32_t hash, uint32_t value) {
-  for (int shift = 0; shift < 32; shift += 8) {
-    hash ^= (value >> shift) & 0xFFu;
-    hash *= kFnvPrime;
-  }
-  return hash;
-}
-
-uint32_t mix(uint32_t hash, const std::string& text) {
-  for (char c : text) hash = mix(hash, static_cast<uint8_t>(c));
-  return mix(hash, static_cast<uint32_t>(text.size()));
-}
-
 uint32_t fingerprintOf(const Canvas& frame, const PageInfo& page) {
-  uint32_t hash = mix(kFnvOffset, static_cast<uint32_t>(page.kind));
-  hash = mix(hash, page.app);
-  hash = mix(hash, page.incoming);
-  const uint32_t* pixels = frame.data();
-  for (std::size_t i = 0, n = frame.size(); i < n; ++i) hash = mix(hash, pixels[i]);
-  return hash;
+  Fingerprint print;
+  print.add(static_cast<uint32_t>(page.kind));
+  print.add(page.app);
+  print.add(page.incoming);
+  print.add(frame);
+  return print.value();
 }
 }
 

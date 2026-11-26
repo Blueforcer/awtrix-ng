@@ -16,6 +16,7 @@
 #include "core/net/DeviceUrl.h"
 #include "core/StrCase.h"
 #include "core/api/CapabilitiesJson.h"
+#include "core/remote/HostModules.h"
 #include "core/script/ScriptHeap.h"
 #include "core/apps/AppRegistry.h"
 #include "core/render/TransitionComposer.h"
@@ -67,6 +68,7 @@
 #include "transport/net/ArtnetService.h"
 #include "transport/net/DiscoveryService.h"
 #include "transport/net/MirrorLink.h"
+#include "transport/net/ScriptHostLink.h"
 #include "transport/net/NetworkService.h"
 
 using namespace awtrix;
@@ -88,6 +90,7 @@ BootAnimator g_bootAnim;
 DiscoveryService g_disco;
 ArtnetService g_artnet;
 MirrorLink g_mirror;
+ScriptHostLink g_scriptHost;
 #if defined(AWTRIX_SOC_ESP32S3)
 std::unique_ptr<AudioOutEsp32> g_radio;
 #endif
@@ -132,7 +135,11 @@ void refreshCapabilities() {
   platform.display.requestedWidth = requestedWidth > 0 ? requestedWidth : kMatrixWidthMin;
   platform.display.estimatedWireTimeUs = static_cast<uint32_t>(platform.display.pixelCount() * 30u);
   platform.display.ready = g_board->displayReady() && g_runtime->ready();
-  auto caps = std::make_shared<const std::string>(g_runtime->capabilitiesJson(platform));
+  const api::CapabilityMembersFn hostModules = [](api::JsonWriter& w) {
+    for (const char* module : remote::kHostModules) w.member(module, true);
+  };
+  auto caps = std::make_shared<const std::string>(
+      g_runtime->capabilitiesJson(platform, g_cfg.scriptHost.empty() ? nullptr : hostModules));
   g_http.setCapabilitiesJson(caps);
   g_http.setDeviceCapabilities(DeviceCapabilities::from(g_audio.caps(), &platform));
   g_mqtt.setCapabilitiesJson(std::move(caps));
@@ -343,6 +350,7 @@ void setup() {
       else g_artnet.end();
     }
     g_mirror.configure(g_cfg);
+    g_scriptHost.systemChanged();
   });
   {
 #if defined(AWTRIX_SOC_ESP32S3)
@@ -382,31 +390,45 @@ void setup() {
   g_scriptSvc.maxAllocHeap = [] {
     return heap_caps_get_largest_free_block(scriptBufferHeapCaps());
   };
-  g_mqtt.setScriptingRunning(cfg.scriptingEnabled);
-  g_scriptSlots.begin(*g_runtime, g_scriptSvc, cfg.scriptingEnabled,
-      [](const std::string& name, const std::string& source) { g_scriptStore.save(name, source); },
-      [](const std::string& name) { g_scriptStore.remove(name); });
+  const bool onHost = !cfg.scriptHost.empty();
+  if (onHost) {
+    bootstrap::beginScriptHost(g_scriptSlots, *g_runtime, g_scriptHost, g_scriptHttp, uid, cfg, webPort, esp_random,
+                               [](uint32_t) {
+                                 const IPAddress ip = WiFi.localIP();
+                                 return uint32_t{ip[0]} << 24 | uint32_t{ip[1]} << 16 | uint32_t{ip[2]} << 8 | ip[3];
+                               });
+  } else {
+    g_scriptSlots.begin(*g_runtime, g_scriptSvc, cfg.scriptingEnabled,
+        [](const std::string& name, const std::string& source) { g_scriptStore.save(name, source); },
+        [](const std::string& name) { g_scriptStore.remove(name); });
+  }
+  g_mqtt.setScriptingRunning(onHost ? g_scriptHost.running() : cfg.scriptingEnabled);
   g_scripts = g_scriptSlots.host();
   if (g_scripts) {
     bootstrap::bindScriptHttp(*g_scripts, g_scriptHttp);
     bootstrap::bindScriptMqtt(*g_scripts, g_mqtt, g_scriptMqtt);
     bootstrap::restoreScripts(*g_scripts, g_scriptStore, script::kFirstLoopStaggerMs);
-  } else {
+  } else if (!onHost) {
     logf("scripts: disabled by configuration (sources stay editable)");
   }
   g_http.setScripts(g_scripts, g_scriptSvc.readSource, g_scriptSvc.readStore,
                     [] { return g_scriptStore.storedScripts(); });
+  g_http.setScriptHost(g_scriptHost, onHost);
   g_http.setOnAssetsChanged([] {
-    bootstrap::assetsChanged(*g_runtime, g_scriptIcon);
+    bootstrap::assetsChanged(*g_runtime, g_scriptIcon, g_scriptHost);
   });
   // Stops playback from a file before it is deleted or replaced.
   g_http.setReleaseFiles([](const std::string& path) { g_audio.release(path); });
 
+  g_disco.setScriptHost(&g_scriptHost);
   if (g_net.isConnected()) {
     g_disco.begin(g_net.hostname(), cfg.webPort);
     if (cfg.artnet) g_artnet.begin();
   }
-  bootstrap::bindScriptButtons(g_periphery, *g_engine, g_scripts);
+  if (onHost)
+    bootstrap::bindRemoteButtons(g_periphery, *g_engine, *g_scriptSlots.hosted());
+  else
+    bootstrap::bindScriptButtons(g_periphery, *g_engine, g_scripts);
   bootstrap::bindDisplay(*g_display, *g_canvas, g_mqtt);
 
   // Everything is up; hold the intro on screen for its full length even when setup got there
@@ -473,6 +495,7 @@ void loop() {
   probe::begin();
   g_disco.tick();
   g_mirror.tick(now, netConnected && !g_net.apMode());
+  g_scriptHost.tick(now, netConnected && !g_net.apMode(), *g_engine);
   probe::report("disco", 256);
   probe::begin();
   g_http.tick();

@@ -453,6 +453,10 @@ script. Every button of the **Scripts** tab is in [The web UI](../../getting-sta
 - [Pushed apps](../pushed-apps.md): the simpler way to show your own content, when something
   outside AWTRIX sends it
 - [Modbus in scripts](../modbus.md): read an energy meter or inverter over Modbus TCP
+<!-- only esp32 esp32-s3 -->
+- [Script host](../script-host.md): run your scripts on a computer in your network, with much more
+  memory
+<!-- /only -->
 <!-- only tc002 -->
 - [TCP in scripts](../tcp.md) and [Hashing and mining in scripts](../hashing.md): the modules
   for line-based services, signatures and Bitcoin mining

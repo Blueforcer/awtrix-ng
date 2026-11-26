@@ -54,7 +54,6 @@ class MqttService : private PlatformMqttCommands {
  private:
   void onOnline();
   void announceHa();
-  bool send(const std::string& topic, const std::string& payload, bool retained);
   ha::ButtonEdges::State buttonState() const;
   void handleMessage(char* topic, uint8_t* payload, unsigned int len);
   static void onMessageStatic(char* topic, uint8_t* payload, unsigned int len);

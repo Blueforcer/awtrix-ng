@@ -234,6 +234,10 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/builtin/Time/config' -m '{"t
 * A script that restarts with an error is still saved. It answers
   `{"ok":true,"name":"Weather","error":{...}}`, with [the error object](http.md#the-error-object) of
   the HTTP route.
+<!-- only esp32 esp32-s3 -->
+* On a clock paired with a [script host](../guides/script-host.md), a script's settings go on to
+  the script host. While the clock cannot reach it, the answer is `scriptsOnHost`.
+<!-- /only -->
 
 ### settings
 
@@ -440,7 +444,7 @@ none):
 {"ok":false,"error":{"code":"validationFailed","message":"invalid value","field":"brightness"}}
 ```
 
-Eight codes can appear here; they and their messages are listed in
+<!-- only tc002 -->Eight<!-- /only --><!-- only esp32 esp32-s3 -->Nine<!-- /only --> codes can appear here; they and their messages are listed in
 [Errors – Errors over MQTT](errors.md#errors-over-mqtt). HTTP-only codes such as
 `methodNotAllowed`, `unauthorized` and `unsupportedMediaType` never appear over MQTT.
 

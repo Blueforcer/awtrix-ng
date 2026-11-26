@@ -90,7 +90,7 @@ bool Api::handle(const httplib::Request& req, httplib::Response& res) {
     sendError(res, 405, "methodNotAllowed", action.empty() ? "allowed: GET, POST, DELETE" : "allowed: POST");
     return true;
   }
-  if (host::refuseForeign(req, res, "X-Awtrix-OAuth")) return true;
+  if (!keyLogin_ && host::refuseForeign(req, res, "X-Awtrix-OAuth")) return true;
   if (remove) {
     service_.signOut(name);
     sendJson(res, 200, "{\"ok\":true}");

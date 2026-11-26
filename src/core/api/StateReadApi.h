@@ -19,6 +19,7 @@ namespace api {
 
 using StoredScriptsFn = std::function<std::vector<script::StoredScript>()>;
 using DeviceStateFn = std::function<std::string(bool scriptingRunning)>;
+using ScriptHostFn = std::function<std::string(bool withKey)>;
 
 // Borrowed for a single call on the application loop. The transport supplies platform facts
 // and storage access, while these read endpoints share their routing and response contracts.
@@ -33,6 +34,11 @@ struct StateReadContext {
   const DeviceStateFn& deviceState;
   // What this device offers scripts; lets /api/v1/apps say whether each script fits.
   const DeviceCapabilities* device = nullptr;
+  // The script host status for GET /api/v1/scripthost; null where clocks cannot have one.
+  const ScriptHostFn* scriptHost = nullptr;
+  bool scriptsOnHost = false;
+  bool hostScriptsRun = false;
+  bool secrets = false;
 };
 
 struct StateReadResult {

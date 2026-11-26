@@ -368,7 +368,7 @@ struct FakeHttp : script::IScriptHttp {
   script::HttpHeaders lastHeaders;
   int calls = 0;
   bool accept = true;
-  bool request(const script::HttpRequest& req) override {
+  bool request(script::HttpRequest req) override {
     lastId = req.id;
     lastUrl = req.url;
     lastMax = req.maxBytes;

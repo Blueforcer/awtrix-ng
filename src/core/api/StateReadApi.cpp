@@ -15,7 +15,7 @@ StateReadResult readState(const std::string& method, const std::string& path,
                           const StateReadContext& context, std::string& body) {
   if (method != "GET") return {};
   if (path == "/api/v1/device") {
-    body = context.deviceState ? context.deviceState(context.scripts != nullptr) : "{}";
+    body = context.deviceState ? context.deviceState(context.scripts != nullptr || context.hostScriptsRun) : "{}";
     return {true};
   }
   if (path == "/api/v1/settings") {
@@ -62,6 +62,10 @@ StateReadResult readState(const std::string& method, const std::string& path,
     }
     return {true, 200, "application/json", true};
   }
+  if (path == "/api/v1/scripthost" && context.scriptHost && *context.scriptHost) {
+    body = (*context.scriptHost)(context.secrets);
+    return {true, 200, "application/json", true};
+  }
   if (path == "/api/v1/scripts/shared") {
     if (!context.scripts) {
       body = errorJson("unavailable", "no scripting");
@@ -71,7 +75,15 @@ StateReadResult readState(const std::string& method, const std::string& path,
     appendSharedStateJson(body, context.scripts->sharedSnapshot());
     return {true, 200, "application/json", true};
   }
-  if (path.rfind("/api/v1/apps/script/", 0) == 0 && !scriptsounds::match(path).matched) {
+  const bool scriptRead = path.rfind("/api/v1/apps/script/", 0) == 0 && !scriptsounds::match(path).matched;
+  bool builtin = false;
+  const std::string configName = appConfigName(path, builtin);
+  const std::string dataName = appSubresourceName(path, "/data");
+  if (context.scriptsOnHost && (scriptRead || (!builtin && !configName.empty()) || !dataName.empty())) {
+    body = errorJson("scriptsOnHost", "scripts run on the host");
+    return {true, 409};
+  }
+  if (scriptRead) {
     const std::string name = path.substr(sizeof("/api/v1/apps/script/") - 1);
     if (!context.scriptSource) {
       body = errorJson("unavailable", "no scripting");
@@ -88,8 +100,6 @@ StateReadResult readState(const std::string& method, const std::string& path,
     }
     return {true, 200, "text/plain"};
   }
-  bool builtin = false;
-  const std::string configName = appConfigName(path, builtin);
   if (builtin) {
     if (!isValidAppName(configName)) {
       body = errorJson("invalidName", "invalid name", "name");
@@ -109,7 +119,6 @@ StateReadResult readState(const std::string& method, const std::string& path,
         script::configResponse(configName, context.scriptSource, context.scriptStore, body);
     return {true, status, "application/json", true};
   }
-  const std::string dataName = appSubresourceName(path, "/data");
   if (!dataName.empty()) {
     const int status =
         script::dataResponse(dataName, context.scriptSource, context.scriptStore, body);

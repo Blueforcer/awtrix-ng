@@ -50,12 +50,18 @@ bool LinuxRuntime::runFrame() {
     bootSoundClock_.reset();
   }
   const bool setup = o_.supervised && supervision_->accessPoint();
-  if (!booting && !updating && !setup) app_->tick(now, scripts_);
+  if (remote_) {
+    app_->tick(now, nullptr);
+    remote_->tick(now, *app_, *services_, scripts_);
+    if (scriptOnlyMqtt_) scriptOnlyMqtt_->tick(now, true);
+  } else if (!booting && !updating && !setup) {
+    app_->tick(now, scripts_);
+  }
   store_.tick(now);
   const int64_t renderStartedUs = performance.now();
   if (updating) update_->draw(app_->canvas(), awtrixFont());
   else if (!booting && setup) supervision_->drawProvisioning(app_->canvas(), awtrixFont(), now);
-  else if (!booting) {
+  else if (!booting && !remote_) {
     app_->render(now);
     quickSettings_->draw(app_->canvas(), awtrixFont(), now);
     voice_->draw(app_->canvas(), now);
@@ -118,6 +124,7 @@ void LinuxRuntime::tickNetwork(int64_t now) {
   if (lan && deviceFacts_->hostname() != discoveryName_) {
     discoveryName_ = deviceFacts_->hostname();
     discovery_.begin(discoveryName_, o_.port);
+    discovery_.setScriptHost(&scriptHost_);
   }
   discovery_.tick();
   if (mqttTls_ && brokerTrust_) {
@@ -126,6 +133,7 @@ void LinuxRuntime::tickNetwork(int64_t now) {
       logf("mqtt: broker certificate not trusted, SHA-256 %s", fingerprint.c_str());
   }
   mirror_.tick(now, lan && (!supervised || supervision_->networkConnected()));
+  scriptHost_.tick(now, !supervised || supervision_->networkConnected(), engine());
   if (activation_) activation_->tick(now, supervision_->networkConnected() && clock_.synchronized());
   http_.tick();
   extensions_.phones.poll();

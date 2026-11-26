@@ -14,6 +14,9 @@
 
 using namespace awtrix;
 using awtrix::sound::AudioRouter;
+using awtrix::sound::canPlay;
+using awtrix::sound::Caps;
+using awtrix::sound::capsBits;
 using awtrix::sound::Choices;
 using awtrix::sound::Group;
 using awtrix::sound::Origin;
@@ -422,6 +425,31 @@ void test_each_kind_needs_its_output(void) {
   assertResult(PlayResult::NoSink, rig.play("\"ding\""), "a name");
   TEST_ASSERT_TRUE(rig.detail.message.c_str()[0] != '\0');
   TEST_ASSERT_TRUE(rig.pcm.mp3s.empty() && rig.track.played.empty());
+}
+
+// Another device's outputs, as its capabilities name them: the router's own answer for its sinks.
+void test_outputs_named_by_caps_decide_what_can_play(void) {
+  Caps buzzer;
+  buzzer.rtttl = true;
+  TEST_ASSERT_TRUE(canPlay(buzzer, parsed("\"ding\"", Origin::Script)));
+  TEST_ASSERT_TRUE(canPlay(buzzer, parsed("{\"rtttl\":\"x:d=4,o=5,b=120:c\"}", Origin::Script)));
+  TEST_ASSERT_FALSE(canPlay(buzzer, parsed("\"racer/boost\"", Origin::Script)));
+  TEST_ASSERT_FALSE(canPlay(buzzer, parsed("{\"track\":7}", Origin::Script)));
+  TEST_ASSERT_FALSE(canPlay(buzzer, parsed("{\"speech\":\"hi\"}", Origin::Script)));
+  TEST_ASSERT_TRUE(canPlay(buzzer, parsed("[{\"track\":7},{\"rtttl\":\"x:d=4,o=5,b=120:c\"}]", Origin::Script)));
+  TEST_ASSERT_FALSE(canPlay(Caps{}, parsed("\"ding\"", Origin::Script)));
+  Caps speaker;
+  speaker.mp3 = true;
+  TEST_ASSERT_TRUE(canPlay(speaker, parsed("\"racer/boost\"", Origin::Script)));
+  TEST_ASSERT_FALSE(canPlay(speaker, parsed("{\"file\":\"http://radio/x.mp3\"}", Origin::Script)));
+  speaker.url = true;
+  TEST_ASSERT_TRUE(canPlay(speaker, parsed("{\"file\":\"http://radio/x.mp3\"}", Origin::Script)));
+  Rig rig;
+  TEST_ASSERT_EQUAL(rig.router.canPlay(parsed("{\"track\":7}", Origin::Script)),
+                    canPlay(rig.router.caps(), parsed("{\"track\":7}", Origin::Script)));
+  TEST_ASSERT_EQUAL(1 | 2 | 64, capsBits(speaker) | capsBits(buzzer));
+  Caps all{true, true, true, true, true, true, true, true, true};
+  TEST_ASSERT_EQUAL(511, capsBits(all));
 }
 
 // A melody the parser accepted, or one that is stored, is never a mistake: while the speaker is
@@ -1222,6 +1250,7 @@ int main(int, char**) {
   RUN_TEST(test_names_that_could_leave_a_folder_are_never_looked_up);
   RUN_TEST(test_a_missing_melody_is_not_found_under_an_alert);
   RUN_TEST(test_each_kind_needs_its_output);
+  RUN_TEST(test_outputs_named_by_caps_decide_what_can_play);
   RUN_TEST(test_a_melody_the_speaker_cannot_take_is_unavailable);
   RUN_TEST(test_a_router_without_sinks_is_harmless);
   RUN_TEST(test_volumes_are_master_times_group_and_reach_every_sink);

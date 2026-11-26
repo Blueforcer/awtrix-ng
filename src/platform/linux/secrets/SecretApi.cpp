@@ -92,7 +92,7 @@ bool Api::handle(const httplib::Request& req, httplib::Response& res) {
     sendError(res, 405, "methodNotAllowed", whole ? "allowed: GET, PUT" : "allowed: DELETE");
     return true;
   }
-  if (host::refuseForeign(req, res, "X-Awtrix-Secret")) return true;
+  if (!keyLogin_ && host::refuseForeign(req, res, "X-Awtrix-Secret")) return true;
 
   std::vector<std::pair<std::string, std::string>> values;
   if (!whole) {

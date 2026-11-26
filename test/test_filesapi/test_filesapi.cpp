@@ -8,6 +8,8 @@
 
 #include "core/api/FilesApi.h"
 #include "core/api/JsonReader.h"
+#include "core/apps/AppRegistry.h"
+#include "core/remote/RemoteApps.h"
 
 using namespace awtrix;
 using namespace awtrix::api;
@@ -190,6 +192,65 @@ void test_orphan_sounds_remain_readable_but_cannot_be_uploaded() {
   TEST_ASSERT_NOT_NULL(strstr(f.response.result.body.c_str(), "gone"));
 }
 
+void test_a_paired_clock_keeps_the_sounds_of_host_apps() {
+  AppRegistry registry;
+  remote::RemoteFrames frames;
+  frames.begin(32, 8);
+  remote::RemoteApps hosted(registry, frames, nullptr, nullptr, nullptr);
+  remote::wire::Apps list;
+  list.revision = 1;
+  list.count = 1;
+  list.entries[0].name = "racer";
+  hosted.apply(list);
+  const script::ConfigTextFn none;
+  const scriptsounds::InstalledScripts scripts(nullptr, none, &hosted);
+  Origins origins;
+  Storage files(scripts, origins);
+  Response response;
+  std::string uploaded;
+  const auto route = [&](const std::string& method, const std::string& path) {
+    response = Response{};
+    const Request request{method, path, {}, [](const char*, std::string&) { return false; },
+        [&](const UploadTargetFn& target) {
+          const auto result = target("boost.mp3");
+          uploaded = result.path;
+          return result.result;
+        }, {}};
+    routeFiles(request, response, files);
+  };
+  route("POST", "/api/v1/apps/script/racer/sounds");
+  TEST_ASSERT_EQUAL_INT(200, response.result.status);
+  TEST_ASSERT_EQUAL_STRING("/SCRIPTS/racer/boost.mp3", uploaded.c_str());
+  files.contents[uploaded] = "bytes";
+  route("GET", "/api/v1/apps/script/racer/sounds");
+  TEST_ASSERT_EQUAL_INT(200, response.result.status);
+  TEST_ASSERT_NOT_NULL(strstr(response.result.body.c_str(), "boost.mp3"));
+  route("GET", "/api/v1/audio/mp3");
+  TEST_ASSERT_NOT_NULL(strstr(response.result.body.c_str(), "\"name\":\"racer\""));
+  TEST_ASSERT_NULL(strstr(response.result.body.c_str(), "\"orphan\":true"));
+  uploaded.clear();
+  route("POST", "/api/v1/apps/script/b@d/sounds");
+  TEST_ASSERT_EQUAL_INT(400, response.result.status);
+  TEST_ASSERT_TRUE(uploaded.empty());
+  route("POST", "/api/v1/apps/script/other/sounds");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(200, response.result.status, "a script the host has not listed yet takes sounds");
+  TEST_ASSERT_EQUAL_STRING("/SCRIPTS/other/boost.mp3", uploaded.c_str());
+  files.contents[uploaded] = "bytes";
+  route("GET", "/api/v1/audio/mp3");
+  TEST_ASSERT_NOT_NULL_MESSAGE(strstr(response.result.body.c_str(), "\"orphan\":true"), "an orphan until it is listed");
+  list.revision = 2;
+  list.count = 2;
+  list.entries[1].name = "other";
+  hosted.apply(list);
+  route("GET", "/api/v1/audio/mp3");
+  TEST_ASSERT_NULL(strstr(response.result.body.c_str(), "\"orphan\":true"));
+  list.revision = 3;
+  list.count = 0;
+  hosted.apply(list);
+  route("GET", "/api/v1/audio/mp3");
+  TEST_ASSERT_NOT_NULL(strstr(response.result.body.c_str(), "\"orphan\":true"));
+}
+
 void test_melody_create_replace_list_and_storage_failure() {
   Fixture f;
   const char* body = "{\"rtttl\":\"old:d=4,o=5,b=120:c\"}";
@@ -291,6 +352,7 @@ int main() {
   RUN_TEST(test_asset_get_cache_and_backup_paths);
   RUN_TEST(test_script_listing_filters_entries_and_uses_hash_read_size);
   RUN_TEST(test_orphan_sounds_remain_readable_but_cannot_be_uploaded);
+  RUN_TEST(test_a_paired_clock_keeps_the_sounds_of_host_apps);
   RUN_TEST(test_melody_create_replace_list_and_storage_failure);
   RUN_TEST(test_deletion_releases_active_sound_before_removing_it);
   RUN_TEST(test_icon_rename_and_metadata_failure_rollback);

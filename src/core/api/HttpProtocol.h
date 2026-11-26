@@ -22,6 +22,10 @@ class Etag {
 
 bool isUploadRoute(std::string_view path);
 
+// Whether an Authorization header carries the script host's pairing key as a Bearer token. The
+// comparison takes the same time however much of the key matches; an empty key never admits.
+bool hostKeyOk(std::string_view authorization, std::string_view key);
+
 using HeaderFn = std::function<void(const char* name, const char* value)>;
 void corsHeaders(const HeaderFn& header, bool preflight);
 

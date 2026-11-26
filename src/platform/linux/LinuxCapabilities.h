@@ -1,10 +1,14 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <cstring>
+#include <iterator>
 
 #include "core/DeviceCapabilities.h"
 #include "core/Settings.h"
 #include "core/api/JsonWriter.h"
+#include "core/remote/HostModules.h"
 #include "platform/linux/layout/ScriptLayouts.h"
 
 namespace awtrix {
@@ -16,6 +20,21 @@ class LinuxCapabilities {
                    {"crypto", scripting}, {"tcp", scripting}, {"layout", layouts && scripting},
                    {"voice", voice}, {}}},
         layouts_(layouts), gamepadRemote_(scripting) {}
+
+  // The script host of an ESP32 clock offers scripts what the clock has, plus the network modules.
+  void hostOfClock() {
+    for (auto& module : modules_) module.present = module.present && hostModule(module.name);
+    layouts_ = nullptr;
+    gamepadRemote_ = false;
+  }
+
+  // A clock whose scripts run on a script host offers them what the host adds, as an ESP32 clock
+  // does, and none of its own modules.
+  void scriptsOnHost() {
+    for (auto& module : modules_) module.present = hostModule(module.name);
+    layouts_ = nullptr;
+    gamepadRemote_ = false;
+  }
 
   bool clockFaces = false;
   bool mqttTls = false;
@@ -49,6 +68,11 @@ class LinuxCapabilities {
   }
 
  private:
+  static bool hostModule(const char* name) {
+    return name && std::any_of(std::begin(remote::kHostModules), std::end(remote::kHostModules),
+                               [name](const char* host) { return std::strcmp(host, name) == 0; });
+  }
+
   std::array<DeviceCapabilities::Extra, 9> modules_;
   const layout::Limits* layouts_;
   bool gamepadRemote_;

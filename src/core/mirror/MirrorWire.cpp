@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstring>
 
+#include "core/net/RgbRows.h"
+
 namespace awtrix {
 namespace mirror {
 namespace wire {
@@ -87,12 +89,9 @@ bool decode(const uint8_t* data, std::size_t length, Packet& out) {
   else return false;
   const uint8_t* at = data + 17;
   const uint8_t* end = data + length;
-  if (!takeName(at, end, out.app) || !takeName(at, end, out.incoming)) return false;
-  if (out.width == 0 || out.height == 0 || out.rows == 0 ||
-      out.firstRow >= out.height || out.rows > out.height - out.firstRow)
+  if (!takeName(at, end, out.app) || !takeName(at, end, out.incoming) ||
+      !net::rgb::validRows(out.width, out.height, out.firstRow, out.rows, static_cast<std::size_t>(end - at)))
     return false;
-  const std::size_t pixels = static_cast<std::size_t>(out.width) * out.rows * 3u;
-  if (static_cast<std::size_t>(end - at) != pixels) return false;
   out.rgb = at;
   return true;
 }
@@ -121,10 +120,7 @@ std::size_t encodeIdle(uint16_t width, uint16_t height, uint8_t* out, std::size_
 }
 
 int rowsPerDatagram(int width, const FrameHeader& header) {
-  if (width <= 0) return 0;
-  const std::size_t head = frameHeaderBytes(header);
-  if (head >= kMaxDatagram) return 0;
-  return static_cast<int>((kMaxDatagram - head) / (static_cast<std::size_t>(width) * 3u));
+  return net::rgb::rowsPerDatagram(width, frameHeaderBytes(header));
 }
 
 std::size_t encodeFrame(const Canvas& canvas, const FrameHeader& header, int firstRow, int rows,
@@ -141,14 +137,7 @@ std::size_t encodeFrame(const Canvas& canvas, const FrameHeader& header, int fir
   put16(out + 12, static_cast<uint16_t>(firstRow));
   put16(out + 14, static_cast<uint16_t>(rows));
   out[16] = header.kind == PageKind::Notification ? kKindNotification : kKindApp;
-  uint8_t* at = putName(out + 17, header.app);
-  at = putName(at, header.incoming);
-  const uint32_t* pixel = canvas.data() + static_cast<std::size_t>(firstRow) * width;
-  for (std::size_t i = 0, n = static_cast<std::size_t>(width) * rows; i < n; ++i) {
-    *at++ = static_cast<uint8_t>(pixel[i] >> 16);
-    *at++ = static_cast<uint8_t>(pixel[i] >> 8);
-    *at++ = static_cast<uint8_t>(pixel[i]);
-  }
+  net::rgb::pack(canvas, firstRow, rows, putName(putName(out + 17, header.app), header.incoming));
   return total;
 }
 

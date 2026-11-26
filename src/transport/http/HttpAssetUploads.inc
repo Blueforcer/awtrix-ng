@@ -42,7 +42,7 @@ api::HttpResult HttpApiServer::multipartPolicy() {
   if (apMode_ && provisioningVerdict(resolved.method, server_->uri().c_str(), {}, !resolved.error) !=
                      provisioning::Verdict::Allow)
     return api::errorResult(403, "forbidden", provisioning::kRefusal);
-  if (cfg_->authEnabled &&
+  if (cfg_->authEnabled && !hostKeyOk() &&
       !server_->authenticate(cfg_->authUser.c_str(), cfg_->authPass.c_str()))
     return api::errorResult(401, "unauthorized", "authentication required");
   if (resolved.error) return api::errorResult(400, "invalidMethodOverride", resolved.error);

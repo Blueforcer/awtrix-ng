@@ -43,6 +43,7 @@ async function viewDisplay(view){
 }
 async function viewSystem(view){
   let data;
+  const sh=api('/api/v1/scripthost',{timeout:4000}).then(r=>r.data,()=>null);
   try{data=(await api('/api/v1/system')).data;}
   catch(e){view.append(el('div',{class:'card wide'},t('neterr')));return;}
   if(!S.sysHost){try{setStats((await api('/api/v1/device',{timeout:4000})).data);}catch(e){}}
@@ -71,6 +72,7 @@ async function viewSystem(view){
     //linux:end
   }
   ['wifiPass','mqttPass','authPass'].forEach(k=>{if(!(k in data))data[k]='';});
+  S.sh=await sh;
   (S.ap?provisioningPage:systemPage)(view,data);
 }
 function systemSettingsPage(view,data){
@@ -134,6 +136,7 @@ function systemPage(view,data){
     page.update();
   }
   hubTokenSection(page);
+  if(S.sh)scriptHostSection(page);
   //linux:begin
   if(S.gamepad)gamepadSection(page);
   if(S.voice)voiceSection(page);

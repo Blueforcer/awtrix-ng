@@ -99,6 +99,8 @@ const SYSF={
  mirrorFromNotifications:F('share','toggle','Mirror notifications',''),
  debugMode:F('misc','toggle','Debug mode','More detail in the log.'),
  scriptingEnabled:F('script','toggle','Run scripts','Off stops all scripts and frees memory. Scripts stay installed. Needs a reboot.'),
+ scriptHost:F('hidden','text','',''),
+ scriptHostKey:F('hidden','text','',''),
 };
 const SYS_GROUPS=[['wifi','grpWifi','grpWifiH'],['web','grpWeb','grpWebH'],['mqtt','grpMqtt','grpMqttH'],
  ['time','grpTime','grpTimeH'],['panel','grpPanel','grpPanelH'],['hw','grpHw','grpHwH'],

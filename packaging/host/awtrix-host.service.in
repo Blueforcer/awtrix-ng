@@ -1,0 +1,26 @@
+[Unit]
+Description=AWTRIX script host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+DynamicUser=yes
+StateDirectory=awtrix-host
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/awtrix-host --state /var/lib/awtrix-host --binary @CMAKE_INSTALL_FULL_BINDIR@/awtrix-linux --webui @CMAKE_INSTALL_FULL_DATADIR@/awtrix-ng/index.html
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGTERM
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+
+[Install]
+WantedBy=multi-user.target

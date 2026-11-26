@@ -163,6 +163,7 @@ class CoreEngine : public BuiltinAppProfile, public IAppService, public INotifyS
   // folder first, then in /MP3.
   DispatchResult notifyFromScript(const std::string& script, const std::string& json,
                                   DispatchDetail& detail);
+  DispatchResult checkNotification(const std::string& json, DispatchDetail& detail) const;
   void dismiss() override;
   bool dismissNamed(const std::string& name) override;
 
@@ -172,6 +173,7 @@ class CoreEngine : public BuiltinAppProfile, public IAppService, public INotifyS
   std::string stationNameAt(int index) const override;
 
  private:
+  DispatchResult readNotification(const std::string& json, AppSpec& spec, DispatchDetail& detail) const;
   DispatchResult pushNotification(const std::string& json, const std::string& soundScript,
                                   DispatchDetail& detail);
   void rebuildAppList();

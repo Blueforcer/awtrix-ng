@@ -346,12 +346,10 @@ DispatchResult Dispatcher::dispatch(Command& cmd, CommandContext& ctx) {
         ctx.detail = {"", "scripting is off"};
         return DispatchResult::Failed;
       }
-      ctx.scripts->removeScript(cmd.name);
-      return DispatchResult::Ok;
+      return ctx.scripts->removeScript(cmd.name, ctx.detail);
     case CommandType::DeleteApp:
       ctx.apps.deletePushedApp(cmd.name);
-      if (ctx.scripts) ctx.scripts->removeScript(cmd.name);
-      return DispatchResult::Ok;
+      return ctx.scripts ? ctx.scripts->removeScript(cmd.name, ctx.detail) : DispatchResult::Ok;
     case CommandType::Reboot:
       ctx.system.reboot();
       return DispatchResult::Ok;

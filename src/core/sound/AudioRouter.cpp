@@ -92,25 +92,35 @@ PlayResult AudioRouter::startFirst(const Choices& choices, Group group, bool eff
   return last;
 }
 
-// The output an entry needs; nullptr when this clock has it. Files are not looked up here.
-const char* AudioRouter::missingOutput(const Spec& spec) const {
+const char* missingOutput(const Caps& caps, const Spec& spec) {
   switch (spec.kind) {
     case Kind::File:
-      if (isUrl(spec.text)) return pcm_ && pcm_->caps().url ? nullptr : kNoUrls;
-      if (spec.text.find('/') != std::string::npos) return pcm_ ? nullptr : kNoPcm;
-      return pcm_ || tone_ ? nullptr : kNoOutput;
+      if (isUrl(spec.text)) return caps.url ? nullptr : kNoUrls;
+      if (spec.text.find('/') != std::string::npos) return caps.mp3 ? nullptr : kNoPcm;
+      return caps.mp3 || caps.rtttl ? nullptr : kNoOutput;
     case Kind::Rtttl:
-      return tone_ ? nullptr : kNoMelody;
+      return caps.rtttl ? nullptr : kNoMelody;
     case Kind::Song:
-      return pcm_ && pcm_->caps().song ? nullptr : kNoSynth;
+      return caps.song ? nullptr : kNoSynth;
     case Kind::Speech:
-      return pcm_ && pcm_->caps().speech ? nullptr : kNoSpeech;
+      return caps.speech ? nullptr : kNoSpeech;
     case Kind::Track:
-      return track_ ? nullptr : kNoTrackSink;
+      return caps.track ? nullptr : kNoTrackSink;
     case Kind::Station:
-      return pcm_ ? nullptr : kNoOutput;
+      return caps.mp3 ? nullptr : kNoOutput;
   }
   return kNoOutput;
+}
+
+bool canPlay(const Caps& caps, const Choices& choices) {
+  for (const Spec& s : choices)
+    if (!missingOutput(caps, s)) return true;
+  return false;
+}
+
+int capsBits(const Caps& c) {
+  return (c.mp3 ? 1 : 0) | (c.rtttl ? 2 : 0) | (c.song ? 4 : 0) | (c.speech ? 8 : 0) | (c.track ? 16 : 0) |
+         (c.radio ? 32 : 0) | (c.url ? 64 : 0) | (c.effect ? 128 : 0) | (c.clip ? 256 : 0);
 }
 
 // What needs no hardware is judged first, so a mistake is one on every clock.
@@ -120,7 +130,7 @@ PlayResult AudioRouter::start(const Spec& spec, Group group, bool effect,
   if (spec.kind == Kind::Station) return mistake(detail, "station", "not here");
   if (spec.kind == Kind::File && isUrl(spec.text) && !radio::parseUrl(spec.text, parsed))
     return mistake(detail, "file", "invalid URL");
-  if (const char* missing = missingOutput(spec)) return unavailable(detail, missing);
+  if (const char* missing = missingOutput(caps(), spec)) return unavailable(detail, missing);
   switch (spec.kind) {
     case Kind::File:
       return startFile(spec, group, effect, script, detail);
@@ -406,11 +416,7 @@ Caps AudioRouter::caps() const {
   return c;
 }
 
-bool AudioRouter::canPlay(const Choices& choices) const {
-  for (const Spec& s : choices)
-    if (!missingOutput(s)) return true;
-  return false;
-}
+bool AudioRouter::canPlay(const Choices& choices) const { return sound::canPlay(caps(), choices); }
 
 bool AudioRouter::check(const Choices& choices, Origin origin, DispatchDetail& detail) {
   if (!pcm_) return true;

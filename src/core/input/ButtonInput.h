@@ -17,6 +17,7 @@ class ButtonInput {
     router_.begin(engine, menu);
   }
   void setButtonHook(ButtonRouter::ScriptHook hook) { router_.setScriptHook(std::move(hook)); }
+  void press(int button, int64_t nowMs) { router_.press(button, nowMs); }
   const DeviceConfig& config() const { return *config_; }
   const ButtonState& state() const { return state_; }
 

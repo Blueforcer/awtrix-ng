@@ -1,0 +1,15 @@
+services:
+  awtrix-host:
+    build:
+      context: ../..
+      dockerfile: packaging/host/Dockerfile
+    image: awtrix-host
+    container_name: awtrix-host
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - awtrix-host:/data
+
+volumes:
+  awtrix-host:
+    name: awtrix-host

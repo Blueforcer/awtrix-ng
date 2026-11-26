@@ -24,27 +24,44 @@ function toast(msg,ok=true,actions){
   $('#toasts').append(d);
   return d;
 }
-const toastErr=e=>toast(e.message,false,e.code==='hubAuthentication'?[connectHubAction()]:undefined);
+const toastErr=e=>toast(e.message,false,e.code==='hubAuthentication'?[connectHubAction()]:
+  e.code==='shAuth'?[{label:t('shRepair'),pri:1,fn:()=>{location.hash='#/system';}}]:undefined);
 const setNet=ok=>$('#brand')?.classList.toggle('off',!ok);
+const SH={host:'',url:'',key:''},CLOCK={url:''};
+let shLoad;
+const shReady=()=>shLoad||=api('/api/v1/scripthost?secrets=1',{timeout:4000}).then(({data:d})=>{
+  const h=SH.host=d.host||'';
+  SH.url=h&&'http://'+h+(h.includes(':')?'':':8301');SH.key=d.key||'';
+},e=>{if(e.status!==404)shLoad=0;});
+const SHP=/^\/(SCRIPTS\/[^/]+$|api\/v1\/(apps\/script(?!\/[^/]+\/sounds)|scripts\/|oauth|secrets|apps\/(?!builtin\/)[^/?]+\/(config|data)(\?|$)))/;
+async function shTo(path,headers={},host){
+  const at=host?.url!=null?host:(host||SHP.test(path))&&(await shReady(),SH);
+  if(!at?.url)return[path,headers];
+  const h={Authorization:'Bearer '+at.key};
+  if(headers['Content-Type'])h['Content-Type']=headers['Content-Type'];
+  return[at.url+path,h];
+}
 async function api(path,opts={}){
+  const[url,headers]=await shTo(path,opts.headers,opts.host),remote=url[0]!=='/';
   const ctrl=new AbortController();
   const to=setTimeout(()=>ctrl.abort(),opts.timeout||12000);
   let r;
-  try{r=await fetch(path,{signal:ctrl.signal,...opts});}
-  catch(e){setNet(false);throw new Error(t('neterr'));}
+  try{r=await fetch(url,{signal:ctrl.signal,...opts,headers});}
+  catch(e){if(!remote)setNet(false);throw new Error(t(remote?'shNoAnswer':'neterr'));}
   finally{clearTimeout(to);}
-  setNet(true);
+  if(!remote)setNet(true);
   const text=await r.text();
   let data=text;try{data=JSON.parse(text);}catch(e){}
   if(!r.ok&&r.status!==202){
     const err=data&&data.error;
     const e=new Error(err?(err.message||err.code)+(err.field?' ('+err.field+')':''):'HTTP '+r.status);
     e.status=r.status;e.code=err&&err.code;e.field=err&&err.field;
+    if(remote&&r.status===401){e.code='shAuth';e.message=t('shAuth');}
     throw e;
   }
   return{status:r.status,data,text};
 }
-const req=(m,p,body)=>api(p,body===undefined?{method:m}:{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const req=(m,p,body,host)=>api(p,body===undefined?{method:m,host}:{method:m,host,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const post=(p,body)=>req('POST',p,body);
 function fmtBytes(b){return b>=1048576?(b/1048576).toFixed(1)+' MB':b>=1024?(b/1024).toFixed(1)+' KB':b+' B';}
 function toHex(v){

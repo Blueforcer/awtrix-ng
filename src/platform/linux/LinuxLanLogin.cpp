@@ -6,6 +6,7 @@
 #include <openssl/sha.h>
 
 #include "core/api/ApiRouter.h"
+#include "core/api/HttpProtocol.h"
 #include "persistence/DeviceConfig.h"
 #include "platform/linux/host/vendor/httplib.h"
 
@@ -27,18 +28,22 @@ void LinuxLanLogin::update(const DeviceConfig& config) {
   std::lock_guard<std::mutex> lock(mutex_);
   required_ = config.authEnabled;
   expected_ = expected;
+  hostKey_ = config.scriptHost.empty() ? std::string() : config.scriptHostKey;
 }
 
 bool LinuxLanLogin::admit(const httplib::Request& request, httplib::Response& response) const {
   if (request.method == "OPTIONS") return true;
   auth::Digest expected{};
+  std::string hostKey;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!required_) return true;
     expected = expected_;
+    hostKey = hostKey_;
   }
   if (request.get_header_value_count("Authorization") == 1) {
     const std::string authorization = request.get_header_value("Authorization");
+    if (api::hostKeyOk(authorization, hostKey)) return true;
     if (authorization.rfind("Basic ", 0) == 0) {
       std::string credentials = credentialsOf(authorization);
       const auth::Digest candidate = auth::digest(credentials);

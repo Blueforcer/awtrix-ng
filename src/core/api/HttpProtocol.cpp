@@ -2,6 +2,7 @@
 
 #include <cstdio>
 
+#include "core/ConstantTime.h"
 #include "core/api/ApiRouter.h"
 #include "core/api/ScriptSoundsApi.h"
 
@@ -20,6 +21,14 @@ std::string Etag::value() const {
   char tag[40];
   std::snprintf(tag, sizeof(tag), "\"%zx-%lx\"", size_, static_cast<unsigned long>(hash_));
   return tag;
+}
+
+bool hostKeyOk(std::string_view authorization, std::string_view key) {
+  constexpr std::string_view kScheme = "Bearer ";
+  if (key.empty() || authorization.size() != kScheme.size() + key.size() ||
+      authorization.substr(0, kScheme.size()) != kScheme)
+    return false;
+  return constantTimeEqual(authorization.data() + kScheme.size(), key.data(), key.size());
 }
 
 bool isUploadRoute(std::string_view path) {
@@ -46,6 +55,7 @@ bool fromOtherSite(const BrowserOrigin& request) {
 
 bool ownPageOnly(std::string_view method, std::string_view path, bool secrets) {
   if (path == "/api/v1/system") return method == "PUT" || (method == "GET" && secrets);
+  if (path == "/api/v1/scripthost") return method == "GET" && secrets;
   return method == "POST" &&
          (path == "/update" || path == "/api/v1/restore" || path == "/api/v1/device/factory-reset");
 }

@@ -115,7 +115,7 @@ struct FakeHttp : script::IScriptHttp {
   std::vector<uint32_t> timeouts;
   std::vector<uint32_t> cancelled;
   bool accept = true;
-  bool request(const script::HttpRequest& req) override {
+  bool request(script::HttpRequest req) override {
     if (!accept) return false;
     ids.push_back(req.id);
     urls.push_back(req.url);
@@ -1975,7 +1975,8 @@ static void test_service_installs_and_persists() {
   TEST_ASSERT_EQUAL_STRING(("A=" + src).c_str(), saved[0].c_str());
   TEST_ASSERT_NOT_NULL(reg.find("A"));
 
-  svc.removeScript("A");
+  DispatchDetail removedA;
+  TEST_ASSERT_EQUAL(DispatchResult::Ok, svc.removeScript("A", removedA));
   TEST_ASSERT_NULL(reg.find("A"));
   TEST_ASSERT_EQUAL_UINT(1u, (unsigned)removed.size());
 }
@@ -2059,7 +2060,8 @@ static void test_service_remove_then_install_starts_empty() {
   TEST_ASSERT_EQUAL(DispatchResult::Ok, svc.setScript("S", src, d));
   TEST_ASSERT_EQUAL_STRING("7", check(reg, "S").c_str());
 
-  svc.removeScript("S");
+  DispatchDetail removedS;
+  TEST_ASSERT_EQUAL(DispatchResult::Ok, svc.removeScript("S", removedS));
   d.clear();
   TEST_ASSERT_EQUAL(DispatchResult::Ok, svc.setScript("S", src, d));
   TEST_ASSERT_EQUAL_STRING("-1", check(reg, "S").c_str());

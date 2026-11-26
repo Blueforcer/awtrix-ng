@@ -13,11 +13,11 @@ function readAudioCaps(caps){
   S.enlargeApps=caps.enlargeApps===true;
   S.iphone=caps.ble===true;
   S.mqttTls=caps.mqttTls===true;
+  S.activation=caps.activation===true;
+  //linux:end
   S.oauth=caps.oauth===true;
   S.secret=caps.secret===true;
-  S.activation=caps.activation===true;
   loadScriptSections();
-  //linux:end
   if(typeof caps.sensors?.light==='boolean')S.light=caps.sensors.light;
   if(Object.hasOwn(caps,'gpio')){
     S.gpio=caps.gpio;S.gpioKnown=true;

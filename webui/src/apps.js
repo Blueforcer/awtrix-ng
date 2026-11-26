@@ -93,9 +93,7 @@ async function fillConfigPanel(name,box,saveError,builtin){
   return true;
 }
 async function viewApps(view){
-  //linux:begin
   loadScriptSections();
-  //linux:end
   let loop=[],background=[],ondemand=[],disabled=[],modules=[],dragFrom=null,saving=Promise.resolve();
   const panels=new Map(),infos=new Map();
   let panelTaken=new Set();
@@ -226,7 +224,7 @@ async function viewApps(view){
       catch(e){toastErr(e);}
     };
     const remove=async()=>{
-      try{await req('DELETE','/api/v1/apps/'+encodeURIComponent(a.name));}
+      try{await req('DELETE','/api/v1/apps/'+encodeURIComponent(a.name),undefined,a.origin==='script'||a.origin==='module');}
       catch(e){toastErr(e);return;}
       loop=loop.filter(x=>x!==a);background=background.filter(x=>x!==a);disabled=disabled.filter(x=>x!==a);
       persist(null,t('deleted'));
@@ -286,6 +284,15 @@ async function viewApps(view){
   async function reload(){
     const{data}=await api('/api/v1/apps');
     let all=Array.isArray(data)?data:[];
+    await shReady();
+    if(SH.url){
+      if(!S.caps)await api('/api/v1/capabilities').then(r=>readAudioCaps(r.data||{}),()=>{});
+      const host=(await api('/api/v1/apps',{host:1}).catch(e=>{if(e.code==='shAuth')toastErr(e);return{data:[]};})).data||[];
+      const on=new Map(host.map(a=>[a.name,a.meta?{...a,meta:{...a.meta,
+        needs:a.meta.needs?.map(n=>({...n,missing:!!S.caps&&!capPresent(n.name)}))}}:a]));
+      all=all.map(a=>a.origin==='script'&&on.has(a.name)?{...on.get(a.name),enabled:a.enabled,inLoop:a.inLoop,slot:a.slot}:a);
+      all.push(...host.filter(a=>a.origin==='module').map(a=>on.get(a.name)));
+    }
     const scrOff=await scriptsOff();
     if(scrOff)all=all.filter(a=>a.origin!=='script'&&a.origin!=='module');
     offBanner.hidden=!scrOff;

@@ -13,6 +13,14 @@ namespace sound {
 
 enum class PlayResult : uint8_t { Ok, NotFound, NoSink, Invalid };
 
+// The output an entry needs on a device with these outputs; nullptr when it has it. Files are not
+// looked up here.
+const char* missingOutput(const Caps& caps, const Spec& spec);
+// Whether some entry is a kind such a device has the output for.
+bool canPlay(const Caps& caps, const Choices& choices);
+// One bit per output, in the order of Caps: mp3 is 1, clip is 256.
+int capsBits(const Caps& caps);
+
 struct GroupStatus {
   bool playing = false;
   std::string name;
@@ -80,7 +88,6 @@ class AudioRouter final {
   PlayResult startPcm(const Spec& spec, const std::string& path, Group group, bool effect,
                       const std::string& script, DispatchDetail& detail);
   std::string findMp3(const std::string& name, const std::string& script) const;
-  const char* missingOutput(const Spec& spec) const;
   bool mayStartOneShot(Group group) const { return group != Group::App || !alertPlaying(); }
   bool oneShotActive() const;
   bool oneShotOn() const { return repeating_ || oneShotActive(); }

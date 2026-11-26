@@ -1,5 +1,11 @@
+bool HttpApiServer::hostKeyOk() {
+  return !cfg_->scriptHost.empty() &&
+         api::hostKeyOk(server_->header("Authorization").c_str(), cfg_->scriptHostKey);
+}
+
 bool HttpApiServer::authOk() {
   if (!cfg_->authEnabled) return true;
+  if (hostKeyOk()) return true;
   if (server_->authenticate(cfg_->authUser.c_str(), cfg_->authPass.c_str())) return true;
   sendUnauthorized();
   return false;
@@ -91,6 +97,7 @@ void HttpApiServer::dispatch() {
   probe::report("req:body", 128);
   probe::begin();
 
+  if (serveHostAct(req)) return;
   if (serveCommand(req)) return;
   if (serveState(req)) return;
   if (serveDiagnostics(req)) return;
@@ -218,6 +225,13 @@ bool HttpApiServer::serveWebUi(const Request& req) {
   return true;
 }
 
+bool HttpApiServer::serveHostAct(const Request& req) {
+  remote::HostActs* acts = scriptHost_ ? scriptHost_->acts() : nullptr;
+  if (!acts || req.path != remote::kActPath) return false;
+  sendResult(acts->request(req.method, hostKeyOk(), req.body));
+  return true;
+}
+
 bool HttpApiServer::serveCommand(Request& req) {
   Command cmd;
   api::HttpResult immediate;
@@ -262,9 +276,12 @@ bool HttpApiServer::serveState(const Request& req) {
   const api::DeviceStateFn device = [this](bool scripting) {
     return buildDeviceStateJson(*engine_, *board_, uid_, scripting);
   };
+  const api::ScriptHostFn scriptHost = [this](bool withKey) { return scriptHost_->statusJson(*cfg_, withKey); };
   const api::StateReadContext context{*engine_, *screen_, *capabilitiesJson_, scripts_,
                                       scriptSource_, scriptStore_, storedScripts_, device,
-                                      &deviceCapabilities_};
+                                      &deviceCapabilities_, scriptHost_ ? &scriptHost : nullptr,
+                                      scriptsOnHost_, scriptHost_ && scriptHost_->running(),
+                                      server_->hasArg("secrets")};
   std::string body;
   body.swap(respBuf_);
   const auto result = api::readState(req.method, req.path, context, body);
@@ -315,7 +332,7 @@ bool HttpApiServer::serveSystem(const Request& req) {
 }
 
 api::scriptsounds::InstalledScripts HttpApiServer::installedScripts() const {
-  return api::scriptsounds::InstalledScripts(scripts_, scriptSource_);
+  return api::scriptsounds::InstalledScripts(scripts_, scriptSource_, scriptHost_ ? scriptHost_->apps() : nullptr);
 }
 
 bool HttpApiServer::serveFiles(const Request& req) {

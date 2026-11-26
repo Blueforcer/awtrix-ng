@@ -2080,6 +2080,80 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '422': {$ref: '#/components/responses/Invalid'}
 
+  /api/v1/scripthost:
+    x-only: [esp32, esp32-s3]
+    get:
+      tags: [scripts]
+      summary: Script host status
+      description: |
+        Whether this clock's scripts run on a script host, the state of the link to it and the
+        hosts that offered themselves in the last 90 seconds. With `?secrets=1` a paired clock adds
+        the pairing key as `key`. A request for it from a web page of another site answers
+        `403 forbiddenOrigin`.
+      parameters:
+        - name: secrets
+          in: query
+          required: false
+          schema: { type: string, enum: ["1"] }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "200":
+          description: Status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mode, host, link, offers]
+                properties:
+                  mode: { type: string, enum: ["off", remote] }
+                  host: { type: string, description: "The scriptHost setting, empty when off." }
+                  link: { type: string, enum: ["off", resolving, notFound, down, up] }
+                  key: { type: string, description: "The scriptHostKey, only with ?secrets=1 while paired." }
+                  offers:
+                    type: array
+                    maxItems: 4
+                    items:
+                      type: object
+                      required: [name, address, port]
+                      properties:
+                        name: { type: string }
+                        address: { type: string }
+                        port: { type: integer }
+  /api/v1/scripthost/act:
+    x-only: [esp32, esp32-s3]
+    post:
+      tags: [scripts]
+      summary: The script host acts for its scripts
+      description: |
+        Sounds and notifications of the host's scripts, rotation steps and holds, and button presses
+        the scripts do not take. Only with the pairing key (`Authorization: Bearer <scriptHostKey>`),
+        only on a paired clock.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [act]
+              properties:
+                act:
+                  type: string
+                  enum: [sound, notify, next, previous, show, hold, restart, press, endSession]
+                script: { type: string, description: "sound, notify: the script it is for." }
+                action: { type: string, enum: [play, effect, stop, stopMusic, release] }
+                sound: { type: object, description: "sound: what to play, as for a script." }
+                notification: { type: object, description: "notify: the notification." }
+                app: { type: string, description: "show, restart, press: the app." }
+                hold: { type: boolean }
+                button: { type: integer, minimum: 0, maximum: 2, description: "0 left, 1 select, 2 right." }
+                id: { type: string, description: "endSession: the app started from the device menu." }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadJson" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
   /api/v1/scripts/shared:
     get:
       tags: [scripts]
@@ -3619,6 +3693,7 @@ components:
                 - payloadTooLarge       # 413, body larger than the device takes
                 - validationFailed      # 422
                 - scriptChanged         # 409, source changed or copy name exists
+                - scriptsOnHost         # 409, the scripts of this clock run on a script host
                 - gamepadsFull          # 409, gamepad slots are full
                 - scanUnavailable       # 503, Wi-Fi scan in setup mode
                 - notNewer              # 409, POST /update - not newer than the installed release
@@ -4491,6 +4566,20 @@ components:
             Whether Berry scripts can run at all. Off: no script runs, and script
             updates and script settings answer 503. Installed scripts stay
             stored. Applies after a reboot.
+        scriptHost:
+          x-only: [esp32, esp32-s3]
+          type: string
+          default: ""
+          description: >
+            host or host:port of the script host that runs this clock's scripts. While set, no
+            script runs on the clock. Needs scriptHostKey. Applies after a reboot.
+        scriptHostKey:
+          x-only: [esp32, esp32-s3]
+          type: string
+          default: ""
+          description: >
+            The 64 hex digits from pairing with the script host. Secret: only returned with
+            ?secrets=1. Applies after a reboot.
         # --- GPIO map: -1 = disabled, defaults in capabilities.gpio.defaults, validated as a whole ---
         pinMatrix:
           x-only: [esp32, esp32-s3]

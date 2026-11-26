@@ -64,6 +64,8 @@
   X(tempDecimals, "tempdec", 0, None)          \
   X(debugMode, "dbg", 0, None)                 \
   X(scriptingEnabled, "scren", 0, None)        \
+  X(scriptHost, "schost", 0, None)             \
+  X(scriptHostKey, "schkey", 1, None)          \
   X(pinMatrix, "pmatrix", 0, Gpio)             \
   X(pinBtnLeft, "pbtnl", 0, Gpio)              \
   X(pinBtnSelect, "pbtns", 0, Gpio)            \

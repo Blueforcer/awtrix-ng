@@ -17,7 +17,7 @@ class LinuxScriptHttp : public script::IScriptHttp {
   ~LinuxScriptHttp();
   void begin(std::function<void(script::HttpResult)> result);
   void stop();
-  bool request(const script::HttpRequest& request) override;
+  bool request(script::HttpRequest request) override;
   void cancel(uint32_t id) override;
  private:
   struct Job {

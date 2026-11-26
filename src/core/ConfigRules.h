@@ -9,8 +9,10 @@
 #include <string_view>
 #include <utility>
 
+#include "core/Sha256Hex.h"
 #include "core/SocProfile.h"
 #include "core/api/JsonReader.h"
+#include "core/remote/HostAddress.h"
 #include "core/render/MatrixLayout.h"
 
 namespace awtrix {
@@ -267,6 +269,31 @@ inline bool validateAuthGate(bool authEnabled, const std::string& authUser,
                              const std::string& authPass, ConfigError& err) {
   if (authEnabled && (authUser.empty() || authPass.empty())) {
     err = {"authUser", "set authUser and authPass first"};
+    return false;
+  }
+  return true;
+}
+
+// scriptHost is host[:port] of the script host that runs this clock's scripts; it needs the 64 hex
+// digits of the key the host handed out when the clock was paired.
+inline bool validateScriptHost(const std::string& host, const std::string& key, ConfigError& err) {
+  if (!key.empty() && !isSha256Hex(key)) {
+    err = {"scriptHostKey", "must be 64 hex digits"};
+    return false;
+  }
+  if (host.empty()) return true;
+  if (key.empty()) {
+    err = {"scriptHostKey", "set scriptHostKey first"};
+    return false;
+  }
+  std::string name;
+  uint16_t port = 0;
+  bool hostOk = host.size() <= 64 && remote::splitHost(host, name, port);
+  for (const char c : name)
+    hostOk = hostOk && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                        c == '.' || c == '-' || c == '_');
+  if (!hostOk) {
+    err = {"scriptHost", "must be host or host:port"};
     return false;
   }
   return true;

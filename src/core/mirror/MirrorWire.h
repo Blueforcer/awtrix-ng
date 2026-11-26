@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string_view>
 
+#include "core/net/Datagram.h"
 #include "core/render/Canvas.h"
 #include "core/render/PageInfo.h"
 
@@ -18,8 +19,7 @@ namespace wire {
 // another panel size only ever gets one Idle back, which tells it the size of the shared panel.
 constexpr uint16_t kPort = 4212;
 constexpr uint8_t kVersion = 1;
-// Stays below the Ethernet and Wi-Fi MTU, so no datagram is ever fragmented on the way.
-constexpr std::size_t kMaxDatagram = 1400;
+constexpr std::size_t kMaxDatagram = net::kMaxDatagram;
 constexpr std::size_t kMaxName = 255;
 
 enum class Type : uint8_t { Subscribe = 1, Leave = 2, Idle = 3, Frame = 4 };

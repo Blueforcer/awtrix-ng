@@ -176,6 +176,31 @@ static void test_notify_and_dismiss() {
   TEST_ASSERT_FALSE(e.hasNotification());
 }
 
+static void test_a_notification_is_checked_without_being_shown() {
+  sound::AudioRouter so; FDisplay di; FSystem sy;
+  CoreEngine e(so, di, sy);
+  EffectRegistry effects;
+  FEffect plasma("Plasma");
+  effects.add(&plasma);
+  e.setEffectRegistry(&effects);
+  DispatchDetail detail;
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(e.checkNotification("{\"text\":\"hi\"}", detail)));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError), rc(e.checkNotification("{\"txt\":\"hi\"}", detail)));
+  TEST_ASSERT_EQUAL_STRING("unknown field", detail.message.c_str());
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError),
+                        rc(e.checkNotification("[{\"text\":\"a\"},{\"text\":\"b\"}]", detail)));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ValidationError),
+                        rc(e.checkNotification("{\"text\":\"a\",\"effect\":\"nope\"}", detail)));
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::ParseError), rc(e.checkNotification("{\"text\":", detail)));
+  TEST_ASSERT_FALSE(e.hasNotification());
+  for (const char* json : {"{\"txt\":\"hi\"}", "{\"text\":\"a\",\"effect\":\"nope\"}", "{\"text\":\"hi\"}"}) {
+    DispatchDetail checked, pushed;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(rc(e.checkNotification(json, checked)),
+                                  rc(e.notifyFromScript("s", json, pushed)), json);
+    TEST_ASSERT_EQUAL_STRING(checked.message.c_str(), pushed.message.c_str());
+  }
+}
+
 static void test_switch_app() {
   sound::AudioRouter so; FDisplay di; FSystem sy;
   CoreEngine e(so, di, sy);
@@ -443,7 +468,7 @@ static void test_script_app_declining_is_skipped_by_the_rotation() {
     DispatchResult setScript(const std::string&, const std::string&, DispatchDetail&) override {
       return DispatchResult::Ok;
     }
-    void removeScript(const std::string&) override {}
+    DispatchResult removeScript(const std::string&, DispatchDetail&) override { return DispatchResult::Ok; }
     bool scriptWantsShow(const std::string& name) override {
       asked.push_back(name);
       return name != quiet;
@@ -478,7 +503,7 @@ static void test_script_app_duration_overrides_global() {
     DispatchResult setScript(const std::string&, const std::string&, DispatchDetail&) override {
       return DispatchResult::Ok;
     }
-    void removeScript(const std::string&) override {}
+    DispatchResult removeScript(const std::string&, DispatchDetail&) override { return DispatchResult::Ok; }
     long scriptDurationMs(const std::string& name) override {
       return name == "Quick" ? 2000 : 0;
     }
@@ -760,7 +785,7 @@ struct FHeadless : IScriptService {
   DispatchResult setScript(const std::string&, const std::string&, DispatchDetail&) override {
     return DispatchResult::Ok;
   }
-  void removeScript(const std::string&) override {}
+  DispatchResult removeScript(const std::string&, DispatchDetail&) override { return DispatchResult::Ok; }
   bool scriptIsHeadless(const std::string& name) override {
     return std::find(headless.begin(), headless.end(), name) != headless.end();
   }
@@ -1196,6 +1221,7 @@ int main(int, char**) {
   RUN_TEST(test_notify_and_dismiss);
   RUN_TEST(test_bad_scroll_in_a_payload_is_rejected);
   RUN_TEST(test_notification_array_is_rejected_not_truncated);
+  RUN_TEST(test_a_notification_is_checked_without_being_shown);
   RUN_TEST(test_switch_app);
   RUN_TEST(test_the_disabled_list_decides_what_stays_out);
   RUN_TEST(test_an_app_that_turns_up_later_joins_the_loop);

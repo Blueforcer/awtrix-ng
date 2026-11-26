@@ -27,8 +27,8 @@ function uploadZone(dir,accept,hint,onDone,asGif){
   return el('div',null,zone,fileIn);
 }
 let assetRev=0;
-async function uploadFile(file,dir,name,onProgress,timeout){
-  const mp3=dir.startsWith('/api/'),x=await xhrPost(mp3?dir:'/api/v1/files?dir='+encodeURIComponent(dir),'file',file,name,onProgress,timeout);
+async function uploadFile(file,dir,name,onProgress,timeout,host){
+  const mp3=dir.startsWith('/api/'),x=await xhrPost(mp3?dir:'/api/v1/files?dir='+encodeURIComponent(dir),'file',file,name,onProgress,timeout,host);
   if(x.status>=300){
     let m;try{m=JSON.parse(x.responseText).error.message;}catch(e){}
     const k=mp3&&{400:'sndName',404:'sndNoScript',415:'sndNoMp3',500:'sndFull',507:'sndFull'}[x.status];

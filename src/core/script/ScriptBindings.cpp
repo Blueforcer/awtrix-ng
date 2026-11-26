@@ -783,7 +783,7 @@ int b_http_request(bvm* vm) {
 
     if (normalizeMethod(be_tostring(vm, 2), req.method) && keep >= 0 && timeout >= 0 &&
         parseHeaderBlock(headerBlock, req.headers))
-      ok = g_svc->http->request(req);
+      ok = g_svc->http->request(std::move(req));
     else if (g_svc->logDebug)
       g_svc->logDebug("script http: request rejected for " + req.url);
   }

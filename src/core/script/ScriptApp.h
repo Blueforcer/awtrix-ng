@@ -68,6 +68,7 @@ class ScriptApp : public IApp {
   const ScriptError& error() const { return error_; }
   bool visible() const { return visible_; }
   bool scrollHolds() const { return scroll_.wantsMoreTime(); }
+  bool takesButtons() const { return has(kOnButton) || has(kOnButtonEvent); }
 
   bool callCheckForTest(std::string& out);
 

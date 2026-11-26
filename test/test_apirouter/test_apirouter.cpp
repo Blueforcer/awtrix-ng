@@ -510,7 +510,7 @@ static void test_http_get_only_reads_reject_other_methods() {
   const char* paths[] = {"/api/v1/device",           "/api/v1/display/screen",
                          "/api/v1/capabilities",     "/api/v1/version",
                          "/version",                 "/api/v1/system/wifi-scan",
-                         "/api/v1/logs"};
+                         "/api/v1/logs",             "/api/v1/scripthost"};
   Command r;
   api::HttpResult imm;
   for (const char* p : paths) {

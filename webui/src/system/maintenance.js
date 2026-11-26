@@ -107,9 +107,9 @@ function updateRow(install){
   row.firstChild.append(status);
   return row;
 }
-async function waitForDevice(){
+async function waitForDevice(first=15000){
   const pause=ms=>new Promise(r=>setTimeout(r,ms));
-  await pause(15000);
+  await pause(first);
   for(const end=Date.now()+180000;Date.now()<end;await pause(3000)){
     try{if((await fetch('/api/v1/device',{cache:'no-store',signal:AbortSignal.timeout(3000)})).ok)return;}catch(e){}
   }

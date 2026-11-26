@@ -21,6 +21,7 @@ class LinuxLanLogin {
   mutable std::mutex mutex_;
   bool required_ = false;
   std::array<unsigned char, 32> expected_{};
+  std::string hostKey_;
 };
 
 }

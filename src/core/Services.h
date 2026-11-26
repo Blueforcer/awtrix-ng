@@ -72,7 +72,7 @@ class IScriptService {
   virtual ~IScriptService() = default;
   virtual DispatchResult setScript(const std::string& name, const std::string& source,
                                    DispatchDetail& detail) = 0;
-  virtual void removeScript(const std::string& name) = 0;
+  virtual DispatchResult removeScript(const std::string& name, DispatchDetail& detail) = 0;
   virtual DispatchResult updateScript(const std::string& name, const std::string& json,
                                       DispatchDetail& detail) {
     (void)name;

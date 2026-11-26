@@ -40,6 +40,8 @@ target_sources(awtrix_host PRIVATE
   "${PROJECT_SOURCE_DIR}/src/persistence/FsRestoreSink.cpp"
   "${PROJECT_SOURCE_DIR}/src/system/Log.cpp"
   "${PROJECT_SOURCE_DIR}/src/transport/net/UdpSocket.cpp"
+  "${PROJECT_SOURCE_DIR}/src/transport/net/UdpPort.cpp"
+  "${PROJECT_SOURCE_DIR}/src/transport/net/HostLookup.cpp"
   "${PROJECT_SOURCE_DIR}/src/transport/ScriptMqttBridge.cpp"
   "${PROJECT_SOURCE_DIR}/src/transport/mqtt/MqttService.cpp"
   "${PROJECT_SOURCE_DIR}/src/transport/mqtt/MqttLink.cpp"

@@ -85,6 +85,11 @@ routes, secrets export and firmware upload answer `403 forbidden`. See the exact
 ```bash
 curl -u admin:secret http://<awtrix-ip>/api/v1/device
 ```
+<!-- only esp32 esp32-s3 -->
+
+A clock paired with a script host also takes the pairing key in place of the login:
+`Authorization: Bearer <scriptHostKey>`. The script host uses it to reach the clock.
+<!-- /only -->
 
 ## Requests from other web pages {#cross-origin}
 
@@ -93,10 +98,13 @@ read and control AWTRIX from your browser. Answers carry `Access-Control-Allow-O
 preflight `OPTIONS` request answers `204` with the allowed methods and headers and
 `Access-Control-Allow-Private-Network: true`.
 
-Five requests read, replace or erase the passwords or the firmware. Only AWTRIX's own web UI and
+These requests read, replace or erase the passwords or the firmware. Only AWTRIX's own web UI and
 programs that are not browsers, such as `curl` or Home Assistant, can use them:
 
 * `GET /api/v1/system?secrets=1`
+<!-- only esp32 esp32-s3 -->
+* `GET /api/v1/scripthost?secrets=1`
+<!-- /only -->
 * `PUT /api/v1/system`
 * `POST /api/v1/restore`
 * `POST /update`
@@ -1727,7 +1735,7 @@ be an MP3. A sound with the same name is replaced.
 | 400 | `badRequest`: no file arrived, or the upload was interrupted |
 | 401 | authentication failed |
 | 403 | `forbidden`: uploads are not allowed in setup mode |
-| 404 | `notFound`, `no such script` |
+| 404 | `notFound`, `no such script`<!-- only esp32 esp32-s3 -->. Never on a clock paired with a script host<!-- /only --> |
 | 415 | `unsupportedMediaType`: the file is not an MP3 |
 | 507 | `insufficientStorage`, `write failed`: the file could not be saved. The previous version is kept |
 
@@ -1812,6 +1820,89 @@ everything it shared.
 ```bash
 curl "http://<awtrix-ip>/api/v1/scripts/shared"
 ```
+
+<!-- only esp32 esp32-s3 -->
+### GET /api/v1/scripthost
+
+Shows whether this clock's scripts run on a script host, how the link to it is, and which hosts
+offered themselves on the network lately.
+
+**Request:** no body. Add `?secrets=1` to include the pairing key `key` on a paired clock. Only
+the clock's own web UI and programs that are not browsers get it (see
+[Requests from other web pages](#cross-origin)).
+
+**Response:** `200`:
+
+```json
+{"mode":"remote","host":"raspberrypi.local:8301","link":"up",
+ "offers":[{"name":"raspberrypi","address":"192.168.1.5","port":8300}]}
+```
+
+| Field | Meaning |
+|---|---|
+| `mode` | `off`: scripts run on the clock. `remote`: they run on the script host in `host` |
+| `host` | the `scriptHost` setting, `""` when off |
+| `link` | `off`, `resolving` (looking up the host), `notFound`, `down` (no answer for 3 seconds) or `up` |
+| `key` | the `scriptHostKey`, only with `?secrets=1` and only while `mode` is `remote` |
+| `offers` | script hosts heard in the last 90 seconds, at most four |
+
+While the link is down, the apps of the script host are skipped in the rotation.
+
+On a paired clock, script changes sent to the clock go on to the script host while the link is up:
+uploads, deletes, script updates, settings and stored data. Reading a script's source, settings or
+data from the clock answers `409 scriptsOnHost`. Read them from the script host.
+[Script sounds](#script-sounds) stay on the clock: list, upload and delete them there, for every
+app the script host lists. An upload for any other valid script name is kept too. It counts as
+left over (`orphan`) until the script host lists that app. `GET /api/v1/capabilities` names the
+modules the script host gives the scripts (`oauth`, `secret`, `tcp`), not the clock's own.
+
+**Errors:**
+
+| Status | Condition |
+|---|---|
+| 405 | `methodNotAllowed`, `allowed: GET` |
+
+```bash
+curl "http://<awtrix-ip>/api/v1/scripthost"
+```
+
+### POST /api/v1/scripthost/act
+
+The script host acts here for its scripts: their sounds and notifications, rotation steps and holds,
+and the button presses they do not take. The route takes only the pairing key
+(`Authorization: Bearer <scriptHostKey>`) and exists only on a paired clock.
+
+**Request:** a JSON object with `act` and the fields that act needs:
+
+| `act` | Fields | Does |
+|---|---|---|
+| `sound` | `script`, `action` (`play`, `effect`, `stop`, `stopMusic` or `release`), `sound` | plays or stops a sound for that script, as `sound` in a script does |
+| `notify` | `script`, `notification` | shows a notification for that script |
+| `next`, `previous` | none | moves the rotation on or back. A hold stays. |
+| `show` | `app` | shows that app |
+| `hold` | `hold` (`true` or `false`) | holds the rotation on the app shown, or lets it go |
+| `restart` | `app` | gives the app its full time again, if it is shown |
+| `press` | `app`, `button` (`0` left, `1` select, `2` right) | does what the button does when no app takes it, if the app is shown |
+| `endSession` | `id` | ends the app started from the device menu |
+
+**Response:** `200` with `{"ok":true}`.
+
+**Errors:**
+
+| Status | Condition |
+|---|---|
+| 400 | `invalidJson` |
+| 401 | `unauthorized`: no pairing key |
+| 404 | `notFound`: `app not found`, `no such session` |
+| 405 | `methodNotAllowed`, `allowed: POST` |
+| 422 | `validationFailed`: `invalid act`, `expected <field>`, or what is wrong with the sound |
+
+```bash
+curl -X POST "http://<awtrix-ip>/api/v1/scripthost/act" \
+  -H "Authorization: Bearer <scriptHostKey>" -H "Content-Type: application/json" \
+  -d '{"act":"next"}'
+```
+<!-- /only -->
 
 ---
 
@@ -3984,6 +4075,10 @@ Any other path answers **404** `notFound` with the message `unknown route`.
 | DELETE | `/api/v1/apps/script/{name}/sounds/{sound}` | [delete one sound](#delete-apiv1appsscriptnamesoundssound) |
 | DELETE | `/api/v1/apps/script/{name}/sounds` | [delete all of a script's sounds](#delete-apiv1appsscriptnamesounds) |
 | GET | `/api/v1/scripts/shared` | [values scripts share](#get-apiv1scriptsshared) |
+<!-- only esp32 esp32-s3 -->
+| GET | `/api/v1/scripthost` | [script host status](#get-apiv1scripthost) |
+| POST | `/api/v1/scripthost/act` | [the script host acts for its scripts](#post-apiv1scripthostact) |
+<!-- /only -->
 | POST | `/api/v1/notifications` | [show a notification](#post-apiv1notifications) |
 | DELETE | `/api/v1/notifications/active` | [dismiss the one shown](#delete-apiv1notificationsactive) |
 | DELETE | `/api/v1/notifications/{name}` | [dismiss by name, anywhere in the queue](#delete-apiv1notificationsname) |

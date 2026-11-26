@@ -16,6 +16,14 @@ namespace awtrix {
 class GifPlayer;
 class ScriptIcon;
 
+class IIconMissing {
+ public:
+  virtual void iconMissing(const std::string& name) = 0;
+
+ protected:
+  ~IIconMissing() = default;
+};
+
 // One script app's icons. Entries are allocated only for used icons, up to 4. Icons drawn
 // at the same nowMs stay resident together; a fifth icon in that draw tick returns false
 // instead of evicting one already drawn and restarting its animation. Older entries are evicted
@@ -79,6 +87,11 @@ class ScriptIcon : public script::IScriptIcon, public RemoteIconSource {
   void setPanelSize(int width, int height);
 
   void setLog(std::function<void(const std::string&)> log) { log_ = std::move(log); }
+  // Told the name of an icon that is not on flash, so a script host can fetch it from its clock.
+  void setOnMissing(IIconMissing* missing) { missing_ = missing; }
+  void missing(std::string_view name) {
+    if (missing_) missing_->iconMissing(std::string(name));
+  }
 
   int maxWidth() const { return maxWidth_; }
   int maxHeight() const { return maxHeight_; }
@@ -92,6 +105,7 @@ class ScriptIcon : public script::IScriptIcon, public RemoteIconSource {
   bool oomLogged_ = false;
   int64_t lastOomLogMs_ = 0;
   std::function<void(const std::string&)> log_;
+  IIconMissing* missing_ = nullptr;
 };
 
 }

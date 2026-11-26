@@ -102,7 +102,7 @@ struct HttpResult {
 class IScriptHttp {
  public:
   virtual ~IScriptHttp() = default;
-  virtual bool request(const HttpRequest& req) = 0;
+  virtual bool request(HttpRequest req) = 0;
   virtual void cancel(uint32_t) {}
 };
 

@@ -21,6 +21,7 @@ class PeripheryService {
   void begin(CoreEngine& engine, IBoard& board, const DeviceConfig& cfg, input::IButtonMenu* menu);
   void setUid(const std::string& uid) { uid_ = uid; }
   void setButtonHook(input::ButtonRouter::ScriptHook hook) { buttons_.setButtonHook(std::move(hook)); }
+  void press(int button, int64_t nowMs) { buttons_.press(button, nowMs); }
   void tick(int64_t nowMs);
 
  private:

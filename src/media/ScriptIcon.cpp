@@ -142,6 +142,7 @@ void ScriptIconSet::load(Entry& e, std::string_view icon, int64_t nowMs) {
       if (!outOfMemory) {
         e.state = State::kMissing;
         e.retryStep = 0;
+        service_.missing(icon);
         return;
       }
     }

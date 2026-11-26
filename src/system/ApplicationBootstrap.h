@@ -16,6 +16,7 @@
 #include "transport/ScriptMqttBridge.h"
 #include "transport/mqtt/MqttService.h"
 #include "transport/net/MirrorLink.h"
+#include "transport/net/ScriptHostLink.h"
 
 namespace awtrix::bootstrap {
 
@@ -27,10 +28,11 @@ inline void restoreUserState(CoreEngine& engine) {
   engine.setStationPersist(radiostore::save);
 }
 
-inline void assetsChanged(ApplicationRuntime& app, ScriptIcon& icons) {
+inline void assetsChanged(ApplicationRuntime& app, ScriptIcon& icons, ScriptHostLink& scriptHost) {
   icons.invalidate();
   app.invalidateIcons();
   render::clearPaletteCache();
+  scriptHost.assetsChanged();
 }
 
 inline void mirrorServices(ApplicationServices& services, MirrorLink& link) {
@@ -93,6 +95,49 @@ void bindScriptButtons(Buttons& buttons, CoreEngine& engine, script::ScriptHost*
   buttons.setButtonHook([&engine, scripts](int button, bool pressed, bool held) {
     return scripts && scripts->handleButtonState(engine.currentAppId(), button, pressed, held);
   });
+}
+
+// A clock paired with a script host runs no script engine: the host's apps stand in for its
+// scripts, and with scripting on the link carries their pictures, buttons and changes.
+template <class Http>
+void beginScriptHost(script::ScriptSlots& slots, ApplicationRuntime& app, ScriptHostLink& link, Http& http,
+                     const std::string& uid, DeviceConfig& cfg, uint16_t webPort, ScriptHostLink::Random random,
+                     ScriptHostLink::OwnAddress ownAddress) {
+  slots.beginRemote(app);
+  remote::HostedScripts& hosted = *slots.hosted();
+  if (!cfg.scriptingEnabled) {
+    logf("scripts: disabled by configuration, script host %s not used", cfg.scriptHost.c_str());
+    return;
+  }
+  if (!link.begin(hosted, uid, app.canvas().width(), app.canvas().height(), webPort, cfg, http, random,
+                  ownAddress)) {
+    logf("scripts: script host %s unusable", cfg.scriptHost.c_str());
+    return;
+  }
+  app.engine().state().subscribe([&link](StateEvent event) {
+    if (event == StateEvent::SettingsChanged) link.settingsChanged();
+  });
+  http.begin([](script::HttpResult result) {
+    const bool done = result.status >= 200 && result.status < 300;
+    logf("scripts: passed on to the script host: %s (%d)", done ? "done" : "failed", result.status);
+  });
+  hosted.apps.setForward([&link](const char* method, const std::string& path, std::string body) {
+    return link.forward(method, path, std::move(body));
+  });
+  logf("scripts: run on the script host %s", cfg.scriptHost.c_str());
+}
+
+// With a script host the buttons of a host app that takes them go to the host while the link is
+// up; a press the app does not use comes back from the host and does what it does elsewhere.
+template <class Buttons>
+void bindRemoteButtons(Buttons& buttons, CoreEngine& engine, remote::HostedScripts& hosted) {
+  buttons.setButtonHook([&engine, &hosted](int button, bool pressed, bool held) {
+    (void)held;
+    const bool takes = hosted.apps.takesButtons(engine.currentAppId());
+    hosted.buttons.update(button, takes && pressed);
+    return takes;
+  });
+  hosted.acts.setPress([&buttons](int button) { buttons.press(button, monotonicMs()); });
 }
 
 }

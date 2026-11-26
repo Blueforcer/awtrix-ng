@@ -9,6 +9,7 @@
 #include "core/ScreenDisplay.h"
 #include "core/SettingsSaver.h"
 #include "core/script/ScriptSlots.h"
+#include "core/remote/RemoteWire.h"
 #include "core/script/RestoreScripts.h"
 #include "core/apps/DefaultApps.h"
 #include "core/apps/builtin/TimeApp.h"
@@ -55,6 +56,49 @@ struct Rig {
     runtime.render(now);
   }
 };
+
+void test_a_clock_with_a_script_host_runs_no_vm_and_lists_the_host_apps() {
+  Rig r;
+  script::ScriptServices services;
+  r.runtime.configureScripts(services);
+  script::ScriptSlots slots;
+  slots.beginRemote(r.runtime);
+  TEST_ASSERT_NULL(slots.host());
+  TEST_ASSERT_NOT_NULL(slots.hosted());
+  Command install(CommandType::ScriptSet);
+  install.name = "local";
+  install.payload = "class App def draw() end end return App()";
+  TEST_ASSERT_EQUAL(static_cast<int>(DispatchResult::OnHost),
+                    static_cast<int>(r.runtime.engine().execute(install)));
+  remote::wire::Apps apps;
+  apps.entries[0].name = "Weather";
+  apps.entries[0].flags = remote::wire::app::kWantsShow;
+  apps.count = 1;
+  apps.entries[1].name = "Doom";
+  apps.entries[1].flags = remote::wire::app::kOnDemand;
+  apps.count = 2;
+  apps.revision = 1;
+  remote::RemoteApps& hosted = slots.hosted()->apps;
+  hosted.apply(apps);
+  CoreEngine& engine = r.runtime.engine();
+  TEST_ASSERT_TRUE(engine.isScriptApp("Weather"));
+  TEST_ASSERT_TRUE(engine.isOnDemandApp("Doom"));
+  TEST_ASSERT_EQUAL_HEX32(0, hosted.offMask());
+  engine.setAppEnabled("Weather", false);
+  TEST_ASSERT_EQUAL_HEX32_MESSAGE(0b01, hosted.offMask(), "switching a host app off on the clock marks it");
+  engine.setAppEnabled("Weather", true);
+  TEST_ASSERT_EQUAL_HEX32(0, hosted.offMask());
+  apps.entries[1].flags = remote::wire::app::kWantsShow;
+  apps.revision = 2;
+  hosted.apply(apps);
+  TEST_ASSERT_FALSE_MESSAGE(engine.isOnDemandApp("Doom"), "an app that left on-demand joins the rotation");
+  TEST_ASSERT_TRUE(engine.isScriptApp("Doom"));
+  apps.count = 0;
+  apps.revision = 3;
+  hosted.apply(apps);
+  TEST_ASSERT_FALSE(engine.isScriptApp("Weather"));
+  TEST_ASSERT_FALSE(engine.isScriptApp("Doom"));
+}
 
 void test_disabled_scripts_keep_sources_editable_without_a_vm() {
   Rig r;
@@ -587,5 +631,6 @@ int main(int, char**) {
   RUN_TEST(test_a_scripts_sound_call_answers_at_once);
   RUN_TEST(test_a_script_that_breaks_silences_its_song);
   RUN_TEST(test_a_script_leaves_a_song_it_did_not_start);
+  RUN_TEST(test_a_clock_with_a_script_host_runs_no_vm_and_lists_the_host_apps);
   return UNITY_END();
 }

@@ -15,6 +15,7 @@
 #include "core/api/AssetApi.h"
 #include "core/api/AssetUploadSession.h"
 #include "core/api/ScriptSoundsApi.h"
+#include "core/api/StateReadApi.h"
 #include "core/api/SingleUploadRequest.h"
 #include "core/script/ScriptMeta.h"
 #include "core/backup/RestoreApplier.h"
@@ -29,6 +30,7 @@ namespace awtrix {
 class CoreEngine;
 class IBoard;
 class Canvas;
+class ScriptHostLink;
 struct DeviceConfig;
 
 class HttpApiServer {
@@ -57,6 +59,11 @@ class HttpApiServer {
     scriptStore_ = std::move(readStore);
     storedScripts_ = std::move(stored);
   }
+  // Answers GET /api/v1/scripthost and, while the link runs, POST /api/v1/scripthost/act.
+  void setScriptHost(ScriptHostLink& link, bool scriptsOnHost) {
+    scriptHost_ = &link;
+    scriptsOnHost_ = scriptsOnHost;
+  }
 
  private:
   class BodyHandler;
@@ -80,6 +87,7 @@ class HttpApiServer {
 
   bool serveWebUi(const Request& req);
   bool serveCommand(Request& req);
+  bool serveHostAct(const Request& req);
   bool serveState(const Request& req);
   bool serveDiagnostics(const Request& req);
   bool serveSystem(const Request& req);
@@ -87,6 +95,7 @@ class HttpApiServer {
   api::scriptsounds::InstalledScripts installedScripts() const;
 
   bool authOk();
+  bool hostKeyOk();
   void collectBody(WebServer& server, const String& uri, HTTPRaw& raw);
   void dropRawBody();
   void handleUpdateUpload();
@@ -148,6 +157,7 @@ class HttpApiServer {
   std::function<void(const std::string& event)> onError_;
   std::function<void(const std::string& path)> releaseFiles_;
   const script::ScriptHost* scripts_ = nullptr;
+  ScriptHostLink* scriptHost_ = nullptr;
   ScriptSourceFn scriptSource_;
   ScriptSourceFn scriptStore_;
   StoredScriptsFn storedScripts_;
@@ -156,6 +166,7 @@ class HttpApiServer {
   static constexpr uint32_t kWifiScanMs = 15000;
   uint32_t wifiScanStartedMs_ = 0;
   bool apMode_ = false;
+  bool scriptsOnHost_ = false;
 };
 
 }

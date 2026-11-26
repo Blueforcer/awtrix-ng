@@ -167,6 +167,27 @@ void test_auth_gate_requires_user_and_pass() {
   TEST_ASSERT_TRUE(cfgrules::validateAuthGate(false, "", "", e));
 }
 
+void test_script_host_needs_a_key_and_a_plain_address() {
+  cfgrules::ConfigError e;
+  const std::string key(64, 'a');
+  TEST_ASSERT_TRUE(cfgrules::validateScriptHost("", "", e));
+  TEST_ASSERT_TRUE(cfgrules::validateScriptHost("raspberrypi.local:8301", key, e));
+  TEST_ASSERT_TRUE(cfgrules::validateScriptHost("192.168.1.5", key, e));
+  TEST_ASSERT_FALSE(cfgrules::validateScriptHost("192.168.1.5", "", e));
+  TEST_ASSERT_EQUAL_STRING("scriptHostKey", e.field.c_str());
+  TEST_ASSERT_FALSE(cfgrules::validateScriptHost("", "abc", e));
+  TEST_ASSERT_EQUAL_STRING("scriptHostKey", e.field.c_str());
+  TEST_ASSERT_FALSE(cfgrules::validateScriptHost("", std::string(64, 'G'), e));
+  TEST_ASSERT_FALSE(cfgrules::validateScriptHost("http://pi:8301", key, e));
+  TEST_ASSERT_EQUAL_STRING("scriptHost", e.field.c_str());
+  TEST_ASSERT_FALSE(cfgrules::validateScriptHost("pi:0", key, e));
+  TEST_ASSERT_FALSE(cfgrules::validateScriptHost("pi:", key, e));
+  TEST_ASSERT_FALSE(cfgrules::validateScriptHost(":8301", key, e));
+  TEST_ASSERT_FALSE(cfgrules::validateScriptHost("pi:70000", key, e));
+  TEST_ASSERT_FALSE(cfgrules::validateScriptHost("pi host", key, e));
+  TEST_ASSERT_FALSE(cfgrules::validateScriptHost(std::string(65, 'a'), key, e));
+}
+
 void test_i2s_pins_are_all_or_none() {
   cfgrules::ConfigError e;
   TEST_ASSERT_TRUE(cfgrules::validateAudioPins(5, 6, 4, -1, -1, e));
@@ -532,6 +553,7 @@ int main(int, char**) {
   RUN_TEST(test_empty_string_message_names_the_explicit_route);
   RUN_TEST(test_mqtt_gate_requires_host);
   RUN_TEST(test_auth_gate_requires_user_and_pass);
+  RUN_TEST(test_script_host_needs_a_key_and_a_plain_address);
   RUN_TEST(test_non_empty_and_absent_load_bearing_fields_accepted);
   RUN_TEST(test_other_strings_may_still_be_emptied);
   RUN_TEST(test_malformed_ip_fields_rejected);

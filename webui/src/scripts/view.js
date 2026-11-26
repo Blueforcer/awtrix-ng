@@ -509,14 +509,14 @@ function viewScripts(view){
   const checkHubBtn=el('button',{onclick:checkHubUpdates},t('suCheck'));
   async function refreshTree(){
     try{
-      const{data}=await api('/api/v1/apps');
+      const{data}=await api('/api/v1/apps',{host:1});
       const byName=(a,b)=>a.name.localeCompare(b.name);
       const rows=(Array.isArray(data)?data:[])
         .filter(a=>a.origin==='script'||a.origin==='module')
         .map(a=>({name:a.name,error:a.error||null,module:a.origin==='module',requires:a.meta?.requires||[]}));
       scripts=rows.filter(a=>!a.module).sort(byName);
       modules=rows.filter(a=>a.module).sort(byName);
-    }catch(e){scripts=[];modules=[];}
+    }catch(e){scripts=[];modules=[];if(e.code==='shAuth')toastErr(e);}
     try{sndCount=new Map(hasSink('mp3')?((await api('/api/v1/audio/mp3')).data.scripts||[]).map(s=>[s.name,s.files.length]):[]);}catch(e){}
     paintTree();paintRequires();paintSounds();
     checkHubUpdates().catch(()=>{});

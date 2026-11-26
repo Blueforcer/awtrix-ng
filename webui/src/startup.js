@@ -18,9 +18,9 @@ new ResizeObserver(setChromeH).observe(topbar);
     if(!S.transitions.length)S.transitions=caps.transitions||[];
     readAudioCaps(caps);
     //linux:begin
-    if(S.oauth&&/^#oauth(_error)?=/.test(location.hash))oauthReturn();
     if(S.activation&&!S.ap)askActivation();
     //linux:end
+    if(S.oauth&&/^#oauth(_error)?=/.test(location.hash))oauthReturn();
     if(!anyAudioCap())nav();
   }catch(e){}
 })();

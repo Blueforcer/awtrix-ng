@@ -832,27 +832,44 @@ function toast(msg,ok=true,actions){
   $('#toasts').append(d);
   return d;
 }
-const toastErr=e=>toast(e.message,false,e.code==='hubAuthentication'?[connectHubAction()]:undefined);
+const toastErr=e=>toast(e.message,false,e.code==='hubAuthentication'?[connectHubAction()]:
+  e.code==='shAuth'?[{label:t('shRepair'),pri:1,fn:()=>{location.hash='#/system';}}]:undefined);
 const setNet=ok=>$('#brand')?.classList.toggle('off',!ok);
+const SH={host:'',url:'',key:''},CLOCK={url:''};
+let shLoad;
+const shReady=()=>shLoad||=api('/api/v1/scripthost?secrets=1',{timeout:4000}).then(({data:d})=>{
+  const h=SH.host=d.host||'';
+  SH.url=h&&'http://'+h+(h.includes(':')?'':':8301');SH.key=d.key||'';
+},e=>{if(e.status!==404)shLoad=0;});
+const SHP=/^\/(SCRIPTS\/[^/]+$|api\/v1\/(apps\/script(?!\/[^/]+\/sounds)|scripts\/|oauth|secrets|apps\/(?!builtin\/)[^/?]+\/(config|data)(\?|$)))/;
+async function shTo(path,headers={},host){
+  const at=host?.url!=null?host:(host||SHP.test(path))&&(await shReady(),SH);
+  if(!at?.url)return[path,headers];
+  const h={Authorization:'Bearer '+at.key};
+  if(headers['Content-Type'])h['Content-Type']=headers['Content-Type'];
+  return[at.url+path,h];
+}
 async function api(path,opts={}){
+  const[url,headers]=await shTo(path,opts.headers,opts.host),remote=url[0]!=='/';
   const ctrl=new AbortController();
   const to=setTimeout(()=>ctrl.abort(),opts.timeout||12000);
   let r;
-  try{r=await fetch(path,{signal:ctrl.signal,...opts});}
-  catch(e){setNet(false);throw new Error(t('neterr'));}
+  try{r=await fetch(url,{signal:ctrl.signal,...opts,headers});}
+  catch(e){if(!remote)setNet(false);throw new Error(t(remote?'shNoAnswer':'neterr'));}
   finally{clearTimeout(to);}
-  setNet(true);
+  if(!remote)setNet(true);
   const text=await r.text();
   let data=text;try{data=JSON.parse(text);}catch(e){}
   if(!r.ok&&r.status!==202){
     const err=data&&data.error;
     const e=new Error(err?(err.message||err.code)+(err.field?' ('+err.field+')':''):'HTTP '+r.status);
     e.status=r.status;e.code=err&&err.code;e.field=err&&err.field;
+    if(remote&&r.status===401){e.code='shAuth';e.message=t('shAuth');}
     throw e;
   }
   return{status:r.status,data,text};
 }
-const req=(m,p,body)=>api(p,body===undefined?{method:m}:{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const req=(m,p,body,host)=>api(p,body===undefined?{method:m,host}:{method:m,host,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
 const post=(p,body)=>req('POST',p,body);
 function fmtBytes(b){return b>=1048576?(b/1048576).toFixed(1)+' MB':b>=1024?(b/1024).toFixed(1)+' KB':b+' B';}
 function toHex(v){
@@ -1122,6 +1139,21 @@ const STR={
   mioff:'Off',mioffline:'No network',miresolving:'Searching…',minotFound:'Clock not found',
   miwaiting:'No answer',miidle:'Nothing shared',mifiltered:'App not selected',
   misizeMismatch:'Other display size',minoMemory:'Out of memory',mishowing:'Mirroring',
+  shSection:'Script host',shSectionH:"Run this clock's scripts on a computer in your network. The clock only shows them.",
+  shFound:'Found',shAddr:'Address',shAddrH:'Name or IP of the script host.',shCode:'Code',
+  shCodeH:"The 6 digits from the script host's log.",shPair:'Pair',shRepair:'Pair again',shUnpair:'Unpair',
+  shState:'Script host',shUp:'Connected',shDown:'No answer',shResolving:'Looking up…',shNotFound:'Not found',
+  shAuth:'The script host does not know this clock.',shNoAnswer:'The script host does not answer.',
+  shMove:'Moving {s}…',shPaired:'Paired. The clock restarts.',shWait:'Waiting for the clock…',
+  shBack:'Bring scripts back',shLeave:'Leave them on the host',shBackAsk:'Bring the scripts back to the clock?',
+  shBackDone:'Scripts are back on the clock.',shLeft:'Still on the script host: {s}',
+  oaSection:'Sign-in',oaStatus:'Status',oaId:'Client ID',oaSecret:'Client secret',oaKeep:'Saved – type to replace',
+  oaSecretPkce:'Not every provider needs one.',
+  oaSignIn:'Sign in',oaSignOut:'Sign out',oaDone:'Signed in',oaInvalid:'@oauth line invalid',
+  oasignedIn:'Signed in',oasignedOut:'Not signed in',oapending:'Signing in…',oaerror:'Sign-in failed',
+  seSection:'API keys',seSet:'Saved',seEmpty:'Not set',seRemove:'Remove',seInvalid:'Mistake in the app\'s code',
+  seHosts:'Goes only to',
+  seWarn:'Enter keys only for apps you trust. A web login protects them from other web pages.',
   //linux:begin
   gpNone:'No gamepad paired',gpPair:'Add gamepad',gpPairH:'Put the gamepad in pairing mode, then press Pair.',gpPairBtn:'Pair',gpForget:'Forget',gpPhone:'Phone',
   gpDevice:'Controller',gpPlayer:'Player',gpFull:'Forget a controller to add another.',
@@ -1159,13 +1191,6 @@ const STR={
   vcfurl:'Check the address',vcftoken:'Paste the token again',vcfpipeline:'Pick another one',vcfdevice:'Not a device link',vcfassistant:'Not a valid app name',vcfwakeCutoff:'Enter 0.30 to 0.99',
   ipOn:'iPhone link',ipOnH:'Then pair the clock on the iPhone under Settings › Bluetooth.',ipWait:'Waiting for iPhone',
   ipForget:'Forget iPhone',ipForgot:'Also forget the clock on the iPhone.',
-  oaSection:'Sign-in',oaStatus:'Status',oaId:'Client ID',oaSecret:'Client secret',oaKeep:'Saved – type to replace',
-  oaSecretPkce:'Not every provider needs one.',
-  oaSignIn:'Sign in',oaSignOut:'Sign out',oaDone:'Signed in',oaInvalid:'@oauth line invalid',
-  oasignedIn:'Signed in',oasignedOut:'Not signed in',oapending:'Signing in…',oaerror:'Sign-in failed',
-  seSection:'API keys',seSet:'Saved',seEmpty:'Not set',seRemove:'Remove',seInvalid:'Mistake in the app\'s code',
-  seHosts:'Goes only to',
-  seWarn:'Enter keys only for apps you trust. A web login protects them from other web pages.',
   acTitle:'Help AWTRIX',
   acWhy:'Counting TC002 clocks shows how many of them run AWTRIX NG. It is also the basis for a planned cooperation with Ulanzi, in which Ulanzi would support the project for every counted clock. That is the best way to make sure AWTRIX keeps running on future Ulanzi clocks.',
   acWhat:'If you agree, this clock tells the AWTRIX Hub one time that it runs AWTRIX NG, with a code made from its chip ID. The report contains nothing about you: no name, no location, no usage data. It goes only to the Hub, not to Ulanzi. Ulanzi learns only how many clocks were counted. Your clock works exactly the same either way. Once sent, the report cannot be taken back: the Hub cannot tell which clock it came from.',
@@ -1521,6 +1546,8 @@ const SYSF={
  mirrorFromNotifications:F('share','toggle','Mirror notifications',''),
  debugMode:F('misc','toggle','Debug mode','More detail in the log.'),
  scriptingEnabled:F('script','toggle','Run scripts','Off stops all scripts and frees memory. Scripts stay installed. Needs a reboot.'),
+ scriptHost:F('hidden','text','',''),
+ scriptHostKey:F('hidden','text','',''),
 };
 const SYS_GROUPS=[['wifi','grpWifi','grpWifiH'],['web','grpWeb','grpWebH'],['mqtt','grpMqtt','grpMqttH'],
  ['time','grpTime','grpTimeH'],['panel','grpPanel','grpPanelH'],['hw','grpHw','grpHwH'],
@@ -1542,11 +1569,11 @@ function readAudioCaps(caps){
   S.enlargeApps=caps.enlargeApps===true;
   S.iphone=caps.ble===true;
   S.mqttTls=caps.mqttTls===true;
+  S.activation=caps.activation===true;
+  //linux:end
   S.oauth=caps.oauth===true;
   S.secret=caps.secret===true;
-  S.activation=caps.activation===true;
   loadScriptSections();
-  //linux:end
   if(typeof caps.sensors?.light==='boolean')S.light=caps.sensors.light;
   if(Object.hasOwn(caps,'gpio')){
     S.gpio=caps.gpio;S.gpioKnown=true;
@@ -2455,9 +2482,7 @@ async function fillConfigPanel(name,box,saveError,builtin){
   return true;
 }
 async function viewApps(view){
-  //linux:begin
   loadScriptSections();
-  //linux:end
   let loop=[],background=[],ondemand=[],disabled=[],modules=[],dragFrom=null,saving=Promise.resolve();
   const panels=new Map(),infos=new Map();
   let panelTaken=new Set();
@@ -2588,7 +2613,7 @@ async function viewApps(view){
       catch(e){toastErr(e);}
     };
     const remove=async()=>{
-      try{await req('DELETE','/api/v1/apps/'+encodeURIComponent(a.name));}
+      try{await req('DELETE','/api/v1/apps/'+encodeURIComponent(a.name),undefined,a.origin==='script'||a.origin==='module');}
       catch(e){toastErr(e);return;}
       loop=loop.filter(x=>x!==a);background=background.filter(x=>x!==a);disabled=disabled.filter(x=>x!==a);
       persist(null,t('deleted'));
@@ -2648,6 +2673,15 @@ async function viewApps(view){
   async function reload(){
     const{data}=await api('/api/v1/apps');
     let all=Array.isArray(data)?data:[];
+    await shReady();
+    if(SH.url){
+      if(!S.caps)await api('/api/v1/capabilities').then(r=>readAudioCaps(r.data||{}),()=>{});
+      const host=(await api('/api/v1/apps',{host:1}).catch(e=>{if(e.code==='shAuth')toastErr(e);return{data:[]};})).data||[];
+      const on=new Map(host.map(a=>[a.name,a.meta?{...a,meta:{...a.meta,
+        needs:a.meta.needs?.map(n=>({...n,missing:!!S.caps&&!capPresent(n.name)}))}}:a]));
+      all=all.map(a=>a.origin==='script'&&on.has(a.name)?{...on.get(a.name),enabled:a.enabled,inLoop:a.inLoop,slot:a.slot}:a);
+      all.push(...host.filter(a=>a.origin==='module').map(a=>on.get(a.name)));
+    }
     const scrOff=await scriptsOff();
     if(scrOff)all=all.filter(a=>a.origin!=='script'&&a.origin!=='module');
     offBanner.hidden=!scrOff;
@@ -2793,13 +2827,24 @@ function zipStore(entries){
     ...u32(cdSize),...u32(off),...u16(0)]);
   return new Blob([...parts,...central,eocd],{type:'application/zip'});
 }
+function unzipStore(b){
+  const v=new DataView(b),out=[];let o=0;
+  while(v.getUint32(o,true)===0x04034b50){
+    if(v.getUint16(o+6,true)&8||v.getUint16(o+8,true))throw 0;
+    const n=v.getUint16(o+26,true),s=o+30+n+v.getUint16(o+28,true),z=v.getUint32(o+18,true);
+    out.push({name:new TextDecoder().decode(new Uint8Array(b,o+30,n)),data:new Uint8Array(b,s,z)});
+    o=s+z;
+  }
+  if(v.getUint32(o,true)!==0x02014b50)throw 0;
+  return out;
+}
 const baseName=n=>String(n).split('/').pop();
 async function collectBackup(cats){
   const entries=[],included=[];
-  const bytes=async p=>{const r=await fetch(p);if(!r.ok)throw new Error(p+': HTTP '+r.status);return new Uint8Array(await r.arrayBuffer());};
+  const bytes=async p=>{const[u,h]=await shTo(p);const r=await fetch(u,{headers:h});if(!r.ok)throw new Error(p+': HTTP '+r.status);return new Uint8Array(await r.arrayBuffer());};
   const text=async p=>(await fetch(p)).text();
-  const list=async d=>((await api('/api/v1/files?dir='+encodeURIComponent(d))).data.files||[]);
-  const grab=async dir=>{for(const f of await list(dir)){const b=baseName(f.name);
+  const list=async(d,host)=>((await api('/api/v1/files?dir='+encodeURIComponent(d),{host})).data.files||[]);
+  const grab=async(dir,host)=>{for(const f of await list(dir,host)){const b=baseName(f.name);
     entries.push({name:dir.slice(1)+'/'+b,data:await bytes(dir+'/'+encodeURIComponent(b))});}};
   let sys=null;
   if(cats.wifi||cats.settings)sys=(await api('/api/v1/system?secrets=1')).data;
@@ -2820,7 +2865,7 @@ async function collectBackup(cats){
   if(cats.mp3){await grab('/MP3');included.push('mp3');}
   if(cats.radio){entries.push({name:'radio.json',
     data:JSON.stringify({stations:(await api('/api/v1/audio/stations')).data.stations||[]})});included.push('radio');}
-  if(cats.scripts){await grab('/SCRIPTS');
+  if(cats.scripts){await grab('/SCRIPTS',1);
     for(const s of(await api('/api/v1/audio/mp3')).data.scripts||[])for(const f of s.files){const p='SCRIPTS/'+s.name+'/'+f.name;
       entries.push({name:p,data:await bytes('/'+p)});}
     included.push('scripts');}
@@ -2830,11 +2875,13 @@ async function collectBackup(cats){
      device:{hostname:S.sysHost},categories:included})});
   return entries;
 }
-function xhrPost(url,field,file,name,onProgress,timeout=0){
+async function xhrPost(url,field,file,name,onProgress,timeout=0,host){
+  const[u,h]=await shTo(url,{},host);
   return new Promise((res,rej)=>{
     const fd=new FormData();fd.append(field,file,name);
     const x=new XMLHttpRequest();
-    x.open('POST',url);
+    x.open('POST',u);
+    if(h.Authorization)x.setRequestHeader('Authorization',h.Authorization);
     x.timeout=timeout;
     x.ontimeout=()=>rej(new Error(t('neterr')));
     x.upload.onprogress=e=>{if(e.lengthComputable&&onProgress)onProgress(e.loaded/e.total);};
@@ -2843,11 +2890,22 @@ function xhrPost(url,field,file,name,onProgress,timeout=0){
     x.send(fd);
   });
 }
-async function restoreBackup(file,onProgress){
-  const x=await xhrPost('/api/v1/restore','file',file,file.name,onProgress);
+async function restorePost(file,onProgress,host){
+  const x=await xhrPost('/api/v1/restore','file',file,'backup.zip',onProgress,0,host);
   let d={};try{d=JSON.parse(x.responseText);}catch(e){}
   const er=d.error;
   if(x.status>=300)throw new Error(er?.message||er?.code||(typeof er=='string'?er:'HTTP '+x.status));
+  return d;
+}
+async function restoreBackup(file,onProgress){
+  let host;
+  await shReady();
+  if(SH.url)try{
+    const e=unzipStore(await file.arrayBuffer()),s=e.filter(x=>/^SCRIPTS\/[^/]+$/.test(x.name));
+    if(s.length){file=zipStore(e.filter(x=>!s.includes(x)));host=zipStore([e[0],...s]);}
+  }catch(e){}
+  const d=await restorePost(file,onProgress);
+  if(host)d.warnings=[...d.warnings||[],...(await restorePost(host,null,1)).warnings||[]];
   return d;
 }
 let scrPending=null;
@@ -3068,34 +3126,38 @@ async function soundSync(name,id,plan,step,put){
   if(plan.remove.length)step(t('sndDel'));
   for(const n of plan.remove)await api(url+'/'+n,{method:'DELETE'}).catch(e=>{if(e.status!==404)throw e;});
 }
-async function carrySounds(from,to,step){
-  const{data}=await api('/api/v1/apps/script/'+from+'/sounds').catch(e=>{if(e.status===404)return{data:{}};throw e;});
+async function carrySounds(from,to,step,src,dst){
+  const p=n=>'/api/v1/apps/script/'+n+'/sounds';
+  const{data}=await api(p(from),{host:src}).catch(e=>{if(e.status===404)return{data:{}};throw e;});
   const fs=data.files||[];let i=0;
-  if(soundSpace(fs.map(f=>({bytes:f.size})),data).fits===false)throw new Error(t('sndFull'));
+  if(fs.length&&soundSpace(fs.map(f=>({bytes:f.size})),src===dst?data:(await api(p(to),{host:dst})).data).fits===false)
+    throw new Error(t('sndFull'));
   for(const f of fs){
     step(t('sndStep').replace('{i}',++i).replace('{n}',fs.length).replace('{f}',f.name));
-    const r=await fetch('/SCRIPTS/'+from+'/'+f.name);
+    const[u,h]=await shTo('/SCRIPTS/'+from+'/'+f.name,{},src);
+    const r=await fetch(u,{headers:h});
     if(!r.ok)throw new Error(f.name+': HTTP '+r.status);
-    await uploadFile(await r.blob(),'/api/v1/apps/script/'+to+'/sounds',f.name,null,transferMs(f.size)).catch(e=>{e.message=f.name+': '+e.message;throw e;});
+    await uploadFile(await r.blob(),p(to),f.name,null,transferMs(f.size),dst).catch(e=>{e.message=f.name+': '+e.message;throw e;});
   }
+  return fs.length;
 }
-async function carryStore(from,to){
-  const u=n=>'/api/v1/apps/'+encodeURIComponent(n),g=async p=>(await api(p)).data;
-  const[d,a,b]=await Promise.all([g(u(from)+'/data'),g(u(from)+'/config'),g(u(to)+'/config')]),c={};
+async function carryStore(from,to,src,dst){
+  const u=n=>'/api/v1/apps/'+encodeURIComponent(n),g=async(p,host)=>(await api(p,{host})).data;
+  const[d,a,b]=await Promise.all([g(u(from)+'/data',src),g(u(from)+'/config',src),g(u(to)+'/config',dst)]),c={};
   for(const f of a.fields)d[f.key]=f.value;
   for(const f of b.fields){
     const v=d[f.key];delete d[f.key];
     if(typeof v===typeof f.default&&(!f.options||f.options.includes(v))&&JSON.stringify(v)!==JSON.stringify(f.value))c[f.key]=v;
   }
   for(const f of a.fields)delete d[f.key];
-  if(Object.keys(d).length)await req('PATCH',u(to)+'/data',d);
-  if(Object.keys(c).length)await req('PATCH',u(to)+'/config',c);
+  if(Object.keys(d).length)await req('PATCH',u(to)+'/data',d,dst);
+  if(Object.keys(c).length)await req('PATCH',u(to)+'/config',c,dst);
 }
-const carryScript=async(from,to,step)=>{await carrySounds(from,to,step);await carryStore(from,to);};
+const carryScript=async(from,to,step,src,dst)=>{const n=await carrySounds(from,to,step,src,dst);await carryStore(from,to,src,dst);return n;};
 // Deleting a script keeps its sounds; with sounds they go first, so a failure leaves the script.
-async function delScript(n,sounds){
-  if(sounds)await req('DELETE','/api/v1/apps/script/'+encodeURIComponent(n)+'/sounds');
-  await req('DELETE','/api/v1/apps/'+encodeURIComponent(n));
+async function delScript(n,sounds,host){
+  if(sounds)await req('DELETE','/api/v1/apps/script/'+encodeURIComponent(n)+'/sounds',undefined,host);
+  await req('DELETE','/api/v1/apps/'+encodeURIComponent(n),undefined,host||1);
 }
 const newRun=(step=()=>{})=>({step,created:[]});
 async function soundRoom(run,more=[]){
@@ -3142,10 +3204,10 @@ async function resolveScriptRequires(missing,have,taken,releases=new Map()){
   await walk(missing,1);
   return{deps,left};
 }
-async function putScript(name,source){
+async function putScript(name,source,host){
   for(let attempt=0;;attempt++){
     try{return(await api('/api/v1/apps/script/'+encodeURIComponent(name),
-      {method:'PUT',headers:{'Content-Type':'text/plain'},body:source})).data;}
+      {method:'PUT',headers:{'Content-Type':'text/plain'},body:source,host})).data;}
     catch(e){if(e.code!=='serviceBusy'||attempt>=3)throw e;await new Promise(res=>setTimeout(res,900));}
   }
 }
@@ -3190,7 +3252,7 @@ function askScriptRequires(target,missing,releases){
 async function scriptRequiresFlow(target,reqs,{ask=true,skip,run}={}){
   const none={done:[],left:[]};
   if(!reqs.length)return none;
-  const{data}=await api('/api/v1/apps');
+  const{data}=await api('/api/v1/apps',{host:1});
   const apps=Array.isArray(data)?data:[],have=scriptRequiresHave(apps);
   have.add(target);
   const missing=reqs.filter(r=>!have.has(r.name)),key=target+':'+missing.map(r=>r.name).join();
@@ -3721,14 +3783,14 @@ function viewScripts(view){
   const checkHubBtn=el('button',{onclick:checkHubUpdates},t('suCheck'));
   async function refreshTree(){
     try{
-      const{data}=await api('/api/v1/apps');
+      const{data}=await api('/api/v1/apps',{host:1});
       const byName=(a,b)=>a.name.localeCompare(b.name);
       const rows=(Array.isArray(data)?data:[])
         .filter(a=>a.origin==='script'||a.origin==='module')
         .map(a=>({name:a.name,error:a.error||null,module:a.origin==='module',requires:a.meta?.requires||[]}));
       scripts=rows.filter(a=>!a.module).sort(byName);
       modules=rows.filter(a=>a.module).sort(byName);
-    }catch(e){scripts=[];modules=[];}
+    }catch(e){scripts=[];modules=[];if(e.code==='shAuth')toastErr(e);}
     try{sndCount=new Map(hasSink('mp3')?((await api('/api/v1/audio/mp3')).data.scripts||[]).map(s=>[s.name,s.files.length]):[]);}catch(e){}
     paintTree();paintRequires();paintSounds();
     checkHubUpdates().catch(()=>{});
@@ -3999,6 +4061,7 @@ async function viewDisplay(view){
 }
 async function viewSystem(view){
   let data;
+  const sh=api('/api/v1/scripthost',{timeout:4000}).then(r=>r.data,()=>null);
   try{data=(await api('/api/v1/system')).data;}
   catch(e){view.append(el('div',{class:'card wide'},t('neterr')));return;}
   if(!S.sysHost){try{setStats((await api('/api/v1/device',{timeout:4000})).data);}catch(e){}}
@@ -4027,6 +4090,7 @@ async function viewSystem(view){
     //linux:end
   }
   ['wifiPass','mqttPass','authPass'].forEach(k=>{if(!(k in data))data[k]='';});
+  S.sh=await sh;
   (S.ap?provisioningPage:systemPage)(view,data);
 }
 function systemSettingsPage(view,data){
@@ -4090,6 +4154,7 @@ function systemPage(view,data){
     page.update();
   }
   hubTokenSection(page);
+  if(S.sh)scriptHostSection(page);
   //linux:begin
   if(S.gamepad)gamepadSection(page);
   if(S.voice)voiceSection(page);
@@ -4216,6 +4281,91 @@ function hubTokenSection(page){
       inp.focus();
     });
   }
+}
+const shScripts=async at=>(await api('/api/v1/apps',{host:at})).data
+  .filter(a=>a.origin==='script'||a.origin==='module')
+  .sort((a,b)=>(b.origin==='module')-(a.origin==='module'));
+async function shCopy(n,from,to,step){
+  step(t('shMove').replace('{s}',n));
+  await putScript(n,(await api('/api/v1/apps/script/'+encodeURIComponent(n),{host:from})).text,to);
+  try{await carryStore(n,n,from,to);}
+  catch(e){await delScript(n,false,to).catch(()=>{});throw e;}
+}
+const shBase=a=>(/^https?:\/\//.test(a)?a:'http://'+(a.includes(':')?a:a+':8300')).replace(/\/$/,'');
+const shForget=(base,uid,key,keep)=>api(base+'/api/v1/pair/'+uid+'?keep='+keep,
+  {method:'DELETE',headers:{Authorization:'Bearer '+key}});
+async function shPair(base,code,move,step){
+  const dev=(await api('/api/v1/device')).data,g=displayGeometry(),list=move?await shScripts(CLOCK):[];
+  const ip=/^\d+\.\d+\.\d+\.\d+$/.test(dev.ipAddress||'')&&dev.ipAddress!=='0.0.0.0';
+  const clock=ip?'http://'+dev.ipAddress+(location.port?':'+location.port:''):location.origin;
+  const r=(await api(base+'/api/v1/pair',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({code,uid:dev.uid,name:S.sysHost||'',width:g.width,height:g.height,board:dev.boardType||'',
+      clock})})).data;
+  const to={url:r.url,key:r.key};
+  try{
+    for(const a of list)await shCopy(a.name,CLOCK,to,step);
+    await req('PUT','/api/v1/system',{scriptHost:r.scriptHost,scriptHostKey:r.key});
+  }catch(e){
+    await shForget(base,dev.uid,r.key,1).catch(()=>{});
+    throw e;
+  }
+  for(let i=list.length;i--;)await delScript(list[i].name,false,CLOCK).catch(()=>{});
+  await post('/api/v1/device/reboot');
+}
+async function shUnpair(back,step){
+  await shReady();
+  if(!SH.url)throw new Error(t('neterr'));
+  const from={...SH},dev=(await api('/api/v1/device')).data,list=back?await shScripts(from):[],left=[];
+  await req('PUT','/api/v1/system',{scriptHost:''});
+  await post('/api/v1/device/reboot');
+  step(t('shWait'));
+  await waitForDevice(4000);
+  for(const a of list)try{await shCopy(a.name,from,CLOCK,step);}catch(e){left.push(a.name+' ('+e.message+')');}
+  await shForget(shBase(from.host.split(':')[0]),dev.uid,from.key,left.length||!back?1:0).catch(e=>left.push(e.message));
+  return left;
+}
+function scriptHostSection(page){
+  const h=S.sh,remote=h.mode==='remote',o=h.offers?.[0];
+  const code=el('input',{type:'text',inputmode:'numeric',maxlength:'6',autocomplete:'off','aria-label':t('shCode')});
+  const addr=el('input',{type:'text',autocomplete:'off',spellcheck:'false','aria-label':t('shAddr'),
+    value:remote?h.host.split(':')[0]+':8300':o?o.address+':'+o.port:''});
+  const busy=el('div',{class:'mono'}),step=s=>busy.replaceChildren(s);
+  const pair=el('button',{class:'pri'},t(remote?'shRepair':'shPair'));
+  pair.addEventListener('click',async()=>{
+    pair.disabled=true;
+    try{
+      await shPair(shBase(addr.value.trim()),code.value.trim(),!remote,step);
+      toast(t('shPaired'));step(t('shWait'));
+      await waitForDevice(4000);location.reload();
+    }catch(e){step('');toastErr(e);pair.disabled=false;}
+  });
+  const pairRows=[...(h.offers||[]).map(o=>{
+    const use=el('button',null,o.name);
+    use.addEventListener('click',()=>{addr.value=o.address+':'+o.port;code.focus();});
+    return actionRow(t('shFound'),o.address+':'+o.port,[use]);
+  }),actionRow(t('shAddr'),t('shAddrH'),[addr]),actionRow(t('shCode'),t('shCodeH'),[code,pair])];
+  const rows=[];
+  if(remote){
+    const st=el('div',{class:'badge'+(h.link==='up'?' good':' bad')},
+      t({up:'shUp',resolving:'shResolving',notFound:'shNotFound'}[h.link]||'shDown'));
+    const again=el('div');
+    rows.push(actionRow(t('shState'),h.host,[st]),again);
+    api('/api/v1/version',{host:1,timeout:4000})
+      .catch(e=>{if(e.code==='shAuth')again.replaceWith(el('div',{class:'badge bad'},e.message),...pairRows);});
+    const unpair=armable(el('button',{class:'danger'},t('shUnpair')),async()=>{
+      const back=await askToast(t('shBackAsk'),[[t('shBack'),1,1],[t('shLeave'),0]]);
+      if(back===null)return;
+      unpair.disabled=true;
+      try{
+        const left=await shUnpair(!!back,step);
+        if(left.length)toast(t('shLeft').replace('{s}',left.join(', ')),false,[{label:t('close'),pri:1,fn:()=>location.reload()}]);
+        else{toast(t(back?'shBackDone':'rebooting'));setTimeout(()=>location.reload(),3000);}
+      }catch(e){step('');toastErr(e);unpair.disabled=false;}
+    });
+    rows.push(actionRow(t('shUnpair'),null,[unpair]));
+  }else rows.push(...pairRows);
+  rows.push(busy);
+  page.section('scripthost',t('shSection'),t('shSectionH'),rows);
 }
 //linux:begin
 document.head.append(el('style',null,`
@@ -4506,6 +4656,7 @@ function iphoneSection(page){
     actionRow(t('mqStatus'),null,[state,forget])]);
   poller(load,()=>cur.state==='connecting'?2000:5000);
 }
+//linux:end
 const ownPageSend=(url,marker,method,body)=>api(url,{method,
   headers:{'Content-Type':'application/json',[marker]:'1'},body:JSON.stringify(body||{})});
 function scriptSectionBox(cls,title,open){
@@ -4643,7 +4794,6 @@ async function oauthReturn(){
     }
   }catch(e){toastErr(e);}
 }
-//linux:end
 function actionRow(label,help,ctls,key){
   return el('div',{class:'frow'},
     el('div',{class:'lab'},
@@ -4753,9 +4903,9 @@ function updateRow(install){
   row.firstChild.append(status);
   return row;
 }
-async function waitForDevice(){
+async function waitForDevice(first=15000){
   const pause=ms=>new Promise(r=>setTimeout(r,ms));
-  await pause(15000);
+  await pause(first);
   for(const end=Date.now()+180000;Date.now()<end;await pause(3000)){
     try{if((await fetch('/api/v1/device',{cache:'no-store',signal:AbortSignal.timeout(3000)})).ok)return;}catch(e){}
   }
@@ -4900,8 +5050,8 @@ function uploadZone(dir,accept,hint,onDone,asGif){
   return el('div',null,zone,fileIn);
 }
 let assetRev=0;
-async function uploadFile(file,dir,name,onProgress,timeout){
-  const mp3=dir.startsWith('/api/'),x=await xhrPost(mp3?dir:'/api/v1/files?dir='+encodeURIComponent(dir),'file',file,name,onProgress,timeout);
+async function uploadFile(file,dir,name,onProgress,timeout,host){
+  const mp3=dir.startsWith('/api/'),x=await xhrPost(mp3?dir:'/api/v1/files?dir='+encodeURIComponent(dir),'file',file,name,onProgress,timeout,host);
   if(x.status>=300){
     let m;try{m=JSON.parse(x.responseText).error.message;}catch(e){}
     const k=mp3&&{400:'sndName',404:'sndNoScript',415:'sndNoMp3',500:'sndFull',507:'sndFull'}[x.status];
@@ -6497,9 +6647,9 @@ new ResizeObserver(setChromeH).observe(topbar);
     if(!S.transitions.length)S.transitions=caps.transitions||[];
     readAudioCaps(caps);
     //linux:begin
-    if(S.oauth&&/^#oauth(_error)?=/.test(location.hash))oauthReturn();
     if(S.activation&&!S.ap)askActivation();
     //linux:end
+    if(S.oauth&&/^#oauth(_error)?=/.test(location.hash))oauthReturn();
     if(!anyAudioCap())nav();
   }catch(e){}
 })();

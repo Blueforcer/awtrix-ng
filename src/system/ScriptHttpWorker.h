@@ -17,7 +17,7 @@ class ScriptHttpWorker : public script::IScriptHttp {
 
   void begin(ResultFn onResult);
 
-  bool request(const script::HttpRequest& req) override;
+  bool request(script::HttpRequest req) override;
   void cancel(uint32_t id) override;
 
  private:

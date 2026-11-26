@@ -33,7 +33,7 @@ void LinuxScriptHttp::stop() {
   for (Lane* lane : {&quick_, &patient_})
     if (lane->worker.joinable()) lane->worker.join();
 }
-bool LinuxScriptHttp::request(const script::HttpRequest& req) {
+bool LinuxScriptHttp::request(script::HttpRequest req) {
   if (req.timeoutSec > kMaxTimeoutSec) return false;
   const bool modbus = script::modbus::isUrl(req.url);
   if (modbus) {
@@ -51,7 +51,7 @@ bool LinuxScriptHttp::request(const script::HttpRequest& req) {
   }
   if (!lane.worker.joinable() && !posix::startThread(lane.worker, [this, &lane] { run(lane); })) return false;
   queuedBodyBytes_ += req.body.size();
-  lane.queue.push_back({script::BindingScope::currentScript(), req, std::chrono::steady_clock::now()});
+  lane.queue.push_back({script::BindingScope::currentScript(), std::move(req), std::chrono::steady_clock::now()});
   lane.ready.notify_one();
   return true;
 }

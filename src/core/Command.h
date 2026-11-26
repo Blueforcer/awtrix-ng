@@ -63,7 +63,9 @@ enum class DispatchResult : uint8_t {
   Unavailable,
   Failed,
   Unknown,
-  Conflict
+  Conflict,
+  // The clock's scripts run on a script host; it does not take scripts itself.
+  OnHost
 };
 
 // Why a command failed, in a shape the API can hand back to the sender. line and hook are only

@@ -48,6 +48,7 @@ class ButtonRouter {
   // physical is the debounced state by position; swapped mirrors left and right (a rotated
   // panel or the swap setting, both together cancel out).
   void update(const ButtonState& physical, bool swapped, int64_t nowMs);
+  void press(int button, int64_t nowMs);
 
  private:
   enum class Claim : uint8_t { None, Menu, Hold };

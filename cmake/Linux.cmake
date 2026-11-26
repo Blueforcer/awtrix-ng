@@ -72,6 +72,10 @@ add_executable(awtrix-linux "${LINUX_DIR}/main_linux.cpp" "${LINUX_DIR}/LinuxOpt
   "${LINUX_DIR}/iphone/LinuxCoverFetch.cpp"
   "${PROJECT_SOURCE_DIR}/src/transport/net/DiscoveryService.cpp"
   "${PROJECT_SOURCE_DIR}/src/transport/net/MirrorLink.cpp"
+  "${PROJECT_SOURCE_DIR}/src/transport/net/ScriptHostLink.cpp"
+  "${PROJECT_SOURCE_DIR}/src/transport/net/HmacSha256.cpp"
+  "${LINUX_DIR}/remote/ClockApi.cpp" "${LINUX_DIR}/remote/RemoteClockApplication.cpp"
+  "${LINUX_DIR}/remote/RemoteRole.cpp" "${PROJECT_SOURCE_DIR}/src/transport/mqtt/ScriptOnlyMqtt.cpp"
   ${TC002_RUNTIME_SOURCES} ${TC002_BOOT_SCREEN_SOURCES})
 add_dependencies(awtrix-linux awtrix-webui)
 target_link_libraries(awtrix-linux PRIVATE tc002_audio_script awtrix_layout awtrix_host awtrix_images awtrix_script_ext awtrix_oauth awtrix_secrets awtrix_ble awtrix_ble_script awtrix_iphone tc002_contract tc002_update_verify awtrix_update_state tc002_voice tc002_voice_script tc002_voice_router tc002_wake_listener tc002_microphone_hub tc002_audio tc002_speech_voice awtrix_warnings)

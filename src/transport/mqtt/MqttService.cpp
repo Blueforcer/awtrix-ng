@@ -53,12 +53,12 @@ void MqttService::onOnline() {
   PubSubClient* client = link_.client();
   client->subscribe((prefix_ + "/cmd/#").c_str());
   client->publish((prefix_ + "/availability").c_str(), "online", true);
-  send(prefix_ + "/state/capabilities", *capabilitiesJson_, true);
-  send(prefix_ + "/state/prefix", prefix_, true);
+  link_.publish(prefix_ + "/state/capabilities", *capabilitiesJson_, true);
+  link_.publish(prefix_ + "/state/prefix", prefix_, true);
   announceHa();
   cadence_.onConnect();
   // Clears retained button messages left on the broker.
-  for (const char* topic : kButtonTopics) send(prefix_ + "/" + topic, "", true);
+  for (const char* topic : kButtonTopics) link_.publish(prefix_ + "/" + topic, "", true);
   buttonEdges_.resync(buttonState());
   if (scriptBridge_) scriptBridge_->onReconnect();
 }
@@ -78,17 +78,6 @@ void MqttService::tick() {
     publish("state/device", deviceState_(scriptingRunning_), true);
 }
 
-// Publishes in streaming form so the payload is never copied into the packet buffer; that keeps
-// state documents larger than the buffer's spare room from failing.
-bool MqttService::send(const std::string& topic, const std::string& payload, bool retained) {
-  PubSubClient* client = link_.client();
-  if (!client->beginPublish(topic.c_str(), static_cast<unsigned int>(payload.size()), retained))
-    return false;
-  if (!payload.empty())
-    client->write(reinterpret_cast<const uint8_t*>(payload.data()), payload.size());
-  return client->endPublish() != 0;
-}
-
 ha::ButtonEdges::State MqttService::buttonState() const {
   const RuntimeState& rt = engine_->state().runtime();
   return rt.buttons;
@@ -96,7 +85,7 @@ ha::ButtonEdges::State MqttService::buttonState() const {
 
 void MqttService::publish(const std::string& suffix, const std::string& payload, bool retained) {
   if (!link_.online()) return;
-  send(prefix_ + "/" + suffix, payload, retained);
+  link_.publish(prefix_ + "/" + suffix, payload, retained);
 }
 
 void MqttService::publishError(const std::string& event) {
@@ -105,7 +94,7 @@ void MqttService::publishError(const std::string& event) {
 
 void MqttService::publishRaw(const std::string& topic, const std::string& payload) {
   if (!link_.online()) return;
-  send(topic, payload, false);
+  link_.publish(topic, payload, false);
 }
 
 void MqttService::subscribeRaw(const std::string& topic) {

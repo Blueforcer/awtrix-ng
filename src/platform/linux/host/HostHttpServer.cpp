@@ -126,9 +126,9 @@ bool HostHttpServer::begin(uint16_t port, CoreEngine& engine, Canvas& screen,
     };
   }
   // httplib reads the body of any other method before dispatch, outside the one-at-a-time rule.
-  im->svr->set_pre_routing_handler([admit](const httplib::Request& req,
-                                                         httplib::Response& res) {
-    const bool ownPage = ownPageRequest(req);
+  im->svr->set_pre_routing_handler([admit, keyLogin = im->options.keyLogin](const httplib::Request& req,
+                                                                            httplib::Response& res) {
+    const bool ownPage = !keyLogin && ownPageRequest(req);
     if (ownPage) res.headers.erase("Access-Control-Allow-Origin");
     if (admit && !admit(req, res)) return httplib::Server::HandlerResponse::Handled;
     if (ownPage && fromOtherSite(req)) {

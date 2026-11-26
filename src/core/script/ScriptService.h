@@ -60,7 +60,7 @@ class ScriptService : public IScriptService {
         if (readSource(name, saved) && saved == source) return DispatchResult::Ok;
         detail.message = "source not saved";
       }
-      removeScript(name);
+      drop(name);
       return DispatchResult::ValidationError;
     }
     if (!exists) return DispatchResult::NotFound;
@@ -107,9 +107,9 @@ class ScriptService : public IScriptService {
                       "not enough memory", detail);
   }
 
-  void removeScript(const std::string& name) override {
-    host_.remove(name);
-    if (remove_) remove_(name);
+  DispatchResult removeScript(const std::string& name, DispatchDetail&) override {
+    drop(name);
+    return DispatchResult::Ok;
   }
 
   bool scriptWantsShow(const std::string& name) override { return host_.wantsShow(name); }
@@ -177,6 +177,11 @@ class ScriptService : public IScriptService {
     const DispatchResult r = install(name, source, patch.storeJson, refusal, detail);
     if (r != DispatchResult::Ok) saveStore(name, storeJson.empty() ? "{}" : storeJson);
     return r;
+  }
+
+  void drop(const std::string& name) {
+    host_.remove(name);
+    if (remove_) remove_(name);
   }
 
   bool readSource(const std::string& name, std::string& out) const {

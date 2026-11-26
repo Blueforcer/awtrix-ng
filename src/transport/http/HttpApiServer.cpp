@@ -34,6 +34,7 @@
 #include "core/api/ScriptSoundsApi.h"
 #include "core/backup/RestoreApplier.h"
 #include "core/payload/PayloadParser.h"
+#include "core/remote/HostActs.h"
 #include "core/render/Canvas.h"
 #include "core/script/ScriptConfig.h"
 #include "core/script/ScriptHeap.h"
@@ -56,6 +57,7 @@
 #include "system/Log.h"
 #include "transport/DeviceStateJson.h"
 #include "transport/http/WebUiAsset.h"
+#include "transport/net/ScriptHostLink.h"
 
 namespace awtrix {
 

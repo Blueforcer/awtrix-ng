@@ -13,6 +13,10 @@ namespace awtrix::script {
 class ScriptHost;
 }
 
+namespace awtrix::remote {
+class RemoteApps;
+}
+
 // A script's own sounds: /SCRIPTS/<script>/<sound>.mp3, next to its source. The routes live under
 // the script they belong to. Files adapters provide the storage and streaming hash operations.
 namespace awtrix::api::scriptsounds {
@@ -32,18 +36,22 @@ Route match(std::string_view path);
 bool isUpload(std::string_view path);
 
 // The scripts these routes can reach, seen the way GET /api/v1/apps sees them: the running
-// interpreter's, or the stored sources while scripting is off. Borrowed for one request.
+// interpreter's, the stored sources while scripting is off, and on a clock paired with a script
+// host the host's apps, whose sounds the clock keeps and plays. Borrowed for one request.
 class InstalledScripts {
  public:
-  InstalledScripts(const script::ScriptHost* host, const script::ConfigTextFn& source)
-      : host_(host), source_(source) {}
+  InstalledScripts(const script::ScriptHost* host, const script::ConfigTextFn& source,
+                   const remote::RemoteApps* hosted = nullptr)
+      : host_(host), source_(source), hosted_(hosted) {}
 
   // title receives the script's @name, or its install name when it declares none.
   bool find(const std::string& name, std::string* title = nullptr) const;
+  bool takesSounds(const std::string& name) const { return hosted_ || find(name); }
 
  private:
   const script::ScriptHost* host_;
   const script::ConfigTextFn& source_;
+  const remote::RemoteApps* hosted_;
 };
 
 // 200 for a script that is installed or still has sounds of its own (deleting a script keeps

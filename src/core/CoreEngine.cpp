@@ -573,10 +573,13 @@ DispatchResult CoreEngine::notifyFromScript(const std::string& script, const std
   return pushNotification(json, script, detail);
 }
 
-DispatchResult CoreEngine::pushNotification(const std::string& json,
-                                            const std::string& soundScript,
-                                            DispatchDetail& detail) {
+DispatchResult CoreEngine::checkNotification(const std::string& json, DispatchDetail& detail) const {
   AppSpec spec;
+  return readNotification(json, spec, detail);
+}
+
+DispatchResult CoreEngine::readNotification(const std::string& json, AppSpec& spec,
+                                            DispatchDetail& detail) const {
   int elements = 0;
   payload::JsonParse why = payload::JsonParse::Ok;
   if (!payload::parse(json, true, spec, &elements, &why, &detail)) {
@@ -588,6 +591,15 @@ DispatchResult CoreEngine::pushNotification(const std::string& json,
     return DispatchResult::ValidationError;
   }
   if (!validateSpecNames(spec, detail)) return DispatchResult::ValidationError;
+  return DispatchResult::Ok;
+}
+
+DispatchResult CoreEngine::pushNotification(const std::string& json,
+                                            const std::string& soundScript,
+                                            DispatchDetail& detail) {
+  AppSpec spec;
+  const DispatchResult read = readNotification(json, spec, detail);
+  if (read != DispatchResult::Ok) return read;
   if (!spec.sound.empty()) {
     sound::Choices choices;
     sound::parse(spec.sound, sound::Origin::Notification, choices, detail);

@@ -51,6 +51,14 @@ function installGlobals(fetchImpl, canvasContext) {
     // jsdom 24 has <dialog> without showModal(); open and close are enough for the tests.
     window.HTMLDialogElement.prototype.showModal ??= function () { this.open = true; };
     window.HTMLDialogElement.prototype.close ??= function () { this.open = false; };
+    // jsdom 24 has Blob without arrayBuffer(); restoring a backup reads the archive with it.
+    window.Blob.prototype.arrayBuffer ??= function () {
+      return new Promise(resolve => {
+        const reader = new window.FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsArrayBuffer(this);
+      });
+    };
     if (canvasContext) window.HTMLCanvasElement.prototype.getContext = () => canvasContext;
   };
 }
@@ -161,6 +169,14 @@ function mockFetch(store, netlog, win) {
 
     if (/^https?:\/\//.test(url) && !url.startsWith('http://localhost')) {
       netlog.push(method + ' ' + url);
+      if (store.external) {
+        const answer = store.external(method, url, opts);
+        if (answer) {
+          const r = ext(answer[0], answer[1] < 400, answer[1]);
+          if (typeof answer[0] === 'string') r.text = async () => answer[0];
+          return r;
+        }
+      }
       if (url.startsWith('https://api.github.com/'))
         return ext(store.githubLatest || { message: 'Not Found' }, !!store.githubLatest, store.githubLatest ? 200 : 404);
       if (url.endsWith('/submit') && method === 'POST') {
@@ -203,6 +219,8 @@ function mockFetch(store, netlog, win) {
     const p = u.pathname;
     const q = u.searchParams;
     netlog.push(method + ' ' + p + (u.search || ''));
+    const failed = store.fail && store.fail(method, p);
+    if (failed) return resp(failed[0], false, failed[1]);
 
     for (const [kind, prefix] of [['oauth', '/api/v1/oauth'], ['secrets', '/api/v1/secrets']]) {
       if (!store[kind] || (p !== prefix && !p.startsWith(prefix + '/'))) continue;
@@ -214,9 +232,22 @@ function mockFetch(store, netlog, win) {
       const [answer, status] = store.activation(method, opts.body ? JSON.parse(opts.body) : null);
       return resp(answer, status < 400, status);
     }
+    if (p === '/api/v1/scripthost') {
+      if (!store.scripthost) return resp({ error: { code: 'notFound' } }, false, 404);
+      const key = q.has('secrets') && store.scripthost.host && store.system.scriptHostKey;
+      return resp(key ? { ...store.scripthost, key } : store.scripthost);
+    }
     if (p === '/api/v1/device') return resp(store.device);
     if (p === '/api/v1/capabilities')
       return store.caps ? resp(store.caps) : resp({ error: { message: 'offline' } }, false, 503);
+    if (p === '/api/v1/system' && method === 'PUT') {
+      store.systemPut = JSON.parse(opts.body || '{}');
+      return resp(store.system);
+    }
+    if (p === '/api/v1/device/reboot' && method === 'POST') {
+      store.reboots = (store.reboots || 0) + 1;
+      return resp({ ok: true });
+    }
     if (p === '/api/v1/system') return resp(store.system);
     if (p === '/api/v1/display/screen' && store.screen) return resp(store.screen);
     if (p === '/api/v1/display' && method === 'GET') return resp(store.display);
@@ -466,6 +497,14 @@ async function boot(opts) {
   for (const kind of ['oauth', 'secrets']) {
     if (opts && kind in opts) { store[kind] = opts[kind]; store[kind + 'Calls'] = []; }
   }
+  // scripthost answers GET /api/v1/scripthost (a paired system brings one, with its key for
+  // ?secrets=1); external(method, url, opts) answers other hosts, by
+  // fetch and by upload, with [json or text, status] or null; fail(method, path) makes a call to the
+  // clock answer [json, status] instead.
+  if (opts && 'scripthost' in opts) store.scripthost = opts.scripthost;
+  else if (store.system.scriptHost) store.scripthost = { mode: 'remote', host: store.system.scriptHost, link: 'up', offers: [] };
+  if (opts && 'external' in opts) store.external = opts.external;
+  if (opts && 'fail' in opts) store.fail = opts.fail;
   // activation(method, body) answers /api/v1/activation with [json, status].
   if (opts && 'activation' in opts) store.activation = opts.activation;
   const netlog = [];
@@ -511,20 +550,29 @@ async function goto(window, hash) {
 }
 
 // uploadFile() goes through XMLHttpRequest, which mockFetch never sees. This swaps in a fake
-// that records {method, url, files:[{field,name}]} into log and answers 200. Pass the store
+// that records {method, url, headers, files:[{field,name,file}]} into log and answers 200. Pass the store
 // to have the upload land in its file view too, the way the device would store it: /MP3 for
 // /api/v1/audio/mp3, the script's folder for /api/v1/apps/script/{name}/sounds (404 when the
 // script is not installed), and store.uploadFail can answer an upload with an error or
-// {network:true} for a connection that drops.
+// {network:true} for a connection that drops. An upload to another host goes to store.external.
 function stubXhr(window, log, store) {
   window.XMLHttpRequest = class {
-    constructor() { this.upload = {}; this.status = 200; this.responseText = '{"ok":true}'; }
+    constructor() { this.upload = {}; this.status = 200; this.responseText = '{"ok":true}'; this.headers = {}; }
     open(method, url) { this.method = method; this.url = url; }
+    setRequestHeader(name, value) { this.headers[name] = value; }
     send(body) {
-      const entry = { method: this.method, url: this.url, files: [], timeout: this.timeout };
+      const entry = { method: this.method, url: this.url, headers: this.headers, files: [], timeout: this.timeout };
       if (body && typeof body.entries === 'function')
-        for (const [field, v] of body.entries()) entry.files.push({ field, name: v && v.name });
+        for (const [field, v] of body.entries()) entry.files.push({ field, name: v && v.name, file: v });
       log.push(entry);
+      if (store && store.external && /^https?:\/\//.test(this.url) && !this.url.startsWith('http://localhost')) {
+        store.netlog?.push('XHR ' + this.method + ' ' + this.url);
+        const answer = store.external(this.method, this.url, { headers: this.headers, body, files: entry.files });
+        if (answer) { this.status = answer[1]; this.responseText = JSON.stringify(answer[0]); }
+        else { this.status = 404; this.responseText = '{"error":{"code":"notFound"}}'; }
+        setTimeout(() => this.onload && this.onload(), 0);
+        return;
+      }
       const reads=[];
       const read = file => new Promise(resolve=>{const reader=new window.FileReader();
         reader.onload=()=>resolve(new TextDecoder().decode(reader.result));reader.readAsArrayBuffer(file);});

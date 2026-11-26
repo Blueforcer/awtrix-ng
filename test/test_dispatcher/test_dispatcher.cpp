@@ -60,10 +60,15 @@ struct FakeSystem : ISystemService {
 struct FakeScripts : IScriptService {
   std::string setName, setSource, removedName;
   DispatchResult setReturn = DispatchResult::Ok;
+  DispatchResult removeReturn = DispatchResult::Ok;
   DispatchResult setScript(const std::string& n, const std::string& src, DispatchDetail&) override {
     setName = n; setSource = src; return setReturn;
   }
-  void removeScript(const std::string& n) override { removedName = n; }
+  DispatchResult removeScript(const std::string& n, DispatchDetail& detail) override {
+    removedName = n;
+    if (removeReturn != DispatchResult::Ok) detail.message = "script host not reachable";
+    return removeReturn;
+  }
 };
 struct FakeOverlay : IEffect {
   std::string name;
@@ -329,6 +334,19 @@ static void test_delete_app_removes_either_kind() {
   TEST_ASSERT_EQUAL_INT(rc(DispatchResult::Ok), rc(h.run(c)));
   TEST_ASSERT_EQUAL_STRING("weather", h.app.deletedName.c_str());
   TEST_ASSERT_EQUAL_STRING("weather", h.scripts.removedName.c_str());
+}
+
+static void test_a_refused_script_removal_is_the_answer() {
+  Harness h;
+  h.scripts.removeReturn = DispatchResult::OnHost;
+  Command c(CommandType::DeleteApp);
+  c.name = "weather";
+  c.clear = true;
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::OnHost), rc(h.run(c)));
+  TEST_ASSERT_EQUAL_STRING("script host not reachable", h.ctx.detail.message.c_str());
+  Command remove(CommandType::ScriptRemove);
+  remove.name = "weather";
+  TEST_ASSERT_EQUAL_INT(rc(DispatchResult::OnHost), rc(h.run(remove)));
 }
 
 static void test_delete_app_without_scripting_still_succeeds() {
@@ -853,6 +871,7 @@ int main(int, char**) {
   RUN_TEST(test_notify_capacity_maps_to_Capacity);
   RUN_TEST(test_delete_app_removes_either_kind);
   RUN_TEST(test_delete_app_without_scripting_still_succeeds);
+  RUN_TEST(test_a_refused_script_removal_is_the_answer);
   RUN_TEST(test_custom_clear_flag_deletes);
   RUN_TEST(test_custom_empty_body_and_braces_delete_the_app);
   RUN_TEST(test_custom_capacity_maps_to_Capacity);

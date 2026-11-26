@@ -4,6 +4,8 @@
 #include <cstring>
 #include <new>
 
+#include "core/net/RgbRows.h"
+
 namespace awtrix {
 namespace mirror {
 
@@ -98,13 +100,7 @@ void Receiver::accept(const wire::Packet& packet) {
 }
 
 void Receiver::draw(Canvas& canvas) const {
-  if (!showing() || canvas.width() != width_ || canvas.height() != height_) return;
-  const uint8_t* rgb = shown_.get();
-  for (int y = 0; y < height_; ++y) {
-    for (int x = 0; x < width_; ++x, rgb += 3)
-      canvas.setPixel(x, y, (static_cast<uint32_t>(rgb[0]) << 16) |
-                                (static_cast<uint32_t>(rgb[1]) << 8) | rgb[2]);
-  }
+  if (showing() && canvas.width() == width_ && canvas.height() == height_) net::rgb::draw(shown_.get(), canvas);
 }
 
 }

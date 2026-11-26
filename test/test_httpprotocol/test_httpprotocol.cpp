@@ -65,6 +65,9 @@ void test_credentials_and_firmware_routes_are_for_the_own_page_only() {
   TEST_ASSERT_TRUE(api::ownPageOnly("POST", "/update", false));
   TEST_ASSERT_TRUE(api::ownPageOnly("POST", "/api/v1/device/factory-reset", false));
   TEST_ASSERT_FALSE(api::ownPageOnly("GET", "/api/v1/system", false));
+  TEST_ASSERT_TRUE(api::ownPageOnly("GET", "/api/v1/scripthost", true));
+  TEST_ASSERT_FALSE(api::ownPageOnly("GET", "/api/v1/scripthost", false));
+  TEST_ASSERT_FALSE(api::ownPageOnly("POST", "/api/v1/scripthost/act", true));
   TEST_ASSERT_FALSE(api::ownPageOnly("OPTIONS", "/api/v1/system", true));
   TEST_ASSERT_FALSE(api::ownPageOnly("GET", "/api/v1/settings", true));
   TEST_ASSERT_FALSE(api::ownPageOnly("POST", "/api/v1/notifications", false));
@@ -90,6 +93,17 @@ void test_a_page_of_another_site_is_told_apart_from_the_own_page() {
   TEST_ASSERT_TRUE(refusal.body.find("\"forbiddenOrigin\"") != std::string::npos);
 }
 
+void test_the_script_host_key_is_a_bearer_token() {
+  const std::string key(64, 'a');
+  TEST_ASSERT_TRUE(api::hostKeyOk("Bearer " + key, key));
+  TEST_ASSERT_FALSE(api::hostKeyOk("Bearer " + std::string(64, 'b'), key));
+  TEST_ASSERT_FALSE(api::hostKeyOk("Basic " + key, key));
+  TEST_ASSERT_FALSE(api::hostKeyOk(key, key));
+  TEST_ASSERT_FALSE(api::hostKeyOk("Bearer " + key.substr(1), key));
+  TEST_ASSERT_FALSE_MESSAGE(api::hostKeyOk("Bearer ", ""), "an empty key never admits");
+  TEST_ASSERT_FALSE(api::hostKeyOk("", ""));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_etag_describes_content_independently_of_read_boundaries);
@@ -98,5 +112,6 @@ int main() {
   RUN_TEST(test_preflight_allows_the_same_headers_on_both_transports);
   RUN_TEST(test_credentials_and_firmware_routes_are_for_the_own_page_only);
   RUN_TEST(test_a_page_of_another_site_is_told_apart_from_the_own_page);
+  RUN_TEST(test_the_script_host_key_is_a_bearer_token);
   return UNITY_END();
 }

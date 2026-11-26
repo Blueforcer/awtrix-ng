@@ -45,7 +45,7 @@ struct FScripts : IScriptService {
   DispatchResult setScript(const std::string&, const std::string&, DispatchDetail&) override {
     return DispatchResult::Ok;
   }
-  void removeScript(const std::string&) override {}
+  DispatchResult removeScript(const std::string&, DispatchDetail&) override { return DispatchResult::Ok; }
   void setRunningScripts(const std::vector<std::string>& r) override { running = r; }
   bool scriptIsOnDemand(const std::string& name) override { return onDemand.count(name) != 0; }
   DispatchResult launchScript(const std::string& name, DispatchDetail&) override {
@@ -378,6 +378,28 @@ static void test_double_press_still_switches_the_panel() {
   TEST_ASSERT_TRUE(r.rig.engine.state().runtime().matrixOff);
 }
 
+static void test_a_press_sent_back_does_what_a_free_press_does() {
+  RouterRig r;
+  r.router.press(input::index(input::Button::Right), 0);
+  r.rig.engine.tick(50);
+  TEST_ASSERT_EQUAL_STRING("Date", r.rig.engine.incomingAppId().c_str());
+  RouterRig twice;
+  twice.router.press(input::index(input::Button::Select), 0);
+  twice.router.press(input::index(input::Button::Select), 200);
+  TEST_ASSERT_TRUE_MESSAGE(twice.rig.engine.state().runtime().matrixOff, "two of them are a double press");
+  RouterRig mixed;
+  mixed.at(0, pressed(false, true, false));
+  mixed.at(50, pressed(false, false, false));
+  mixed.router.press(input::index(input::Button::Select), 200);
+  TEST_ASSERT_TRUE_MESSAGE(mixed.rig.engine.state().runtime().matrixOff, "and with one on the clock");
+  RouterRig session;
+  DispatchDetail detail;
+  session.rig.engine.startSession("Doom", detail);
+  session.router.press(input::index(input::Button::Right), 0);
+  session.rig.engine.tick(50);
+  TEST_ASSERT_TRUE_MESSAGE(session.rig.engine.inSession(), "a session keeps the arrows");
+}
+
 // --- launcher ---------------------------------------------------------------------------------
 
 static const char* kStations =
@@ -621,6 +643,7 @@ int main(int, char**) {
   RUN_TEST(test_swapped_buttons_step_the_other_way);
   RUN_TEST(test_blocked_navigation_or_a_dark_panel_keeps_the_menu_shut);
   RUN_TEST(test_double_press_still_switches_the_panel);
+  RUN_TEST(test_a_press_sent_back_does_what_a_free_press_does);
   RUN_TEST(test_the_root_lists_what_this_device_can_offer);
   RUN_TEST(test_picking_a_script_starts_its_session_and_closes);
   RUN_TEST(test_a_script_that_will_not_start_says_so_and_stays);

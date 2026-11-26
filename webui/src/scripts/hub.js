@@ -53,34 +53,38 @@ async function soundSync(name,id,plan,step,put){
   if(plan.remove.length)step(t('sndDel'));
   for(const n of plan.remove)await api(url+'/'+n,{method:'DELETE'}).catch(e=>{if(e.status!==404)throw e;});
 }
-async function carrySounds(from,to,step){
-  const{data}=await api('/api/v1/apps/script/'+from+'/sounds').catch(e=>{if(e.status===404)return{data:{}};throw e;});
+async function carrySounds(from,to,step,src,dst){
+  const p=n=>'/api/v1/apps/script/'+n+'/sounds';
+  const{data}=await api(p(from),{host:src}).catch(e=>{if(e.status===404)return{data:{}};throw e;});
   const fs=data.files||[];let i=0;
-  if(soundSpace(fs.map(f=>({bytes:f.size})),data).fits===false)throw new Error(t('sndFull'));
+  if(fs.length&&soundSpace(fs.map(f=>({bytes:f.size})),src===dst?data:(await api(p(to),{host:dst})).data).fits===false)
+    throw new Error(t('sndFull'));
   for(const f of fs){
     step(t('sndStep').replace('{i}',++i).replace('{n}',fs.length).replace('{f}',f.name));
-    const r=await fetch('/SCRIPTS/'+from+'/'+f.name);
+    const[u,h]=await shTo('/SCRIPTS/'+from+'/'+f.name,{},src);
+    const r=await fetch(u,{headers:h});
     if(!r.ok)throw new Error(f.name+': HTTP '+r.status);
-    await uploadFile(await r.blob(),'/api/v1/apps/script/'+to+'/sounds',f.name,null,transferMs(f.size)).catch(e=>{e.message=f.name+': '+e.message;throw e;});
+    await uploadFile(await r.blob(),p(to),f.name,null,transferMs(f.size),dst).catch(e=>{e.message=f.name+': '+e.message;throw e;});
   }
+  return fs.length;
 }
-async function carryStore(from,to){
-  const u=n=>'/api/v1/apps/'+encodeURIComponent(n),g=async p=>(await api(p)).data;
-  const[d,a,b]=await Promise.all([g(u(from)+'/data'),g(u(from)+'/config'),g(u(to)+'/config')]),c={};
+async function carryStore(from,to,src,dst){
+  const u=n=>'/api/v1/apps/'+encodeURIComponent(n),g=async(p,host)=>(await api(p,{host})).data;
+  const[d,a,b]=await Promise.all([g(u(from)+'/data',src),g(u(from)+'/config',src),g(u(to)+'/config',dst)]),c={};
   for(const f of a.fields)d[f.key]=f.value;
   for(const f of b.fields){
     const v=d[f.key];delete d[f.key];
     if(typeof v===typeof f.default&&(!f.options||f.options.includes(v))&&JSON.stringify(v)!==JSON.stringify(f.value))c[f.key]=v;
   }
   for(const f of a.fields)delete d[f.key];
-  if(Object.keys(d).length)await req('PATCH',u(to)+'/data',d);
-  if(Object.keys(c).length)await req('PATCH',u(to)+'/config',c);
+  if(Object.keys(d).length)await req('PATCH',u(to)+'/data',d,dst);
+  if(Object.keys(c).length)await req('PATCH',u(to)+'/config',c,dst);
 }
-const carryScript=async(from,to,step)=>{await carrySounds(from,to,step);await carryStore(from,to);};
+const carryScript=async(from,to,step,src,dst)=>{const n=await carrySounds(from,to,step,src,dst);await carryStore(from,to,src,dst);return n;};
 // Deleting a script keeps its sounds; with sounds they go first, so a failure leaves the script.
-async function delScript(n,sounds){
-  if(sounds)await req('DELETE','/api/v1/apps/script/'+encodeURIComponent(n)+'/sounds');
-  await req('DELETE','/api/v1/apps/'+encodeURIComponent(n));
+async function delScript(n,sounds,host){
+  if(sounds)await req('DELETE','/api/v1/apps/script/'+encodeURIComponent(n)+'/sounds',undefined,host);
+  await req('DELETE','/api/v1/apps/'+encodeURIComponent(n),undefined,host||1);
 }
 const newRun=(step=()=>{})=>({step,created:[]});
 async function soundRoom(run,more=[]){
@@ -127,10 +131,10 @@ async function resolveScriptRequires(missing,have,taken,releases=new Map()){
   await walk(missing,1);
   return{deps,left};
 }
-async function putScript(name,source){
+async function putScript(name,source,host){
   for(let attempt=0;;attempt++){
     try{return(await api('/api/v1/apps/script/'+encodeURIComponent(name),
-      {method:'PUT',headers:{'Content-Type':'text/plain'},body:source})).data;}
+      {method:'PUT',headers:{'Content-Type':'text/plain'},body:source,host})).data;}
     catch(e){if(e.code!=='serviceBusy'||attempt>=3)throw e;await new Promise(res=>setTimeout(res,900));}
   }
 }
@@ -175,7 +179,7 @@ function askScriptRequires(target,missing,releases){
 async function scriptRequiresFlow(target,reqs,{ask=true,skip,run}={}){
   const none={done:[],left:[]};
   if(!reqs.length)return none;
-  const{data}=await api('/api/v1/apps');
+  const{data}=await api('/api/v1/apps',{host:1});
   const apps=Array.isArray(data)?data:[],have=scriptRequiresHave(apps);
   have.add(target);
   const missing=reqs.filter(r=>!have.has(r.name)),key=target+':'+missing.map(r=>r.name).join();

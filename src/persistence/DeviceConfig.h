@@ -69,6 +69,9 @@ struct DeviceConfig : PlatformConfig {
   bool debugMode = false;
 
   bool scriptingEnabled = true;
+  // host[:port] of the script host that runs this clock's scripts, and the key from pairing.
+  std::string scriptHost;
+  std::string scriptHostKey;
 
   // Defaults come from the SoC profile at construction; load() then overwrites whatever the user
   // has actually stored. A profile change therefore only affects pins nobody has pinned down.

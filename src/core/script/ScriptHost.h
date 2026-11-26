@@ -47,6 +47,9 @@ class ScriptHost {
   // A switched-off app is only compiled: no instance, no init() or setup(), nothing held. Switching
   // it on starts it from its stored source, switching it off unloads it again.
   void setSwitchedOff(NameCheck switchedOff) { switchedOff_ = std::move(switchedOff); }
+  // Asks the check again for every installed app on the next tick, for an answer that changed
+  // without the running set changing.
+  void recheckSwitches() { switchesPending_ = true; }
   void setRunningScripts(std::vector<std::string> running);
   bool active(const std::string& name) const;
   bool isHeadless(const std::string& name) const;
@@ -66,6 +69,14 @@ class ScriptHost {
     return meta && meta->onDemand;
   }
   bool isLoaded(const std::string& name) const { return apps_.count(name) != 0; }
+  // The apps that run, in name order: what a script host offers its clock.
+  std::vector<std::string> loadedApps() const {
+    std::vector<std::string> names;
+    for (const auto& kv : apps_) names.push_back(kv.first);
+    return names;
+  }
+  // Whether the app reacts to buttons at all.
+  bool takesButtons(const std::string& name) const;
   bool isParked(const std::string& name) const {
     const auto it = meta_.find(name);
     return it != meta_.end() && it->second.parked && !apps_.count(name);
@@ -142,7 +153,7 @@ class ScriptHost {
   class HttpAdapter : public IScriptHttp {
    public:
     explicit HttpAdapter(ScriptHost* h) : host_(h) {}
-    bool request(const HttpRequest& req) override;
+    bool request(HttpRequest req) override;
     void cancel(uint32_t id) override;
 
    private:

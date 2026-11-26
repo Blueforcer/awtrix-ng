@@ -1,10 +1,17 @@
 set(linux "${PROJECT_SOURCE_DIR}/src/platform/linux")
 
 add_awtrix_test(NAME posix-files SOURCES test_posix_files.cpp LIBRARIES awtrix_posix)
+add_awtrix_test(NAME hostd-store SOURCES test_hostd_store.cpp LIBRARIES awtrix_hostd)
 target_link_options(posix-files-test PRIVATE -Wl,--wrap=fsync)
 add_awtrix_test(NAME posix-worker-thread SOURCES test_worker_thread.cpp LIBRARIES awtrix_posix)
 add_awtrix_test(NAME posix-private-store SOURCES test_private_store.cpp LIBRARIES awtrix_posix)
 add_awtrix_test(NAME linux-own-page SOURCES test_own_page.cpp LIBRARIES awtrix_host)
+add_awtrix_test(NAME linux-clock-api SOURCES test_clock_api.cpp "${linux}/remote/ClockApi.cpp"
+  LIBRARIES awtrix_host awtrix_posix)
+add_awtrix_test(NAME linux-remote-role SOURCES test_remote_role.cpp "${linux}/remote/ClockApi.cpp"
+  "${linux}/remote/RemoteClockApplication.cpp" "${linux}/remote/RemoteRole.cpp"
+  "${PROJECT_SOURCE_DIR}/src/transport/net/HmacSha256.cpp"
+  LIBRARIES awtrix_host awtrix_posix OpenSSL::Crypto TIMEOUT 60)
 add_awtrix_test(NAME linux-on-demand-workers SOURCES test_on_demand_workers.cpp LIBRARIES awtrix_host TIMEOUT 60)
 add_awtrix_test(NAME linux-cover-fetch SOURCES test_cover_fetch.cpp "${linux}/iphone/LinuxCoverFetch.cpp"
   LIBRARIES awtrix_iphone)
@@ -62,6 +69,11 @@ add_awtrix_runtime_test(NAME linux-performance SCRIPT test_performance.py TIMEOU
 add_awtrix_runtime_test(NAME http-header-contract SCRIPT test_headers.py TIMEOUT 60)
 add_awtrix_runtime_test(NAME http-bodyless-post SCRIPT test_bodyless_post.py TIMEOUT 60)
 add_awtrix_runtime_test(NAME linux-discovery SCRIPT test_discovery.py TIMEOUT 60 PROPERTIES RUN_SERIAL TRUE)
+add_awtrix_runtime_test(NAME linux-script-host-clock SCRIPT test_script_host_clock.py TIMEOUT 90 PROPERTIES RUN_SERIAL TRUE)
+add_awtrix_runtime_test(NAME linux-script-host-e2e SCRIPT test_script_host_e2e.py TIMEOUT 240 PROPERTIES RUN_SERIAL TRUE)
+add_awtrix_runtime_test(NAME linux-script-host-offer SCRIPT test_script_host_offer.py TIMEOUT 90 PROPERTIES RUN_SERIAL TRUE)
+add_awtrix_runtime_test(NAME linux-script-host-mqtt SCRIPT test_script_host_mqtt.py TIMEOUT 120 PROPERTIES RUN_SERIAL TRUE)
+add_awtrix_runtime_test(NAME linux-hostd SCRIPT test_hostd.py TIMEOUT 150 PROPERTIES RUN_SERIAL TRUE)
 add_awtrix_runtime_test(NAME linux-icon-origins SCRIPT test_icon_origins.py TIMEOUT 60)
 add_awtrix_runtime_test(NAME linux-provision SCRIPT test_provision.py TIMEOUT 180)
 add_awtrix_runtime_test(NAME linux-web-update SCRIPT test_web_update.py TIMEOUT 180)

@@ -23,6 +23,8 @@
 #include "platform/linux/host/HostButtonInput.h"
 #include "platform/linux/host/HostHttpServer.h"
 #include "platform/linux/host/HostScriptFiles.h"
+#include "platform/linux/remote/RemoteClockApplication.h"
+#include "platform/linux/remote/RemoteRole.h"
 #include "platform/linux/LinuxBoard.h"
 #include "platform/linux/LinuxButtonWebhook.h"
 #include "platform/linux/LinuxCapabilities.h"
@@ -84,6 +86,8 @@
 #include "transport/net/DiscoveryService.h"
 #include "transport/net/HostResolver.h"
 #include "transport/net/MirrorLink.h"
+#include "transport/mqtt/ScriptOnlyMqtt.h"
+#include "transport/net/ScriptHostLink.h"
 #include "transport/ScriptMqttBridge.h"
 
 namespace awtrix {
@@ -134,6 +138,7 @@ class LinuxRuntime {
   int openChannels();
   int loadConfig();
   int composeEngine();
+  int beginRemote();
   void composeAccess();
   void composeConnectivity();
   void composeScriptServices();
@@ -200,6 +205,9 @@ class LinuxRuntime {
   layout::Limits layoutLimits_;
   std::shared_ptr<layout::Budget> layoutBudget_;
   MirrorLink mirror_;
+  // Only a headless clock with scriptHost set uses it: its scripts then run on the script host.
+  ScriptHostLink scriptHost_;
+  bool onHost_ = false;
   std::optional<ApplicationRuntime> app_;
   layout::Resources layoutResources_;
   std::optional<layout::LayoutPayload> layoutPayload_;
@@ -216,6 +224,9 @@ class LinuxRuntime {
   LinuxLanLogin lanLogin_;
   std::string listenAddress_;
   std::optional<LinuxCapabilities> platformCapabilities_;
+  // Set with --remote: this process is the script host of one ESP32 clock.
+  std::optional<remote::RemoteRole> remote_;
+  std::optional<remote::RemoteClockApplication> remoteApplication_;
   HostHttpServer http_;
   MqttService mqtt_;
   std::unique_ptr<net::IHostResolver> resolver_;
@@ -264,6 +275,8 @@ class LinuxRuntime {
   bool readinessFailed_ = false;
   bool readySent_ = false;
   bool supervisorClosed_ = false;
+  // Last, so it goes first: it holds the script host, the bridge and the resolver.
+  std::unique_ptr<ScriptOnlyMqtt> scriptOnlyMqtt_;
 };
 
 }

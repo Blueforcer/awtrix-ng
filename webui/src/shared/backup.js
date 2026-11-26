@@ -30,13 +30,24 @@ function zipStore(entries){
     ...u32(cdSize),...u32(off),...u16(0)]);
   return new Blob([...parts,...central,eocd],{type:'application/zip'});
 }
+function unzipStore(b){
+  const v=new DataView(b),out=[];let o=0;
+  while(v.getUint32(o,true)===0x04034b50){
+    if(v.getUint16(o+6,true)&8||v.getUint16(o+8,true))throw 0;
+    const n=v.getUint16(o+26,true),s=o+30+n+v.getUint16(o+28,true),z=v.getUint32(o+18,true);
+    out.push({name:new TextDecoder().decode(new Uint8Array(b,o+30,n)),data:new Uint8Array(b,s,z)});
+    o=s+z;
+  }
+  if(v.getUint32(o,true)!==0x02014b50)throw 0;
+  return out;
+}
 const baseName=n=>String(n).split('/').pop();
 async function collectBackup(cats){
   const entries=[],included=[];
-  const bytes=async p=>{const r=await fetch(p);if(!r.ok)throw new Error(p+': HTTP '+r.status);return new Uint8Array(await r.arrayBuffer());};
+  const bytes=async p=>{const[u,h]=await shTo(p);const r=await fetch(u,{headers:h});if(!r.ok)throw new Error(p+': HTTP '+r.status);return new Uint8Array(await r.arrayBuffer());};
   const text=async p=>(await fetch(p)).text();
-  const list=async d=>((await api('/api/v1/files?dir='+encodeURIComponent(d))).data.files||[]);
-  const grab=async dir=>{for(const f of await list(dir)){const b=baseName(f.name);
+  const list=async(d,host)=>((await api('/api/v1/files?dir='+encodeURIComponent(d),{host})).data.files||[]);
+  const grab=async(dir,host)=>{for(const f of await list(dir,host)){const b=baseName(f.name);
     entries.push({name:dir.slice(1)+'/'+b,data:await bytes(dir+'/'+encodeURIComponent(b))});}};
   let sys=null;
   if(cats.wifi||cats.settings)sys=(await api('/api/v1/system?secrets=1')).data;
@@ -57,7 +68,7 @@ async function collectBackup(cats){
   if(cats.mp3){await grab('/MP3');included.push('mp3');}
   if(cats.radio){entries.push({name:'radio.json',
     data:JSON.stringify({stations:(await api('/api/v1/audio/stations')).data.stations||[]})});included.push('radio');}
-  if(cats.scripts){await grab('/SCRIPTS');
+  if(cats.scripts){await grab('/SCRIPTS',1);
     for(const s of(await api('/api/v1/audio/mp3')).data.scripts||[])for(const f of s.files){const p='SCRIPTS/'+s.name+'/'+f.name;
       entries.push({name:p,data:await bytes('/'+p)});}
     included.push('scripts');}
@@ -67,11 +78,13 @@ async function collectBackup(cats){
      device:{hostname:S.sysHost},categories:included})});
   return entries;
 }
-function xhrPost(url,field,file,name,onProgress,timeout=0){
+async function xhrPost(url,field,file,name,onProgress,timeout=0,host){
+  const[u,h]=await shTo(url,{},host);
   return new Promise((res,rej)=>{
     const fd=new FormData();fd.append(field,file,name);
     const x=new XMLHttpRequest();
-    x.open('POST',url);
+    x.open('POST',u);
+    if(h.Authorization)x.setRequestHeader('Authorization',h.Authorization);
     x.timeout=timeout;
     x.ontimeout=()=>rej(new Error(t('neterr')));
     x.upload.onprogress=e=>{if(e.lengthComputable&&onProgress)onProgress(e.loaded/e.total);};
@@ -80,10 +93,21 @@ function xhrPost(url,field,file,name,onProgress,timeout=0){
     x.send(fd);
   });
 }
-async function restoreBackup(file,onProgress){
-  const x=await xhrPost('/api/v1/restore','file',file,file.name,onProgress);
+async function restorePost(file,onProgress,host){
+  const x=await xhrPost('/api/v1/restore','file',file,'backup.zip',onProgress,0,host);
   let d={};try{d=JSON.parse(x.responseText);}catch(e){}
   const er=d.error;
   if(x.status>=300)throw new Error(er?.message||er?.code||(typeof er=='string'?er:'HTTP '+x.status));
+  return d;
+}
+async function restoreBackup(file,onProgress){
+  let host;
+  await shReady();
+  if(SH.url)try{
+    const e=unzipStore(await file.arrayBuffer()),s=e.filter(x=>/^SCRIPTS\/[^/]+$/.test(x.name));
+    if(s.length){file=zipStore(e.filter(x=>!s.includes(x)));host=zipStore([e[0],...s]);}
+  }catch(e){}
+  const d=await restorePost(file,onProgress);
+  if(host)d.warnings=[...d.warnings||[],...(await restorePost(host,null,1)).warnings||[]];
   return d;
 }
