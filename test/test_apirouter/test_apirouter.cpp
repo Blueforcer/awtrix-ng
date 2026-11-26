@@ -57,7 +57,7 @@ struct Clock {
     std::string result;
     if (api::routeMqtt(suffix, payload, c, result) != api::RouteOutcome::Routed) return result;
     const DispatchResult r = engine.execute(c);
-    return api::mqttResult(r, engine.lastDetail());
+    return api::mqttResult(c, r, engine.lastDetail());
   }
 };
 
@@ -287,6 +287,59 @@ static void test_app_switch_answers_over_http_and_mqtt() {
 
   TEST_ASSERT_EQUAL_STRING("{\"ok\":true}", clock.mqtt("cmd/apps/Date/enabled", "true").c_str());
   TEST_ASSERT_TRUE(clock.engine.isEnabled("Date"));
+}
+
+static void test_mqtt_app_config_names_the_app_in_the_topic() {
+  Command c;
+  std::string result;
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Routed),
+                        ro(routeMqttCopy("cmd/apps/Weather/config", "{\"city\":\"Rom\"}", c, result)));
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::ScriptConfigSet), ct(c.type));
+  TEST_ASSERT_EQUAL_STRING("Weather", c.name.c_str());
+  TEST_ASSERT_EQUAL_STRING("{\"city\":\"Rom\"}", c.payload.c_str());
+  TEST_ASSERT_TRUE(api::isResultEcho("cmd/apps/Weather/config/result"));
+
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Routed),
+                        ro(routeMqttCopy("cmd/apps/builtin/Time/config", "{\"time24h\":false}", c,
+                                         result)));
+  TEST_ASSERT_EQUAL_INT(ct(CommandType::BuiltinAppConfigSet), ct(c.type));
+  TEST_ASSERT_EQUAL_STRING("Time", c.name.c_str());
+  TEST_ASSERT_TRUE(api::isResultEcho("cmd/apps/builtin/Time/config/result"));
+
+  for (const char* topic : {"cmd/apps/order/config", "cmd/apps/builtin//config",
+                            "cmd/apps/a/b/config"}) {
+    result.clear();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(ro(api::RouteOutcome::Respond),
+                                  ro(routeMqttCopy(topic, "{}", c, result)), topic);
+    TEST_ASSERT_TRUE_MESSAGE(result.find("invalidName") != std::string::npos, topic);
+  }
+
+  result.clear();
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::Respond),
+                        ro(routeMqttCopy("cmd/apps/Weather/config", "", c, result)));
+  TEST_ASSERT_TRUE(result.find("body required") != std::string::npos);
+  TEST_ASSERT_EQUAL_INT(ro(api::RouteOutcome::NoMatch),
+                        ro(routeMqttCopy("cmd/apps/Weather/data", "{}", c, result)));
+}
+
+static void test_mqtt_result_keeps_the_error_of_a_restarted_script() {
+  Command set(CommandType::ScriptConfigSet);
+  set.name = "Weather";
+  TEST_ASSERT_EQUAL_STRING("{\"ok\":true}", api::mqttResult(set, DispatchResult::Ok, {}).c_str());
+
+  DispatchDetail raised;
+  raised.message = "runtime_error: operand must be number";
+  raised.line = 4;
+  const std::string saved = api::mqttResult(set, DispatchResult::Ok, raised);
+  TEST_ASSERT_TRUE(saved.find("\"ok\":true") != std::string::npos);
+  TEST_ASSERT_TRUE(saved.find("\"line\":4") != std::string::npos);
+
+  DispatchDetail wrong;
+  wrong.field = "nope";
+  wrong.message = "unknown setting";
+  const std::string refused = api::mqttResult(set, DispatchResult::ValidationError, wrong);
+  TEST_ASSERT_TRUE(refused.find("\"ok\":false") != std::string::npos);
+  TEST_ASSERT_TRUE(refused.find("\"field\":\"nope\"") != std::string::npos);
 }
 
 static void test_http_indicators() {
@@ -1122,6 +1175,8 @@ int main(int, char**) {
   RUN_TEST(test_http_app_switch_names_the_app_in_the_path);
   RUN_TEST(test_mqtt_app_switch_names_the_app_in_the_topic);
   RUN_TEST(test_app_switch_answers_over_http_and_mqtt);
+  RUN_TEST(test_mqtt_app_config_names_the_app_in_the_topic);
+  RUN_TEST(test_mqtt_result_keeps_the_error_of_a_restarted_script);
   RUN_TEST(test_http_indicators);
   RUN_TEST(test_http_audio_clip);
   RUN_TEST(test_http_play_routes_the_sound_object);

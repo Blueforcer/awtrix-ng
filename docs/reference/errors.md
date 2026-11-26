@@ -711,20 +711,23 @@ whether it worked. A failure contains the **same error object** as over HTTP:
 {"ok":false,"error":{"code":"validationFailed","message":"out of range","field":"brightness"}}
 ```
 
-Success is `{"ok":true}`. <!-- only esp32 tc002 -->Seven<!-- /only --><!-- only esp32-s3 -->Eight<!-- /only --> codes can appear over MQTT:
+Success is `{"ok":true}`. Eight codes can appear over MQTT:
 
 | Code | When | `message` |
 | --- | --- | --- |
 | `invalidJson` | the payload is not valid JSON | `invalid JSON` |
 | `validationFailed` | a value was rejected | the reason, or `invalid value` |
 | `notFound` | unknown app, sound or notification name | `not found`, or for a sound the message HTTP gives, such as `nothing called "<name>"` |
-| `insufficientStorage` | the notification queue or the pushed apps are full | the reason, or `storage full` |
-| `unavailable` | the command needs hardware this device does not have | for example `no audio output` |
+| `insufficientStorage` | the notification queue or the pushed apps are full, or there is too little memory to restart a script | the reason, or `storage full` |
+| `unavailable` | the command needs hardware this device does not have, or scripting is off | for example `no audio output` |
+<!-- only esp32 tc002 -->
+| `serviceBusy` | a script cannot restart yet because a script is waiting for a web request; try again | the reason |
+<!-- /only -->
 <!-- only esp32-s3 -->
-| `serviceBusy` | a radio stream is refused for lack of memory; try again | `not enough memory for TLS` |
+| `serviceBusy` | a radio stream is refused for lack of memory, or a script cannot restart yet because a script is waiting for a web request; try again | the reason, for example `not enough memory for TLS` |
 <!-- /only -->
 | `internalError` | the command failed or was not understood | `command failed` |
-| `invalidName` | an app name in the topic is not `[A-Za-z0-9_-]{1,32}` or is a reserved name (`active`, `next`, `previous`, `order`) - only `cmd/apps/pushed/{name}` can return it | `invalid name` |
+| `invalidName` | an app name in the topic is not `[A-Za-z0-9_-]{1,32}` or is a reserved name (`active`, `next`, `previous`, `order`) | `invalid name` |
 
 All other codes are HTTP only. `methodNotAllowed`, `unauthorized`, `forbidden`, `forbiddenOrigin`,
 `unsupportedMediaType`, `payloadTooLarge` and `invalidMethodOverride` are about how an HTTP

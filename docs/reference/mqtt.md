@@ -4,9 +4,9 @@ This page lists every MQTT topic AWTRIX reads and publishes. AWTRIX connects to 
 command, state and availability topics below are everything there is. Home Assistant discovery
 uses these same topics; it is not a second interface.
 
-Command payloads are exactly the same as the HTTP request bodies, so anything you can send with
-`curl` you can also publish. There are no read commands over MQTT: instead, AWTRIX *publishes* its
-state to retained topics.
+A command's payload is the same as the body of its HTTP request. Not every HTTP route has a topic.
+See [Routes without a topic](#routes-without-a-topic). There are no read commands over MQTT:
+instead, AWTRIX *publishes* its state to retained topics.
 
 The [Conventions](conventions.md) apply to every topic: camelCase keys, durations in whole
 milliseconds with an `...Ms` suffix, the color forms (`"#RRGGBB"` out; `"RRGGBB"`, `"RGB"`,
@@ -53,6 +53,8 @@ AWTRIX. `<P>/cmd` and `<P>/cmd/` alone do nothing.
 | `<P>/cmd/apps/previous` | ignored | `POST /api/v1/apps/previous` |
 | `<P>/cmd/apps/order` | `{"order":["Time","weather"],"disabled":["Battery"]}`; `disabled` is required, `order` is optional | `PUT /api/v1/apps/order` |
 | `<P>/cmd/apps/<name>/enabled` | `true` or `false` | `PUT /api/v1/apps/{name}/enabled` |
+| `<P>/cmd/apps/<name>/config` | [a script's settings](#apps-name-config) | `PATCH /api/v1/apps/{name}/config` |
+| `<P>/cmd/apps/builtin/<name>/config` | [a built-in app's settings](#apps-name-config) | `PATCH /api/v1/apps/builtin/{name}/config` |
 | `<P>/cmd/settings` | partial settings JSON | `PATCH /api/v1/settings` |
 | `<P>/cmd/settings/reset` | ignored | `POST /api/v1/settings/reset` |
 | `<P>/cmd/display` | `{"power":bool?,"overlay":"rain"\|null?}` | `PATCH /api/v1/display` |
@@ -83,9 +85,15 @@ A topic that is not in this table gets **no `/result`** at all – no error, no 
 a topic is silent. This includes `<P>/cmd/indicators/<bad-id>`, where HTTP would answer 404
 `id must be 1..3`. If a command seems to do nothing, check the topic spelling first.
 
-**Not available over MQTT:** factory reset works only over HTTP
-(`POST /api/v1/device/factory-reset`). Publishing to `<P>/cmd/device/factory-reset` does nothing
-and gets no answer.
+### Routes without a topic {#routes-without-a-topic}
+
+An HTTP route that is not in the table above has no topic. Publishing to a topic named after it
+does nothing and gets no answer.
+
+| Over HTTP | Over MQTT |
+|---|---|
+| Reading, for example `GET /api/v1/settings` | No read command. AWTRIX publishes its state on the [state topics](#state-topics) |
+| Factory reset, `PUT /api/v1/system`, `PATCH /api/v1/apps/{name}/data`, installing or removing a script, uploads and firmware updates | No topic |
 
 ### notify
 
@@ -206,6 +214,27 @@ mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/Status/enabled' -m 'false'
 ```
 <!-- /only -->
 
+### apps/&lt;name&gt;/config {#apps-name-config}
+
+Changes the settings of one app. The payload is a JSON object with only the settings you want to
+change. The rules are those of the HTTP route:
+
+| App | Topic | Rules and keys |
+|---|---|---|
+| A script | `<P>/cmd/apps/<name>/config` | [PATCH /api/v1/apps/{name}/config](http.md#patch-apiv1appsnameconfig) |
+| A built-in app | `<P>/cmd/apps/builtin/<name>/config` | [PATCH /api/v1/apps/builtin/{name}/config](http.md#patch-apiv1appsbuiltinnameconfig) |
+
+```bash
+mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/Weather/config' -m '{"lat":"48.14"}'
+mosquitto_pub -h broker.local -t 'awtrixNG/cmd/apps/builtin/Time/config' -m '{"time24h":false}'
+```
+
+* Every message restarts the script, also when no value changes.
+* An empty payload deletes nothing. It answers `body required`.
+* A script that restarts with an error is still saved. It answers
+  `{"ok":true,"name":"Weather","error":{...}}`, with [the error object](http.md#the-error-object) of
+  the HTTP route.
+
 ### settings
 
 Any subset of the settings JSON, the same as `PATCH /api/v1/settings`. If one key is wrong,
@@ -222,6 +251,9 @@ A rejected value answers, for example:
 ```json
 {"ok":false,"error":{"code":"validationFailed","message":"out of range","field":"brightness"}}
 ```
+
+A script's settings do not go to this topic. They answer `unknown field`. Send them to
+[their own topic](#apps-name-config).
 
 ### settings/reset
 
@@ -398,6 +430,8 @@ Success is exactly:
 ```json
 {"ok":true}
 ```
+
+Only [a script that restarts with an error](#apps-name-config) answers with more than this.
 
 A failure has the same error body as HTTP, inside `ok:false` (`field` is left out when there is
 none):

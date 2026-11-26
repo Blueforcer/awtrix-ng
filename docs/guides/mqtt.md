@@ -4,7 +4,7 @@ This page shows how to control AWTRIX through an MQTT broker. For example, show 
 
 ## How it behaves
 
-AWTRIX connects to one broker and listens on `<prefix>/cmd/...`. The message you publish there is the same JSON you would send over HTTP, so anything you can `curl` you can publish. AWTRIX answers every command it knows on the same topic with `/result` added. A topic it does not know gets no answer at all. AWTRIX also publishes its state by itself, on retained topics under `<prefix>/state/`, so a new subscriber gets the current values at once.
+AWTRIX connects to one broker and listens on `<prefix>/cmd/...`. The message you publish there is the same JSON you would send over HTTP. Most commands have a topic, but not all of them. AWTRIX answers every command it knows on the same topic with `/result` added. A topic it does not know gets no answer at all. AWTRIX also publishes its state by itself, on retained topics under `<prefix>/state/`, so a new subscriber gets the current values at once.
 
 ## Point AWTRIX at your broker
 
@@ -62,9 +62,9 @@ AWTRIX ignores every topic outside `<prefix>/`, and only topics under `<prefix>/
 
 Give every AWTRIX on your broker its own prefix. If two share one, both act on every command.
 
-## Anything you can curl, you can publish
+## Turn an HTTP request into a command
 
-To turn an HTTP request into an MQTT command, take the path after `/api/v1/`, put `cmd/` in front of it, and publish the body you would have sent. A few topics have shorter names: notifications go to `cmd/notify`, and switching to an app is `cmd/apps/switch`. Both commands below show the same notification:
+To turn an HTTP request into an MQTT command, look up its topic in [Command topics](../reference/mqtt.md#command-topics) and publish the body you would have sent. Most topics are the path after `/api/v1/` with `cmd/` in front. A few have shorter names: notifications go to `cmd/notify`, and switching to an app is `cmd/apps/switch`. A route that is not in that list has no topic. Both commands below show the same notification:
 
 <!-- panel motion=4 -->
 ```bash
@@ -92,22 +92,28 @@ mosquitto_pub -h 192.168.1.10 -t 'awtrixNG/cmd/apps/pushed/power' -m ''
 mosquitto_pub -h 192.168.1.10 -t 'awtrixNG/cmd/settings' \
   -m '{"brightness":120,"autoBrightness":false}'
 
+# a setting of a built-in app, here the clock's 12-hour format
+mosquitto_pub -h 192.168.1.10 -t 'awtrixNG/cmd/apps/builtin/Time/config' \
+  -m '{"time24h":false}'
+
+# a setting of a script, here one called Weather
+mosquitto_pub -h 192.168.1.10 -t 'awtrixNG/cmd/apps/Weather/config' \
+  -m '{"lat":"48.14"}'
+
 # jump to an app - a bare name works, no JSON needed
 mosquitto_pub -h 192.168.1.10 -t 'awtrixNG/cmd/apps/switch' -m 'Time'
 ```
 
 Every command topic, with its HTTP route and accepted payload, is listed in [MQTT topics → Command topics](../reference/mqtt.md#command-topics). The payload keys (text, icons, colors, effects) are described in [App & notification payload](../reference/payload.md).
 
-Four differences from HTTP:
+Three differences from HTTP:
 
 - **Reading is HTTP-only.** There is no `cmd/device/get`. Instead, AWTRIX publishes its state to
   retained topics. See [Subscribe to state](#subscribe-to-state) below. The one exception is
   `cmd/screen/get`, which asks for a single `state/screen` message.
-- **Factory reset is HTTP-only.** Publishing to `cmd/device/factory-reset` does nothing and answers
-  nothing. The route is `POST /api/v1/device/factory-reset`.
-- **MQTT reaches pushed apps only.** `cmd/apps/pushed/<name>` creates, replaces and deletes a
-  pushed app. Scripts have no topic at all, and removing one is `DELETE /api/v1/apps/{name}`
-  over HTTP.
+- **Some commands are HTTP-only.** Factory reset, system configuration, uploads, and installing or
+  removing a script have no topic. See
+  [Routes without a topic](../reference/mqtt.md#routes-without-a-topic).
 - **An empty message deletes.** An empty payload (or `{}`) deletes a pushed app, turns the
   mood light off or turns an indicator off, like the HTTP `DELETE`. Never publish an empty message
   just to test a topic.
@@ -294,6 +300,7 @@ jq -n --rawfile certificate ca.crt '{$certificate}' |
 - **Nothing arrives, and a yellow dot pulses in the bottom-left corner of the display.** AWTRIX cannot
   reach the broker. See [MQTT never connects](../troubleshooting/troubleshooting.md#mqtt-never-connects).
 - **A command does nothing and no `/result` comes back.** The topic is misspelled or does not exist.
+  [Command topics](../reference/mqtt.md#command-topics) lists every topic.
 - **A large command does nothing and gets no answer.** A command over 8192 bytes is dropped,
   most often a notification that carries a big icon. See [Limits](../reference/limits.md).
 - **The `/result` says `ok:false`.** The `error` names the problem and usually the `field`. See

@@ -149,7 +149,7 @@ void MqttService::handleMessage(char* topic, uint8_t* payload, unsigned int len)
     case api::RouteOutcome::Routed: {
       const DispatchResult r = engine_->execute(cmd);
       logdbg("mqtt cmd %s -> %d", suffix.c_str(), static_cast<int>(r));
-      result = api::mqttResult(r, engine_->lastDetail());
+      result = api::mqttResult(cmd, r, engine_->lastDetail());
       break;
     }
     case api::RouteOutcome::Respond:

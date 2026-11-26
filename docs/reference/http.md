@@ -1251,7 +1251,8 @@ curl "http://<awtrix-ip>/api/v1/apps/Weather/config"
 
 ### PATCH /api/v1/apps/{name}/config
 
-Changes a script's settings.
+Changes a script's settings. Over MQTT, publish them to
+[`cmd/apps/<name>/config`](mqtt.md#apps-name-config).
 
 **Request:** a JSON object with only the settings you want to change. Everything else keeps its
 value, including other data the script stored.
@@ -1351,7 +1352,8 @@ curl "http://<awtrix-ip>/api/v1/apps/builtin/Time/config"
 ### PATCH /api/v1/apps/builtin/{name}/config
 
 Changes the settings of a built-in app. The change shows at once and is saved like every other
-setting.
+setting. Over MQTT, publish them to
+[`cmd/apps/builtin/<name>/config`](mqtt.md#apps-name-config).
 
 **Request:** a JSON object with only the settings you want to change, each at its `path`.
 Everything else keeps its value.
@@ -4050,5 +4052,5 @@ Any other path answers **404** `notFound` with the message `unknown route`.
 * [Errors](errors.md): every error code
 * [App & notification payload](payload.md): the fields for pushed apps and notifications
 * [Settings](settings.md) and [System configuration](system.md): every key
-* [MQTT](mqtt.md): the same commands over MQTT
+* [MQTT](mqtt.md): the commands that also work over MQTT
 * [Limits](limits.md): sizes and counts

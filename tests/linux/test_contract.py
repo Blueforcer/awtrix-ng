@@ -1455,6 +1455,29 @@ return Fetch()
                           "error": body["error"]},
                          json.loads(client.wait_topic("contract/event/error")))
 
+        app.json("PUT", "/api/v1/apps/script/Probe",
+                 '# @name Probe\n# @config who text "Who" default="a" help="Who it is"\n'
+                 'class Probe\n  def setup()\n    mqtt.subscribe("contract/probe", / topic, payload ->\n'
+                 '      mqtt.publish("contract/probe/who", store.get("who")))\n  end\n'
+                 '  def draw()\n    clear()\n  end\nend\nreturn Probe()\n')
+        topic = "contract/cmd/apps/Probe/config"
+        client.publish(topic, json.dumps({"who": "b"}))
+        self.assertEqual({"ok": True}, json.loads(client.wait_topic(topic + "/result")))
+        self.assertEqual("b", app.json("GET", "/api/v1/apps/Probe/config")["fields"][0]["value"])
+        # The restart ran inside the broker's callback, and its subscription still has to work.
+        client.publish("contract/probe", "")
+        self.assertEqual("b", client.wait_topic("contract/probe/who"))
+        client.publish(topic, json.dumps({"nope": 1}))
+        result = json.loads(client.wait_topic(topic + "/result"))
+        self.assertEqual(("unknown setting", "nope"), (result["error"]["message"], result["error"]["field"]))
+        client.publish(topic, "")
+        self.assertEqual("body required", json.loads(client.wait_topic(topic + "/result"))["error"]["message"])
+
+        topic = "contract/cmd/apps/builtin/Time/config"
+        client.publish(topic, json.dumps({"time24h": False}))
+        self.assertEqual({"ok": True}, json.loads(client.wait_topic(topic + "/result")))
+        self.assertIs(False, app.json("GET", "/api/v1/settings")["time24h"])
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

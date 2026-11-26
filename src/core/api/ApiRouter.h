@@ -77,6 +77,7 @@ HttpResult commandResponse(CoreEngine& engine, const Command& cmd, DispatchResul
                            bool persistencePending = false);
 
 std::string mqttResult(DispatchResult r, const DispatchDetail& detail);
+std::string mqttResult(const Command& cmd, DispatchResult r, const DispatchDetail& detail);
 
 // The <prefix>/event/error message for a rejected request, built from the error body the sender
 // got back; empty when that body is not an error.

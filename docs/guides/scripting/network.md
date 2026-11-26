@@ -344,6 +344,50 @@ mqtt.publish("home/panel/status", "up")
 Both calls do nothing while MQTT is not set up, so a script with MQTT parts still runs without a
 broker. Topics do not have to be under AWTRIX's own [MQTT prefix](../mqtt.md#the-prefix).
 
+### Change a setting over MQTT {#change-a-setting-over-mqtt}
+
+Every script's settings have a topic, [`<prefix>/cmd/apps/<name>/config`](../../reference/mqtt.md#apps-name-config).
+It needs no change in the script, also not in one you did not write. The script restarts with each
+message.
+
+To change a value without a restart, let the script listen on a topic of its own and save the
+message with `store.set()`. The **Apps** tab then shows the new value.
+
+```berry
+# @name    Greeter
+# @config  who  text  "Your name"  default="World" help="Who the app greets"
+
+class Greeter
+  var who
+
+  def init()
+    self.who = store.get("who")
+  end
+
+  def setup()
+    mqtt.subscribe("home/greeter/who", / topic, payload -> self.set(payload))
+  end
+
+  def set(payload)
+    self.who = payload
+    store.set("who", payload)
+  end
+
+  def draw()
+    clear()
+    text(1, 6, self.who, 0xFFFFFF)
+  end
+end
+
+return Greeter()
+```
+
+```bash
+mosquitto_pub -h 192.168.1.10 -t 'home/greeter/who' -m 'Ada'
+```
+
+The message arrives as text. For a `number` setting, convert it first with `int(payload)`.
+
 ## Read a Modbus device {#modbus-tcp}
 
 <a id="display-a-measurement"></a><a id="choose-what-to-read"></a><a id="convert-the-values"></a><a id="share-one-device-across-several-apps"></a><a id="when-a-read-fails"></a>

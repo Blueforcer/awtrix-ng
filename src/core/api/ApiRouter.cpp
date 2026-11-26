@@ -492,6 +492,25 @@ RouteOutcome routeMqtt(const std::string& suffix, std::string& payload, Command&
       return RouteOutcome::Routed;
     }
   }
+  {
+    bool builtin = false;
+    const std::string name = appConfigName("/api/v1/" + op, builtin);
+    if (!name.empty() || builtin) {
+      if (!isValidAppName(name)) {
+        resultPayload = mqttError("invalidName", "invalid name", "name");
+        return RouteOutcome::Respond;
+      }
+      // Unlike the topics above, an empty payload deletes nothing here: it is the missing body.
+      if (payload.empty()) {
+        resultPayload = mqttError("validationFailed", "body required", "");
+        return RouteOutcome::Respond;
+      }
+      cmd = make(builtin ? CommandType::BuiltinAppConfigSet : CommandType::ScriptConfigSet, src);
+      cmd.name = name;
+      cmd.payload = std::move(payload);
+      return RouteOutcome::Routed;
+    }
+  }
   if (op == "apps/switch") return command(CommandType::SwitchApp);
   if (op == "apps/next") return command(CommandType::NextApp);
   if (op == "apps/previous") return command(CommandType::PreviousApp);
@@ -675,6 +694,13 @@ std::string mqttResult(DispatchResult r, const DispatchDetail& detail) {
   if (r == DispatchResult::ParseError) fallback = "invalid JSON";
   else if (r == DispatchResult::NotFound) fallback = "not found";
   return mqttError(shape.code, messageFor(detail, fallback), detail.field);
+}
+
+// A script that restarted with an error is still saved, so ok stays true and the error goes along,
+// as over HTTP.
+std::string mqttResult(const Command& cmd, DispatchResult r, const DispatchDetail& detail) {
+  if (r == DispatchResult::Ok && !detail.message.empty()) return httpResponse(cmd, r, detail).body;
+  return mqttResult(r, detail);
 }
 
 std::string errorEvent(const char* source, const std::string& request, const std::string& body) {
