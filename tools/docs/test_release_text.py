@@ -59,7 +59,7 @@ class Highlights(unittest.TestCase):
         self.assertEqual(1, sum("Script host" in line for line in self.lines))
 
     def test_title_that_starts_a_sentence(self):
-        self.assertIn("• **AHT20 sensors** are found on the sensor bus. (ESP32 / TC001, ESP32-S3)", self.lines)
+        self.assertIn("• **AHT20 sensors** (ESP32 / TC001, ESP32-S3) are found on the sensor bus.", self.lines)
 
     def test_title_that_is_a_sentence(self):
         self.assertIn("• **More free memory.** (ESP32 / TC001)", self.lines)
@@ -87,10 +87,10 @@ class GitHubBody(unittest.TestCase):
     def test_whole_entries_with_clocks_and_absolute_links(self):
         self.assertIn("* **Everywhere**: every clock gets it. See "
                       "[Guide](https://blueforcer.github.io/awtrix-ng/guides/x/).", self.text)
-        self.assertIn("* **AHT20 sensors** are found on the sensor bus. See [Sensor bus]"
-                      "(https://blueforcer.github.io/awtrix-ng/esp32/reference/gpio/). (ESP32 / TC001, ESP32-S3)",
+        self.assertIn("* **AHT20 sensors** (ESP32 / TC001, ESP32-S3) are found on the sensor bus. See [Sensor bus]"
+                      "(https://blueforcer.github.io/awtrix-ng/esp32/reference/gpio/).",
                       self.text)
-        self.assertIn("* **More free memory.** About 23 KB more stays free. (ESP32 / TC001)", self.text)
+        self.assertIn("* **More free memory.** (ESP32 / TC001) About 23 KB more stays free.", self.text)
 
     def test_fixes_are_included(self):
         self.assertIn("### Fixed\n\n* **MQTT**: a slow broker connects.", self.text)

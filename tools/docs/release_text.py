@@ -81,9 +81,8 @@ def tagged(title, colon, rest, clocks):
         return "%s%s" % (rest, suffix)
     if colon or title.endswith(":"):
         return "**%s**%s: %s" % (title.rstrip(":"), suffix, rest)
-    if title.endswith((".", "!", "?")) and not rest:
-        return "**%s**%s" % (title, suffix)
-    return "**%s** %s%s" % (title, rest, suffix)
+    head = "**%s**%s" % (title, suffix)
+    return "%s %s" % (head, rest) if rest else head
 
 
 def highlight(text, clocks):
