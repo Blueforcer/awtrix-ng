@@ -4,158 +4,362 @@ only: [esp32, esp32-s3]
 
 # Script host
 
-This page lets you run your clock's scripts on a computer in your network, for example a Raspberry
-Pi or a NAS, while the clock shows them.
+The script host runs your clock's scripts on a computer in your home network, and the clock shows
+them.
 
 ## What you get
 
-Your scripts run on the script host, and the clock shows them in its rotation as usual. Save this
-script in the **Scripts** tab of a paired clock, and the display shows **hi** in green:
+- Your scripts run on the computer and get much more memory there.
+- The clock shows them in its rotation like any other app, and keeps more memory free for the rest.
+- You keep installing and changing scripts in the clock's web UI and on the [AWTRIX Hub](hub.md).
+- One script host serves all your clocks. Each clock keeps its own scripts and settings.
 
-<!-- panel -->
-```berry
-class Hello
-  def draw()
-    clear()
-    text(1, 6, "hi", 0x00FF00)
-  end
-end
-
-return Hello()
-```
-
-- The clock has much more free memory, because no script runs on it. Scripts can fetch as much
-  as they need.
-- You keep using the web UI of the clock: the **Scripts** tab, the settings of each app and the
-  Hub work as before.
-- One script host serves several clocks. Each clock keeps its own scripts and settings.
+It helps when your scripts do not fit into the clock, for example when saving a script says
+**not enough memory**. Without a script host, the clock runs its scripts itself.
 
 ## How it behaves
 
-The script host runs your scripts and sends each picture to the clock. The clock decides which app
-is shown, as before, and its buttons, sensors, sound and settings stay with the clock. A script
-reads the clock's sensors, settings and time zone, and its sounds and notifications play on the
-clock. A script's own sounds stay on the clock.
+The script host is a program on a computer in the same network as the clock. It runs the scripts
+and sends each picture to the clock. The clock still decides which app is shown, and its buttons,
+sensors, sound and settings stay with the clock. While the clock is paired, no script runs on the
+clock itself.
 
-The clock holds each picture back for up to 0.15 seconds, so animations run smoothly even when the
-Wi-Fi is uneven. Buttons in games therefore react a little later than with scripts on the clock.
+When the computer sleeps, is switched off or cannot be reached, the clock leaves out its scripts
+within three seconds and shows its other apps. When the computer is back, the scripts come back on
+their own.
 
-While a clock is paired with a script host, no script runs on the clock itself. When the script
-host is off or out of reach, the clock skips its scripts within three seconds and shows its other
-apps. Once the script host is back, the scripts return on their own.
+The clock shows each picture up to 0.15 seconds late, so that animations run smoothly over Wi-Fi.
+Buttons in games react that much later.
 
 ---
+
+## Choose a computer
+
+Pick a computer that is on whenever the clock should show your scripts. It must be in the same
+network as the clock.
+
+| Computer | Needs | Runs your scripts |
+|---|---|---|
+| Home Assistant | Home Assistant OS on a 64-bit computer | whenever it is on |
+| Raspberry Pi | the 64-bit Raspberry Pi OS | whenever it is on |
+| Linux computer | 64-bit Linux with systemd, on Intel, AMD or ARM | whenever it is on |
+| NAS | Docker, on a 64-bit Intel, AMD or ARM processor | whenever it is on |
+| Windows PC | Windows 10 or 11, 64-bit | while you are signed in and the PC is awake |
+| Mac | macOS 11 or newer, Apple silicon or Intel | while you are logged in and the Mac is awake |
 
 ## Set up the script host
 
-The script host runs on a computer that is always on, in the same network as the clock. It needs
-Linux and Docker, for example a Raspberry Pi with Raspberry Pi OS or a NAS.
+Choose your system. At the end you see the 6-digit pairing code. You need it to
+[pair the clock](#pair-the-clock).
 
-1. Get the AWTRIX NG files and start the script host:
+=== "Windows"
 
-    ```bash
-    git clone https://github.com/Blueforcer/awtrix-ng.git
-    cd awtrix-ng/packaging/host
-    docker compose up -d
-    ```
+    1. Download
+       [`AWTRIX-Script-Host-windows-x64.exe`](https://github.com/Blueforcer/awtrix-ng/releases/latest/download/AWTRIX-Script-Host-windows-x64.exe).
+       If your browser warns about the file, choose **Keep**.
+    2. Open the file. If Windows shows **Windows protected your PC**, press **More info**, then
+       **Run anyway**. Answer the next question with **Yes**.
+    3. Press **Next**, **I Agree** and **Install**.
+    4. Leave **Start AWTRIX Script Host** ticked and press **Finish**.
+    5. Click the small pixel clock in the notification area, at the right end of the taskbar. If
+       you do not see it, press the arrow **^** next to the other icons first.
 
-    The first start builds the script host. That takes a few minutes, longer on a Raspberry Pi.
+    You now see the pairing code in the menu, for example **Pairing code 482915**. Click it to copy
+    it.
 
-2. Read the pairing code:
+=== "macOS"
 
-    ```bash
-    docker logs awtrix-host
-    ```
+    1. Download
+       [`AWTRIX-Script-Host-macos.pkg`](https://github.com/Blueforcer/awtrix-ng/releases/latest/download/AWTRIX-Script-Host-macos.pkg)
+       and open it.
+    2. macOS says that it cannot check the package. Press **Done** or **OK**.
+    3. Open **System Settings → Privacy & Security**, scroll down and press **Open Anyway** next to
+       the package. Confirm with your password. On macOS 11 and 12, the button is under
+       **System Preferences → Security & Privacy → General**.
+    4. In the installer, press **Continue** and **Install**, and enter your password. Then press
+       **Close**.
+    5. If macOS asks whether **AWTRIX Script Host** may find devices on your local network, press
+       **Allow**. Without it, the script host cannot reach the clocks.
+    6. Click the small pixel clock in the menu bar at the top.
 
-    The log shows a line like `pairing code 482915 (valid 10 min)`.
+    You now see the pairing code in the menu, for example **Pairing code 482915**. Click it to copy
+    it.
 
-The script host starts again by itself after a restart of the computer. Its scripts and settings
-are kept in the Docker volume `awtrix-host`.
+=== "Linux / Raspberry Pi"
 
-### Without Docker
+    1. Open a terminal on the computer, or sign in to it with SSH.
+    2. Run this line:
 
-On a Linux computer, build AWTRIX NG as [Building](../developers/building.md) describes, then
-install it. The installation contains a systemd service:
+        ```bash
+        curl -fsSL https://raw.githubusercontent.com/Blueforcer/awtrix-ng/main/packaging/host/linux/install.sh | sudo sh
+        ```
 
-```bash
-sudo cmake --install build/host
-sudo cp /usr/local/share/awtrix-ng/systemd/awtrix-host.service /etc/systemd/system/
-sudo systemctl enable --now awtrix-host
-journalctl -u awtrix-host
-```
+    3. If the installer says that ufw or firewalld is active, also run the line it shows below.
+       It lets the clocks through the firewall.
 
-The pairing code is in the journal.
+    You now see the pairing code in the last lines, for example `Pairing code: 482915`.
 
----
+    The script host runs in the background and starts with the computer, also when nobody signs
+    in.
+
+=== "Home Assistant"
+
+    1. Go to **Settings → Apps → Install app**.
+    2. Open the menu **⋮** at the top right and choose **Repositories**. Add
+       `https://github.com/Blueforcer/awtrix-ng` and close the window.
+    3. Under **AWTRIX NG**, open **AWTRIX Script Host** and press **Install**.
+    4. Press **Start**, then **Open Web UI**.
+
+    You now see the pairing code on the page.
+
+    Instead of steps 1 and 2, you can
+    [add the repository to your Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FBlueforcer%2Fawtrix-ng)
+    in one click. **Show in sidebar** keeps the page one click away.
+
+    If **Settings** has no **Apps**, your Home Assistant cannot install apps. Use the
+    **Linux / Raspberry Pi** or the **Docker** tab instead.
+
+=== "Docker"
+
+    For a NAS or a Linux computer with Docker.
+
+    1. Save this file as `docker-compose.yml` in an empty folder:
+
+        ```yaml
+        services:
+          awtrix-host:
+            image: ghcr.io/blueforcer/awtrix-script-host
+            container_name: awtrix-host
+            network_mode: host
+            restart: unless-stopped
+            volumes:
+              - awtrix-host:/data
+
+        volumes:
+          awtrix-host:
+            name: awtrix-host
+        ```
+
+    2. Start the script host in that folder:
+
+        ```bash
+        docker compose up -d
+        ```
+
+    3. Read the code:
+
+        ```bash
+        docker logs awtrix-host | grep "pairing code" | tail -n 1
+        ```
+
+    You now see the pairing code, for example `pairing code 482915 (valid 10 min)`.
+
+    On a NAS, you can paste the file as a new project in its container app instead. The log of the
+    container shows the code there.
+
+    - Keep `network_mode: host`. Without it, the clocks cannot reach the script host.
+    - Keep the volume as in the file. A folder of your own in its place must belong to the user
+      with the ID 999.
+    - Docker Desktop on Windows or on a Mac cannot reach the clocks. Use the **Windows** or
+      **macOS** tab there.
 
 ## Pair the clock
 
+Do this once for each clock. It works the same with every system.
+
 1. Open the web UI of the clock and go to **System → Script host**.
-2. The script host shows up under **Found**. If it does not, type its address into **Address**,
-   for example `192.168.1.5` or `raspberrypi.local`.
-3. Type the code from the log into **Code** and press **Pair**.
+2. Check **Address**. When the clock has found the script host, its address is there already.
+   With several script hosts, press the name of the computer under **Found**. If nothing was found,
+   type the address of the computer, for example `192.168.1.5` or `raspberrypi.local`.
+3. Type the pairing code into **Code** and press **Pair**.
 
-The clock moves its scripts to the script host, with their settings and saved data. Their sounds
-stay on the clock. Then it restarts. Afterwards the **Script host** section shows **Connected**.
+The clock copies its scripts to the script host, with their settings and saved data. Then it
+restarts. **System → Script host** now shows **Connected**, and your scripts are back in the
+rotation.<!-- only esp32-s3 --> Their sounds stay on the clock, in the **Audio** tab.<!-- /only -->
 
-A code works once and for ten minutes. After five wrong codes, pairing waits one minute. Each
-further five wrong codes double the wait, up to one hour, until a clock pairs. The next code is in
-the log.
+A script host shows up under **Found** within half a minute after it started. If you opened the
+page before that, reload it.
 
-## Use your scripts
+### A new code
 
-Everything works as before:
+A code works for one clock and for ten minutes. Then the script host makes a new one. You find the
+current code here:
 
-- **Scripts** tab: write and edit scripts. Saving sends them to the script host.
-- **Apps** tab: switch apps on and off, change their order and their settings.
-- **Audio** tab: upload and delete the sounds of your scripts. They are kept on the clock.
-- **AWTRIX Hub**: **Send to AWTRIX** with the address of the clock. The clock passes the script on
-  to the script host.
+- **Windows and macOS:** in the menu of the pixel clock icon.
+- **Linux / Raspberry Pi:** open `http://localhost:8300` in a browser on that computer, or run:
 
-Script errors show in the **Scripts** tab and on the clock, as before.
+    ```bash
+    sudo journalctl -u awtrix-script-host | grep "pairing code" | tail -n 1
+    ```
 
-Script changes sent to the clock's API, for example from Home Assistant, go on to the script host
-while the clock can reach it.
-
-## Pair again
-
-When **System → Script host** says **The script host does not know this clock.**, for example after
-the script host was set up anew, type a new code from the log and press **Pair again**. The clock
-restarts. Your scripts stay where they are.
-
-## Unpair
-
-1. Go to **System → Script host** and press **Unpair**, then press it again to confirm.
-2. Choose **Bring scripts back** to copy the scripts back to the clock, or **Leave them on the
-   host**.
-
-The clock restarts and runs scripts itself again. Their sounds are on the clock already. A script
-that cannot be copied back, for example because it does not fit into the clock's memory, stays on
-the script host. The web UI lists each one with the reason.
-
-## Several clocks
-
-Pair each clock the same way, each with its own code. Each clock has its own scripts, settings and
-data on the script host. To show the same picture on several clocks, use
-[Mirroring](mirroring.md).
+- **Home Assistant:** **Open Web UI** on the page of the app.
+- **Docker:** run the `docker logs` line from the setup again, or look at the log of the container.
 
 ---
 
-## Good to know
+## Everyday use
 
-- **The clock skips its scripts:** the script host is off or cannot be reached. Check that the
-  computer runs and is in the same network. **System → Script host** shows the state.
-- **Docker needs the host's network:** the compose file sets `network_mode: host`. Without it the
-  clocks cannot reach the script host.
-- **The script host is not found:** some networks block the search. Type the address of the script
-  host into **Address**.
-- **A firewall on the computer** must let through TCP port 8300, UDP port 4211 and, for each clock,
-  TCP and UDP ports from 8301 upwards.
-- **The clocks reach the computer at another address than its own,** for example through port
-  forwarding: before you pair, add `--advertise` with that address to the start command, for
-  example `--advertise 192.168.1.5` at the end of the `ExecStart` line of the systemd service.
+Install and change your scripts as without a script host: in the **Scripts** and **Apps** tabs of
+the clock, and with **Send to AWTRIX** on the AWTRIX Hub. The clock passes them on to the script
+host. Changes to app settings from Home Assistant or over MQTT reach it too.
+
+### Start and stop
+
+- **Windows and macOS:** the script host starts when you sign in. **Quit** in its menu stops it,
+  and the clock shows its other apps. To start it again, open **AWTRIX Script Host** in the Start
+  menu or in **Applications**. To keep it from starting by itself, untick **Start at login** in
+  the menu.
+- **Linux / Raspberry Pi:** it always runs. `sudo systemctl stop awtrix-script-host` stops it until
+  the computer starts again. `sudo systemctl start awtrix-script-host` starts it.
+- **Home Assistant:** **Stop** and **Start** on the page of the app.
+- **Docker:** `docker compose stop` and `docker compose start` in the folder of the file.
+
+### Update
+
+Your scripts and pairings stay.
+
+- **Windows:** download the Setup from [Set up the script host](#set-up-the-script-host) again and
+  open it. Setup quits the running script host. Leave **Start AWTRIX Script Host** ticked at the
+  end.
+- **macOS:** download the package again and open it. The installer quits the running script host
+  and starts the new one.
+- **Linux / Raspberry Pi:** run the install line again.
+- **Home Assistant:** press **Update** when Home Assistant offers it.
+- **Docker:** in the folder of `docker-compose.yml`, run `docker compose pull`, then
+  `docker compose up -d`.
+
+## Move to another computer
+
+Set up the script host on the new computer first, and leave the old one running.
+
+1. Go to **System → Script host**. Press the name of the new computer under **Found**, or type its
+   address into **Address**.
+2. Type the pairing code of the new script host into **Code**.
+3. Leave **Take my scripts along** on and press **Move**.
+
+The clock copies its scripts to the new script host, with their settings and saved data. Then it
+restarts, and the old script host deletes its copies. What you entered under **API keys** and
+**Sign-in** in the settings of an app stays behind. Enter it again.
+
+With **Take my scripts along** off, the new script host starts without scripts. The old one keeps
+them and stops running them.
+
+If the old computer does not answer, the web UI asks whether to move without your scripts. Press
+**Move without them** to go on. The scripts then stay on the old computer.
+
+## Several clocks
+
+Pair each clock the same way, each with its own code. The script host keeps the scripts, settings
+and saved data of each clock apart. To show the same picture on several clocks, use
+[Mirroring](mirroring.md).
+
+## Unpair
+
+1. Go to **System → Script host** and press **Unpair**. Press it again to confirm.
+2. Choose **Bring scripts back** to copy the scripts to the clock, or **Leave them on the host**.
+
+The clock restarts and runs its scripts itself again. Once all scripts are back, the script host
+deletes its copies. A script that does not fit into the clock's memory stays on the script host.
+The web UI names each one with the reason.
+
+Scripts left on the script host stop there. They run again when you pair the clock with that
+script host again.
+
+## Remove the script host
+
+First [unpair](#unpair) each clock and choose **Bring scripts back**. Otherwise the clock keeps
+waiting for the script host and shows no scripts.
+
+- **Windows:** open **Settings → Apps**, find **AWTRIX Script Host** and choose **Uninstall**. At
+  the end, it asks whether to delete the paired clocks and their scripts too.
+- **macOS:** download
+  [`AWTRIX-Script-Host-Uninstall-macos.pkg`](https://github.com/Blueforcer/awtrix-ng/releases/latest/download/AWTRIX-Script-Host-Uninstall-macos.pkg)
+  and open it like the installer, with **Open Anyway**. Press **Continue** and **Install**. This
+  removes the program. Your scripts and pairings stay on the Mac. To delete them too, choose
+  **Go → Go to Folder** in the Finder, type `~/Library/Application Support` and move the folder
+  **AWTRIX Script Host** to the Trash.
+- **Linux / Raspberry Pi:** run `sudo /usr/local/lib/awtrix-script-host/uninstall.sh`. Your scripts
+  and pairings stay. To delete them too, run
+  `sudo /usr/local/lib/awtrix-script-host/uninstall.sh --purge` instead.
+- **Home Assistant:** press **Uninstall** on the page of the app. This deletes its scripts and
+  pairings too.
+- **Docker:** run `docker compose down` in the folder of the file. Your scripts and pairings stay
+  in the volume. To delete them too, run `docker compose down -v` instead.
+
+## If something does not work
+
+| What you see | What to do |
+|---|---|
+| The script host is not under **Found** | Wait half a minute and reload the page. Some networks block the search: type the address of the computer into **Address**. |
+| **wrong code** | The code changes after ten minutes and after each pairing. Type the [current code](#a-new-code). |
+| **too many wrong codes** | Wait a minute, then try again. After more wrong codes, the wait grows up to one hour. |
+| **No answer** under **System → Script host**, or **The script host does not answer.** | The computer is off or asleep, or the script host was quit. Start it. The device with your browser must be in the same network as the computer too. |
+| **The script host does not know this clock.** | The script host lost its pairings, for example because it was installed anew without its data. Type a new code and press **Pair again**. Scripts lost with that data must be installed again. |
+| **Stopped: port 8300 is used by another program** in the menu | Another program uses this port, for example the script host of another user signed in to the same computer. Quit it, then choose **Start again**. |
+| **Stopped: the script host cannot start** in the menu | Install the script host again. Your scripts and pairings stay. |
+| On a Mac, the clocks are not found after **Don't Allow** | Open **System Settings → Privacy & Security → Local Network** and turn on **AWTRIX Script Host**. Then choose **Quit** in its menu and open it again. |
+| The status page shows no code | It shows the code only on the computer that runs the script host. Use **Open status page** in the menu, **Open Web UI** in Home Assistant, or the [other ways](#a-new-code). |
+| A firewall of your own, for example in an antivirus program | Let the [ports](#ports) through. The Windows and macOS installers already let the clocks through the built-in firewall. |
+
+---
 
 ## Details
+
+### The menu
+
+On Windows and macOS, a click on the pixel clock icon opens this menu:
+
+| Entry | What it does |
+|---|---|
+| **AWTRIX Script Host 1.3.0** | shows the version |
+| **Running**, **Starting…**, **Restarting in 10 s…** or **Stopped: …** | shows the state. After an unexpected stop, the script host starts again by itself |
+| **Start again** | starts the script host again. Shown only when it stopped because of a problem |
+| **Pairing code 482915** | copies the code |
+| one line per paired clock, or **No clock paired yet** | the name, address and [state](#states) of the clock. A click opens the web UI of the clock |
+| **Open status page** | opens the status page in your browser |
+| **Open log** | opens the log |
+| **Start at login** | starts the script host when you sign in. Ticked after the installation |
+| **Quit** | stops the script host and removes the icon |
+
+On Windows, the icon is green while the script host runs and grey while it is stopped. On a Mac,
+it is dimmed while stopped. Opening **AWTRIX Script Host** again while it runs opens the status
+page.
+
+### The status page
+
+The status page shows the name and version of the script host, the pairing code and the paired
+clocks. Open it with **Open status page** in the menu, or at `http://<computer>:8300` in a browser.
+It shows the code only on the computer itself, and in Home Assistant under **Open Web UI**.
+
+### States
+
+| State | Meaning |
+|---|---|
+| **running** | The scripts of this clock run. |
+| **waiting**, on the status page **waiting for the clock** | The scripts of this clock are stopped until the clock is heard again. This happens when the clock was silent for ten minutes, for example because it is off, and for a few seconds after the script host starts. |
+| **restarting** | The scripts stopped unexpectedly and start again within a few seconds. |
+
+### Where your scripts and the log are
+
+| System | Scripts and pairings | Log |
+|---|---|---|
+| Windows | `%LOCALAPPDATA%\AWTRIX Script Host` | **Open log** in the menu, a file in the same folder |
+| macOS | `~/Library/Application Support/AWTRIX Script Host` | **Open log** in the menu, a file in `~/Library/Logs/AWTRIX Script Host` |
+| Linux / Raspberry Pi | `/var/lib/awtrix-script-host` | `sudo journalctl -u awtrix-script-host` |
+| Home Assistant | inside the app, part of your Home Assistant backups | **Log** tab of the app |
+| Docker | the volume `awtrix-host` | `docker logs awtrix-host` |
+
+On Windows and macOS, each user of the computer has their own script host, scripts and pairings.
+
+### Ports {#ports}
+
+| Port on the computer | For |
+|---|---|
+| 8300, TCP | the status page and pairing |
+| 4211, UDP | finding the clocks |
+| 8301 to 8399, TCP and UDP | one port for each paired clock |
+
+### Reference
 
 - [System settings](../reference/system.md): `scriptHost` and `scriptHostKey`
 - [HTTP API: script host status](../reference/http.md#get-apiv1scripthost)

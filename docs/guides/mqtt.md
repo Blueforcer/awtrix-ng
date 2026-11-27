@@ -222,12 +222,12 @@ This check cannot be switched off.
 
 ### Trust your broker's certificate
 
-Brokers at home, such as the Home Assistant Mosquitto add-on or Mosquitto on a Raspberry Pi,
+Brokers at home, such as the Home Assistant Mosquitto app or Mosquitto on a Raspberry Pi,
 usually have a certificate of their own. AWTRIX refuses such a broker the first time.
 
 1. In the **MQTT** section, **Broker certificate** appears, with the certificate's fingerprint.
 2. Compare it with the fingerprint of your broker's certificate. On the broker's computer (for Home
-   Assistant: in the **Terminal** add-on):
+   Assistant: in the **Terminal** app):
 
     ```bash
     openssl x509 -in /ssl/fullchain.pem -noout -fingerprint -sha256
@@ -288,7 +288,7 @@ jq -n --rawfile certificate ca.crt '{$certificate}' |
 
 - **The log says `mqtt: broker requires a client certificate`.** The broker wants a certificate
   from AWTRIX as well. AWTRIX logs in with username and password only. Switch this off on the
-  broker: in the Home Assistant Mosquitto add-on, turn off **Require Client Certificate**. In
+  broker: in the Home Assistant Mosquitto app, turn off **Require Client Certificate**. In
   Mosquitto itself, set `require_certificate false`.
 - **The log says `mqtt: broker closed TLS: ...`.** The broker ended the encrypted connection. The
   rest of the line says why, for example `handshake failure` when AWTRIX and the broker have no

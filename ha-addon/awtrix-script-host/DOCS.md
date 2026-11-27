@@ -1,36 +1,45 @@
 # AWTRIX Script Host
 
-This app runs the scripts of your AWTRIX NG clocks. The clock shows them in its rotation, and its
-memory stays free. It works with ESP32 clocks, for example the Ulanzi TC001. The TC002 runs its own
-scripts.
-
-## Install
-
-1. Go to **Settings → Apps → Install app**.
-2. Open the menu at the top right, select **Repositories** and add
-   `https://github.com/Blueforcer/awtrix-ng`.
-3. Select **AWTRIX Script Host** and select **Install**.
-4. Select **Start**.
+This app runs the scripts of your AWTRIX NG clocks on Home Assistant. The clock shows them in its
+rotation and keeps more memory free for everything else. It is for ESP32 clocks, for example the
+Ulanzi TC001. The TC002 runs its own scripts and does not need it.
 
 ## Pair a clock
 
-1. Select **Open Web UI**. The page shows a six-digit pairing code.
+1. On the page of this app, press **Start**, then **Open Web UI**. The page shows a 6-digit
+   pairing code.
 2. Open the web UI of the clock and go to **System → Script host**.
-3. **Home Assistant** shows up under **Found**. If it does not, type the address of Home Assistant
-   into **Address**, for example `192.168.1.5` or `homeassistant.local`.
+3. Check **Address**. When the clock has found Home Assistant, its address is there already. With
+   several script hosts, press **Home Assistant** under **Found**. Otherwise type the address of
+   Home Assistant, for example `homeassistant.local` or `192.168.1.5`.
 4. Type the code into **Code** and press **Pair**.
 
-The clock moves its scripts to Home Assistant and restarts. A code works once and for ten minutes.
-The next code shows on the same page. **Show in sidebar** keeps the page one click away.
+The clock copies its scripts to Home Assistant and restarts. Then **System → Script host** shows
+**Connected**.
 
-The [script host guide](https://blueforcer.github.io/awtrix-ng/guides/script-host/) explains how
-to use, move and unpair your scripts.
+A code works for one clock and for ten minutes. **Open Web UI** always shows the current one. Pair
+each further clock the same way. **Show in sidebar** keeps the page one click away.
 
-## Network
+## Good to know
 
-The app uses the network of the Home Assistant computer, so the clocks find it and reach it
-directly. It uses TCP port 8300, UDP port 4211 and, for each clock, TCP and UDP ports from 8301
-upwards.
+- You keep installing and changing scripts in the web UI of the clock and on the AWTRIX Hub.
+- While Home Assistant restarts, the clocks show their other apps. The scripts come back on their
+  own.
+- The app uses the network of the Home Assistant computer, so that the clocks can find it.
+- Updates of the app keep your scripts and pairings. They are part of your Home Assistant backups.
+- Before you uninstall the app, unpair each clock with **Bring scripts back**. Uninstalling deletes
+  the scripts on Home Assistant.
+
+## If something does not work
+
+- **Home Assistant is not under Found:** reload the page of the clock after half a minute, or type
+  the address of Home Assistant into **Address**.
+- **wrong code:** type the code that **Open Web UI** shows now.
+- **The Log tab says `cannot listen on port 8300`:** another app uses this port. Stop it, then start
+  this app again.
+
+The [script host guide](https://blueforcer.github.io/awtrix-ng/guides/script-host/) explains how to
+move your scripts to another computer and how to unpair a clock.
 
 ## Help and license
 

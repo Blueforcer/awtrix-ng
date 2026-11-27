@@ -512,7 +512,8 @@ Every setting with its range and default:
 <!-- only esp32 esp32-s3 -->
 Device settings in these sections: **Wi-Fi**, **Web server**, **MQTT**, **Time**, **Panel**,
 **Brightness & sensors**, **GPIO**, **Buttons**, **Audio**, **Scripting**, **Mirroring**, **Misc**, then
-**AWTRIX Hub**, **Maintenance** and **Backup & restore**. Sections your board cannot use are hidden.
+**AWTRIX Hub**, **Script host**, **Maintenance** and **Backup & restore**. Sections your board cannot
+use are hidden.
 <!-- /only -->
 <!-- only tc002 -->
 Device settings in these sections: **Wi-Fi**, **Web server**, **MQTT**, **Time**, **Panel**,
@@ -638,6 +639,14 @@ Paste your Hub connection key here to download icons and script updates from the
 you copy the key. The key is saved only in this browser. In another browser, enter it again.
 **Remove key** deletes it.
 
+<!-- only esp32 esp32-s3 -->
+### Script host
+
+Pairs the clock with a script host, a program that runs the clock's scripts on a computer in your
+network. **Pair** pairs it, **Move** moves it to another script host, and after **Unpair** the
+clock runs its scripts itself again. See [Script host](../guides/script-host.md).
+
+<!-- /only -->
 <!-- only tc002 -->
 ### Gamepad
 
