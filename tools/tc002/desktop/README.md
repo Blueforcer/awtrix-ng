@@ -36,10 +36,10 @@ file.
 
 ## Downloads
 
-The current builds are in
-[`installer/tc002/`](https://github.com/Blueforcer/awtrix-ng/tree/main/installer/tc002), with
-version-free file names. They change far less often than the firmware, so firmware releases do not
-carry them.
+The current builds are in the
+[latest release of awtrix-ng-installer](https://github.com/Blueforcer/awtrix-ng-installer/releases/latest),
+with version-free file names. They change far less often than the firmware, so firmware releases do
+not carry them.
 
 | System | Graphical installer | Terminal version |
 | --- | --- | --- |
@@ -205,19 +205,20 @@ pull requests that change the installer code and on dispatch, not on a push.
 
 To ship a new installer, build all five platforms from one clean commit, by hand or with a run of
 the installer workflow. Then put each platform's `artifacts/` folder into its own folder under
-`ARTIFACTS` and replace the folder from the repository root:
+`ARTIFACTS`, collect them and release them with a new version:
 
 ```sh
 gh run download RUN_ID --repo Blueforcer/awtrix-ng --pattern 'tc002-installer-*' --dir ARTIFACTS
-node tools/tc002/desktop/publish.mjs --from ARTIFACTS --out installer/tc002
+node tools/tc002/desktop/publish.mjs --from ARTIFACTS --out OUT
+gh release create vVERSION --repo Blueforcer/awtrix-ng-installer --title "Installer VERSION" OUT/*
 ```
 
 The first line applies only to a workflow run. `publish.mjs` checks every file against its
 `artifact-manifest.json`, requires all five platforms to come from the same clean commit and
-version, and replaces `installer/tc002/` with the installers and terminal archives under
-version-free names. It leaves the source archives out. Commit the folder; the
+version, and fills `OUT` with the installers and terminal archives under version-free names. It
+leaves the source archives out. Raise `version` in `package.json` for each new release. The
 [TC002 guide](https://blueforcer.github.io/awtrix-ng/tc002/getting-started/tc002/#get-the-installer)
-links to these file names.
+links to these file names in the latest release.
 
 ## Testing
 

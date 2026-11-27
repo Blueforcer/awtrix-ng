@@ -13,4 +13,3 @@
 *.atts binary
 *.tflite binary
 *.expect binary
-installer/tc002/* binary

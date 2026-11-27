@@ -290,8 +290,8 @@ jobs:
         # update files on the release page, and the browser flasher picks from
         # inside it (the Docs workflow unpacks it). The update images stay
         # separate assets: the device names the exact file to upload. The TC002
-        # desktop installers are not part of a release; they live in
-        # installer/tc002.
+        # desktop installers are not part of a release; they are released in
+        # Blueforcer/awtrix-ng-installer.
         run: |
           cp from-main/firmware-*/firmware-awtrix-ng*.bin .
           zip -j usb-awtrix-ng.zip from-main/firmware-*/usb-awtrix-ng-*.bin
