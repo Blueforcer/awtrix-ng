@@ -310,7 +310,7 @@ jobs:
           version=${GITHUB_REF_NAME#v}
           docs=https://blueforcer.github.io/awtrix-ng
           cat > release-body.md <<EOF
-          **[Release notes]($docs/releases/$version/)** for your clock:
+          **[Full release notes]($docs/releases/$version/)** for your clock:
           [ESP32 (Ulanzi TC001, DIY)]($docs/esp32/releases/$version/) ·
           [ESP32-S3]($docs/esp32-s3/releases/$version/) ·
           [Ulanzi TC002]($docs/tc002/releases/$version/)

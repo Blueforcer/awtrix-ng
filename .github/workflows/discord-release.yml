@@ -14,6 +14,16 @@ jobs:
     name: Post release to Discord
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
+      - name: Highlights from the release notes
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+        run: |
+          page="docs/releases/${RELEASE_TAG#v}.md"
+          if [ -f "$page" ]; then python3 tools/docs/release_highlights.py "$page" > highlights.md; else : > highlights.md; fi
+          cat highlights.md
       - name: Send webhook
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -31,12 +41,20 @@ jobs:
             exit 0
           fi
 
-          for attempt in $(seq 1 20); do
+          wanted="firmware-awtrix-ng.bin firmware-awtrix-ng-s3-octal.bin firmware-awtrix-ng-s3-quad.bin licenses-awtrix-ng.zip"
+          if [ -f packaging/host/windows/installer.nsi ]; then
+            wanted="$wanted AWTRIX-Script-Host-windows-x64.exe AWTRIX-Script-Host-macos.pkg"
+            wanted="$wanted AWTRIX-Script-Host-Uninstall-macos.pkg"
+            for arch in x64 arm64; do
+              wanted="$wanted AWTRIX-Script-Host-linux-$arch.tar.gz AWTRIX-Script-Host-linux-$arch.tar.gz.sha256"
+            done
+          fi
+
+          for attempt in $(seq 1 120); do
             assets=$(gh release view "$RELEASE_TAG" --repo "$REPO" \
               --json assets --jq '.assets[] | select(.size > 0) | .name')
             missing=
-            for want in firmware-awtrix-ng.bin firmware-awtrix-ng-s3-octal.bin \
-                        firmware-awtrix-ng-s3-quad.bin licenses-awtrix-ng.zip; do
+            for want in $wanted; do
               grep -qx "$want" <<<"$assets" || missing="$missing $want"
             done
             # One bundle since v1.0.16; loose usb-*.bin satisfy the check so an
@@ -45,16 +63,18 @@ jobs:
               || missing="$missing usb-awtrix-ng.zip"
             [ -z "$missing" ] && break
             echo "attempt $attempt: still waiting for:$missing"
-            [ "$attempt" -eq 20 ] && {
-              echo "::error::$RELEASE_TAG has no complete asset set after 5 min -- not announcing:$missing"
+            [ "$attempt" -eq 120 ] && {
+              echo "::error::$RELEASE_TAG has no complete asset set after 30 min -- not announcing:$missing"
               exit 1
             }
             sleep 15
           done
           echo "all assets present, announcing $RELEASE_TAG"
 
-          payload=$(jq -n --argjson r "$release" \
+          payload=$(jq -n --argjson r "$release" --rawfile highlights highlights.md \
             '($r.name // $r.tagName) as $name |
+             ($highlights | rtrimstr("\n")) as $h |
+             (if $h == "" then $r.body else $h + "\n\n" + $r.body end) as $text |
              {
               content: ("@everyone New AWTRIX NG release: **\($name)**\n\($r.url)"),
               allowed_mentions: { parse: ["everyone"] },
@@ -62,11 +82,11 @@ jobs:
                 title: $name,
                 url: $r.url,
                 color: 3447003,
-                description: (if ($r.body | length) == 0
+                description: (if ($text | length) == 0
                               then "[Release notes](" + $r.url + ")"
-                              elif ($r.body | length) > 3800
-                              then (($r.body | .[0:3800]) + "\n\n...\n[Full release notes](" + $r.url + ")")
-                              else $r.body end),
+                              elif ($text | length) > 3800
+                              then (($text | .[0:3800]) + "\n\n...\n[Full release notes](" + $r.url + ")")
+                              else $text end),
                 footer: { text: $r.tagName }
               }]
             }')
