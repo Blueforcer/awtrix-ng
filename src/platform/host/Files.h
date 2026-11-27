@@ -11,7 +11,6 @@ bool readFile(const std::string& path, std::string& out, std::size_t maximum = 4
 bool replaceFile(const std::string& path, std::string_view text);
 bool syncDirectory(const std::string& path);
 bool ensurePrivateDirectory(const std::string& path);
-std::size_t restoreFolderAccess(const std::string& directory);
 bool removeFile(const std::string& path);
 void keepNewFilesPrivate();
 int openForReading(const std::string& path);

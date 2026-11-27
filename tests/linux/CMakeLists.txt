@@ -4,6 +4,11 @@ set(linux "${PROJECT_SOURCE_DIR}/src/platform/linux")
 add_awtrix_test(NAME hostd-store SOURCES test_hostd_store.cpp LIBRARIES awtrix_hostd)
 add_awtrix_test(NAME hostd-discovery SOURCES test_hostd_discovery.cpp LIBRARIES awtrix_hostd)
 add_awtrix_test(NAME hostd-code-access SOURCES test_hostd_code_access.cpp LIBRARIES awtrix_hostd)
+add_awtrix_test(NAME hostd-process SOURCES test_hostd_process.cpp LIBRARIES awtrix_hostapp awtrix_os Threads::Threads
+  COMMAND "$<TARGET_FILE:awtrix-host>" "$<TARGET_FILE:awtrix-script-runner>" "${AWTRIX_WEBUI}" TIMEOUT 120
+  PROPERTIES RUN_SERIAL TRUE)
+add_awtrix_test(NAME hostapp-supervisor SOURCES test_hostapp_supervisor.cpp LIBRARIES awtrix_hostapp)
+add_awtrix_test(NAME hostapp-tray SOURCES test_hostapp_tray.cpp LIBRARIES awtrix_hostapp)
 add_awtrix_test(NAME posix-private-store SOURCES test_private_store.cpp LIBRARIES awtrix_os)
 add_awtrix_test(NAME linux-own-page SOURCES test_own_page.cpp LIBRARIES awtrix_host)
 add_awtrix_test(NAME linux-clock-api SOURCES test_clock_api.cpp LIBRARIES awtrix_remote)

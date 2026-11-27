@@ -29,7 +29,34 @@ class ChildProcess {
 #endif
 };
 
+class TiedProcess {
+ public:
+  TiedProcess() = default;
+  ~TiedProcess() { stop(); }
+  TiedProcess(const TiedProcess&) = delete;
+  TiedProcess& operator=(const TiedProcess&) = delete;
+
+  bool start(const std::vector<std::string>& args);
+  bool running() const { return id_ > 0; }
+  long id() const { return id_; }
+#if defined(_WIN32)
+  void* handle() const { return handle_; }
+#endif
+  bool ended(int& status);
+  bool wait(int timeoutMs, int& status);
+  void closeInput();
+  void stop(int graceMs = 8000);
+
+ private:
+  long id_ = -1;
+  std::intptr_t input_ = -1;
+#if defined(_WIN32)
+  void* handle_ = nullptr;
+#endif
+};
+
 void stopOnRequest(std::atomic<bool>& stop);
+void stopAtInputEnd(std::atomic<bool>& stop);
 void lowerThreadPriority(int nice);
 std::string hostName();
 

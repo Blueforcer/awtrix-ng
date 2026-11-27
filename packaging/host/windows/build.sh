@@ -28,12 +28,13 @@ PREFIX=$(cygpath -m "$DEPS")
 cmake -S "$ROOT" -B "$OUT/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DAWTRIX_HOST_ONLY=ON -DBUILD_TESTING=OFF \
   -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DOPENSSL_ROOT_DIR="$PREFIX" -DOPENSSL_USE_STATIC_LIBS=TRUE \
   -DCMAKE_PREFIX_PATH="$PREFIX" -DAWTRIX_DEPS="$(cygpath -m "$ROOT/.pio/libdeps/native")" > "$OUT/configure.log"
-cmake --build "$OUT/build" --target awtrix-host awtrix-script-runner
+cmake --build "$OUT/build" --target awtrix-script-host awtrix-host awtrix-script-runner
 
 STAGE=$OUT/stage
 rm -rf "$STAGE"
 mkdir -p "$STAGE/webui" "$STAGE/licenses"
-cp "$OUT/build/awtrix-host.exe" "$OUT/build/awtrix-script-runner.exe" "$CA_DIR/ca-certificates.crt" "$STAGE/"
+cp "$OUT/build/AWTRIX Script Host.exe" "$OUT/build/awtrix-host.exe" "$OUT/build/awtrix-script-runner.exe" \
+  "$CA_DIR/ca-certificates.crt" "$STAGE/"
 cp "$ROOT/webui/index.html" "$STAGE/webui/"
 cp "$ROOT/LICENSE.md" "$STAGE/licenses/LICENSE.md"
 { printf '\357\273\277'; cat "$ROOT/LICENSE.md"; } > "$STAGE/license-page.txt"
@@ -46,5 +47,6 @@ cp "$CA_DIR/NOTICE" "$STAGE/licenses/Mozilla-CA-NOTICE.txt"
 
 SETUP=$OUT/AWTRIX-Script-Host-windows-x64.exe
 MSYS2_ARG_CONV_EXCL='*' "$MAKENSIS" -V2 "-DVERSION=$VERSION" "-DSTAGE=$(cygpath -w "$STAGE")" \
-  "-DOUTFILE=$(cygpath -w "$SETUP")" "$(cygpath -w "$HERE/installer.nsi")"
+  "-DOUTFILE=$(cygpath -w "$SETUP")" "-DICON=$(cygpath -w "$ROOT/tools/tc002/desktop/native/icons/icon.ico")" \
+  "$(cygpath -w "$HERE/installer.nsi")"
 ( cd "$OUT" && ls -l "$(basename "$SETUP")" stage/*.exe && sha256sum "$(basename "$SETUP")" )

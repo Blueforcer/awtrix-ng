@@ -48,3 +48,10 @@ if(WIN32)
   add_awtrix_test(NAME host-win32 SOURCES test_win32.cpp LIBRARIES awtrix_os
     ${host_test} TIMEOUT 60)
 endif()
+if(TARGET awtrix_tray)
+  add_awtrix_test(NAME hostapp-win32 SOURCES test_hostapp_win32.cpp LIBRARIES awtrix_tray)
+  add_awtrix_test(NAME hostapp-win32-process SOURCES test_hostapp_win32_process.cpp
+    LIBRARIES awtrix_tray awtrix_tray_host awtrix_os
+    COMMAND "$<TARGET_FILE:awtrix-host>" "$<TARGET_FILE:awtrix-script-runner>" "${AWTRIX_WEBUI}" TIMEOUT 120
+    PROPERTIES RUN_SERIAL TRUE)
+endif()

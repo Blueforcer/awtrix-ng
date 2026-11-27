@@ -11,7 +11,6 @@
 #include <chrono>
 #include <thread>
 #include <utility>
-#include <vector>
 
 #include "platform/host/win32/Wide.h"
 
@@ -139,33 +138,6 @@ bool writeAll(HANDLE file, const void* data, std::size_t size) {
   return true;
 }
 
-bool administratorsLockedOut(const std::wstring& path) {
-  PACL dacl = nullptr;
-  PSECURITY_DESCRIPTOR descriptor = nullptr;
-  if (::GetNamedSecurityInfoW(path.c_str(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr, nullptr, &dacl, nullptr,
-                              &descriptor) != ERROR_SUCCESS)
-    return false;
-  bool granted = dacl == nullptr;
-  for (DWORD i = 0; !granted && i < dacl->AceCount; ++i) {
-    void* ace = nullptr;
-    if (!::GetAce(dacl, i, &ace)) break;
-    const auto* allowed = static_cast<const ACCESS_ALLOWED_ACE*>(ace);
-    granted = allowed->Header.AceType == ACCESS_ALLOWED_ACE_TYPE && !(allowed->Header.AceFlags & INHERIT_ONLY_ACE) &&
-              (allowed->Mask & FILE_ALL_ACCESS) == FILE_ALL_ACCESS &&
-              ::IsWellKnownSid(const_cast<DWORD*>(&allowed->SidStart), WinBuiltinAdministratorsSid);
-  }
-  ::LocalFree(descriptor);
-  return !granted;
-}
-
-bool inheritAccess(const std::wstring& path) {
-  ACL empty;
-  return ::InitializeAcl(&empty, sizeof empty, ACL_REVISION) &&
-         ::SetNamedSecurityInfoW(const_cast<LPWSTR>(path.c_str()), SE_FILE_OBJECT,
-                                 DACL_SECURITY_INFORMATION | UNPROTECTED_DACL_SECURITY_INFORMATION, nullptr, nullptr,
-                                 &empty, nullptr) == ERROR_SUCCESS;
-}
-
 bool moveOver(const std::wstring& from, const std::wstring& to) {
   for (int attempt = 0;; ++attempt) {
     if (::MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return true;
@@ -284,28 +256,6 @@ bool ensurePrivateDirectory(const std::string& path) {
     return false;
   }
   return true;
-}
-
-std::size_t restoreFolderAccess(const std::string& directory) {
-  std::size_t restored = 0;
-  std::vector<std::wstring> pending{wide(directory)};
-  while (!pending.empty()) {
-    const std::wstring folder = std::move(pending.back());
-    pending.pop_back();
-    WIN32_FIND_DATAW found{};
-    const HANDLE search =
-        ::FindFirstFileExW((folder + L"\\*").c_str(), FindExInfoBasic, &found, FindExSearchNameMatch, nullptr, 0);
-    if (search == INVALID_HANDLE_VALUE) continue;
-    do {
-      const std::wstring name = found.cFileName;
-      if (name == L"." || name == L".." || (found.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) continue;
-      const std::wstring path = folder + L"\\" + name;
-      if (administratorsLockedOut(path) && inheritAccess(path)) ++restored;
-      if (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) pending.push_back(path);
-    } while (::FindNextFileW(search, &found));
-    ::FindClose(search);
-  }
-  return restored;
 }
 
 bool removeFile(const std::string& path) {

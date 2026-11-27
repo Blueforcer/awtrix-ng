@@ -1,3 +1,3 @@
 #!/bin/sh
-launchctl bootout system/de.blueforcer.awtrix.script-host >/dev/null 2>&1 || true
+/bin/sh "$(dirname "$0")/quit.sh"
 exit 0

@@ -22,8 +22,6 @@ bool syncDirectory(const std::string& path) { return posix::fsyncDirectory(path)
 
 bool ensurePrivateDirectory(const std::string& path) { return posix::ensurePrivateDirectory(path); }
 
-std::size_t restoreFolderAccess(const std::string&) { return 0; }
-
 bool removeFile(const std::string& path) { return ::unlink(path.c_str()) == 0; }
 
 void keepNewFilesPrivate() { ::umask(0077); }

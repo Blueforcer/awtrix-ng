@@ -33,6 +33,7 @@ void closeSocket(Socket socket);
 void shutdownSocket(Socket socket);
 Socket duplicateSocket(Socket socket);
 bool noDelay(Socket socket);
+void exclusiveListener(Socket socket);
 int connectSocket(Socket socket, const sockaddr* address, socklen_t size);
 
 int socketError();

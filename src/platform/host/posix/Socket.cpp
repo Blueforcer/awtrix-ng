@@ -81,6 +81,11 @@ bool noDelay(Socket socket) {
   return ::setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one) == 0;
 }
 
+void exclusiveListener(Socket socket) {
+  const int one = 1;
+  ::setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+}
+
 int connectSocket(Socket socket, const sockaddr* address, socklen_t size) {
   return ::connect(socket, address, size) == 0 ? 0 : errno;
 }

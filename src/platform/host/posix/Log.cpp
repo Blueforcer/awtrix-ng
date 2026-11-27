@@ -1,12 +1,10 @@
-#include "platform/host/Service.h"
+#include "platform/host/Log.h"
 
 #include <sys/stat.h>
 
 #include <cstdio>
 
 namespace awtrix::os {
-
-int runService(const std::string&, std::atomic<bool>&, const ServiceBody& body) { return body(false); }
 
 bool logToFile(const std::string& path, unsigned long keepBytes) {
   struct stat info{};

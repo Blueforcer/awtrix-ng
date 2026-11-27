@@ -17,6 +17,12 @@ target_link_libraries(awtrix_hostd PUBLIC awtrix_core awtrix_json awtrix_os awtr
 add_executable(awtrix-host "${HOSTD_DIR}/main_hostd.cpp")
 target_link_libraries(awtrix-host PRIVATE awtrix_hostd awtrix_warnings)
 
+set(HOSTAPP_DIR "${PROJECT_SOURCE_DIR}/src/platform/host/app")
+add_library(awtrix_hostapp STATIC "${HOSTAPP_DIR}/HostSupervisor.cpp" "${HOSTAPP_DIR}/StatusMenu.cpp"
+  "${HOSTAPP_DIR}/StatusFetch.cpp" "${HOSTAPP_DIR}/TrayIcon.cpp")
+target_include_directories(awtrix_hostapp PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_link_libraries(awtrix_hostapp PUBLIC awtrix_json PRIVATE awtrix_os Threads::Threads awtrix_warnings)
+
 add_library(awtrix_remote STATIC "${RUNNER_DIR}/remote/ClockApi.cpp" "${RUNNER_DIR}/remote/RemoteClockApplication.cpp"
   "${RUNNER_DIR}/remote/RemoteRole.cpp" "${PROJECT_SOURCE_DIR}/src/transport/mqtt/ScriptOnlyMqtt.cpp")
 target_link_libraries(awtrix_remote PUBLIC awtrix_host awtrix_hmac PRIVATE awtrix_warnings)
@@ -29,6 +35,8 @@ target_link_libraries(awtrix-script-runner PRIVATE awtrix_remote awtrix_tcp awtr
 install(TARGETS awtrix-host awtrix-script-runner RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 if(WIN32)
   include("${CMAKE_CURRENT_LIST_DIR}/HostWindows.cmake")
+elseif(APPLE)
+  include("${CMAKE_CURRENT_LIST_DIR}/HostMacOS.cmake")
 else()
   configure_file("${PROJECT_SOURCE_DIR}/packaging/host/awtrix-host.service.in" awtrix-host.service @ONLY)
   install(FILES "${PROJECT_BINARY_DIR}/awtrix-host.service" DESTINATION ${CMAKE_INSTALL_DATADIR}/awtrix-ng/systemd)

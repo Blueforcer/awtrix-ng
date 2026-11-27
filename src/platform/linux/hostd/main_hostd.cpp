@@ -15,15 +15,15 @@
 #include "core/api/HttpProtocol.h"
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
-#include "platform/host/Files.h"
+#include "platform/host/Log.h"
 #include "platform/host/Process.h"
-#include "platform/host/Service.h"
 #include "platform/host/Socket.h"
 #include "platform/host/Text.h"
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/hostd/Children.h"
 #include "platform/linux/hostd/ClockStore.h"
 #include "platform/linux/hostd/CodeAccess.h"
+#include "platform/linux/hostd/Contract.h"
 #include "platform/linux/hostd/Discovery.h"
 #include "platform/linux/hostd/PairingCode.h"
 #include "system/MonotonicClock.h"
@@ -35,7 +35,6 @@ namespace {
 
 constexpr std::size_t kMaxBody = 1024;
 constexpr int64_t kStartMs = 8000;
-constexpr unsigned long kKeepLogBytes = 1024 * 1024;
 
 std::atomic<bool> g_stop{false};
 
@@ -44,22 +43,26 @@ struct Options {
   std::string binary = "/usr/bin/awtrix-script-runner";
   std::string webui;
   std::string caFile;
+  std::string log;
   std::string name;
   // The address clocks and browsers reach this host at, when it differs from the one a request
   // arrives at (Docker bridge networks, NAT).
   std::string advertise;
-  int port = 8300;
+  int port = kDefaultPort;
   int idle = 600;
   bool discovery = true;
   bool haIngress = false;
+  bool exitWithStdin = false;
 };
 
 void usage() {
   std::puts("awtrix-host [--state DIR] [--port 8300] [--binary awtrix-script-runner] [--webui FILE] [--name NAME]\n"
-            "  [--advertise ADDRESS] [--ca-file FILE] [--idle SECONDS] [--no-discovery] [--ha-ingress]\n"
+            "  [--advertise ADDRESS] [--ca-file FILE] [--idle SECONDS] [--log FILE] [--no-discovery] [--ha-ingress]\n"
+            "  [--exit-with-stdin]\n"
             "The script host for ESP32 clocks: pair a clock in its web UI under System > Script host with the\n"
             "code this program prints. The scripts of a clock not heard for --idle seconds (600, 0 = never)\n"
-            "stop until it is back. --ha-ingress also shows the code in Home Assistant's Open Web UI.");
+            "stop until it is back. --ha-ingress also shows the code in Home Assistant's Open Web UI.\n"
+            "--log writes the output to FILE and starts a new one past 1 MB. --exit-with-stdin stops once stdin ends.");
 }
 
 bool parse(int argc, char** argv, Options& o) {
@@ -67,6 +70,7 @@ bool parse(int argc, char** argv, Options& o) {
     const std::string arg = argv[i];
     if (arg == "--no-discovery") { o.discovery = false; continue; }
     if (arg == "--ha-ingress") { o.haIngress = true; continue; }
+    if (arg == "--exit-with-stdin") { o.exitWithStdin = true; continue; }
     if (arg == "--help") { usage(); std::exit(0); }
     if (i + 1 >= argc) return false;
     const std::string value = argv[++i];
@@ -77,6 +81,7 @@ bool parse(int argc, char** argv, Options& o) {
     else if (arg == "--name") o.name = value;
     else if (arg == "--advertise") o.advertise = value;
     else if (arg == "--ca-file") o.caFile = value;
+    else if (arg == "--log") o.log = value;
     else if (arg == "--idle") o.idle = std::atoi(value.c_str());
     else return false;
   }
@@ -96,6 +101,13 @@ std::string newKey() {
 }
 
 bool portFree(int port) { return os::localPortFree(static_cast<uint16_t>(port)); }
+
+void openLog(const std::string& path) {
+  std::error_code ignored;
+  const std::filesystem::path file = std::filesystem::u8path(path);
+  if (file.has_parent_path()) std::filesystem::create_directories(file.parent_path(), ignored);
+  if (!os::logToFile(path, kLogKeepBytes)) std::fprintf(stderr, "cannot write the log %s\n", path.c_str());
+}
 
 bool answers(int port) {
   httplib::Client client("127.0.0.1", port);
@@ -137,24 +149,18 @@ async function load(){
 load();setInterval(load,5000);
 </script></body></html>)";
 
-int serve(Options& o, bool asService) {
-  if (asService) {
-    std::error_code ignored;
-    std::filesystem::create_directories(std::filesystem::u8path(o.state), ignored);
-    const std::size_t restored = os::restoreFolderAccess(o.state);
-    os::logToFile((std::filesystem::u8path(o.state) / "awtrix-host.log").u8string(), kKeepLogBytes);
-    if (restored) std::printf("access restored on %zu entries of %s\n", restored, o.state.c_str());
-  }
+int serve(Options& o) {
+  if (!o.log.empty()) openLog(o.log);
   if (!os::startSockets()) {
     std::fputs("cannot use the network\n", stderr);
-    return 1;
+    return kExitFailure;
   }
 
   ClockStore store(o.state);
   std::string problem;
   if (!store.load(problem)) {
     std::fprintf(stderr, "%s\n", problem.c_str());
-    return 1;
+    return kExitFailure;
   }
   std::mutex mutex;
   Children children(o.binary, o.webui, o.caFile, o.idle);
@@ -165,6 +171,7 @@ int serve(Options& o, bool asService) {
   if (o.discovery) discovery.begin(o.name, static_cast<uint16_t>(o.port));
 
   httplib::Server server;
+  server.set_socket_options([](os::Socket socket) { os::exclusiveListener(socket); });
   server.set_default_headers({{"Cache-Control", "no-store"}});
   server.set_payload_max_length(kMaxBody);
   server.Options(R"(/api/v1/pair(/[0-9A-Fa-f]{1,32})?)", [](const httplib::Request&, httplib::Response& res) {
@@ -261,7 +268,7 @@ int serve(Options& o, bool asService) {
 
   if (!server.bind_to_port("0.0.0.0", o.port)) {
     std::fprintf(stderr, "cannot listen on port %d\n", o.port);
-    return 1;
+    return kExitPortBusy;
   }
   std::thread http([&server] { server.listen_after_bind(); });
   {
@@ -297,9 +304,10 @@ int main(int argc, char** argv) {
   Options o;
   if (!parse(argc, argv, o)) {
     usage();
-    return 2;
+    return kExitUsage;
   }
   if (o.name.empty()) o.name = hostName();
   os::stopOnRequest(g_stop);
-  return os::runService("AWTRIXScriptHost", g_stop, [&o](bool asService) { return serve(o, asService); });
+  if (o.exitWithStdin) os::stopAtInputEnd(g_stop);
+  return serve(o);
 }

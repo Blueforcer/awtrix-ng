@@ -11,13 +11,14 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <string>
 #include <thread>
 
 #include "platform/host/Files.h"
+#include "platform/host/Log.h"
 #include "platform/host/Memory.h"
 #include "platform/host/Process.h"
-#include "platform/host/Service.h"
 #include "platform/host/System.h"
 #include "platform/host/Wake.h"
 
@@ -46,12 +47,12 @@ int child(const std::string& mode, const std::string& marker) {
     std::fflush(stdout);
     return 0;
   }
-  if (mode == "service") {
+  if (mode == "logger") {
     std::printf("runner-out\n");
     std::fflush(stdout);
     if (!os::logToFile(marker, 64)) return 4;
-    std::printf("service-out\n");
-    std::fprintf(stderr, "service-err\n");
+    std::printf("logger-out\n");
+    std::fprintf(stderr, "logger-err\n");
     return 0;
   }
   if (mode == "graceful") {
@@ -113,31 +114,23 @@ bool ownAccountMayUse(const fs::path& path) {
   return true;
 }
 
-bool forTheServiceOnly(const fs::path& path) {
+bool ownerOnly(const fs::path& path) {
   return ownAccountMayUse(path) && allowedTo(path, WinBuiltinAdministratorsSid) == FILE_ALL_ACCESS &&
          allowedTo(path, WinLocalSystemSid) == FILE_ALL_ACCESS && allowedTo(path, WinBuiltinUsersSid) == 0 &&
          allowedTo(path, WinAuthenticatedUserSid) == 0 && allowedTo(path, WinWorldSid) == 0 &&
          allowedTo(path, WinInteractiveSid) == 0;
 }
 
-bool lockOut(const fs::path& path) {
-  ACL empty;
-  return ::InitializeAcl(&empty, sizeof empty, ACL_REVISION) &&
-         ::SetNamedSecurityInfoW(const_cast<LPWSTR>(path.c_str()), SE_FILE_OBJECT,
-                                 DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, nullptr, nullptr,
-                                 &empty, nullptr) == ERROR_SUCCESS;
-}
-
-bool runServiceChild(const fs::path& log, const fs::path& runtime) {
-  os::ChildProcess service;
+bool runLogger(const fs::path& log, const fs::path& runtime) {
+  os::ChildProcess logger;
   int status = -1;
-  return service.start({self(), "--child", "service", log.u8string()}, runtime.u8string()) &&
-         waitFor([&] { return service.ended(status); }, 5000) && status == 0;
+  return logger.start({self(), "--child", "logger", log.u8string()}, runtime.u8string()) &&
+         waitFor([&] { return logger.ended(status); }, 5000) && status == 0;
 }
 
-void serviceFolder(const fs::path& root) {
+void stateFolder(const fs::path& root) {
   const fs::path state = root / "state";
-  require(os::ensurePrivateDirectory(state.u8string()), "a private state folder, as the Setup makes it");
+  require(os::ensurePrivateDirectory(state.u8string()), "a private state folder");
   const fs::path clock = state / "clocks" / "abc";
   fs::create_directories(clock / "data");
   require(os::replaceFile((clock / "clock.json").u8string(), "{}"), "a clock record");
@@ -145,54 +138,30 @@ void serviceFolder(const fs::path& root) {
   const fs::path older = state / "awtrix-host.log.1";
   const fs::path runtime = clock / "runtime.log";
 
-  check(runServiceChild(log, runtime), "a child logs through logToFile, as the service does");
+  check(runLogger(log, runtime), "a child logs through logToFile, as awtrix-host --log does");
   const std::string first = slurp(log);
-  check(first.find("service-out") != std::string::npos && first.find("service-err") != std::string::npos,
-        "stdout and stderr of the service land in awtrix-host.log");
+  check(first.find("logger-out") != std::string::npos && first.find("logger-err") != std::string::npos,
+        "stdout and stderr land in awtrix-host.log");
   check(slurp(runtime).find("runner-out") != std::string::npos, "what the child printed before lands in runtime.log");
-  check(forTheServiceOnly(log), "the service, SYSTEM and the Administrators may use awtrix-host.log, other users not");
-  check(forTheServiceOnly(runtime), "the same holds for the runtime.log of a runner");
-  check(forTheServiceOnly(clock) && forTheServiceOnly(clock / "data"), "and for the folders of a clock");
+  check(ownerOnly(log), "the owner, SYSTEM and the Administrators may use awtrix-host.log, other users not");
+  check(ownerOnly(runtime), "the same holds for the runtime.log of a runner");
+  check(ownerOnly(clock) && ownerOnly(clock / "data"), "and for the folders of a clock");
   os::OutFile script = os::OutFile::create((clock / "data" / "script.be").u8string(), true);
   check(script.valid() && script.write("x", 1) && script.close(), "a runner writes a script, store or image file");
   {
     os::FileLock lock;
     check(lock.acquire((clock / "data" / ".lock").u8string()), "and takes its lock");
   }
-  check(forTheServiceOnly(clock / "data" / "script.be") && forTheServiceOnly(clock / "data" / ".lock") &&
-            forTheServiceOnly(clock / "clock.json"),
+  check(ownerOnly(clock / "data" / "script.be") && ownerOnly(clock / "data" / ".lock") &&
+            ownerOnly(clock / "clock.json"),
         "those and the clock record, written like its key, have the same access");
 
   std::ofstream(log, std::ios::app) << std::string(100, '.') << '\n';
   const std::string full = slurp(log);
-  check(runServiceChild(log, runtime), "the service starts again");
-  check(slurp(older) == full && slurp(log).find("service-out") != std::string::npos,
+  check(runLogger(log, runtime), "the logger starts again");
+  check(slurp(older) == full && slurp(log).find("logger-out") != std::string::npos,
         "a log over its limit moves to awtrix-host.log.1, a new one starts");
-  check(forTheServiceOnly(older) && forTheServiceOnly(log), "both keep that access");
-
-  const std::string before = slurp(log), beforeOlder = slurp(older), beforeRuntime = slurp(runtime);
-  check(lockOut(log) && lockOut(older) && lockOut(runtime),
-        "an update with the 1.3.0 Setup left them with an empty DACL");
-  std::string text;
-  check(!os::readFile(log.u8string(), text) && !ownAccountMayUse(runtime), "which locks out even their owner");
-  const fs::path outside = root / "outside";
-  fs::create_directories(outside);
-  std::ofstream(outside / "locked.txt") << "elsewhere";
-  check(lockOut(outside / "locked.txt"), "a locked file outside the state folder");
-  const fs::path link = state / "clocks" / "elsewhere";
-  const std::wstring junction = L"mklink /J \"" + link.wstring() + L"\" \"" + outside.wstring() + L"\" >NUL";
-  check(::_wsystem(junction.c_str()) == 0, "a junction from the state folder to it");
-
-  check(os::restoreFolderAccess(state.u8string()) == 3, "the service restores the three locked files");
-  check(forTheServiceOnly(log) && forTheServiceOnly(older) && forTheServiceOnly(runtime),
-        "they take their access from the state folder again");
-  check(slurp(log) == before && slurp(older) == beforeOlder && slurp(runtime) == beforeRuntime,
-        "and keep what they hold");
-  check(awtrix::test::privateMode(clock / "clock.json", 0600), "a file that lets the Administrators in keeps its DACL");
-  check(allowedTo(outside / "locked.txt", WinBuiltinAdministratorsSid) == 0, "a junction is not followed");
-  check(os::restoreFolderAccess(state.u8string()) == 0, "a second pass finds nothing to restore");
-  check(runServiceChild(log, runtime) && slurp(log).size() > before.size(), "the service appends to its log again");
-  ::RemoveDirectoryW(link.c_str());
+  check(ownerOnly(older) && ownerOnly(log), "both keep that access");
 }
 
 void files(const fs::path& root) {
@@ -422,9 +391,6 @@ void facts() {
   check(os::machineName() == "x86_64" || os::machineName() == "aarch64", "the architecture is named like uname -m");
   check(os::secondsSinceBoot() > 0, "uptime counts from the boot");
   check(!os::firstIpv4Address().empty(), "an IPv4 address is reported");
-  std::atomic<bool> stop{false};
-  check(os::runService("AWTRIXScriptHostTest", stop, [](bool service) { return service ? 1 : 42; }) == 42,
-        "outside the service manager the body runs at once, as a console program");
 }
 
 }
@@ -435,7 +401,7 @@ int main(int argc, char** argv) {
   fs::remove_all(root);
   fs::create_directories(root);
   files(root);
-  serviceFolder(root);
+  stateFolder(root);
   sockets();
   wake();
   processes(root);

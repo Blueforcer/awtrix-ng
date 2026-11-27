@@ -31,46 +31,63 @@ if [ "$TESTS" = 1 ]; then
 fi
 
 STAGE=$WORK/stage
-APP="$STAGE/root/Library/Application Support/AWTRIX Script Host"
+APP="$STAGE/root/AWTRIX Script Host.app"
+PROGRAMS="$APP/Contents/MacOS"
+LICENSES="$APP/Contents/Resources/licenses"
 rm -rf "$STAGE"
-mkdir -p "$APP/bin" "$APP/share" "$APP/licenses" "$STAGE/root/Library/LaunchDaemons" "$STAGE/scripts" \
-  "$STAGE/uninstall-scripts" "$WORK/out"
-for program in awtrix-host awtrix-script-runner; do
-  cp "$WORK/build/$program" "$APP/bin/$program"
-  strip "$APP/bin/$program"
-  codesign --force --sign - --identifier "de.blueforcer.awtrix.$program" "$APP/bin/$program" 2>/dev/null
+mkdir -p "$STAGE/root" "$STAGE/scripts" "$STAGE/uninstall-scripts" "$WORK/out"
+cp -R "$WORK/build/AWTRIX Script Host.app" "$APP"
+mkdir -p "$LICENSES"
+cp "$ROOT/LICENSE.md" "$LICENSES/AWTRIX-NG.md"
+for license in MIT-Berry MIT-cpp-httplib MIT-densaugeo-base64 MIT-PubSubClient TJpg_Decoder; do
+  cp "$ROOT/LICENSES/$license.txt" "$LICENSES/"
+done
+cp "$DEPS/licenses/"*.txt "$LICENSES/"
+xattr -cr "$APP"
+for program in awtrix-host awtrix-script-runner "AWTRIX Script Host"; do
+  system='/usr/lib/'
+  [ "$program" = "AWTRIX Script Host" ] && system='(/usr/lib/|/System/Library/Frameworks/)'
+  strip "$PROGRAMS/$program"
   for arch in arm64 x86_64; do
-    if otool -arch "$arch" -L "$APP/bin/$program" | tail -n +2 | grep -vE '^[[:space:]]+/usr/lib/'; then
-      echo "$program ($arch) links a library outside /usr/lib" >&2
+    if otool -arch "$arch" -L "$PROGRAMS/$program" | tail -n +2 | grep -vE "^[[:space:]]+$system"; then
+      echo "$program ($arch) links a library outside the system" >&2
       exit 1
     fi
   done
 done
-cp "$ROOT/webui/index.html" "$APP/share/index.html"
-cp "$HERE/uninstall.sh" "$APP/uninstall.sh"
-cp "$ROOT/LICENSE.md" "$APP/licenses/AWTRIX-NG.md"
-for license in MIT-Berry MIT-cpp-httplib MIT-densaugeo-base64 MIT-PubSubClient TJpg_Decoder; do
-  cp "$ROOT/LICENSES/$license.txt" "$APP/licenses/"
+for program in awtrix-host awtrix-script-runner; do
+  codesign --force --sign - --identifier "de.blueforcer.awtrix.$program" "$PROGRAMS/$program" 2>/dev/null
 done
-cp "$DEPS/licenses/"*.txt "$APP/licenses/"
-cp "$HERE/$ID.plist" "$STAGE/root/Library/LaunchDaemons/"
-cp "$HERE/scripts/preinstall" "$HERE/scripts/postinstall" "$STAGE/scripts/"
-cp "$HERE/uninstall-scripts/postinstall" "$HERE/uninstall.sh" "$STAGE/uninstall-scripts/"
-chmod 755 "$APP/bin/"* "$APP/uninstall.sh" "$STAGE/scripts/"* "$STAGE/uninstall-scripts/"*
-chmod 644 "$APP/share/index.html" "$APP/licenses/"* "$STAGE/root/Library/LaunchDaemons/$ID.plist"
-plutil -lint "$STAGE/root/Library/LaunchDaemons/$ID.plist" >/dev/null
+codesign --force --sign - "$APP" 2>/dev/null
+codesign --verify --strict --deep "$APP"
+plutil -lint "$APP/Contents/Info.plist" >/dev/null
+chmod -R u=rwX,go=rX "$APP"
+cp "$HERE/scripts/preinstall" "$HERE/scripts/postinstall" "$HERE/quit.sh" "$STAGE/scripts/"
+cp "$HERE/uninstall-scripts/postinstall" "$HERE/uninstall.sh" "$HERE/quit.sh" "$STAGE/uninstall-scripts/"
+chmod 755 "$STAGE/scripts/"* "$STAGE/uninstall-scripts/"*
 
 product() {
-  local title=$1 id=$2 package=$3 output=$4
+  local title=$1 id=$2 package=$3 resources=$4 output=$5 pages="" page
+  for page in welcome conclusion; do
+    if [ -f "$resources/$page.html" ]; then pages="$pages<$page file=\"$page.html\" mime-type=\"text/html\"/>"; fi
+  done
   sed -e "s|@TITLE@|$title|" -e "s|@ID@|$id|g" -e "s|@VERSION@|$VERSION|" -e "s|@PACKAGE@|$package|" \
-    "$HERE/distribution.xml" > "$STAGE/$id.xml"
-  productbuild --distribution "$STAGE/$id.xml" --package-path "$STAGE" "$output" >/dev/null
+    -e "s|@PAGES@|$pages|" "$HERE/distribution.xml" > "$STAGE/$id.xml"
+  productbuild --distribution "$STAGE/$id.xml" --resources "$resources" --package-path "$STAGE" "$output" >/dev/null
 }
 
-pkgbuild --root "$STAGE/root" --identifier "$ID" --version "$VERSION" --install-location / \
-  --scripts "$STAGE/scripts" --ownership recommended "$STAGE/host.pkg" >/dev/null
+pkgbuild --analyze --root "$STAGE/root" "$STAGE/component.plist" >/dev/null
+plutil -replace 0.BundleIsRelocatable -bool NO "$STAGE/component.plist"
+plutil -replace 0.BundleIsVersionChecked -bool NO "$STAGE/component.plist"
+pkgbuild --root "$STAGE/root" --component-plist "$STAGE/component.plist" --identifier "$ID" --version "$VERSION" \
+  --install-location /Applications --scripts "$STAGE/scripts" --ownership recommended "$STAGE/host.pkg" >/dev/null
+if pkgutil --payload-files "$STAGE/host.pkg" | grep -F '/._'; then
+  echo "the package carries extended attributes" >&2
+  exit 1
+fi
 pkgbuild --nopayload --identifier "$ID.uninstall" --version "$VERSION" --scripts "$STAGE/uninstall-scripts" \
   "$STAGE/uninstall.pkg" >/dev/null
-product "AWTRIX Script Host" "$ID" host.pkg "$WORK/out/AWTRIX-Script-Host-macos.pkg"
-product "Remove AWTRIX Script Host" "$ID.uninstall" uninstall.pkg "$WORK/out/AWTRIX-Script-Host-Uninstall-macos.pkg"
-for file in "$WORK/out/"*.pkg "$APP/bin/"*; do echo "$(basename "$file"): $(stat -f %z "$file") bytes"; done
+product "AWTRIX Script Host" "$ID" host.pkg "$HERE/resources" "$WORK/out/AWTRIX-Script-Host-macos.pkg"
+product "Remove AWTRIX Script Host" "$ID.uninstall" uninstall.pkg "$HERE/uninstall-resources" \
+  "$WORK/out/AWTRIX-Script-Host-Uninstall-macos.pkg"
+for file in "$WORK/out/"*.pkg "$PROGRAMS/"*; do echo "$(basename "$file"): $(stat -f %z "$file") bytes"; done
