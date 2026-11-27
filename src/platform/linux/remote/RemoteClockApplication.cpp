@@ -128,4 +128,16 @@ sound::Caps soundCapsFrom(const std::string& capabilities) {
   return caps;
 }
 
+DeviceCapabilities clockCapabilities(const std::string& capabilities, DeviceCapabilities host) {
+  for (std::size_t i = 0; i < DeviceCapabilities::kNames.size(); ++i) {
+    const std::string_view name = DeviceCapabilities::kNames[i];
+    const std::size_t dot = name.find('.');
+    api::JsonReader value = api::memberValue(capabilities, std::string(name.substr(0, dot)).c_str());
+    if (dot != std::string_view::npos) value = api::memberValue(value, std::string(name.substr(dot + 1)).c_str());
+    host.present[i] = false;
+    value.asBool(host.present[i]);
+  }
+  return host;
+}
+
 }

@@ -59,6 +59,10 @@ def stop_process(process, logs=lambda: "", timeout=12, require_success=True):
         raise AssertionError(f"runtime exited {process.returncode}: {logs()}")
 
 
+def runner_beside(binary):
+    return Path(binary).with_name("awtrix-script-runner")
+
+
 class Runtime:
     def __init__(self, root, binary, webui):
         self.binary, self.webui = str(binary), str(webui)

@@ -1,0 +1,39 @@
+[Unit]
+Description=AWTRIX script host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=awtrix-host
+Group=awtrix-host
+ExecStart=/usr/local/lib/awtrix-script-host/bin/awtrix-host --state /var/lib/awtrix-script-host --binary /usr/local/lib/awtrix-script-host/bin/awtrix-script-runner --webui /usr/local/lib/awtrix-script-host/share/index.html --ca-file @CA_FILE@
+StateDirectory=awtrix-script-host
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGTERM
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

@@ -2,12 +2,10 @@
 
 #include <filesystem>
 #include <string>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include "platform/linux/hostd/ClockStore.h"
 #include "platform/linux/hostd/PairingCode.h"
-#include "platform/posix/Files.h"
+#include "platform/host/Files.h"
 
 using awtrix::hostd::ClockRecord;
 using awtrix::hostd::ClockStore;
@@ -87,19 +85,20 @@ bool leftovers(const fs::path& dir) {
 
 void keysArePrivateAndWrittenWhole() {
   const fs::path root = freshRoot("awtrix-hostd-key");
+#if !defined(_WIN32)
   const mode_t previousMask = ::umask(0);
+#endif
   ClockStore store(root);
   std::string error, text;
   check(store.load(error), "an empty state loads");
   ClockRecord out;
   check(store.pair(clock("abc123"), std::string(64, 'a'), allFree, out, error), "pairs under an open umask");
-  struct stat st {};
-  check(::stat(store.keyFile("abc123").c_str(), &st) == 0 && (st.st_mode & 0777) == 0600, "the key is private");
-  check(::stat((store.clockDir("abc123") / "clock.json").c_str(), &st) == 0 && (st.st_mode & 0777) == 0600,
-        "and so is the clock's address");
-  check(awtrix::posix::readText(store.keyFile("abc123").string(), text) && text == std::string(64, 'a') + "\n",
+  check(awtrix::test::privateMode(store.keyFile("abc123"), 0600), "the key is private");
+  check(awtrix::test::privateMode(store.clockDir("abc123") / "clock.json", 0600), "and so is the clock's address");
+  check(awtrix::os::readFile(store.keyFile("abc123").string(), text) && text == std::string(64, 'a') + "\n",
         "the key file holds the whole key");
   check(!leftovers(store.clockDir("abc123")), "no temporary file stays behind");
+#if !defined(_WIN32)
   if (::geteuid() != 0) {
     fs::permissions(store.clockDir("abc123"), fs::perms::owner_read | fs::perms::owner_exec);
     check(!store.pair(clock("abc123"), std::string(64, 'b'), allFree, out, error), "a key that cannot be written fails");
@@ -108,6 +107,7 @@ void keysArePrivateAndWrittenWhole() {
     check(!leftovers(store.clockDir("abc123")), "without a temporary file");
   }
   ::umask(previousMask);
+#endif
   fs::remove_all(root);
 }
 
@@ -123,8 +123,7 @@ void pairingGivesPortsAndKeepsThem() {
   check(a.port == 8301 && b.port == 8303, "ports start at 8301 and skip one in use");
   check(store.pair(clock("a1b2c3"), std::string(64, 'c'), allFree, again, error) && again.port == 8301,
         "pairing again keeps the port");
-  struct stat st {};
-  check(::stat(store.keyFile("a1b2c3").c_str(), &st) == 0 && (st.st_mode & 0777) == 0600, "the key is private");
+  check(awtrix::test::privateMode(store.keyFile("a1b2c3"), 0600), "the key is private");
   check(store.keyOk("a1b2c3", "Bearer " + std::string(64, 'c')), "the new key counts");
   check(!store.keyOk("a1b2c3", "Bearer " + std::string(64, 'a')), "the old one does not");
 
@@ -133,7 +132,7 @@ void pairingGivesPortsAndKeepsThem() {
   check(reloaded.find("d4e5f6") && reloaded.find("d4e5f6")->port == 8303, "with their ports");
   check(reloaded.find("a1b2c3") && reloaded.find("a1b2c3")->keyHex == std::string(64, 'c') &&
         again.keyHex == std::string(64, 'c'), "and their keys");
-  check(awtrix::posix::replaceText(reloaded.keyFile("a1b2c3").string(), std::string(64, 'f') + "\n") &&
+  check(awtrix::os::replaceFile(reloaded.keyFile("a1b2c3").string(), std::string(64, 'f') + "\n") &&
         reloaded.keyOk("a1b2c3", "Bearer " + std::string(64, 'c')) &&
         !reloaded.keyOk("a1b2c3", "Bearer " + std::string(64, 'f')), "a key is not read from disk again");
 

@@ -8,11 +8,8 @@
 #include <limits>
 #include <mutex>
 #include <new>
-#include <fcntl.h>
-#include <sys/stat.h>
 
-#include <unistd.h>
-#include "platform/posix/Files.h"
+#include "platform/host/Files.h"
 
 #include "persistence/Filesystem.h"
 #include "persistence/VfsFile.h"
@@ -160,28 +157,20 @@ bool writeContained(const std::string& path, const std::string& data, bool uploa
   if (upload && g_uploadReserve && (!roomAboveReserve(room) || data.size() > room)) return false;
 
   stdfs::path temporary;
-  int descriptor = -1;
+  os::OutFile file;
   for (int attempt = 0; attempt < 16; ++attempt) {
     temporary = target.parent_path() / (".awtrix-tmp-" + std::to_string(++temporarySequence));
-    descriptor = ::open(temporary.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
-    if (descriptor >= 0 || errno != EEXIST) break;
+    file = os::OutFile::create(temporary.string(), true);
+    if (file.valid() || !file.exists()) break;
   }
-  if (descriptor < 0) return false;
-  bool ok = posix::writeAll(descriptor, data.data(), data.size());
-  if (ok) ok = ::fsync(descriptor) == 0;
-  if (::close(descriptor) != 0) ok = false;
+  if (!file.valid()) return false;
+  bool ok = file.write(data.data(), data.size()) && file.sync();
+  if (!file.close()) ok = false;
   if (ok) {
     stdfs::rename(temporary, target, ec);
     ok = !ec;
   }
-  if (ok) {
-    const int parent = ::open(target.parent_path().c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    ok = parent >= 0;
-    if (parent >= 0) {
-      ok = ::fsync(parent) == 0;
-      if (::close(parent) != 0) ok = false;
-    }
-  }
+  if (ok) ok = os::syncDirectory(target.parent_path().string());
   stdfs::remove(temporary, ec);
   return ok;
 } catch (const stdfs::filesystem_error&) {
@@ -233,7 +222,7 @@ int openRead(std::string_view path) try {
     errno = ENOENT;
     return -1;
   }
-  return ::open(file.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+  return os::openForReading(file.u8string());
 } catch (const std::bad_alloc&) {
   errno = ENOMEM;
   return -1;

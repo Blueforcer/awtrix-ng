@@ -1,7 +1,5 @@
 #include "platform/linux/tls/TlsTrust.h"
 
-#include <sys/resource.h>
-
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -9,6 +7,7 @@
 #include <openssl/x509_vfy.h>
 #include <openssl/x509v3.h>
 
+#include "platform/host/Process.h"
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/tls/TlsPolicy.h"
 #include "platform/posix/StartThread.h"
@@ -29,7 +28,7 @@ std::shared_ptr<const TrustAnchors> parseInBackground(const std::string& path) {
   std::shared_ptr<const TrustAnchors> anchors;
   std::thread parser;
   if (!posix::startThread(parser, [&] {
-        ::setpriority(PRIO_PROCESS, 0, kParseNice);
+        os::lowerThreadPriority(kParseNice);
         anchors = TrustAnchors::fromFile(path);
       }))
     return TrustAnchors::fromFile(path);

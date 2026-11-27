@@ -60,9 +60,7 @@ bool until(Done done) {
   return false;
 }
 
-std::ptrdiff_t threads() {
-  return std::distance(std::filesystem::directory_iterator("/proc/self/task"), std::filesystem::directory_iterator{});
-}
+std::ptrdiff_t threads() { return static_cast<std::ptrdiff_t>(awtrix::test::listedThreads()); }
 
 bool wait(TransferQueue& queue, TransferResult& result) {
   return until([&] { return queue.poll(result); });
@@ -601,7 +599,9 @@ int main() {
   aHandshakeEndsNearItsBudget();
   hostileAnswersEndWithAStatus();
   aRequestThatThrowsEndsWithStatusZero(server);
-  aWorkerThatCannotStartRefusesTheTransfer(server);
-  aDeadlineThatCannotStartEndsTheRequest(server);
+  if (ThreadStacks::kApplies) {
+    aWorkerThatCannotStartRefusesTheTransfer(server);
+    aDeadlineThatCannotStartEndsTheRequest(server);
+  }
   return awtrix::test::finish("linux-transfer-queue");
 }

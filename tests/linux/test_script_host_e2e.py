@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """A clock and its script host, both awtrix-linux, with a relay between them that passes their
 datagrams and calls on, records the host's calls to the clock, can add button presses and tells the
-host the clock has a melody output, which the headless clock lacks. Scripts on
-the host show on the clock with its settings, time zone and icons; what they do to the clock goes
+host the clock has a melody output and a light sensor, which the headless clock lacks. Scripts on
+the host show on the clock with its settings, time zone and icons, and their needs are checked
+against the clock's capabilities, not the host's; what they do to the clock goes
 there as an act the clock carries out, a sound only when the clock has an output for it; presses
 they leave, switches, on-demand starts and the clock's display state reach them; a hold the clock
 let go of is asked for again; an app switched off on the clock while the host was down does not
 start when the host comes back; the clock names its own web server in its Hello and the host calls
-it there, not where the datagrams come from, and at --remote-clock-url while the Hello names none;
+it there, not where the datagrams come from, and at --clock-url while the Hello names none;
 the host takes only the key, from any origin, and the clock drops the host's apps when the host
-stops."""
+stops. A script on the host reads the time in the clock's time zone. A clock moved from one
+awtrix-host to another keeps its scripts, settings and data; the old host forgets it when told and
+otherwise stops its scripts once the clock is silent, and starts them again when the clock is back."""
 
 from __future__ import annotations
 
@@ -20,6 +23,7 @@ import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import importlib.util
 import json
+import os
 from pathlib import Path
 import select
 import socket
@@ -29,16 +33,19 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from runtime import Runtime, eventually, free_port, wait_ready
+from runtime import Runtime, eventually, free_port, runner_beside, stop_process, wait_ready
 
 KEY = bytes(range(1, 33)).hex()
 FALLBACK = "127.0.0.8"
 AUTH = {"Authorization": "Bearer " + KEY}
 ACT = "/api/v1/scripthost/act"
 
-SCRIPT = """class Painter
+SCRIPT = """# @needs audio.rtttl sensors.light audio.mp3
+class Painter
   def draw()
     var c = settings.get("textColor")
     clear(c == nil ? 0x123456 : c)
@@ -46,6 +53,14 @@ SCRIPT = """class Painter
   end
 end
 return Painter()
+"""
+
+ZONE = """class Zone
+  def draw()
+    clear(hour() * 65536 + minute() * 256 + 1)
+  end
+end
+return Zone()
 """
 
 KEYS = """class Keys
@@ -117,16 +132,15 @@ class LanRuntime(Runtime):
 
 class HostRuntime(Runtime):
     def __init__(self, root, binary, webui, clock_uid, clock_port):
-        super().__init__(root, binary, webui)
+        super().__init__(root, runner_beside(binary), webui)
         self.width, self.height = 32, 8
         self.key_file = Path(root) / "key"
         self.key_file.write_text(KEY + "\n")
         self.clock_uid, self.clock_port = clock_uid, clock_port
 
     def command(self, port=None):
-        return super().command(port) + ["--remote", "--remote-clock", self.clock_uid,
-                                        "--remote-key-file", str(self.key_file),
-                                        "--remote-clock-url", f"http://{FALLBACK}:{self.clock_port}"]
+        return super().command(port) + ["--clock", self.clock_uid, "--key-file", str(self.key_file),
+                                        "--clock-url", f"http://{FALLBACK}:{self.clock_port}"]
 
     def json_auth(self, path):
         code, body = self.request("GET", path, headers=AUTH)
@@ -225,6 +239,7 @@ class Relay:
             return answer
         caps = json.loads(answer)
         caps["audio"]["rtttl"] = True
+        caps["sensors"]["light"] = True
         return json.dumps(caps).encode()
 
     def close(self):
@@ -314,6 +329,20 @@ def pixel(clock, app, index=20):
     clock.request("PUT", "/api/v1/apps/active", {"name": app})
     clock.screen()
     return clock.screen()["pixels"][index]
+
+
+def zone_times(rule):
+    previous = os.environ.get("TZ")
+    os.environ["TZ"] = rule
+    time.tzset()
+    now = time.time()
+    shown = {time.localtime(now - 61)[3:5], time.localtime(now)[3:5], time.localtime(now + 61)[3:5]}
+    if previous is None:
+        del os.environ["TZ"]
+    else:
+        os.environ["TZ"] = previous
+    time.tzset()
+    return {hour * 65536 + minute * 256 + 1 for hour, minute in shown}
 
 
 def upload_icon(clock, name, color):
@@ -406,6 +435,10 @@ def run(binary, webui):
             eventually(lambda: [a["name"] for a in clock.json("GET", "/api/v1/apps")],
                        lambda names: "Painter" in names, timeout=10)
             eventually(lambda: relay.gets("/api/v1/settings") and relay.gets("/api/v1/capabilities"), timeout=5)
+            eventually(lambda: next(a["meta"]["needs"] for a in host.json_auth("/api/v1/apps") if a["name"] == "Painter"),
+                       lambda needs: needs == [{"name": "audio.rtttl", "missing": False},
+                                               {"name": "sensors.light", "missing": False},
+                                               {"name": "audio.mp3", "missing": True}], timeout=5)
 
             clock.json("PATCH", "/api/v1/settings", {"textColor": [255, 0, 0]})
             eventually(lambda: pixel(clock, "Painter"), lambda p: p == 0xFF0000, timeout=10)
@@ -434,6 +467,11 @@ def run(binary, webui):
                        lambda name: name == "America/New_York", timeout=10)
             assert relay.gets("/api/v1/system?secrets=1", mark) and not relay.gets("/api/v1/settings", mark), \
                 "a system change fetches the system alone"
+            code, body = host.request("PUT", "/api/v1/apps/script/Zone", ZONE, "text/plain", headers=AUTH)
+            assert code == 200, (code, body)
+            eventually(lambda: pixel(clock, "Zone", 0), lambda p: p in zone_times("EST5EDT,M3.2.0,M11.1.0"),
+                       timeout=10)
+            assert host.request("DELETE", "/api/v1/apps/Zone", headers=AUTH)[0] == 200
 
             check_acts(clock, host, relay)
             check_display(clock, relay)
@@ -570,11 +608,194 @@ def check_restart(clock, host):
     eventually(starts, lambda n: n == 2, timeout=10)
 
 
+MOVER = """# @config  who  text  "Name"  default="World"
+class Mover
+  def draw() clear(0x00FF00) end
+end
+return Mover()
+"""
+
+DOT = "class Dot def draw() clear(0x0000FF) end end return Dot()"
+
+
+def fetch(method, url, body=None, headers=None):
+    data = None if body is None else body.encode() if isinstance(body, str) else json.dumps(body).encode()
+    kind = "text/plain" if isinstance(body, str) else "application/json"
+    request = urllib.request.Request(url, data=data, method=method, headers={"Content-Type": kind, **(headers or {})})
+    try:
+        response = urllib.request.urlopen(request, timeout=12)
+    except urllib.error.HTTPError as error:
+        response = error
+    with response:
+        raw = response.read()
+    try:
+        return response.status, json.loads(raw)
+    except ValueError:
+        return response.status, raw.decode(errors="replace")
+
+
+class ScriptHost:
+    def __init__(self, root, host_binary, binary, webui, name):
+        self.root = Path(root)
+        self.port = free_port()
+        self.base = f"http://127.0.0.1:{self.port}"
+        self.command = [str(host_binary), "--state", str(self.root), "--port", str(self.port),
+                        "--binary", str(runner_beside(binary)), "--webui", str(webui), "--name", name,
+                        "--no-discovery", "--idle", "3"]
+        self.process = self.log = None
+
+    def logs(self):
+        text = (self.root / "hostd.log").read_text(errors="replace")[-3000:]
+        for log in (self.root / "clocks").glob("*/runtime.log"):
+            text += "\n" + log.read_text(errors="replace")[-2000:]
+        return text
+
+    def start(self):
+        self.log = open(self.root / "hostd.log", "ab")
+        self.process = subprocess.Popen(self.command, stdout=self.log, stderr=self.log)
+        wait_ready(self.process, lambda: fetch("GET", self.base + "/api/v1/status")[0] == 200, self.logs)
+        return self
+
+    def stop(self):
+        if self.process:
+            try:
+                stop_process(self.process, self.logs)
+            finally:
+                self.process = None
+                self.log.close()
+
+    def clocks(self):
+        return fetch("GET", self.base + "/api/v1/status")[1]["clocks"]
+
+    def pair(self, clock, uid):
+        code = fetch("GET", self.base + "/api/v1/status")[1]["code"]
+        status, paired = fetch("POST", self.base + "/api/v1/pair",
+                               {"uid": uid, "name": "moving", "width": 32, "height": 8, "board": "awtrixng",
+                                "clock": f"http://127.0.0.1:{clock.port}", "code": code})
+        assert status == 200, paired
+        return paired
+
+
+def keyed(at):
+    return {"Authorization": "Bearer " + at["key"]}
+
+
+def answers(at):
+    try:
+        return fetch("GET", at["url"] + "/api/v1/version", headers=keyed(at))[0] == 200
+    except OSError:
+        return False
+
+
+def take(at):
+    status, apps = fetch("GET", at["url"] + "/api/v1/apps", headers=keyed(at))
+    assert status == 200, apps
+    taken = []
+    for app in sorted((a for a in apps if a["origin"] in ("script", "module")), key=lambda a: a["origin"] != "module"):
+        name = app["name"]
+        source = fetch("GET", f"{at['url']}/api/v1/apps/script/{name}", headers=keyed(at))[1]
+        data = fetch("GET", f"{at['url']}/api/v1/apps/{name}/data", headers=keyed(at))[1]
+        fields = fetch("GET", f"{at['url']}/api/v1/apps/{name}/config", headers=keyed(at))[1]["fields"]
+        taken.append((name, source, data, {field["key"]: field["value"] for field in fields}))
+    return taken
+
+
+def give(taken, at):
+    for name, source, data, config in taken:
+        status, body = fetch("PUT", f"{at['url']}/api/v1/apps/script/{name}", source, keyed(at))
+        assert status == 200, (name, status, body)
+        for part, values in (("data", {k: v for k, v in data.items() if k not in config}), ("config", config)):
+            if values:
+                status, body = fetch("PATCH", f"{at['url']}/api/v1/apps/{name}/{part}", values, keyed(at))
+                assert status == 200, (name, part, status, body)
+
+
+def move(clock, uid, source, target, told=None):
+    taken = take(source)
+    paired = target.pair(clock, uid)
+    give(taken, paired)
+    clock.json("PUT", "/api/v1/system", {"scriptHost": paired["scriptHost"], "scriptHostKey": paired["key"]})
+    if told:
+        status, body = fetch("DELETE", f"{told.base}/api/v1/pair/{uid}?keep=0", headers=keyed(source))
+        assert status == 200, body
+    clock.stop()
+    clock.start()
+    return paired
+
+
+def linked(clock, names):
+    eventually(lambda: clock.json("GET", "/api/v1/scripthost")["link"], lambda link: link == "up", timeout=20)
+    eventually(lambda: {a["name"] for a in clock.json("GET", "/api/v1/apps")}, lambda shown: names <= shown,
+               timeout=15)
+
+
+def stored(at):
+    config = fetch("GET", at["url"] + "/api/v1/apps/Mover/config", headers=keyed(at))[1]
+    data = fetch("GET", at["url"] + "/api/v1/apps/Mover/data", headers=keyed(at))[1]
+    return {field["key"]: field["value"] for field in config["fields"]}.get("who"), data.get("best")
+
+
+def run_move(host_binary, binary, webui):
+    with tempfile.TemporaryDirectory(prefix="awtrix-move-clock-") as clock_root, \
+         tempfile.TemporaryDirectory(prefix="awtrix-move-one-") as one_root, \
+         tempfile.TemporaryDirectory(prefix="awtrix-move-two-") as two_root:
+        clock = LanRuntime(clock_root, binary, webui)
+        clock.width, clock.height = 32, 8
+        clock.start()
+        one = ScriptHost(one_root, host_binary, binary, webui, "one")
+        two = ScriptHost(two_root, host_binary, binary, webui, "two")
+        try:
+            one.start()
+            two.start()
+            uid = clock.json("GET", "/api/v1/device")["uid"]
+            first = one.pair(clock, uid)
+            give([("Mover", MOVER, {"best": 42}, {"who": "Ann"}), ("Dot", DOT, {}, {})], first)
+            clock.json("PUT", "/api/v1/system", {"scriptHost": first["scriptHost"], "scriptHostKey": first["key"]})
+            clock.stop()
+            clock.start()
+            linked(clock, {"Mover", "Dot"})
+
+            second = move(clock, uid, first, two, told=one)
+            assert second["port"] != first["port"], (first, second)
+            linked(clock, {"Mover", "Dot"})
+            assert stored(second) == ("Ann", 42), stored(second)
+            assert one.clocks() == [] and not (Path(one_root) / "clocks" / uid).exists(), \
+                "the old host forgets the clock and its copies when told"
+            assert not answers(first), "and its process for the clock is gone"
+
+            third = move(clock, uid, second, one)
+            linked(clock, {"Mover", "Dot"})
+            assert stored(third) == ("Ann", 42), stored(third)
+            eventually(lambda: two.clocks()[0], lambda c: c["waiting"] and not c["running"], timeout=30)
+            assert not answers(second), "a host the clock left without a word stops its scripts by itself"
+            assert (Path(two_root) / "clocks" / uid / "data" / "SCRIPTS").is_dir() and \
+                (Path(two_root) / "clocks" / uid / "key").is_file(), "and keeps them"
+
+            clock.json("PUT", "/api/v1/system", {"scriptHost": second["scriptHost"], "scriptHostKey": second["key"]})
+            clock.stop()
+            clock.start()
+            eventually(lambda: two.clocks()[0]["running"], timeout=15)
+            linked(clock, {"Mover", "Dot"})
+            assert stored(second) == ("Ann", 42), "the clock back with its key finds its scripts again"
+            eventually(lambda: one.clocks()[0]["waiting"], timeout=30)
+        except BaseException:
+            print(one.logs() + "\n" + two.logs(), file=sys.stderr)
+            raise
+        finally:
+            one.stop()
+            two.stop()
+            clock.stop()
+    print("PASS: a clock moves between script hosts with its scripts, and the host it left stops them")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--webui", required=True, type=Path)
+    parser.add_argument("--host-binary", type=Path)
     args = parser.parse_args()
+    host_binary = args.host_binary or args.binary.parent / "awtrix-host"
+    run_move(host_binary.resolve(), args.binary.resolve(), args.webui.resolve())
     run(args.binary.resolve(), args.webui.resolve())
 
 

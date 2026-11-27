@@ -1,7 +1,5 @@
 #include "../../test/EngineFakes.h"
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include "../Sockets.h"
 
 #include <atomic>
 #include <chrono>
@@ -27,24 +25,12 @@ namespace {
 using Display = awtrix::test::NullDisplay;
 using System = awtrix::test::NullSystem;
 
-int availablePort() {
-  const int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-  if (fd < 0) return 0;
-  sockaddr_in address{};
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  socklen_t size = sizeof(address);
-  const bool okay = ::bind(fd, reinterpret_cast<sockaddr*>(&address), size) == 0 &&
-      ::getsockname(fd, reinterpret_cast<sockaddr*>(&address), &size) == 0;
-  ::close(fd);
-  return okay ? ntohs(address.sin_port) : 0;
-}
+int availablePort() { return awtrix::test::freePort(SOCK_STREAM); }
 
 bool rejectsHeaders(int port, std::size_t bytes) {
-  const int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-  if (fd < 0) return false;
-  timeval timeout{2, 0};
-  ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+  const awtrix::os::Socket fd = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (fd == awtrix::os::kNoSocket) return false;
+  awtrix::test::receiveTimeout(fd, 2000);
   sockaddr_in address{};
   address.sin_family = AF_INET;
   address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -54,9 +40,9 @@ bool rejectsHeaders(int port, std::size_t bytes) {
       "\r\nConnection: close\r\n\r\n";
   char reply[1024]{};
   const bool sent = ::connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0 &&
-      ::send(fd, request.data(), request.size(), MSG_NOSIGNAL) == static_cast<ssize_t>(request.size());
-  const ssize_t received = sent ? ::recv(fd, reply, sizeof(reply), 0) : -1;
-  ::close(fd);
+      awtrix::os::sendBytes(fd, request.data(), request.size()) == static_cast<long>(request.size());
+  const long received = sent ? awtrix::os::receiveBytes(fd, reply, sizeof(reply)) : -1;
+  awtrix::os::closeSocket(fd);
   return received > 0 && std::string(reply, static_cast<std::size_t>(received)).find("HTTP/1.1 413 ") == 0;
 }
 
@@ -70,6 +56,7 @@ std::string formLikeSource(std::size_t bytes) {
 }
 
 int main() {
+  awtrix::os::startSockets();
   sound::AudioRouter audio;
   Display display;
   System system;

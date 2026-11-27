@@ -12,7 +12,7 @@
 #include "platform/linux/net/HttpClient.h"
 #include "platform/linux/script/PerScriptStore.h"
 #include "platform/linux/secrets/SecretSpec.h"
-#include "platform/posix/PrivateStore.h"
+#include "platform/host/PrivateStore.h"
 
 namespace awtrix::secrets {
 
@@ -57,7 +57,7 @@ class Service final : public script::PerScriptStore {
   const Parsed& parsedLocked(const std::string& app);
   void pruneLocked(const std::string& app);
 
-  posix::PrivateStore store_;
+  os::PrivateStore store_;
   script::SourceReader source_;
   std::mutex mutex_;
   std::map<std::string, Parsed> specs_;

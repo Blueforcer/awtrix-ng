@@ -68,6 +68,9 @@ set(TC002_RUNTIME_SOURCES ${TC002_SUPERVISION_SOURCES}
   "${TC002_RUNTIME_DIR}/Tc002ActivationHttp.cpp")
 set(TC002_BOOT_SCREEN_SOURCES "${TC002_RUNTIME_DIR}/BootIntroWide.cpp" "${TC002_RUNTIME_DIR}/BootInfoWide.cpp"
   "${TC002_RUNTIME_DIR}/TerminalFont.cpp")
+add_library(awtrix_file_download STATIC "${PROJECT_SOURCE_DIR}/src/platform/linux/net/FileDownload.cpp")
+target_link_libraries(awtrix_file_download PUBLIC awtrix_host PRIVATE awtrix_posix awtrix_warnings)
+
 # The runtime's speaker: the sink with its mixer, sources and player, and speech in front of it.
 add_library(tc002_audio STATIC
   "${TC002_DIR}/audio/Tc002AudioLink.cpp"
@@ -82,7 +85,7 @@ add_library(tc002_audio STATIC
   "${TC002_DIR}/audio/Tc002AudioPlayback.cpp"
   "${TC002_DIR}/audio/Tc002AudioPlan.cpp"
   "${TC002_SPEECH_DIR}/VoicePacks.cpp")
-target_link_libraries(tc002_audio PUBLIC tc002_speech tc002_speech_voice awtrix_host PRIVATE awtrix_warnings)
+target_link_libraries(tc002_audio PUBLIC tc002_speech tc002_speech_voice awtrix_host awtrix_file_download PRIVATE awtrix_warnings)
 # The speaker helper awtrix-tc002-audio-pcm, the daemon's client of the awtrix_pcm driver.
 set(TC002_AUDIO_PCM_CORE "${TC002_DIR}/audio/helper/audio_helper.c" "${TC002_DIR}/audio/pcm/pcm_backend.c")
 set(TC002_AUDIO_PCM_FRAME "${TC002_DIR}/audio/helper/audio_owner.c" "${TC002_DIR}/audio/helper/audio_process.c")

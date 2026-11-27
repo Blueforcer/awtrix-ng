@@ -7,7 +7,7 @@ add_library(tc002_voice_session STATIC "${TC002_DIR}/voice/VoiceConfig.cpp" "${T
 target_link_libraries(tc002_voice_session PUBLIC tc002_contract awtrix_posix PRIVATE awtrix_core awtrix_warnings)
 add_library(tc002_voice STATIC "${TC002_DIR}/voice/VoiceRuntime.cpp" "${TC002_DIR}/voice/VoiceApi.cpp"
   "${TC002_DIR}/voice/VoiceOverlay.cpp" "${TC002_DIR}/voice/VoiceMqtt.cpp")
-target_link_libraries(tc002_voice PUBLIC tc002_voice_session tc002_voice_net awtrix_host PRIVATE awtrix_warnings)
+target_link_libraries(tc002_voice PUBLIC tc002_voice_session tc002_voice_net awtrix_host awtrix_file_download PRIVATE awtrix_warnings)
 add_library(tc002_wake_listener STATIC "${TC002_DIR}/wake/WakeListener.cpp")
 target_link_libraries(tc002_wake_listener PUBLIC tc002_contract awtrix_posix
   PRIVATE tc002_wake tc002_wake_files awtrix_host awtrix_warnings)

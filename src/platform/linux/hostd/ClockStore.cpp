@@ -5,7 +5,8 @@
 #include "core/api/HttpProtocol.h"
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
-#include "platform/posix/Files.h"
+#include "platform/host/Files.h"
+#include "platform/host/Text.h"
 
 namespace awtrix::hostd {
 
@@ -35,8 +36,8 @@ bool ClockStore::load(std::string& error) {
   }
   for (const auto& entry : fs::directory_iterator(root_ / "clocks", ec)) {
     std::string json, key;
-    if (!entry.is_directory() || !posix::readText((entry.path() / "clock.json").string(), json) ||
-        !posix::readText((entry.path() / "key").string(), key))
+    if (!entry.is_directory() || !os::readFile((entry.path() / "clock.json").string(), json) ||
+        !os::readFile((entry.path() / "key").string(), key))
       continue;
     ClockRecord record;
     record.uid = api::memberText(json, "uid");
@@ -45,7 +46,7 @@ bool ClockStore::load(std::string& error) {
     record.width = number(json, "width", 32);
     record.height = number(json, "height", 8);
     record.port = number(json, "port", 0);
-    record.keyHex = posix::trimmed(key);
+    record.keyHex = os::trimmed(key);
     if (validUid(record.uid) && record.port >= kFirstPort && record.port <= kLastPort) clocks_.push_back(record);
   }
   std::sort(clocks_.begin(), clocks_.end(), [](const ClockRecord& a, const ClockRecord& b) { return a.port < b.port; });
@@ -69,7 +70,7 @@ bool ClockStore::save(const ClockRecord& record, std::string& error) const {
       .key("height").value(record.height)
       .key("port").value(record.port)
       .endObject();
-  if (!posix::replaceText((clockDir(record.uid) / "clock.json").string(), json)) {
+  if (!os::replaceFile((clockDir(record.uid) / "clock.json").string(), json)) {
     error = "cannot write clock.json";
     return false;
   }
@@ -99,7 +100,7 @@ bool ClockStore::pair(ClockRecord record, const std::string& keyHex, const std::
   record.keyHex = keyHex;
   std::error_code ec;
   fs::create_directories(dataDir(record.uid), ec);
-  if (ec || !posix::replaceText(keyFile(record.uid).string(), keyHex + "\n") || !save(record, error)) {
+  if (ec || !os::replaceFile(keyFile(record.uid).string(), keyHex + "\n") || !save(record, error)) {
     if (error.empty()) error = "cannot write the clock's folder";
     return false;
   }

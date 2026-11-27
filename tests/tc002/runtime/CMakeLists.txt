@@ -51,7 +51,7 @@ add_awtrix_test(NAME tc002-assistant-router SOURCES test_assistant_router.cpp
   LIBRARIES tc002_voice_router tc002_wake_listener awtrix_host
   COMMAND "${PROJECT_SOURCE_DIR}/assets/tc002/wake/hey_awtrix.tflite" TIMEOUT 60)
 add_awtrix_test(NAME tc002-url-sounds SOURCES test_url_sounds.cpp "${TC002_DIR}/audio/UrlSounds.cpp"
-  LIBRARIES awtrix_host awtrix_posix TIMEOUT 30)
+  LIBRARIES awtrix_file_download awtrix_posix TIMEOUT 30)
 add_awtrix_test(NAME tc002-voice-gesture SOURCES test_voice_gesture.cpp
   INCLUDES "${PROJECT_SOURCE_DIR}/src")
 add_awtrix_test(NAME tc002-voice-mqtt SOURCES test_voice_mqtt.cpp "${TC002_DIR}/voice/VoiceMqtt.cpp"

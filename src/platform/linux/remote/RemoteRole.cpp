@@ -16,7 +16,8 @@
 #include "core/script/ScriptHost.h"
 #include "platform/linux/host/HostStore.h"
 #include "platform/linux/remote/RemoteClockApplication.h"
-#include "platform/posix/Files.h"
+#include "platform/host/Files.h"
+#include "platform/host/Text.h"
 #include "system/Log.h"
 #include "transport/net/HmacSha256.h"
 
@@ -51,13 +52,13 @@ bool drop(const std::string& path) {
 bool RemoteRole::begin(const RoleOptions& options, uint16_t port, int width, int height, std::string& error) {
   std::string text;
   PairingKey key;
-  if (!posix::readText(options.keyFile, text) || !PairingKey::parse(keyHex_ = posix::trimmed(text), key)) {
-    error = "--remote-key-file must hold 64 hex digits";
+  if (!os::readFile(options.keyFile, text) || !PairingKey::parse(keyHex_ = os::trimmed(text), key)) {
+    error = "--key-file must hold 64 hex digits";
     return false;
   }
   const auto url = net::parseUrl(options.clockUrl);
   if (!url || url->tls() || url->userinfo) {
-    error = "--remote-clock-url must be http://address[:port]";
+    error = "--clock-url must be http://address[:port]";
     return false;
   }
   clockHost_ = std::string(url->host);
@@ -205,7 +206,10 @@ void RemoteRole::sync(int64_t nowMs, CoreEngine& engine) {
   const uint32_t connection = server_->connection();
   const uint64_t caps = stamp(connection, 0);
   if (due(caps_, caps, nowMs))
-    fetch(caps_, caps, "/api/v1/capabilities", [this](const std::string& body) { soundCaps_ = soundCapsFrom(body); });
+    fetch(caps_, caps, "/api/v1/capabilities", [this](const std::string& body) {
+      soundCaps_ = soundCapsFrom(body);
+      if (onCapabilities_) onCapabilities_(body);
+    });
   const uint64_t settings = stamp(connection, clock.settingsRevision);
   if (due(settings_, settings, nowMs))
     fetch(settings_, settings, "/api/v1/settings", [&engine](const std::string& body) {
@@ -346,6 +350,7 @@ void RemoteRole::tick(int64_t nowMs, ApplicationRuntime& app, const ApplicationS
   while (const std::size_t length = port_.receive(from)) server_->receive(from, port_.data(), length, nowMs);
   server_->tick(nowMs);
   const bool connected = server_->connected();
+  if (connected || heardMs_ < 0) heardMs_ = nowMs;
   if (connected) {
     followClock();
     takeReadings(app);

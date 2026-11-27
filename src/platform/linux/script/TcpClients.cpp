@@ -1,12 +1,6 @@
-#include "platform/posix/Files.h"
 #include "platform/posix/StartThread.h"
 #include "platform/linux/script/TcpClients.h"
-
-#include <fcntl.h>
-#include <netdb.h>
-#include <poll.h>
-#include <sys/eventfd.h>
-#include <unistd.h>
+#include "system/MonotonicClock.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -17,27 +11,22 @@
 namespace awtrix::linux_script {
 namespace {
 
-void signal(int fd) {
-  const uint64_t one = 1;
-  while (::write(fd, &one, sizeof one) < 0 && errno == EINTR) {
-  }
-}
-
 const char* reasonFor(int error) {
-  if (error == ECONNREFUSED) return "refused";
-  if (error == ETIMEDOUT) return "timeout";
-  return "error";
+  switch (os::failureOf(error)) {
+    case os::SocketFailure::Refused: return "refused";
+    case os::SocketFailure::TimedOut: return "timeout";
+    default: return "error";
+  }
 }
 
 }
 
 std::vector<TcpAddress> TcpClients::systemLookup(const std::string& host, uint16_t port) {
-  return posix::Resolver::lookup(host, std::to_string(port), kAddresses);
+  return os::Resolver::lookup(host, std::to_string(port), kAddresses);
 }
 
 TcpClients::TcpClients(Lookup lookup) : lookup_(std::move(lookup)) {
-  wake_ = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-  if (wake_ < 0) throw std::system_error(errno, std::generic_category(), "tcp wake");
+  if (!wake_.valid()) throw std::system_error(errno, std::generic_category(), "tcp wake");
 }
 
 TcpClients::~TcpClients() {
@@ -47,12 +36,10 @@ TcpClients::~TcpClients() {
   }
   wake();
   if (worker_.joinable()) worker_.join();
-  for (auto& kv : conns_)
-    if (kv.second.fd >= 0) ::close(kv.second.fd);
-  ::close(wake_);
+  for (auto& kv : conns_) os::closeSocket(kv.second.fd);
 }
 
-void TcpClients::wake() { signal(wake_); }
+void TcpClients::wake() { wake_.signal(); }
 
 uint32_t TcpClients::connect(const std::string& app, const std::string& host, uint16_t port, int timeoutMs) {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -74,7 +61,7 @@ uint32_t TcpClients::connect(const std::string& app, const std::string& host, ui
   c.app = app;
   c.host = host;
   c.port = port;
-  c.deadline = posix::monotonicMs() + std::clamp(timeoutMs, 1, 60000);
+  c.deadline = monotonicMs() + std::clamp(timeoutMs, 1, 60000);
   conns_.emplace(id, std::move(c));
   wake();
   return id;
@@ -137,8 +124,8 @@ void TcpClients::emit(Conn& c, uint32_t id, TcpEvent::Kind kind, std::string dat
 }
 
 void TcpClients::finish(uint32_t id, Conn& c, const char* reason) {
-  if (c.fd >= 0) ::close(c.fd);
-  c.fd = -1;
+  os::closeSocket(c.fd);
+  c.fd = os::kNoSocket;
   if (!c.dropped && c.state != State::Closed) emit(c, id, TcpEvent::Kind::Closed, reason);
   c.state = State::Closed;
   c.in.clear();
@@ -150,7 +137,7 @@ void TcpClients::finish(uint32_t id, Conn& c, const char* reason) {
 void TcpClients::reap() {
   for (auto it = conns_.begin(); it != conns_.end();) {
     if (it->second.dropped) {
-      if (it->second.fd >= 0) ::close(it->second.fd);
+      os::closeSocket(it->second.fd);
       it = conns_.erase(it);
     } else {
       ++it;
@@ -162,7 +149,7 @@ void TcpClients::startLookups() {
   for (auto& kv : conns_) {
     Conn& c = kv.second;
     if (c.dropped || c.state != State::Resolve || c.lookup) continue;
-    c.lookup = posix::Resolver::start([lookup = lookup_, host = c.host, port = c.port] {
+    c.lookup = os::Resolver::start([lookup = lookup_, host = c.host, port = c.port] {
       auto addresses = lookup(host, port);
       if (addresses.size() > kAddresses) addresses.resize(kAddresses);
       return addresses;
@@ -190,13 +177,13 @@ void TcpClients::expire(int64_t now) {
 }
 
 void TcpClients::connectNext(uint32_t id, Conn& c) {
-  if (c.fd >= 0) ::close(c.fd);
-  c.fd = -1;
-  if (posix::monotonicMs() >= c.deadline) return finish(id, c, "timeout");
-  auto result = posix::connectNext(c.addresses, c.nextAddress);
-  c.fd = result.fd.release();
-  if (result.state != posix::ConnectState::Failed) {
-    c.state = result.state == posix::ConnectState::Connected ? State::Open : State::Connecting;
+  os::closeSocket(c.fd);
+  c.fd = os::kNoSocket;
+  if (monotonicMs() >= c.deadline) return finish(id, c, "timeout");
+  auto result = os::connectNext(c.addresses, c.nextAddress);
+  c.fd = result.socket.release();
+  if (result.state != os::ConnectState::Failed) {
+    c.state = result.state == os::ConnectState::Connected ? State::Open : State::Connecting;
     if (c.state == State::Open) emit(c, id, TcpEvent::Kind::Open, "");
     return;
   }
@@ -207,14 +194,15 @@ void TcpClients::connectNext(uint32_t id, Conn& c) {
 void TcpClients::readFrom(uint32_t id, Conn& c) {
   char buf[4096];
   for (int budget = 0; budget < 4; ++budget) {
-    const ssize_t n = ::read(c.fd, buf, sizeof buf);
+    const long n = os::receiveBytes(c.fd, buf, sizeof buf);
     if (n == 0) return finish(id, c, "closed");
     if (n < 0) {
-      if (errno == EINTR) continue;
-      if (errno == EAGAIN || errno == EWOULDBLOCK) break;
-      return finish(id, c, reasonFor(errno));
+      const int error = os::socketError();
+      if (os::interrupted(error)) continue;
+      if (os::wouldBlock(error)) break;
+      return finish(id, c, reasonFor(error));
     }
-    for (ssize_t i = 0; i < n; ++i) {
+    for (long i = 0; i < n; ++i) {
       const char ch = buf[i];
       if (ch == '\0') return finish(id, c, "error");
       if (ch == '\n') {
@@ -232,10 +220,11 @@ void TcpClients::readFrom(uint32_t id, Conn& c) {
 
 void TcpClients::writeTo(uint32_t id, Conn& c) {
   if (c.out.empty()) return;
-  const ssize_t n = ::send(c.fd, c.out.data(), c.out.size(), MSG_NOSIGNAL);
+  const long n = os::sendBytes(c.fd, c.out.data(), c.out.size());
   if (n < 0) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) return;
-    return finish(id, c, reasonFor(errno));
+    const int error = os::socketError();
+    if (os::wouldBlock(error) || os::interrupted(error)) return;
+    return finish(id, c, reasonFor(error));
   }
   if (n == 0) return finish(id, c, "closed");
   c.out.erase(0, static_cast<size_t>(n));
@@ -248,39 +237,35 @@ void TcpClients::run() {
     takeAnswers();
     startLookups();
 
-    std::vector<pollfd> fds{{wake_, POLLIN, 0}};
+    std::vector<os::PollEntry> fds{{wake_.handle(), POLLIN, 0}};
     std::vector<uint32_t> ids{0};
-    int64_t soonest = posix::monotonicMs() + 1000;
+    int64_t soonest = monotonicMs() + 1000;
     for (auto& kv : conns_) {
       Conn& c = kv.second;
       if (c.dropped) continue;
       if (c.state == State::Resolve || c.state == State::Connecting) soonest = std::min(soonest, c.deadline);
       if (c.state == State::Resolve && c.lookup) {
-        fds.push_back({c.lookup->fd(), POLLIN, 0});
+        fds.push_back({c.lookup->handle(), POLLIN, 0});
         ids.push_back(kv.first);
       }
-      if (c.fd < 0) continue;
+      if (c.fd == os::kNoSocket) continue;
       short want = POLLIN;
       if (c.state == State::Connecting) want = POLLOUT;
       else if (!c.out.empty()) want |= POLLOUT;
       fds.push_back({c.fd, want, 0});
       ids.push_back(kv.first);
     }
-    const int wait = static_cast<int>(std::max<int64_t>(0, soonest - posix::monotonicMs()));
+    const int wait = static_cast<int>(std::max<int64_t>(0, soonest - monotonicMs()));
     lock.unlock();
-    ::poll(fds.data(), fds.size(), wait);
+    os::pollSockets(fds.data(), fds.size(), wait);
     lock.lock();
-    uint64_t drained;
-    while (::read(wake_, &drained, sizeof drained) > 0) {
-    }
+    wake_.drain();
     for (std::size_t i = 1; i < fds.size(); ++i) {
       auto it = conns_.find(ids[i]);
       if (it == conns_.end() || it->second.dropped || it->second.fd != fds[i].fd || !fds[i].revents) continue;
       Conn& c = it->second;
       if (c.state == State::Connecting) {
-        int error = 0;
-        socklen_t length = sizeof error;
-        if (getsockopt(c.fd, SOL_SOCKET, SO_ERROR, &error, &length) != 0) error = errno;
+        const int error = os::pendingError(c.fd);
         if (error != 0) {
           c.lastError = error;
           connectNext(ids[i], c);
@@ -293,7 +278,7 @@ void TcpClients::run() {
       if (fds[i].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) readFrom(ids[i], c);
       if (c.state == State::Open && (fds[i].revents & POLLOUT)) writeTo(ids[i], c);
     }
-    expire(posix::monotonicMs());
+    expire(monotonicMs());
   }
 }
 

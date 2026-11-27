@@ -9,13 +9,15 @@
 #include <utility>
 #include <vector>
 
+#include "platform/host/Socket.h"
+
 namespace httplib {
 class Client;
 class Result;
 }
 
-namespace awtrix::posix {
-class MappedFile;
+namespace awtrix::os {
+class OutFile;
 }
 
 namespace awtrix::net {
@@ -48,13 +50,16 @@ struct RequestBody {
   RequestBody() = default;
   RequestBody(std::string text) : head(std::move(text)) {}
   RequestBody(const char* text) : head(text) {}
-  RequestBody(std::string before, std::shared_ptr<const posix::MappedFile> mapped, std::string after)
-      : head(std::move(before)), file(std::move(mapped)), tail(std::move(after)) {}
+  template <class Mapped>
+  RequestBody(std::string before, std::shared_ptr<const Mapped> mapped, std::string after)
+      : head(std::move(before)), fileBytes(mapped ? mapped->bytes() : std::string_view()), file(std::move(mapped)),
+        tail(std::move(after)) {}
 
   bool fillable() const { return !file && head.find(kPlaceholder) != std::string::npos; }
 
   std::string head;
-  std::shared_ptr<const posix::MappedFile> file;
+  std::string_view fileBytes;
+  std::shared_ptr<const void> file;
   std::string tail;
 };
 
@@ -80,7 +85,7 @@ class RoomWatch {
   explicit RoomWatch(const std::function<bool(std::size_t)>& room) : room_(room) {}
 
   bool fits(std::size_t more);
-  bool write(int fd, const char* bytes, std::size_t count);
+  bool write(os::OutFile& file, const char* bytes, std::size_t count);
   bool noRoom() const { return noRoom_; }
 
  private:
@@ -138,11 +143,11 @@ class SocketInterrupt {
   void release();
 
  private:
-  void adopt(int socket);
+  void adopt(os::Socket socket);
   void closeCopy();
 
   std::mutex mutex_;
-  int socket_ = -1;
+  os::Socket socket_ = os::kNoSocket;
   bool interrupted_ = false;
 };
 

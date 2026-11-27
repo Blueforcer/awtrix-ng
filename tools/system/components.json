@@ -652,6 +652,10 @@
     {
       "notice": "Unity",
       "reason": "test framework resolved by PlatformIO for native unit tests; not distributed"
+    },
+    {
+      "notice": "mingw-w64 winpthreads",
+      "reason": "threads runtime of the MinGW-w64 toolchain, linked statically into the Windows script host programs; not vendored; its license text ships in the Windows Setup"
     }
   ],
   "schema_version": 1,

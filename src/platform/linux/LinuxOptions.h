@@ -26,9 +26,6 @@ struct LinuxOptions {
   std::string uid;
   std::string activationId;
   Tc002UpdateOptions updateOptions;
-  // The script host of one ESP32 clock: its scripts run here and their pictures go to the clock.
-  bool remote = false;
-  std::string remoteClock, remoteKeyFile, remoteClockUrl;
 
   bool webUpdate() const { return !updateOptions.statePath.empty(); }
 };

@@ -7,6 +7,7 @@
 #include <mutex>
 #include <thread>
 
+#include "platform/host/Files.h"
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/net/HttpClient.h"
 #include "platform/posix/Files.h"
@@ -21,6 +22,7 @@ struct FileDownload::Impl {
   std::thread thread;
   bool quit = false, pending = false, ready = false;
   uint64_t generation = 0;
+  uint64_t files = 0;
   Result result;
   SocketInterrupt interrupt;
   Impl(const std::string& dir, const std::string& prefix, Limits l) : limits(std::move(l)), folder(dir, prefix) {
@@ -55,18 +57,23 @@ struct FileDownload::Impl {
       lock.unlock();
       configure(connection, {limits.timeoutMs, 5, limits.followRedirects});
       interrupt.watch(connection);
-      std::string file = folder.path() + "/file-XXXXXX";
-      int fd = folder.valid() ? ::mkstemp(file.data()) : -1;
+      std::string file;
+      os::OutFile out;
+      for (int attempt = 0; folder.valid() && !out.valid() && attempt < 16; ++attempt) {
+        file = folder.path() + "/file-" + std::to_string(++files);
+        out = os::OutFile::create(file, true);
+        if (!out.exists()) break;
+      }
       Failure failure = Failure::Network;
       int status = 0;
-      if (fd >= 0 && current(g)) {
+      if (out.valid() && current(g)) {
         ResponseState received;
         RoomWatch room(limits.room);
         const BodyPolicy policy{limits.maxBytes, [&](int, const std::string&) { return current(g); },
                                 [&](std::size_t more) { return room.fits(more); }};
         auto response = receive200(connection, path, policy, received,
             [&](const char* bytes, std::size_t count) {
-              return current(g) && room.write(fd, bytes, count);
+              return current(g) && room.write(out, bytes, count);
             });
         status = received.status;
         if (received.tooLarge) failure = Failure::TooLarge;
@@ -75,7 +82,8 @@ struct FileDownload::Impl {
         else if (response && response->status == 200)
           failure = received.receivedBytes > 0 ? Failure::None : Failure::Empty;
       }
-      if (fd >= 0) ::close(fd);
+      const bool created = out.valid();
+      out.close();
       interrupt.release();
       lock.lock();
       bool kept = false;
@@ -86,7 +94,7 @@ struct FileDownload::Impl {
         ready = true;
       }
       lock.unlock();
-      if (!kept && fd >= 0) ::unlink(file.c_str());
+      if (!kept && created) ::unlink(file.c_str());
     }
   }
 };

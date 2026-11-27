@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+  <title>@TITLE@</title>
+  <options customize="never" require-scripts="true" hostArchitectures="x86_64,arm64"/>
+  <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+  <allowed-os-versions>
+    <os-version min="11.0"/>
+  </allowed-os-versions>
+  <choices-outline>
+    <line choice="default">
+      <line choice="@ID@"/>
+    </line>
+  </choices-outline>
+  <choice id="default"/>
+  <choice id="@ID@" visible="false">
+    <pkg-ref id="@ID@"/>
+  </choice>
+  <pkg-ref id="@ID@" version="@VERSION@" onConclusion="none">@PACKAGE@</pkg-ref>
+</installer-gui-script>

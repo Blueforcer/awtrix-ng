@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 
+#include "platform/host/Text.h"
 #include "platform/posix/UniqueFd.h"
 #include "platform/posix/Time.h"
 
@@ -28,10 +29,9 @@ bool writeText(const std::string& path, std::string_view text);
 // A private (0600) file written beside path, synced and renamed over it: a reader finds the old
 // text or the new one, never part of either.
 bool replaceText(const std::string& path, std::string_view text);
-std::string trimmed(std::string_view text);
+using os::trimmed;
 bool numeric(const char* text);
-// Lowercase hex of size bytes.
-std::string hexBytes(const void* data, std::size_t size);
+using os::hexBytes;
 
 // Creates the directory (0700) when missing and refuses symlinks, foreign owners and
 // anything that is not a directory; the mode is tightened to 0700.

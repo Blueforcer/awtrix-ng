@@ -1,10 +1,11 @@
-#include "platform/posix/Files.h"
 #include "platform/linux/tls/TlsPolicy.h"
 
-#include <arpa/inet.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
+
+#include "platform/host/Socket.h"
+#include "platform/host/Text.h"
 
 namespace awtrix::tls {
 namespace {
@@ -41,7 +42,7 @@ std::string fingerprint(X509* certificate) {
   unsigned char digest[EVP_MAX_MD_SIZE];
   unsigned int length = 0;
   if (!certificate || X509_digest(certificate, EVP_sha256(), digest, &length) != 1) return "";
-  return posix::hexBytes(digest, length);
+  return os::hexBytes(digest, length);
 }
 
 std::vector<X509Ptr> readCertificates(const std::string& pem) {
@@ -64,7 +65,7 @@ KeyPtr readPrivateKey(const std::string& pem) {
 
 bool isIpLiteral(const std::string& name) {
   unsigned char address[16];
-  return inet_pton(AF_INET, name.c_str(), address) == 1 || inet_pton(AF_INET6, name.c_str(), address) == 1;
+  return os::parseIp(AF_INET, name.c_str(), address) || os::parseIp(AF_INET6, name.c_str(), address);
 }
 
 bool certificateNames(X509* certificate, const std::string& name) {

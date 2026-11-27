@@ -1,4 +1,5 @@
 #include "WiFiClient.h"
+#include "platform/posix/UniqueFd.h"
 #include "../support.h"
 
 #include <chrono>
@@ -10,7 +11,7 @@ using awtrix::posix::UniqueFd;
 
 namespace {
 struct Server {
-  UniqueFd fd{::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0)};
+  UniqueFd fd{::socket(AF_INET, SOCK_STREAM, 0)};
   uint16_t port = 0;
   Server() {
     require(fd.valid(), "create loopback server");
@@ -26,7 +27,7 @@ struct Server {
   UniqueFd accept() {
     pollfd pending{fd.get(), POLLIN, 0};
     require(::poll(&pending, 1, 1000) == 1, "connection reaches listener");
-    UniqueFd peer{::accept4(fd.get(), nullptr, nullptr, SOCK_CLOEXEC)};
+    UniqueFd peer{::accept(fd.get(), nullptr, nullptr)};
     require(peer.valid(), "accept client");
     return peer;
   }
@@ -76,6 +77,6 @@ int main() {
           "refused connect never becomes connected merely because it is writable");
   require(client.connect(nullptr, server.port) == 0 && client.connect("::1", server.port) == 0,
           "invalid and unsupported addresses fail");
-  require(awtrix::posix::connectionError(-1) == EBADF, "descriptor error is preserved");
+  require(awtrix::os::pendingError(-1) == EBADF, "descriptor error is preserved");
   return awtrix::test::finish("host TCP client");
 }

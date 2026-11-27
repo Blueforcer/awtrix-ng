@@ -12,7 +12,9 @@
 #include <vector>
 
 #include "platform/linux/secrets/SecretService.h"
+#if !defined(_WIN32)
 #include "platform/posix/Files.h"
+#endif
 #include "system/Log.h"
 
 using namespace awtrix;
@@ -352,6 +354,7 @@ void fillsTextBodies() {
   check(rig.service.fill("Assistant", url, none, plain) == RequestFill::Unchanged && plain.head == plainText,
         "a body without a placeholder stays, wherever it goes");
 
+#if !defined(_WIN32)
   const fs::path clip = rig.root / "clip";
   std::ofstream(clip) << "audio";
   const auto mapped = std::make_shared<const posix::MappedFile>(clip.string(), 100);
@@ -359,6 +362,7 @@ void fillsTextBodies() {
   check(!form.fillable() && rig.service.fill("Assistant", url, none, form) == RequestFill::Unchanged &&
             form.head == "{secret:key}" && form.tail == "{secret:key}",
         "a clip stays as it is, form fields included");
+#endif
   check(RequestBody(std::string("x{secret:key}")).fillable() && !RequestBody(plainText).fillable(),
         "only a text body with a placeholder can be filled");
 

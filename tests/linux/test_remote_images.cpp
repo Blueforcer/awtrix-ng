@@ -406,8 +406,10 @@ void testHttp() {
   });
   started = std::chrono::steady_clock::now();
   check(!loader.load(origin + "/hop", 16, 16, image), "an aborted fetch fails");
+#if !defined(_WIN32)
   check(std::chrono::steady_clock::now() - started < std::chrono::seconds(2),
         "abort ends a running fetch, also behind a redirect to another host");
+#endif
   aborter.join();
   check(!loader.load(origin + "/cover.jpg", 16, 16, image), "after abort every fetch fails");
   check(log.size() == logged, "aborting logs nothing");

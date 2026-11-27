@@ -1,6 +1,5 @@
 #include "../support.h"
 // The private records of script sign-ins.
-#include <sys/stat.h>
 #include <unistd.h>
 
 #include <cstdio>
@@ -38,13 +37,12 @@ int main() {
             back.clientSecret == "sec" && back.refreshToken == "rt",
         "round trip");
 
-  struct stat st {};
-  check(::stat(dir.c_str(), &st) == 0 && (st.st_mode & 0777) == 0700, "directory is 0700");
+  check(awtrix::test::privateMode(dir, 0700), "directory is 0700");
   int files = 0;
   for (const auto& e : fs::directory_iterator(dir)) {
     ++files;
     check(e.path().filename().string().find("Spotify") == std::string::npos, "file name does not reveal the app");
-    check(::stat(e.path().c_str(), &st) == 0 && (st.st_mode & 0777) == 0600, "record is 0600");
+    check(awtrix::test::privateMode(e.path(), 0600), "record is 0600");
   }
   check(files == 1, "one file per app");
 

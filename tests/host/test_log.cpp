@@ -260,7 +260,11 @@ void concurrentWritersNeverGarbleTheRing() {
 
 }
 
+#if defined(__APPLE__)
+extern "C" time_t time(time_t* out) {
+#else
 extern "C" time_t __wrap_time(time_t* out) {
+#endif
   if (out) *out = 0;
   return 0;
 }

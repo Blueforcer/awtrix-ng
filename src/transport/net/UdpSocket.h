@@ -22,7 +22,7 @@ class UdpSocket {
   bool sendTo(const net::Endpoint& to, const void* data, std::size_t len);
 
  private:
-  int fd_ = -1;
+  std::intptr_t fd_ = -1;
   uint32_t peerAddr_ = 0;
   bool havePeer_ = false;
 };

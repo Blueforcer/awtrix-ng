@@ -1,0 +1,28 @@
+#include <winver.h>
+
+1 24 "@AWTRIX_RC_MANIFEST@"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION @AWTRIX_RC_VERSION@
+PRODUCTVERSION @AWTRIX_RC_VERSION@
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "AWTRIX NG"
+      VALUE "FileDescription", "@AWTRIX_RC_DESCRIPTION@"
+      VALUE "FileVersion", "@AWTRIX_VERSION@"
+      VALUE "InternalName", "@AWTRIX_RC_PROGRAM@"
+      VALUE "OriginalFilename", "@AWTRIX_RC_PROGRAM@.exe"
+      VALUE "ProductName", "AWTRIX Script Host"
+      VALUE "ProductVersion", "@AWTRIX_VERSION@"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 1200
+  END
+END

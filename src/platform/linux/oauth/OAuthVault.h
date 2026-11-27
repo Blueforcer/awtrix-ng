@@ -3,7 +3,7 @@
 #include <functional>
 #include <string>
 
-#include "platform/posix/PrivateStore.h"
+#include "platform/host/PrivateStore.h"
 
 namespace awtrix::oauth {
 
@@ -31,7 +31,7 @@ class Vault {
   void keepOnly(const std::function<bool(const Record& record)>& keep);
 
  private:
-  posix::PrivateStore store_;
+  os::PrivateStore store_;
 };
 
 }

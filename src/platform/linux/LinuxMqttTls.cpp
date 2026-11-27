@@ -18,7 +18,7 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
-#include "platform/posix/Resolver.h"
+#include "platform/host/Resolver.h"
 #include "platform/linux/tls/TlsPolicy.h"
 #include "platform/linux/tls/TlsTrust.h"
 #include "system/Log.h"
@@ -203,17 +203,17 @@ int LinuxMqttTls::connect(const char* address, uint16_t port) {
   remote.sin_family = AF_INET;
   remote.sin_port = htons(port);
   if (::inet_pton(AF_INET, address, &remote.sin_addr) != 1) return 0;
-  posix::SocketAddress target;
+  os::SocketAddress target;
   target.family = AF_INET;
   target.size = sizeof remote;
   std::memcpy(&target.addr, &remote, sizeof remote);
   std::size_t next = 0;
-  auto connection = posix::connectNext(&target, 1, next);
-  state.fd = connection.fd.release();
+  auto connection = os::connectNext(&target, 1, next);
+  state.fd = connection.socket.release();
   if (state.fd < 0) return 0;
   const auto deadline = Clock::now() + std::chrono::seconds(3);
-  if (connection.state != posix::ConnectState::Connected &&
-      (!state.wait(POLLOUT, deadline) || posix::connectionError(state.fd) != 0)) {
+  if (connection.state != os::ConnectState::Connected &&
+      (!state.wait(POLLOUT, deadline) || os::pendingError(state.fd) != 0)) {
     state.close();
     return 0;
   }

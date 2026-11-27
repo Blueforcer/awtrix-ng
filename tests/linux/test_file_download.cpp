@@ -11,6 +11,7 @@
 #include <memory>
 #include <thread>
 
+#include "platform/host/Files.h"
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/net/FileDownload.h"
 #include "platform/linux/net/HttpGet.h"
@@ -93,14 +94,15 @@ int main() {
   response = awtrix::net::send(client, "GET", "/small", "", {},
                               [](const char*, std::size_t) { return false; });
   check(!response, "receiver refusal stops the sender");
-  const awtrix::posix::UniqueFd full(::open("/dev/full", O_WRONLY | O_CLOEXEC));
+  awtrix::os::OutFile full = awtrix::os::OutFile::create("/dev/full", false);
   awtrix::test::require(full.valid(), "the full device");
   const std::function<bool(std::size_t)> anyRoom;
   awtrix::net::RoomWatch watch(anyRoom);
-  check(watch.fits(1) && !watch.noRoom() && !watch.write(full.get(), "x", 1) && watch.noRoom(),
+  check(watch.fits(1) && !watch.noRoom() && !watch.write(full, "x", 1) && watch.noRoom(),
         "a file system that is full counts as no room");
   awtrix::net::RoomWatch broken(anyRoom);
-  check(!broken.write(-1, "x", 1) && !broken.noRoom(), "any other write failure does not");
+  awtrix::os::OutFile closed;
+  check(!broken.write(closed, "x", 1) && !broken.noRoom(), "any other write failure does not");
   std::string agent;
   const auto collect = [&](const char* bytes, std::size_t count) { agent.append(bytes, count); return true; };
   response = awtrix::net::send(client, "GET", "/agent", "", {}, collect);

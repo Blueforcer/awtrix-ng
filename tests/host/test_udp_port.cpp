@@ -1,10 +1,7 @@
 #include "transport/net/UdpPort.h"
 #include "../support.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include "../Sockets.h"
 
 #include <chrono>
 #include <cstring>
@@ -19,10 +16,10 @@ using awtrix::test::require;
 
 namespace {
 struct Socket {
-  int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
+  awtrix::os::Socket fd = ::socket(AF_INET, SOCK_DGRAM, 0);
   uint16_t port = 0;
   explicit Socket(uint32_t address) {
-    require(fd >= 0, "create a UDP socket");
+    require(fd != awtrix::os::kNoSocket, "create a UDP socket");
     sockaddr_in at{};
     at.sin_family = AF_INET;
     at.sin_addr.s_addr = htonl(address);
@@ -33,8 +30,8 @@ struct Socket {
   }
   ~Socket() { close(); }
   void close() {
-    if (fd >= 0) ::close(fd);
-    fd = -1;
+    awtrix::os::closeSocket(fd);
+    fd = awtrix::os::kNoSocket;
   }
   void sendTo(uint16_t to, std::size_t length) {
     const std::vector<uint8_t> bytes(length, static_cast<uint8_t>(length));
@@ -42,8 +39,7 @@ struct Socket {
     at.sin_family = AF_INET;
     at.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     at.sin_port = htons(to);
-    require(::sendto(fd, bytes.data(), length, 0, reinterpret_cast<sockaddr*>(&at), sizeof at) ==
-                static_cast<ssize_t>(length),
+    require(awtrix::os::sendDatagram(fd, bytes.data(), length, at) == static_cast<long>(length),
             "send a datagram");
   }
 };
@@ -65,6 +61,7 @@ std::vector<std::size_t> received(UdpPort& port, std::size_t count, Endpoint& fr
 }
 
 int main() {
+  require(awtrix::os::startSockets(), "sockets");
   Socket blocker(INADDR_ANY);
   const uint16_t number = blocker.port;
   UdpPort port;
@@ -89,9 +86,9 @@ int main() {
   const uint8_t reply[] = {'o', 'k'};
   check(port.send({INADDR_LOOPBACK, peer.port}, reply, sizeof reply), "a datagram goes out");
   uint8_t back[4] = {};
-  timeval wait{1, 0};
-  ::setsockopt(peer.fd, SOL_SOCKET, SO_RCVTIMEO, &wait, sizeof wait);
-  check(::recv(peer.fd, back, sizeof back, 0) == 2 && std::memcmp(back, reply, 2) == 0, "the peer gets it");
+  awtrix::test::receiveTimeout(peer.fd, 1000);
+  check(awtrix::os::receiveBytes(peer.fd, back, sizeof back) == 2 && std::memcmp(back, reply, 2) == 0,
+        "the peer gets it");
 
   check(port.close(), "closing an open port says so");
   check(!port.isOpen() && port.data() == nullptr, "a closed port holds no buffer");

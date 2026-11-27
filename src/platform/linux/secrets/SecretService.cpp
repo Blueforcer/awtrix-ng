@@ -48,7 +48,7 @@ bool parse(const std::string& json, std::string& app, Values& out) {
   return true;
 }
 
-Values loaded(const posix::PrivateStore& store, const std::string& app) {
+Values loaded(const os::PrivateStore& store, const std::string& app) {
   std::string json, owner;
   Values values;
   if (!store.load(app, json) || !parse(json, owner, values) || owner != app) values.clear();
@@ -65,11 +65,11 @@ Values bound(const Spec& spec, Values stored) {
   return stored;
 }
 
-Values current(const posix::PrivateStore& store, const std::string& app, const std::optional<Spec>& spec) {
+Values current(const os::PrivateStore& store, const std::string& app, const std::optional<Spec>& spec) {
   return spec ? bound(*spec, loaded(store, app)) : Values{};
 }
 
-bool save(posix::PrivateStore& store, const std::string& app, const Values& values) {
+bool save(os::PrivateStore& store, const std::string& app, const Values& values) {
   if (values.empty()) return store.erase(app);
   std::string json;
   api::JsonWriter w(json);

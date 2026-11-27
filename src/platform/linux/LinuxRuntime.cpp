@@ -16,7 +16,6 @@
 #include "core/FrameClock.h"
 #include "core/api/CapabilitiesJson.h"
 #include "core/api/HttpProtocol.h"
-#include "platform/linux/Auth.h"
 #include "platform/linux/host/vendor/httplib.h"
 #include "core/api/JsonWriter.h"
 #include "core/effects/EffectNoise.h"
@@ -82,10 +81,6 @@ int LinuxRuntime::start() {
     const int status = (this->*phase)();
     if (status >= 0) return status;
   }
-  if (o_.remote) {
-    const int status = beginRemote();
-    if (status >= 0) return status;
-  }
   composeAccess();
   composeConnectivity();
   composeScriptServices();
@@ -95,38 +90,6 @@ int LinuxRuntime::start() {
   composePlatformRoutes();
   startScripts();
   return startServices();
-}
-
-int LinuxRuntime::beginRemote() {
-  remote_.emplace();
-  std::string error;
-  if (!remote_->begin({o_.remoteClock, o_.remoteKeyFile, o_.remoteClockUrl}, static_cast<uint16_t>(o_.port),
-                      o_.width, o_.height, error)) {
-    std::fprintf(stderr, "%s\n", error.c_str());
-    return 2;
-  }
-  remote_->setOnTimezone([this](const std::string& tz, const std::string& tzName) {
-    if (tz.empty() || (tz == cfg_.tz && tzName == cfg_.tzName)) return;
-    cfg_.tz = tz;
-    cfg_.tzName = tzName;
-    applyConfig();
-  });
-  remote_->setOnBroker([this](const remote::RemoteRole::Broker& broker) {
-    scriptOnlyMqtt_.reset();
-    if (!broker.enabled || broker.host.empty() || !scripts_ || !resolver_) return;
-    DeviceConfig config;
-    config.mqttEnabled = true;
-    config.mqttHost = broker.host;
-    config.mqttPort = static_cast<uint16_t>(broker.port);
-    config.mqttUser = broker.user;
-    config.mqttPass = broker.pass;
-    const std::string prefix = (broker.prefix.empty() ? o_.remoteClock : broker.prefix) + "/scripthost";
-    scriptOnlyMqtt_ = std::make_unique<ScriptOnlyMqtt>();
-    scriptOnlyMqtt_->begin(config, o_.remoteClock + "-sh", prefix, *resolver_, *scripts_, scriptMqtt_);
-    logf("script host: MQTT for scripts via %s:%ld", broker.host.c_str(), broker.port);
-  });
-  logf("script host: runs the scripts of clock %s at %s", o_.remoteClock.c_str(), o_.remoteClockUrl.c_str());
-  return -1;
 }
 
 int LinuxRuntime::selectTarget() {
@@ -326,17 +289,6 @@ void LinuxRuntime::composeAccess() {
     };
     httpOptions_.updateUploadBytes = Tc002Update::kMaxRequestBytes;
   }
-  if (remote_) {
-    httpOptions_.listenAddress = "0.0.0.0";
-    httpOptions_.allowCrossOrigin = true;
-    httpOptions_.keyLogin = true;
-    httpOptions_.loginGuard = [key = remote_->keyHex()](const httplib::Request& request, httplib::Response& response) {
-      return request.method == "OPTIONS" ||
-             (request.get_header_value_count("Authorization") == 1 &&
-              api::hostKeyOk(request.get_header_value("Authorization"), key)) ||
-             auth::deny(response, api::unauthorized());
-    };
-  }
   listenAddress_ = httpOptions_.listenAddress;
 }
 
@@ -346,8 +298,7 @@ void LinuxRuntime::composeConnectivity() {
   platformCapabilities_.emplace(o_.bluetooth, cfg_.scriptingEnabled, supervised && speaker_,
                                 o_.height > 8 ? &layoutLimits_ : nullptr);
   onHost_ = !cfg_.scriptHost.empty() && !tc002_;
-  if (remote_) platformCapabilities_->hostOfClock();
-  else if (onHost_) platformCapabilities_->scriptsOnHost();
+  if (onHost_) platformCapabilities_->scriptsOnHost();
   resolver_ = net::makeHostResolver();
   if (mqttAllowed_) {
     bootstrap::beginMqtt(mqtt_, engine(), board(), cfg_, o_.uid, *resolver_, mqttTls_.get());
@@ -381,7 +332,8 @@ void LinuxRuntime::composeConnectivity() {
       app_->capabilitiesJson(platform, [&](api::JsonWriter& writer) { capabilities.write(writer); });
   auto shared = std::make_shared<const std::string>(std::move(capabilitiesText));
   http_.setCapabilitiesJson(*shared);
-  http_.setDeviceCapabilities(DeviceCapabilities::from(audio_.caps(), &platform, capabilities.needs()));
+  const DeviceCapabilities own = DeviceCapabilities::from(audio_.caps(), &platform, capabilities.needs());
+  http_.setDeviceCapabilities(own);
   mqtt_.setCapabilitiesJson(shared);
   http_.setOnConfigChanged([this] {
     applyConfig();
@@ -400,7 +352,6 @@ void LinuxRuntime::composeScriptServices() {
   const bool supervised = o_.supervised;
   scriptIcon_.setPanelSize(o_.width, o_.height);
   scriptIcon_.setRemoteImages(&*remoteImages_);
-  if (remote_) remote_->bindIcons(scriptIcon_);
   scriptServices_.instructionLimit = target_->scriptInstructionLimit;
   voice_.emplace(tc002::voice::VoiceStack::Setup{[this](std::string message) { return link_.send(std::move(message)); },
                                                  supervised, speaker_.get(), o_.wakeWord,
@@ -426,16 +377,12 @@ void LinuxRuntime::composeScriptServices() {
   };
   analysis_.emplace(speaker_.get(), supervised ? &voice_->microphone() : nullptr);
   app_->configureScripts(scriptServices_);
-  if (remote_) {
-    remoteApplication_.emplace(engine(), *remote_);
-    scriptServices_.application = &*remoteApplication_;
-  }
   scriptServices_.audioStats = [this](int64_t now, bool onScreen, awtrix::audio::FrameStats& out) {
     return analysis_->analysis(static_cast<audio::AnalysisSource>(engine().state().settings().musicSource), now,
                                out, onScreen);
   };
   scriptServices_.http = &scriptHttp_;
-  scriptServices_.mqtt = mqttAllowed_ || remote_ ? &scriptMqtt_ : nullptr;
+  scriptServices_.mqtt = mqttAllowed_ ? &scriptMqtt_ : nullptr;
 }
 
 void LinuxRuntime::composeBluetooth() {
@@ -460,18 +407,6 @@ void LinuxRuntime::composeBluetooth() {
 
 void LinuxRuntime::composeExtensions() {
   Extensions& x = extensions_;
-  if (remote_) {
-    if (cfg_.scriptingEnabled) {
-      x.list.push_back(&x.tcp);
-      x.list.push_back(&*oauthScripting_);
-      x.list.push_back(&*secretScripting_);
-      scriptStores_.dropStale();
-      oauthService_->begin();
-    }
-    x.gamepadApi = std::make_unique<ble::GamepadApi>(nullptr, nullptr, [] { return ble::GamepadPairResult{}; },
-                                                     [](int) {});
-    return;
-  }
   if (cfg_.scriptingEnabled) {
     x.gamepadInput = std::make_unique<ble::GamepadMux>(x.phones, bleService_ ? &bleService_->gamepad() : nullptr);
     x.gamepad = std::make_unique<ble::GamepadScripting>(*x.gamepadInput);
@@ -606,7 +541,6 @@ void LinuxRuntime::startScripts() {
       });
   scripts_ = scriptSlots_.host();
   if (!scripts_) return;
-  if (remote_) remote_->bindScripts(*scripts_, engine());
   scriptExtensions_ = std::make_unique<script::ExtensionHost>(*scripts_, std::move(extensions_.list));
   bootstrap::bindScriptHttp(*scripts_, scriptHttp_);
   if (mqttAllowed_) {

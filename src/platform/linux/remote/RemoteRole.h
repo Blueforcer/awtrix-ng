@@ -35,11 +35,11 @@ struct RoleOptions {
   std::string clockUrl;
 };
 
-// awtrix-linux as the script host of one ESP32 clock: the scripts run here, ticked for the apps the
-// clock asks for, and their pictures go to the clock over UDP on the same port number as the web
-// server. The clock's buttons, readings, switches, settings and time zone are taken over; what a
+// awtrix-script-runner, the script host of one ESP32 clock: the scripts run here, ticked for the
+// apps the clock asks for, and their pictures go to the clock over UDP on the same port number as
+// the web server. The clock's buttons, readings, switches, settings and time zone are taken over; what a
 // script does to the clock goes to its HTTP API at the address and port its last valid Hello names,
-// or at --remote-clock-url while the Hello names none.
+// or at --clock-url while the Hello names none.
 class RemoteRole final : private IIconMissing {
  public:
   using OnTimezone = std::function<void(const std::string& tz, const std::string& tzName)>;
@@ -59,6 +59,8 @@ class RemoteRole final : private IIconMissing {
   };
   using OnBroker = std::function<void(const Broker&)>;
   void setOnBroker(OnBroker onBroker) { onBroker_ = std::move(onBroker); }
+  using OnCapabilities = std::function<void(const std::string& capabilities)>;
+  void setOnCapabilities(OnCapabilities onCapabilities) { onCapabilities_ = std::move(onCapabilities); }
 
   const std::string& keyHex() const { return keyHex_; }
   ClockApi& clock() { return *clock_; }
@@ -76,6 +78,7 @@ class RemoteRole final : private IIconMissing {
   const std::string& shown() const { return server_->current(); }
   bool audioPlaying() const { return (server_->clock().state & wire::state::kAudioPlaying) != 0; }
   const sound::Caps* soundCaps() const { return soundCaps_ ? &*soundCaps_ : nullptr; }
+  int64_t silentMs(int64_t nowMs) const { return heardMs_ < 0 ? 0 : nowMs - heardMs_; }
 
   // Runs in place of the scripts' part of ApplicationRuntime::tick.
   void tick(int64_t nowMs, ApplicationRuntime& app, const ApplicationServices& services,
@@ -125,9 +128,11 @@ class RemoteRole final : private IIconMissing {
   std::unique_ptr<Canvas> incoming_;
   OnTimezone onTimezone_;
   OnBroker onBroker_;
+  OnCapabilities onCapabilities_;
   Broker broker_;
   bool haveBroker_ = false;
   int64_t nowMs_ = 0;
+  int64_t heardMs_ = -1;
 
   Copy caps_, settings_, system_;
   uint64_t assets_ = UINT64_MAX;

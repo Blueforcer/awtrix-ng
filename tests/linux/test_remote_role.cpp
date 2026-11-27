@@ -1,8 +1,7 @@
 #include "../../test/EngineFakes.h"
 #include "../support.h"
+#include "../Sockets.h"
 
-#include <arpa/inet.h>
-#include <sys/socket.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -23,7 +22,7 @@
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/remote/RemoteClockApplication.h"
 #include "platform/linux/remote/RemoteRole.h"
-#include "platform/posix/Files.h"
+#include "platform/host/Files.h"
 #include "transport/net/HmacSha256.h"
 
 using namespace awtrix;
@@ -38,17 +37,7 @@ constexpr const char* kUid = "a1b2c3";
 const std::string kKey(64, 'a');
 const char* const kBeep = "{\"rtttl\":\"beep:d=4,o=5,b=100:c\"}";
 
-int freeUdpPort() {
-  const int fd = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-  sockaddr_in address{};
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  socklen_t size = sizeof(address);
-  const bool okay = fd >= 0 && ::bind(fd, reinterpret_cast<sockaddr*>(&address), size) == 0 &&
-                    ::getsockname(fd, reinterpret_cast<sockaddr*>(&address), &size) == 0;
-  if (fd >= 0) ::close(fd);
-  return okay ? ntohs(address.sin_port) : 0;
-}
+int freeUdpPort() { return awtrix::test::freePort(SOCK_DGRAM); }
 
 struct FakeClock {
   httplib::Server server;
@@ -128,26 +117,26 @@ struct Rig {
   remote::RemoteClockApplication app{runtime.engine(), role};
   ScriptIcon icons;
   int rolePort = 0;
-  int sender = -1;
+  os::Socket sender = os::kNoSocket;
   uint32_t counter = 1;
   int64_t nowMs = 1000;
 
   explicit Rig(const fs::path& root) {
     host::setDataDir(root.string());
     fs::create_directories(root / "ICONS");
-    require(posix::replaceText((root / "key").string(), kKey + "\n"), "write the key file");
+    require(os::replaceFile((root / "key").string(), kKey + "\n"), "write the key file");
     rolePort = freeUdpPort();
     std::string error;
     require(rolePort && role.begin({kUid, (root / "key").string(), "http://127.0.0.1:" + std::to_string(fake.port)},
                                    static_cast<uint16_t>(rolePort), 32, 8, error),
             "the role starts: " + error);
     role.bindIcons(icons);
-    sender = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-    require(sender >= 0, "a socket for the clock's datagrams");
+    sender = ::socket(AF_INET, SOCK_DGRAM, 0);
+    require(sender != os::kNoSocket, "a socket for the clock's datagrams");
   }
 
   ~Rig() {
-    if (sender >= 0) ::close(sender);
+    os::closeSocket(sender);
   }
 
   void hello() {
@@ -165,7 +154,7 @@ struct Rig {
     to.sin_family = AF_INET;
     to.sin_port = htons(static_cast<uint16_t>(rolePort));
     to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    ::sendto(sender, packet, length, 0, reinterpret_cast<sockaddr*>(&to), sizeof(to));
+    os::sendDatagram(sender, packet, length, to);
   }
 
   template <class Done>
@@ -193,7 +182,7 @@ struct Rig {
 
 bool hasIcon(const fs::path& root, const char* name) {
   std::string text;
-  return posix::readText((root / "ICONS" / (std::string(name) + ".gif")).string(), text) && text == "GIF89a" + std::string(name);
+  return os::readFile((root / "ICONS" / (std::string(name) + ".gif")).string(), text) && text == "GIF89a" + std::string(name);
 }
 
 bool contains(const std::vector<std::string>& acts, const char* part) {
@@ -224,6 +213,33 @@ void scriptCallsReachTheClockAsItWouldTakeThem(const fs::path& root) {
         "one more act, not two");
 }
 
+void scriptNeedsAreTheClocks(const fs::path& root) {
+  Rig r(root);
+  std::string seen;
+  r.role.setOnCapabilities([&](const std::string& body) { seen = body; });
+  check(r.tickUntil([&] { return !seen.empty(); }) && seen.find("\"mp3\":true") != std::string::npos,
+        "the clock's capabilities are handed on");
+
+  const char* const tc001 =
+      "{\"audio\":{\"mp3\":false,\"rtttl\":true,\"song\":false,\"speech\":false,\"track\":false,\"radio\":false,"
+      "\"url\":false,\"effect\":false,\"clip\":false},\"microphone\":false,\"platform\":{\"id\":\"esp32\"},"
+      "\"sensors\":{\"light\":true},\"display\":{\"width\":64,\"height\":8},\"oauth\":true,\"tcp\":true}";
+  const DeviceCapabilities::Extra modules[] = {{"tcp", true}, {"ble", false}, {}};
+  DeviceCapabilities host = DeviceCapabilities::from(sound::Caps{}, nullptr, modules);
+  for (std::size_t i = 0; i < host.present.size(); ++i)
+    host.present[i] = DeviceCapabilities::kNames[i] != "audio.rtttl" && DeviceCapabilities::kNames[i] != "sensors.light";
+  host.panelWidth = 32;
+  host.panelHeight = 8;
+  const DeviceCapabilities caps = remote::clockCapabilities(tc001, host);
+  check(caps.has("audio.rtttl") && caps.has("sensors.light"), "what the clock has is there");
+  for (const char* name : {"audio.mp3", "audio.song", "audio.speech", "audio.track", "audio.radio", "audio.effect",
+                           "microphone"})
+    check(!caps.has(name), std::string("what it lacks is not: ") + name);
+  check(caps.has("tcp") && !caps.has("ble") && !caps.has("oauth"), "the modules are the host's");
+  check(caps.fits(32, 8) && !caps.fits(64, 8), "so is the panel");
+  check(!remote::clockCapabilities("{}", host).has("audio.rtttl"), "an empty answer names nothing");
+}
+
 void anIconTheClockDidNotAnswerIsAskedAgain(const fs::path& root) {
   Rig r(root);
   r.icons.missing("flaky");
@@ -237,13 +253,35 @@ void anIconTheClockDidNotAnswerIsAskedAgain(const fs::path& root) {
   check(r.fake.times("/ICONS/flaky.gif") == 2 && r.fake.times("/ICONS/steady.gif") == 1, "each as often as needed");
 }
 
+void aClockNotHeardCountsAsSilent(const fs::path& root) {
+  Rig r(root);
+  const auto quiet = [&r](int64_t ms) {
+    for (const int64_t until = r.nowMs + ms; r.nowMs < until;) {
+      r.nowMs += 500;
+      r.role.tick(r.nowMs, r.runtime, r.services, nullptr);
+    }
+  };
+  const int64_t started = r.nowMs + 500;
+  quiet(20000);
+  check(r.role.silentMs(r.nowMs) == r.nowMs - started, "a clock never heard is silent since the start");
+  check(r.tickUntil([&] { return r.role.silentMs(r.nowMs) == 0; }), "its Hello ends the silence");
+  quiet(remote::RemoteServer::kClockSilenceMs);
+  check(r.role.silentMs(r.nowMs) == 0, "a short gap is not silence yet");
+  quiet(20000);
+  check(r.role.silentMs(r.nowMs) > 20000 - remote::RemoteServer::kClockSilenceMs - 1000,
+        "a clock that stopped talking is silent again");
+}
+
 }
 
 int main() {
+  require(os::startSockets(), "sockets");
   const fs::path base = fs::temp_directory_path() / ("awtrix-remote-role-" + std::to_string(::getpid()));
   fs::remove_all(base);
   scriptCallsReachTheClockAsItWouldTakeThem(base / "calls");
+  scriptNeedsAreTheClocks(base / "needs");
   anIconTheClockDidNotAnswerIsAskedAgain(base / "icons");
+  aClockNotHeardCountsAsSilent(base / "silent");
   fs::remove_all(base);
   return awtrix::test::finish("remote-role");
 }

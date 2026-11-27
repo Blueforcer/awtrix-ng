@@ -103,7 +103,7 @@ void writeLine(const char* fmt, va_list ap) {
   // Before NTP lands the wall clock is meaningless, so stamp early lines with uptime instead.
   if (now > 1600000000) {
     struct tm tmv;
-    localtime_r(&now, &tmv);
+    logLocalTime(now, tmv);
     stamp = snprintf(line, kLineMax, "%02d:%02d:%02d ", tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
   } else {
     stamp = snprintf(line, kLineMax, "[%6lus] ", static_cast<unsigned long>(monotonicMs() / 1000));

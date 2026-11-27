@@ -1,5 +1,5 @@
 #include "platform/linux/Auth.h"
-#include "platform/posix/Resolver.h"
+#include "platform/host/Resolver.h"
 #include "core/StrCase.h"
 #include "core/payload/Base64.h"
 #include "platform/tc002/voice/WebSocket.h"
@@ -157,8 +157,8 @@ class WebSocket::Impl::Connection {
         endpoint_.target.empty() || endpoint_.target.front() != '/' || !printable(endpoint_.target))
       return fail();
     if (endpoint_.tls && !(context_ = newTrustedTlsContext())) return fail();
-    lookup_ = posix::Resolver::start([host = endpoint_.host, port = endpoint_.port] {
-      return posix::Resolver::lookup(host, port);
+    lookup_ = os::Resolver::start([host = endpoint_.host, port = endpoint_.port] {
+      return os::Resolver::lookup(host, port);
     });
     if (!lookup_) return fail();
     phase_ = Phase::Resolving;
@@ -172,7 +172,7 @@ class WebSocket::Impl::Connection {
 
   pollfd watch() const {
     switch (phase_) {
-      case Phase::Resolving: return {lookup_->fd(), POLLIN, 0};
+      case Phase::Resolving: return {lookup_->handle(), POLLIN, 0};
       case Phase::Connecting: return {fd_, POLLOUT, 0};
       case Phase::Securing: return {fd_, sslWants_, 0};
       default: return {fd_, static_cast<short>(POLLIN | (writePending() ? POLLOUT : 0)), 0};
@@ -218,10 +218,10 @@ class WebSocket::Impl::Connection {
 
   void tryNext() {
     closeSocket();
-    auto result = posix::connectNext(addresses_, next_);
-    fd_ = result.fd.release();
-    if (result.state == posix::ConnectState::Connected) return established();
-    if (result.state == posix::ConnectState::Pending) {
+    auto result = os::connectNext(addresses_, next_);
+    fd_ = result.socket.release();
+    if (result.state == os::ConnectState::Connected) return established();
+    if (result.state == os::ConnectState::Pending) {
       phase_ = Phase::Connecting;
       return;
     }
@@ -520,8 +520,8 @@ class WebSocket::Impl::Connection {
   bool stopped_ = false, pinged_ = false, assembling_ = false, readWantsWrite_ = false;
   short sslWants_ = POLLIN;
   Clock::time_point deadline_, lastRead_ = Clock::now();
-  std::shared_ptr<posix::Resolver> lookup_;
-  posix::Resolver::Addresses addresses_;
+  std::shared_ptr<os::Resolver> lookup_;
+  os::Resolver::Addresses addresses_;
   std::size_t next_ = 0;
   int fd_ = -1;
   SSL_CTX* context_ = nullptr;

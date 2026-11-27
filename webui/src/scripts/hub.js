@@ -68,18 +68,23 @@ async function carrySounds(from,to,step,src,dst){
   }
   return fs.length;
 }
-async function carryStore(from,to,src,dst){
-  const u=n=>'/api/v1/apps/'+encodeURIComponent(n),g=async(p,host)=>(await api(p,{host})).data;
-  const[d,a,b]=await Promise.all([g(u(from)+'/data',src),g(u(from)+'/config',src),g(u(to)+'/config',dst)]),c={};
-  for(const f of a.fields)d[f.key]=f.value;
+const appUrl=n=>'/api/v1/apps/'+encodeURIComponent(n);
+async function takeStore(n,host){
+  const g=async p=>(await api(appUrl(n)+p,{host})).data,[d,a]=await Promise.all([g('/data'),g('/config')]);
+  return{d,a:a.fields};
+}
+async function putStore(n,host,{d,a}){
+  const u=appUrl(n),b=(await api(u+'/config',{host})).data,c={};
+  for(const f of a)d[f.key]=f.value;
   for(const f of b.fields){
     const v=d[f.key];delete d[f.key];
     if(typeof v===typeof f.default&&(!f.options||f.options.includes(v))&&JSON.stringify(v)!==JSON.stringify(f.value))c[f.key]=v;
   }
-  for(const f of a.fields)delete d[f.key];
-  if(Object.keys(d).length)await req('PATCH',u(to)+'/data',d,dst);
-  if(Object.keys(c).length)await req('PATCH',u(to)+'/config',c,dst);
+  for(const f of a)delete d[f.key];
+  if(Object.keys(d).length)await req('PATCH',u+'/data',d,host);
+  if(Object.keys(c).length)await req('PATCH',u+'/config',c,host);
 }
+const carryStore=async(from,to,src,dst)=>putStore(to,dst,await takeStore(from,src));
 const carryScript=async(from,to,step,src,dst)=>{const n=await carrySounds(from,to,step,src,dst);await carryStore(from,to,src,dst);return n;};
 // Deleting a script keeps its sounds; with sounds they go first, so a failure leaves the script.
 async function delScript(n,sounds,host){

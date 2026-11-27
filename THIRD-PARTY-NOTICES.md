@@ -121,6 +121,7 @@ the native tests. They are not present in the ESP32 firmware images.
 | [KISS FFT](https://github.com/mborgerding/kissfft) 1.3.0, 16-bit real FFT, ported | `src/platform/tc002/wake/WakeFft.cpp` | BSD-3-Clause | [BSD-3-Clause-KISS-FFT.txt](LICENSES/BSD-3-Clause-KISS-FFT.txt) | Copyright (c) 2003-2010 Mark Borgerding |
 | [microWakeWord voice activity model](https://github.com/esphome/micro-wake-word-models) v2 (`vad.tflite`, `vad.json`) | `assets/tc002/vad/` | Apache-2.0 | [Apache-2.0.txt](LICENSES/Apache-2.0.txt), [NOTICE](assets/tc002/vad/NOTICE) | Copyright 2024-2026 Open Home Foundation |
 | [Unity](https://github.com/ThrowTheSwitch/Unity) test framework (via PlatformIO) | — | MIT | [MIT-Unity.txt](LICENSES/MIT-Unity.txt) | (c) 2007-2021 Mike Karlesky, Mark VanderVoord, Greg Williams |
+| [mingw-w64 winpthreads](https://www.mingw-w64.org/) | linked by the MinGW-w64 toolchain into the Windows script host programs | MIT | [MIT-mingw-w64-winpthreads.txt](LICENSES/MIT-mingw-w64-winpthreads.txt) | (c) 2011 mingw-w64 project |
 | [CMUdict](https://github.com/cmusphinx/cmudict) pronunciations selected with the [SCOWL](https://github.com/en-wl/wordlist) spelling list | compiled into the English voice pack `assets/speech/voice.atts` | BSD-style; SCOWL notices retained | [CMUdict-SCOWL.txt](LICENSES/CMUdict-SCOWL.txt) | (C) 1993-2015 Carnegie Mellon University; selection (C) 2000-2026 Kevin Atkinson |
 
 The Linux CMake build dynamically links the host's **OpenSSL** libraries for
@@ -130,7 +131,12 @@ Apache-2.0; the [upstream license page](https://openssl-library.org/source/licen
 describes the terms for each release family. The license text is available in
 [Apache-2.0.txt](LICENSES/Apache-2.0.txt); the installed system package carries
 the notices for its exact version. A future binary or OS-image distribution
-must include notices for the libraries it actually redistributes.
+must include notices for the libraries it actually redistributes. The Windows
+Setup of the script host links OpenSSL and libjpeg-turbo statically and ships
+their license texts with the ones above. The Linux packages and the Docker image
+of the script host (`packaging/host/linux/build.sh`) link OpenSSL, libjpeg-turbo
+and the musl C library (MIT) statically and ship their license texts, the
+Mozilla CA certificates (MPL-2.0) with their notice and the texts above.
 
 **cpp-httplib is modified.** The vendored header limits line lengths, aggregate
 header bytes and header counts while parsing requests, responses and trailers.

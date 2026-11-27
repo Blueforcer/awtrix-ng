@@ -3,6 +3,7 @@
 #include <set>
 #include <string>
 
+#include "core/DeviceCapabilities.h"
 #include "core/script/ScriptApplication.h"
 #include "core/sound/AudioRouter.h"
 
@@ -46,5 +47,7 @@ class RemoteClockApplication : public script::IScriptApplication {
 
 // The outputs the "audio" object of the clock's GET /api/v1/capabilities names.
 sound::Caps soundCapsFrom(const std::string& capabilities);
+
+DeviceCapabilities clockCapabilities(const std::string& capabilities, DeviceCapabilities host);
 
 }

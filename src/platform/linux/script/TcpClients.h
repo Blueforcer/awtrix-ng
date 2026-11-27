@@ -1,6 +1,7 @@
 #pragma once
 
-#include "platform/posix/Resolver.h"
+#include "platform/host/Resolver.h"
+#include "platform/host/Wake.h"
 
 #include <cstdint>
 #include <deque>
@@ -22,7 +23,7 @@ struct TcpEvent {
   std::string data;
 };
 
-using TcpAddress = posix::SocketAddress;
+using TcpAddress = os::SocketAddress;
 
 // Line-based TCP connections for scripts. One poll() thread serves the sockets; names resolve on
 // threads of their own, so a slow lookup never holds up another connection. Every connection
@@ -59,9 +60,9 @@ class TcpClients {
   struct Conn {
     std::string app, host;
     uint16_t port = 0;
-    int fd = -1;
+    os::Socket fd = os::kNoSocket;
     State state = State::Resolve;
-    std::shared_ptr<posix::Resolver> lookup;
+    std::shared_ptr<os::Resolver> lookup;
     int64_t deadline = 0;
     std::string in, out;
     bool dropped = false;
@@ -88,7 +89,7 @@ class TcpClients {
   std::map<uint32_t, Conn> conns_;
   uint32_t next_ = 1;
   uint32_t cursor_ = 0;
-  int wake_ = -1;
+  os::Wake wake_;
   bool quit_ = false;
   std::thread worker_;
 };

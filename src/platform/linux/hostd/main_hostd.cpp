@@ -1,66 +1,72 @@
 // awtrix-host: the script host for ESP32 clocks. It pairs clocks with a six-digit code, runs one
-// awtrix-linux --remote process for each and offers itself to the clocks it finds on the network.
+// awtrix-script-runner process for each and offers itself to the clocks it finds on the network.
 
 #include <atomic>
 #include <chrono>
-#include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <mutex>
 #include <random>
 #include <string>
 #include <thread>
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #include "core/api/ApiRouter.h"
 #include "core/api/HttpProtocol.h"
 #include "core/api/JsonReader.h"
 #include "core/api/JsonWriter.h"
+#include "platform/host/Files.h"
+#include "platform/host/Process.h"
+#include "platform/host/Service.h"
+#include "platform/host/Socket.h"
+#include "platform/host/Text.h"
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/hostd/Children.h"
 #include "platform/linux/hostd/ClockStore.h"
+#include "platform/linux/hostd/CodeAccess.h"
 #include "platform/linux/hostd/Discovery.h"
 #include "platform/linux/hostd/PairingCode.h"
-#include "platform/posix/Files.h"
-#include "platform/posix/Time.h"
+#include "system/MonotonicClock.h"
 
 using namespace awtrix;
 using namespace awtrix::hostd;
-using posix::monotonicMs;
 
 namespace {
 
 constexpr std::size_t kMaxBody = 1024;
+constexpr int64_t kStartMs = 8000;
+constexpr unsigned long kKeepLogBytes = 1024 * 1024;
 
 std::atomic<bool> g_stop{false};
 
 struct Options {
   std::string state = "/var/lib/awtrix-host";
-  std::string binary = "/usr/bin/awtrix-linux";
+  std::string binary = "/usr/bin/awtrix-script-runner";
   std::string webui;
+  std::string caFile;
   std::string name;
   // The address clocks and browsers reach this host at, when it differs from the one a request
   // arrives at (Docker bridge networks, NAT).
   std::string advertise;
   int port = 8300;
+  int idle = 600;
   bool discovery = true;
+  bool haIngress = false;
 };
 
 void usage() {
-  std::puts("awtrix-host [--state DIR] [--port 8300] [--binary awtrix-linux] [--webui FILE] [--name NAME]\n"
-            "  [--advertise ADDRESS] [--no-discovery]\n"
+  std::puts("awtrix-host [--state DIR] [--port 8300] [--binary awtrix-script-runner] [--webui FILE] [--name NAME]\n"
+            "  [--advertise ADDRESS] [--ca-file FILE] [--idle SECONDS] [--no-discovery] [--ha-ingress]\n"
             "The script host for ESP32 clocks: pair a clock in its web UI under System > Script host with the\n"
-            "code this program prints.");
+            "code this program prints. The scripts of a clock not heard for --idle seconds (600, 0 = never)\n"
+            "stop until it is back. --ha-ingress also shows the code in Home Assistant's Open Web UI.");
 }
 
 bool parse(int argc, char** argv, Options& o) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     if (arg == "--no-discovery") { o.discovery = false; continue; }
+    if (arg == "--ha-ingress") { o.haIngress = true; continue; }
     if (arg == "--help") { usage(); std::exit(0); }
     if (i + 1 >= argc) return false;
     const std::string value = argv[++i];
@@ -70,49 +76,40 @@ bool parse(int argc, char** argv, Options& o) {
     else if (arg == "--webui") o.webui = value;
     else if (arg == "--name") o.name = value;
     else if (arg == "--advertise") o.advertise = value;
+    else if (arg == "--ca-file") o.caFile = value;
+    else if (arg == "--idle") o.idle = std::atoi(value.c_str());
     else return false;
   }
-  return o.port > 0 && o.port < 65536;
+  return o.port > 0 && o.port < 65536 && o.idle >= 0 && o.idle <= 86400;
 }
 
 std::string hostName() {
-  char name[256] = {};
-  if (::gethostname(name, sizeof(name) - 1) != 0 || !name[0]) return "awtrix-host";
-  return name;
+  const std::string name = os::hostName();
+  return name.empty() ? "awtrix-host" : name;
 }
 
 std::string newKey() {
   std::random_device random;
   uint8_t bytes[32];
   for (uint8_t& byte : bytes) byte = static_cast<uint8_t>(random());
-  return posix::hexBytes(bytes, sizeof(bytes));
+  return os::hexBytes(bytes, sizeof(bytes));
 }
 
-bool portFree(int port) {
-  for (const int type : {SOCK_STREAM, SOCK_DGRAM}) {
-    const int fd = ::socket(AF_INET, type, 0);
-    if (fd < 0) return false;
-    sockaddr_in address{};
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = htonl(INADDR_ANY);
-    address.sin_port = htons(static_cast<uint16_t>(port));
-    const bool free = ::bind(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0;
-    ::close(fd);
-    if (!free) return false;
-  }
-  return true;
+bool portFree(int port) { return os::localPortFree(static_cast<uint16_t>(port)); }
+
+bool answers(int port) {
+  httplib::Client client("127.0.0.1", port);
+  client.set_connection_timeout(0, 300000);
+  client.set_read_timeout(2, 0);
+  return static_cast<bool>(client.Get("/api/v1/version"));
 }
 
-bool fromThisHost(const httplib::Request& req, int port) {
-  if (req.remote_addr != "127.0.0.1") return false;
-  const std::string host = req.get_header_value("Host");
-  const std::string suffix = ":" + std::to_string(port);
-  if (req.get_header_value_count("Host") != 1 || (host != "127.0.0.1" + suffix && host != "localhost" + suffix))
-    return false;
-  const std::string origin = req.get_header_value("Origin");
-  const std::string site = req.get_header_value("Sec-Fetch-Site");
-  return !api::fromOtherSite({origin, req.get_header_value_count("Origin"), host, 1, site,
-                              req.get_header_value_count("Sec-Fetch-Site")});
+bool codeVisible(const httplib::Request& req, const Options& o) {
+  return hostd::showsCode({req.remote_addr, req.get_header_value("Host"), req.get_header_value_count("Host"),
+                           req.get_header_value("Origin"), req.get_header_value_count("Origin"),
+                           req.get_header_value("Sec-Fetch-Site"), req.get_header_value_count("Sec-Fetch-Site"),
+                           req.get_header_value("X-Ingress-Path"), req.get_header_value_count("X-Ingress-Path")},
+                          o.port, o.haIngress);
 }
 
 void allowAnyOrigin(httplib::Response& res) {
@@ -126,32 +123,32 @@ h1{font-size:20px}td,th{padding:4px 10px 4px 0;text-align:left}.code{font:600 32
 <h2>Pairing code</h2><div id="code"></div><h2>Clocks</h2><table id="clocks"></table>
 <script>
 async function load(){
-  const s=await (await fetch('/api/v1/status')).json();
+  const s=await (await fetch('api/v1/status')).json();
   document.getElementById('name').textContent=s.name+' · '+s.version;
   const c=document.getElementById('code');
   if(s.code){c.innerHTML='<span class="code"></span> <span class="muted"></span>';
     c.children[0].textContent=s.code;c.children[1].textContent='valid '+Math.ceil(s.codeValidSeconds/60)+' min';}
-  else c.innerHTML='<p class="muted">Shown in the log of this host, for example with <code>docker logs awtrix-host</code>.</p>';
+  else c.innerHTML='<p class="muted">Open this page on the computer that runs the script host, or in Home Assistant with <b>Open Web UI</b>. The code is also in the script host\'s log.</p>';
   const t=document.getElementById('clocks');t.textContent='';
   if(!s.clocks.length){t.innerHTML='<tr><td class="muted">No clock paired yet.</td></tr>';return;}
   for(const k of s.clocks){const r=t.insertRow();
-    for(const v of [k.name||k.uid,k.width+'×'+k.height,k.clock,'port '+k.port,k.running?'running':'restarting'])r.insertCell().textContent=v;}
+    for(const v of [k.name||k.uid,k.width+'×'+k.height,k.clock,'port '+k.port,k.running?'running':k.waiting?'waiting for the clock':'restarting'])r.insertCell().textContent=v;}
 }
 load();setInterval(load,5000);
 </script></body></html>)";
 
-}
-
-int main(int argc, char** argv) {
-  Options o;
-  if (!parse(argc, argv, o)) {
-    usage();
-    return 2;
+int serve(Options& o, bool asService) {
+  if (asService) {
+    std::error_code ignored;
+    std::filesystem::create_directories(std::filesystem::u8path(o.state), ignored);
+    const std::size_t restored = os::restoreFolderAccess(o.state);
+    os::logToFile((std::filesystem::u8path(o.state) / "awtrix-host.log").u8string(), kKeepLogBytes);
+    if (restored) std::printf("access restored on %zu entries of %s\n", restored, o.state.c_str());
   }
-  if (o.name.empty()) o.name = hostName();
-  std::signal(SIGPIPE, SIG_IGN);
-  std::signal(SIGINT, [](int) { g_stop = true; });
-  std::signal(SIGTERM, [](int) { g_stop = true; });
+  if (!os::startSockets()) {
+    std::fputs("cannot use the network\n", stderr);
+    return 1;
+  }
 
   ClockStore store(o.state);
   std::string problem;
@@ -160,13 +157,12 @@ int main(int argc, char** argv) {
     return 1;
   }
   std::mutex mutex;
-  Children children(o.binary, o.webui);
+  Children children(o.binary, o.webui, o.caFile, o.idle);
   std::random_device seed;
   std::mt19937 random(seed());
   PairingCode code([&random] { return static_cast<uint32_t>(random()); });
   Discovery discovery;
-  if (o.discovery && !discovery.begin(o.name, static_cast<uint16_t>(o.port)))
-    std::fputs("discovery: UDP port 4211 is taken, clocks are not offered this host\n", stderr);
+  if (o.discovery) discovery.begin(o.name, static_cast<uint16_t>(o.port));
 
   httplib::Server server;
   server.set_default_headers({{"Cache-Control", "no-store"}});
@@ -188,9 +184,10 @@ int main(int argc, char** argv) {
     for (const ClockRecord& clock : store.clocks())
       w.beginObject().key("uid").value(clock.uid).key("name").value(clock.name).key("clock").value(clock.clockUrl)
           .key("width").value(clock.width).key("height").value(clock.height).key("port").value(clock.port)
-          .key("running").value(children.running(clock.uid)).endObject();
+          .key("running").value(children.running(clock.uid)).key("waiting").value(children.waiting(clock.uid))
+          .endObject();
     w.endArray();
-    if (fromThisHost(req, o.port)) {
+    if (codeVisible(req, o)) {
       const int64_t now = monotonicMs();
       w.key("code").value(code.current(now)).key("codeValidSeconds").value(static_cast<long long>(code.validForMs(now) / 1000));
     }
@@ -220,7 +217,7 @@ int main(int argc, char** argv) {
       return refuse(422, "panelNotSupported", "panel must be 8 high, 32 to 128 wide");
     if (record.clockUrl.rfind("http://", 0) != 0 || record.clockUrl.size() > 128)
       return refuse(422, "validationFailed", "clock must be http://address");
-    std::lock_guard<std::mutex> lock(mutex);
+    std::unique_lock<std::mutex> lock(mutex);
     switch (code.check(api::memberText(json, "code"), monotonicMs())) {
       case PairingCode::Check::Locked: return refuse(429, "locked", "too many wrong codes");
       case PairingCode::Check::Wrong: return refuse(403, "wrongCode", "wrong code");
@@ -235,6 +232,9 @@ int main(int argc, char** argv) {
     children.sync(store, monotonicMs());
     std::printf("clock %s (%s) paired, port %d\n", stored.uid.c_str(), stored.name.c_str(), stored.port);
     std::fflush(stdout);
+    lock.unlock();
+    for (const int64_t until = monotonicMs() + kStartMs; !answers(stored.port) && monotonicMs() < until;)
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
     const std::string address = !o.advertise.empty() ? o.advertise
                                 : req.local_addr.rfind("::ffff:", 0) == 0 ? req.local_addr.substr(7) : req.local_addr;
     const std::string hostPort = address + ":" + std::to_string(stored.port);
@@ -266,6 +266,7 @@ int main(int argc, char** argv) {
   std::thread http([&server] { server.listen_after_bind(); });
   {
     std::lock_guard<std::mutex> lock(mutex);
+    if (o.idle > 0) children.awaitAll(store);
     children.sync(store, monotonicMs());
   }
   std::printf("awtrix-host %s on port %d, %zu clock(s)\n", AWTRIX_NG_VERSION, o.port, store.clocks().size());
@@ -288,4 +289,17 @@ int main(int argc, char** argv) {
   std::lock_guard<std::mutex> lock(mutex);
   children.stopAll();
   return 0;
+}
+
+}
+
+int main(int argc, char** argv) {
+  Options o;
+  if (!parse(argc, argv, o)) {
+    usage();
+    return 2;
+  }
+  if (o.name.empty()) o.name = hostName();
+  os::stopOnRequest(g_stop);
+  return os::runService("AWTRIXScriptHost", g_stop, [&o](bool asService) { return serve(o, asService); });
 }

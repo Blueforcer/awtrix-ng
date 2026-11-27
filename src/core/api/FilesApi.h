@@ -19,18 +19,18 @@ class Files : public asset::Backend, public scriptsounds::Backend {
       : installed(installed), origins(origins) { iconOrigins = &origins; }
   virtual ~Files() = default;
   virtual void list(const std::string& directory, const Visit& visit) = 0;
-  virtual bool exists(const std::string& path) = 0;
+  bool exists(const std::string& path) override = 0;
   virtual bool read(const std::string& path, std::string& content) = 0;
-  virtual bool write(const std::string& path, const std::string& content) = 0;
-  virtual bool remove(const std::string& path) = 0;
-  virtual bool rename(const std::string& from, const std::string& to) = 0;
+  bool write(const std::string& path, const std::string& content) override = 0;
+  bool remove(const std::string& path) override = 0;
+  bool rename(const std::string& from, const std::string& to) override = 0;
   virtual bool mkdir(const std::string& directory, bool& created) = 0;
-  virtual void prune(const std::string& directory) = 0;
+  void prune(const std::string& directory) override = 0;
   virtual void usage(uint64_t& used, uint64_t& total) = 0;
   virtual bool etag(const std::string& path, std::string& value) = 0;
-  virtual bool sha256(const std::string& path, std::string& value, uint64_t& size) = 0;
-  virtual void release(const std::string& path) = 0;
-  virtual void changed() = 0;
+  bool sha256(const std::string& path, std::string& value, uint64_t& size) override = 0;
+  void release(const std::string& path) override = 0;
+  void changed() override = 0;
 
   const scriptsounds::InstalledScripts& installed;
   iconorigins::Backend& origins;

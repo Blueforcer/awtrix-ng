@@ -1,0 +1,15 @@
+name: AWTRIX Script Host
+version: "1.3.0"
+slug: awtrix_script_host
+description: Runs the scripts of your AWTRIX NG clocks, and the clocks show them.
+url: https://blueforcer.github.io/awtrix-ng/guides/script-host/
+arch:
+  - aarch64
+  - amd64
+image: ghcr.io/blueforcer/awtrix-script-host-ha
+startup: application
+boot: auto
+host_network: true
+ingress: true
+ingress_port: 8300
+panel_icon: mdi:clock-digital

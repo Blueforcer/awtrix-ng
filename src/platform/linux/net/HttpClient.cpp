@@ -1,9 +1,5 @@
 #include "platform/linux/net/HttpClient.h"
 
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #include <array>
 #include <cerrno>
 #include <chrono>
@@ -17,7 +13,7 @@
 #include "platform/linux/tls/TlsTrust.h"
 #include "core/net/Url.h"
 #include "core/script/HttpBodyFilter.h"
-#include "platform/posix/Files.h"
+#include "platform/host/Files.h"
 #include "system/Log.h"
 
 namespace awtrix::net {
@@ -56,7 +52,7 @@ void attach(httplib::Request& request, RequestBody& body) {
     request.body += body.tail;
     return;
   }
-  const std::array<std::string_view, 3> parts{body.head, body.file->bytes(), body.tail};
+  const std::array<std::string_view, 3> parts{body.head, body.fileBytes, body.tail};
   request.content_length_ = parts[0].size() + parts[1].size() + parts[2].size();
   request.content_provider_ = [parts](std::size_t offset, std::size_t, httplib::DataSink& sink) {
     for (const std::string_view part : parts) {
@@ -145,24 +141,24 @@ bool RoomWatch::fits(std::size_t more) {
   return !noRoom_;
 }
 
-bool RoomWatch::write(int fd, const char* bytes, std::size_t count) {
-  if (posix::writeAll(fd, bytes, count)) return true;
-  noRoom_ = errno == ENOSPC;
+bool RoomWatch::write(os::OutFile& file, const char* bytes, std::size_t count) {
+  if (file.write(bytes, count)) return true;
+  noRoom_ = file.full();
   return false;
 }
 
 SocketInterrupt::~SocketInterrupt() { release(); }
 
 void SocketInterrupt::watch(httplib::Client& client) {
-  client.set_socket_options([this](int socket) { adopt(socket); });
+  client.set_socket_options([this](os::Socket socket) { adopt(socket); });
 }
 
-void SocketInterrupt::adopt(int socket) {
-  const int copy = ::fcntl(socket, F_DUPFD_CLOEXEC, 0);
+void SocketInterrupt::adopt(os::Socket socket) {
+  const os::Socket copy = os::duplicateSocket(socket);
   std::lock_guard<std::mutex> lock(mutex_);
   if (interrupted_) {
-    ::shutdown(socket, SHUT_RDWR);
-    if (copy >= 0) ::close(copy);
+    os::shutdownSocket(socket);
+    os::closeSocket(copy);
     return;
   }
   closeCopy();
@@ -172,7 +168,7 @@ void SocketInterrupt::adopt(int socket) {
 void SocketInterrupt::interrupt() {
   std::lock_guard<std::mutex> lock(mutex_);
   interrupted_ = true;
-  if (socket_ >= 0) ::shutdown(socket_, SHUT_RDWR);
+  os::shutdownSocket(socket_);
 }
 
 void SocketInterrupt::rearm() {
@@ -187,9 +183,8 @@ void SocketInterrupt::release() {
 }
 
 void SocketInterrupt::closeCopy() {
-  if (socket_ < 0) return;
-  ::close(socket_);
-  socket_ = -1;
+  os::closeSocket(socket_);
+  socket_ = os::kNoSocket;
 }
 
 namespace {

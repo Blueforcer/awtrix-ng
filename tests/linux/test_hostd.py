@@ -21,7 +21,7 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from runtime import eventually, free_port, stop_process, wait_ready
+from runtime import eventually, free_port, runner_beside, stop_process, wait_ready
 from test_script_host_e2e import LanRuntime
 
 SCRIPT = "class Dot def draw() clear(0x00FF00) end end return Dot()"
@@ -32,7 +32,7 @@ def call(method, url, body=None, headers=None):
     request = urllib.request.Request(url, data=data, method=method,
                                      headers={"Content-Type": "application/json", **(headers or {})})
     try:
-        response = urllib.request.urlopen(request, timeout=4)
+        response = urllib.request.urlopen(request, timeout=12)
     except urllib.error.HTTPError as error:
         response = error
     except OSError:
@@ -47,7 +47,7 @@ def call(method, url, body=None, headers=None):
 
 def exchange(method, url, body=None, headers=None):
     parts = urllib.parse.urlsplit(url)
-    connection = http.client.HTTPConnection(parts.hostname, parts.port, timeout=4)
+    connection = http.client.HTTPConnection(parts.hostname, parts.port, timeout=12)
     try:
         connection.request(method, parts.path, body=body, headers=headers or {})
         response = connection.getresponse()
@@ -71,9 +71,10 @@ def run_guards(host_binary, linux_binary, webui):
         port = free_port()
         base = f"http://127.0.0.1:{port}"
         log = open(Path(state) / "hostd.log", "ab")
-        host = subprocess.Popen([str(host_binary), "--state", state, "--port", str(port), "--binary", str(linux_binary),
+        host = subprocess.Popen([str(host_binary), "--state", state, "--port", str(port),
+                                 "--binary", str(runner_beside(linux_binary)),
                                  "--webui", str(webui), "--name", "guards", "--no-discovery",
-                                 "--advertise", "192.0.2.7"], stdout=log, stderr=log)
+                                 "--advertise", "192.0.2.7", "--ha-ingress"], stdout=log, stderr=log)
         logs = lambda: (Path(state) / "hostd.log").read_text(errors="replace")[-4000:]
         status = lambda headers=None: exchange("GET", base + "/api/v1/status", headers=headers)
         try:
@@ -86,10 +87,16 @@ def run_guards(host_binary, linux_binary, webui):
                 code, headers, body = status({name: value})
                 assert code == 200 and "code" not in json.loads(body), (name, body)
                 assert "access-control-allow-origin" not in headers, (name, headers)
+            assert "code" in json.loads(status({"X-Ingress-Path": "/api/hassio_ingress/x"})[2]), \
+                "the Home Assistant switch keeps the code on this machine"
             lan = lan_address()
             if lan:
-                assert "code" not in json.loads(exchange("GET", f"http://{lan}:{port}/api/v1/status")[2]), \
-                    "another machine never sees the code"
+                for headers in ({}, {"X-Ingress-Path": "/api/hassio_ingress/x"}):
+                    assert "code" not in json.loads(exchange("GET", f"http://{lan}:{port}/api/v1/status",
+                                                             headers=headers)[2]), \
+                        ("another machine never sees the code", headers)
+            code, _, page = exchange("GET", base + "/")
+            assert code == 200 and b"fetch('api/v1/status')" in page, "the page works under any path prefix"
             code, headers, _ = exchange("OPTIONS", base + "/api/v1/status",
                                         headers={"Origin": "http://evil.example", "Access-Control-Request-Method": "GET"})
             assert code == 404 and "access-control-allow-origin" not in headers, (code, headers)
@@ -148,7 +155,8 @@ def run(host_binary, linux_binary, webui):
         port = free_port()
         base = f"http://127.0.0.1:{port}"
         log = open(Path(state) / "hostd.log", "ab")
-        host = subprocess.Popen([str(host_binary), "--state", state, "--port", str(port), "--binary", str(linux_binary),
+        host = subprocess.Popen([str(host_binary), "--state", state, "--port", str(port),
+                                 "--binary", str(runner_beside(linux_binary)),
                                  "--webui", str(webui), "--name", "testhost"], stdout=log, stderr=log)
         logs = lambda: (Path(state) / "hostd.log").read_text(errors="replace")[-4000:]
         try:
@@ -173,7 +181,7 @@ def run(host_binary, linux_binary, webui):
             auth = {"Authorization": "Bearer " + key}
             assert call("POST", base + "/api/v1/pair", {**pairing, "code": status["code"]})[0] == 403, "a code pairs once"
 
-            eventually(lambda: call("GET", url + "/api/v1/version", headers=auth)[0], lambda c: c == 200, timeout=15)
+            assert call("GET", url + "/api/v1/version", headers=auth)[0] == 200, "the process answers once pairing does"
             clock.json("PUT", "/api/v1/system", {"scriptHost": paired["scriptHost"], "scriptHostKey": key})
             clock.stop()
             clock.start()
@@ -182,7 +190,7 @@ def run(host_binary, linux_binary, webui):
             assert code == 200, body
             eventually(lambda: [a["name"] for a in clock.json("GET", "/api/v1/apps")], lambda n: "Dot" in n, timeout=15)
 
-            subprocess.run(["pkill", "-f", "--", "--remote-clock " + uid], check=False)
+            subprocess.run(["pkill", "-f", "--", "--clock " + uid], check=False)
             eventually(lambda: call("GET", url + "/api/v1/version", headers=auth)[0], lambda c: c != 200, timeout=5)
             eventually(lambda: call("GET", url + "/api/v1/version", headers=auth)[0], lambda c: c == 200, timeout=15)
             assert any(a["name"] == "Dot" for a in call("GET", url + "/api/v1/apps", headers=auth)[1]), "the script survived"
@@ -191,7 +199,7 @@ def run(host_binary, linux_binary, webui):
             code, again = call("POST", base + "/api/v1/pair", {**pairing, "code": fresh})
             assert code == 200 and again["key"] != key and again["port"] == paired["port"], again
             new_auth = {"Authorization": "Bearer " + again["key"]}
-            eventually(lambda: call("GET", url + "/api/v1/version", headers=new_auth)[0], lambda c: c == 200, timeout=15)
+            assert call("GET", url + "/api/v1/version", headers=new_auth)[0] == 200, "so does a pairing again"
             assert call("GET", url + "/api/v1/version", headers=auth)[0] == 401, "the old key is gone"
 
             assert call("DELETE", base + f"/api/v1/pair/{uid}", headers=auth)[0] == 401

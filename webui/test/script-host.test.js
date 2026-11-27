@@ -31,7 +31,10 @@ const notFound = [{ error: { code: 'notFound', message: 'not found' } }, 404];
 
 // awtrix-host: the supervisor on :8300 pairs and forgets clocks, the clock's own process on :8301
 // takes the key the supervisor handed out.
-function makeHost({ key = KEY, pairKey = key } = {}) {
+const AT_A = { host: HOST, hostd: HOSTD, scriptHost: '10.0.0.5:8301' };
+const AT_B = { host: 'http://10.0.0.7:8301', hostd: 'http://10.0.0.7:8300', scriptHost: '10.0.0.7:8301' };
+function makeHost({ key = KEY, pairKey = key, at = AT_A } = {}) {
+  const HOST = at.host, HOSTD = at.hostd;
   const h = { scripts: new Map(), modules: new Set(), sounds: new Map(), data: {}, values: {}, fields: {}, meta: {},
     calls: [], uploads: [], forgot: [], pairs: [], restored: null, fail: null };
   h.answer = (method, url, opts) => {
@@ -40,7 +43,7 @@ function makeHost({ key = KEY, pairKey = key } = {}) {
       const path = url.slice(HOSTD.length);
       if (method === 'POST' && path === '/api/v1/pair') {
         h.pairs.push(JSON.parse(opts.body));
-        return [{ url: HOST, scriptHost: '10.0.0.5:8301', key: pairKey, port: 8301 }, 200];
+        return [{ url: HOST, scriptHost: at.scriptHost, key: pairKey, port: 8301 }, 200];
       }
       const forget = path.match(/^\/api\/v1\/pair\/(\w+)\?keep=([01])$/);
       if (method === 'DELETE' && forget) {
@@ -304,7 +307,8 @@ async function testFailedPairingWriteKeepsTheHost() {
 }
 
 async function remotePage(host, opts = {}) {
-  const ctx = await boot({ system: PAIRED, scripthost: REMOTE, external: host.answer, fail: opts.fail,
+  const ctx = await boot({ system: PAIRED, scripthost: opts.scripthost || REMOTE, external: opts.external || host.answer,
+    fail: opts.fail,
     device: { uid: 'a1b2c3', boardType: 'awtrixng', ipAddress: '192.168.1.39' } });
   ctx.window.AbortSignal = AbortSignal;
   stubXhr(ctx.window, ctx.uploads = [], ctx.store);
@@ -343,7 +347,8 @@ async function testUnpairBringsScriptsBack() {
   store.configs.A = { fields: [{ key: 'speed', type: 'int', default: 1, value: 1 }] };
   putSound(store, 'A', 'boost.mp3', 'BOOST');
   assert(section.querySelector('.badge.good'), 'the link shows as connected');
-  assert(!inputIn(window, section, 'shCode'), 'a host that knows the clock needs no new pairing');
+  assert(buttonIn(section, tr(window, 'shMoveTo')) && !buttonIn(section, tr(window, 'shRepair')),
+    'a host that knows the clock needs no new pairing, only offers a move');
   store.netlog.length = 0;
   const said = toastLog(window);
   await unpair(window, section, 'shBack');
@@ -387,6 +392,105 @@ async function testUnpairLeavingScripts() {
   assert(!store.scripts.size && host.scripts.size === 2, 'the scripts stay on the host');
   assert(host.forgot.length === 1 && host.forgot[0].keep === '1' && host.forgot[0].auth === 'Bearer ' + KEY,
     'and the host stops its process for the clock');
+  window.close();
+}
+
+const OFFER_B = { name: 'mac', address: '10.0.0.7', port: 8300 };
+
+async function movePage({ down = false, bFail = null, fail = null } = {}) {
+  const a = makeHost(), b = makeHost({ key: NEWKEY, at: AT_B });
+  hostScripts(a);
+  b.fields.A = [{ key: 'speed', type: 'int', default: 1 }];
+  b.fail = bFail;
+  const external = (method, url, opts) => {
+    if (down && url.startsWith('http://10.0.0.5')) throw new TypeError('Failed to fetch');
+    return a.answer(method, url, opts) || b.answer(method, url, opts);
+  };
+  const ctx = await remotePage(a, { external, fail, scripthost: { ...REMOTE, offers: [OFFER, OFFER_B] } });
+  return { ...ctx, a, b };
+}
+
+async function move(window, section, { take = true } = {}) {
+  const sw = [...section.querySelectorAll('.switch input')][0];
+  if (!take) sw.checked = false;
+  inputIn(window, section, 'shCode').value = '777777';
+  window.document.querySelector('#toasts').replaceChildren();
+  buttonIn(section, tr(window, 'shMoveTo')).click();
+  await flush(600);
+}
+
+async function testMoveTakesTheScriptsAlong() {
+  const { window, store, section, a, b } = await movePage();
+  const found = [...section.querySelectorAll('button')].map(x => x.textContent);
+  assert(found.includes('mac') && !found.includes('pi'), 'the other host is offered, the current one is not');
+  assert(inputIn(window, section, 'shAddr').value === '10.0.0.7:8300', 'and filled in');
+  const sw = [...section.querySelectorAll('.switch input')];
+  assert(sw.length === 1 && sw[0].checked, 'taking the scripts along is on by default');
+  store.netlog.length = 0;
+  await move(window, section);
+  assert(b.pairs.length === 1 && b.pairs[0].code === '777777' && b.pairs[0].uid === 'a1b2c3', 'the clock pairs with B');
+  assert(b.scripts.get('A') === 'src A' && b.scripts.get('M') === 'src M', 'both scripts reach B');
+  assert(b.calls.filter(c => c.method === 'PUT').map(c => c.path)[0] === '/api/v1/apps/script/M', 'the module first');
+  assert(b.values.A && b.values.A.speed === 7, 'the setting goes along');
+  assert(b.data.A && b.data.A.best === 9 && !('speed' in b.data.A), 'and the saved data');
+  assert(b.calls.every(c => c.headers.Authorization === 'Bearer ' + NEWKEY), "B is called with B's key");
+  const log = store.netlog;
+  const readA = log.findIndex(l => l === 'GET ' + HOST + '/api/v1/apps/A/data');
+  assert(readA >= 0 && readA < log.indexOf('POST ' + AT_B.hostd + '/api/v1/pair'), 'A is read before B is paired');
+  assert(store.systemPut && store.systemPut.scriptHost === AT_B.scriptHost && store.systemPut.scriptHostKey === NEWKEY,
+    "the clock takes B's address and key");
+  const forget = log.indexOf('DELETE ' + HOSTD + '/api/v1/pair/a1b2c3?keep=0');
+  assert(forget > log.indexOf('PUT /api/v1/system') && forget < log.indexOf('POST /api/v1/device/reboot'),
+    'A is told to forget after the clock moved, before it restarts');
+  assert(a.forgot.length === 1 && a.forgot[0].keep === '0' && a.forgot[0].auth === 'Bearer ' + KEY,
+    "A forgets the clock and its copies, with A's key");
+  assert(!b.forgot.length && store.reboots === 1, 'B keeps the clock, which restarts');
+  assert(!store.scripts.size && !log.some(l => /^(PUT|DELETE) \/api\/v1\/apps\//.test(l)) &&
+    !b.calls.some(c => c.path.includes('sounds')), 'nothing lands on the clock, the sounds stay there');
+  window.close();
+}
+
+async function testMoveLeavingTheScripts() {
+  const { window, store, section, a, b } = await movePage();
+  await move(window, section, { take: false });
+  assert(b.pairs.length === 1 && !b.scripts.size, 'B starts without scripts');
+  assert(!a.calls.some(c => c.path.startsWith('/api/v1/apps/')), 'A is not read');
+  assert(a.forgot.length === 1 && a.forgot[0].keep === '1', 'A keeps them but stops running them');
+  assert(store.systemPut && store.systemPut.scriptHostKey === NEWKEY && store.reboots === 1, 'the clock moves to B');
+  window.close();
+}
+
+async function testMoveWhileTheOldHostIsGone() {
+  for (const choice of ['cancel', 'shWithout']) {
+    const { window, store, section, a, b } = await movePage({ down: true });
+    await move(window, section);
+    const ask = toasts(window).find(x => x.textContent.includes(tr(window, 'shGone')));
+    assert(ask && !b.pairs.length && !store.systemPut, 'an old host that does not answer is named before anything changes');
+    toastButton(window, tr(window, choice)).click();
+    await flush(600);
+    if (choice === 'cancel') {
+      assert(!b.pairs.length && !store.systemPut && !store.reboots, 'cancel leaves the clock where it is');
+      assert(!buttonIn(section, tr(window, 'shMoveTo')).disabled, 'and the move can be tried again');
+    } else {
+      assert(b.pairs.length === 1 && !b.scripts.size, 'without them, the clock pairs with B alone');
+      assert(store.systemPut && store.systemPut.scriptHostKey === NEWKEY && store.reboots === 1, 'and moves there');
+      assert(store.netlog.includes('DELETE ' + HOSTD + '/api/v1/pair/a1b2c3?keep=1') && !a.forgot.length,
+        'A is asked to keep the scripts, which it cannot hear');
+    }
+    window.close();
+  }
+}
+
+async function testFailedMoveStaysWithTheOldHost() {
+  const { window, store, section, a, b } = await movePage({
+    bFail: (method, path) => method === 'PATCH' && path === '/api/v1/apps/A/config'
+      ? [{ error: { code: 'insufficientStorage', message: 'disk full' } }, 507] : null });
+  await move(window, section);
+  assert(!b.scripts.has('A') && b.forgot.length === 1 && b.forgot[0].keep === '1' &&
+    b.forgot[0].auth === 'Bearer ' + NEWKEY, 'B drops the half copy and forgets the clock');
+  assert(!store.systemPut && !store.reboots, 'the clock stays with A');
+  assert(!a.forgot.length && a.scripts.size === 2, 'A keeps the clock and every script');
+  assert(toasts(window).some(x => x.textContent.includes('disk full')), 'the error says why');
   window.close();
 }
 
@@ -516,6 +620,7 @@ async function testRestoreSplitsTheBackup() {
   const cases = [testNoRouteNoSection, testNothingBeforeFirstRender, testScriptCallsGoToTheHost, testDefaultPort,
     testScriptsOffOnPairedClock, testPairMovesEverything, testFailedCopyKeepsTheClock, testFailedDeleteKeepsBothCopies,
     testFailedPairingWriteKeepsTheHost, testUnpairBringsScriptsBack, testUnpairNamesWhatStayed, testUnpairLeavingScripts,
+    testMoveTakesTheScriptsAlong, testMoveLeavingTheScripts, testMoveWhileTheOldHostIsGone, testFailedMoveStaysWithTheOldHost,
     testUnknownKeyOffersPairAgain, testUnknownKeyInAppsTab, testNeedsFromTheClock, testBackupReadsTheHost,
     testSoundUploadGoesStraightToTheClock, testRestoreSplitsTheBackup, testUnpairedClockAsksForNoSecrets];
   for (const c of cases) await c();

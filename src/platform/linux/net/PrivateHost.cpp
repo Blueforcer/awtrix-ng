@@ -1,7 +1,5 @@
 #include "platform/linux/net/PrivateHost.h"
 
-#include <arpa/inet.h>
-
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -9,6 +7,7 @@
 #include <string>
 
 #include "core/StrCase.h"
+#include "platform/host/Socket.h"
 
 namespace awtrix::net {
 namespace {
@@ -36,8 +35,9 @@ bool privateIpv4(const std::array<int, 4>& a) {
 bool privateIpv6(std::string_view host) {
   if (host.size() < 2 || host.front() != '[' || host.back() != ']') return false;
   const std::string address(host.substr(1, host.size() - 2));
+  if (address.find('%') != std::string::npos) return false;
   unsigned char bytes[16];
-  if (::inet_pton(AF_INET6, address.c_str(), bytes) != 1) return false;
+  if (!os::parseIp(AF_INET6, address.c_str(), bytes)) return false;
   static constexpr unsigned char kLoopback[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
   return std::memcmp(bytes, kLoopback, sizeof bytes) == 0 || (bytes[0] & 0xfe) == 0xfc ||
          (bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80);

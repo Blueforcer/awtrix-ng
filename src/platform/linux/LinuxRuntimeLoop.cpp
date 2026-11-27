@@ -50,18 +50,12 @@ bool LinuxRuntime::runFrame() {
     bootSoundClock_.reset();
   }
   const bool setup = o_.supervised && supervision_->accessPoint();
-  if (remote_) {
-    app_->tick(now, nullptr);
-    remote_->tick(now, *app_, *services_, scripts_);
-    if (scriptOnlyMqtt_) scriptOnlyMqtt_->tick(now, true);
-  } else if (!booting && !updating && !setup) {
-    app_->tick(now, scripts_);
-  }
+  if (!booting && !updating && !setup) app_->tick(now, scripts_);
   store_.tick(now);
   const int64_t renderStartedUs = performance.now();
   if (updating) update_->draw(app_->canvas(), awtrixFont());
   else if (!booting && setup) supervision_->drawProvisioning(app_->canvas(), awtrixFont(), now);
-  else if (!booting && !remote_) {
+  else if (!booting) {
     app_->render(now);
     quickSettings_->draw(app_->canvas(), awtrixFont(), now);
     voice_->draw(app_->canvas(), now);

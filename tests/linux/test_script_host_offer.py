@@ -13,14 +13,15 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from runtime import eventually, free_port, stop_process, wait_ready
+from runtime import eventually, free_port, runner_beside, stop_process, wait_ready
 from test_hostd import call
 from test_script_host_e2e import LanRuntime
 
 
 def start_host(host_binary, linux_binary, webui, state, port):
     log = open(Path(state) / "hostd.log", "ab")
-    process = subprocess.Popen([str(host_binary), "--state", state, "--port", str(port), "--binary", str(linux_binary),
+    process = subprocess.Popen([str(host_binary), "--state", state, "--port", str(port),
+                                "--binary", str(runner_beside(linux_binary)),
                                 "--webui", str(webui), "--name", "offerhost"], stdout=log, stderr=log)
     logs = lambda: (Path(state) / "hostd.log").read_text(errors="replace")[-4000:]
     wait_ready(process, lambda: call("GET", f"http://127.0.0.1:{port}/api/v1/status")[0] == 200, logs)

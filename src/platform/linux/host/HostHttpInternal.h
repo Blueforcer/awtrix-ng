@@ -8,6 +8,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <thread>
 
 namespace awtrix {
@@ -33,7 +34,7 @@ struct HostHttpServer::Impl {
   std::string webuiFile;
   bool webuiGzip = false;
   std::string capabilitiesJson = "{}";
-  DeviceCapabilities deviceCapabilities{};
+  std::optional<DeviceCapabilities> deviceCapabilities;
   std::function<void()> onConfigChanged;
   std::function<void()> onAssetsChanged;
   std::function<void(const std::string& event)> onError;

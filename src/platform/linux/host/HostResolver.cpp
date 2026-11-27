@@ -1,14 +1,12 @@
 #include "platform/linux/host/HostResolver.h"
 
-#include <netdb.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-
 #include <atomic>
 #include <chrono>
 #include <memory>
 #include <system_error>
 #include <thread>
+
+#include "platform/host/Resolver.h"
 
 namespace awtrix {
 namespace net {
@@ -96,17 +94,10 @@ class HostResolver : public IHostResolver {
       if (delay > 0) std::this_thread::sleep_for(std::chrono::milliseconds(delay));
 
       uint32_t found = 0;
-      addrinfo hints{};
-      hints.ai_family = AF_INET;
-      hints.ai_socktype = SOCK_STREAM;
-      addrinfo* res = nullptr;
-      if (::getaddrinfo(host.c_str(), nullptr, &hints, &res) == 0 && res) {
-        for (addrinfo* ai = res; ai; ai = ai->ai_next) {
-          if (ai->ai_family != AF_INET) continue;
-          found = ntohl(reinterpret_cast<sockaddr_in*>(ai->ai_addr)->sin_addr.s_addr);
-          break;
-        }
-        ::freeaddrinfo(res);
+      for (const os::SocketAddress& address : os::Resolver::lookup(host, "0", SIZE_MAX, AF_INET)) {
+        if (address.family != AF_INET) continue;
+        found = ntohl(reinterpret_cast<const sockaddr_in*>(&address.addr)->sin_addr.s_addr);
+        break;
       }
 
       if (found != 0) {

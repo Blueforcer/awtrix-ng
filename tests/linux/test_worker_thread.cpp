@@ -17,9 +17,7 @@ using awtrix::test::require;
 
 namespace {
 
-std::ptrdiff_t threads() {
-  return std::distance(std::filesystem::directory_iterator("/proc/self/task"), std::filesystem::directory_iterator{});
-}
+std::ptrdiff_t threads() { return static_cast<std::ptrdiff_t>(awtrix::test::listedThreads()); }
 
 void startsWithTheFirstTask() {
   const std::ptrdiff_t before = threads();
@@ -89,7 +87,7 @@ void destructionWaitsForTheRunningTask() {
 }
 
 int main() {
-  aThreadThatCannotStartRefusesTheTask();
+  if (awtrix::test::ThreadStacks::kApplies) aThreadThatCannotStartRefusesTheTask();
   startsWithTheFirstTask();
   runsTasksInOrder();
   destructionWaitsForTheRunningTask();

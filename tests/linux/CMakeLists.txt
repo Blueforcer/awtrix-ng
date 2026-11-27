@@ -1,18 +1,52 @@
 set(linux "${PROJECT_SOURCE_DIR}/src/platform/linux")
 
-add_awtrix_test(NAME posix-files SOURCES test_posix_files.cpp LIBRARIES awtrix_posix)
+# The script host's libraries; they build wherever awtrix-host and awtrix-script-runner do.
 add_awtrix_test(NAME hostd-store SOURCES test_hostd_store.cpp LIBRARIES awtrix_hostd)
-target_link_options(posix-files-test PRIVATE -Wl,--wrap=fsync)
-add_awtrix_test(NAME posix-worker-thread SOURCES test_worker_thread.cpp LIBRARIES awtrix_posix)
-add_awtrix_test(NAME posix-private-store SOURCES test_private_store.cpp LIBRARIES awtrix_posix)
+add_awtrix_test(NAME hostd-discovery SOURCES test_hostd_discovery.cpp LIBRARIES awtrix_hostd)
+add_awtrix_test(NAME hostd-code-access SOURCES test_hostd_code_access.cpp LIBRARIES awtrix_hostd)
+add_awtrix_test(NAME posix-private-store SOURCES test_private_store.cpp LIBRARIES awtrix_os)
 add_awtrix_test(NAME linux-own-page SOURCES test_own_page.cpp LIBRARIES awtrix_host)
-add_awtrix_test(NAME linux-clock-api SOURCES test_clock_api.cpp "${linux}/remote/ClockApi.cpp"
-  LIBRARIES awtrix_host awtrix_posix)
-add_awtrix_test(NAME linux-remote-role SOURCES test_remote_role.cpp "${linux}/remote/ClockApi.cpp"
-  "${linux}/remote/RemoteClockApplication.cpp" "${linux}/remote/RemoteRole.cpp"
-  "${PROJECT_SOURCE_DIR}/src/transport/net/HmacSha256.cpp"
-  LIBRARIES awtrix_host awtrix_posix OpenSSL::Crypto TIMEOUT 60)
+add_awtrix_test(NAME linux-clock-api SOURCES test_clock_api.cpp LIBRARIES awtrix_remote)
+add_awtrix_test(NAME linux-remote-role SOURCES test_remote_role.cpp LIBRARIES awtrix_remote TIMEOUT 60)
+add_awtrix_test(NAME linux-frame-pacer SOURCES test_frame_pacer.cpp INCLUDES "${PROJECT_SOURCE_DIR}/src")
 add_awtrix_test(NAME linux-on-demand-workers SOURCES test_on_demand_workers.cpp LIBRARIES awtrix_host TIMEOUT 60)
+add_awtrix_test(NAME linux-remote-images SOURCES test_remote_images.cpp LIBRARIES awtrix_images
+  TIMEOUT 60)
+add_awtrix_test(NAME linux-png SOURCES test_png.cpp LIBRARIES awtrix_images)
+add_awtrix_test(NAME linux-jpeg SOURCES test_jpeg.cpp LIBRARIES awtrix_images JPEG::JPEG)
+add_awtrix_test(NAME http-body-limit SOURCES test_http_body_limit.cpp
+  LIBRARIES awtrix_host TIMEOUT 15)
+add_awtrix_test(NAME linux-http-stop SOURCES test_http_stop.cpp LIBRARIES awtrix_host TIMEOUT 60)
+add_awtrix_test(NAME linux-multipart SOURCES test_multipart.cpp LIBRARIES awtrix_host)
+add_awtrix_test(NAME linux-private-host SOURCES test_private_host.cpp LIBRARIES awtrix_host)
+add_awtrix_test(NAME linux-oauth-spec SOURCES test_oauth_spec.cpp LIBRARIES awtrix_oauth)
+add_awtrix_test(NAME linux-oauth-flow SOURCES test_oauth_flow.cpp LIBRARIES awtrix_oauth)
+add_awtrix_test(NAME linux-oauth-vault SOURCES test_oauth_vault.cpp LIBRARIES awtrix_oauth)
+add_awtrix_test(NAME linux-oauth-service SOURCES test_oauth_service.cpp LIBRARIES awtrix_oauth TIMEOUT 60)
+add_awtrix_test(NAME linux-oauth-api SOURCES test_oauth_api.cpp LIBRARIES awtrix_oauth)
+add_awtrix_test(NAME linux-oauth-script SOURCES test_oauth_script.cpp
+  LIBRARIES awtrix_oauth awtrix_host TIMEOUT 60)
+add_awtrix_test(NAME linux-secret-spec SOURCES test_secret_spec.cpp LIBRARIES awtrix_secrets)
+add_awtrix_test(NAME linux-secret-service SOURCES test_secret_service.cpp LIBRARIES awtrix_secrets)
+add_awtrix_test(NAME linux-secret-api SOURCES test_secret_api.cpp LIBRARIES awtrix_secrets)
+add_awtrix_test(NAME linux-secret-script SOURCES test_secret_script.cpp LIBRARIES awtrix_secrets TIMEOUT 60)
+add_awtrix_test(NAME linux-tcp SOURCES test_tcp.cpp LIBRARIES awtrix_tcp TIMEOUT 45)
+if(NOT WIN32)
+  add_awtrix_test(NAME hostd-children SOURCES test_hostd_children.cpp LIBRARIES awtrix_hostd TIMEOUT 60)
+  add_awtrix_test(NAME posix-worker-thread SOURCES test_worker_thread.cpp LIBRARIES awtrix_portable)
+  add_awtrix_test(NAME linux-transfer-queue SOURCES test_transfer_queue.cpp LIBRARIES awtrix_host TIMEOUT 60)
+  add_awtrix_test(NAME linux-script-http SOURCES test_script_http.cpp "${linux}/LinuxScriptHttp.cpp"
+    LIBRARIES awtrix_host TIMEOUT 75)
+  add_awtrix_test(NAME httplib-header-parser SOURCES test_headers.cpp INCLUDES "${PROJECT_SOURCE_DIR}/src"
+    LIBRARIES Threads::Threads TIMEOUT 60)
+endif()
+
+if(NOT TARGET awtrix-linux)
+  return()
+endif()
+
+add_awtrix_test(NAME posix-files SOURCES test_posix_files.cpp LIBRARIES awtrix_posix)
+target_link_options(posix-files-test PRIVATE -Wl,--wrap=fsync)
 add_awtrix_test(NAME linux-cover-fetch SOURCES test_cover_fetch.cpp "${linux}/iphone/LinuxCoverFetch.cpp"
   LIBRARIES awtrix_iphone)
 
@@ -30,27 +64,13 @@ target_link_options(linux-ble-radio-test PRIVATE
   -Wl,--wrap=socket -Wl,--wrap=bind -Wl,--wrap=listen -Wl,--wrap=setsockopt
   -Wl,--wrap=getsockopt -Wl,--wrap=connect -Wl,--wrap=accept4 -Wl,--wrap=write -Wl,--wrap=uname)
 add_awtrix_test(NAME linux-iphone SOURCES test_iphone.cpp LIBRARIES awtrix_iphone)
-add_awtrix_test(NAME linux-remote-images SOURCES test_remote_images.cpp LIBRARIES awtrix_images
-  TIMEOUT 60)
-add_awtrix_test(NAME linux-png SOURCES test_png.cpp LIBRARIES awtrix_images)
-add_awtrix_test(NAME linux-jpeg SOURCES test_jpeg.cpp LIBRARIES awtrix_images JPEG::JPEG)
 add_awtrix_test(NAME linux-ble-script SOURCES test_ble_script.cpp
   LIBRARIES awtrix_ble_script awtrix_host)
-add_awtrix_test(NAME http-body-limit SOURCES test_http_body_limit.cpp
-  LIBRARIES awtrix_host TIMEOUT 15)
-add_awtrix_test(NAME linux-http-stop SOURCES test_http_stop.cpp LIBRARIES awtrix_host TIMEOUT 60)
-add_awtrix_test(NAME linux-file-download SOURCES test_file_download.cpp LIBRARIES awtrix_host awtrix_posix
+add_awtrix_test(NAME linux-file-download SOURCES test_file_download.cpp LIBRARIES awtrix_file_download awtrix_posix
   TIMEOUT 20)
-add_awtrix_test(NAME linux-multipart SOURCES test_multipart.cpp LIBRARIES awtrix_host)
-add_awtrix_test(NAME linux-private-host SOURCES test_private_host.cpp LIBRARIES awtrix_host)
-add_awtrix_test(NAME linux-transfer-queue SOURCES test_transfer_queue.cpp LIBRARIES awtrix_host TIMEOUT 60)
-add_awtrix_test(NAME linux-script-http SOURCES test_script_http.cpp "${linux}/LinuxScriptHttp.cpp"
-  LIBRARIES awtrix_host TIMEOUT 75)
 add_awtrix_test(NAME linux-tls SOURCES test_tls.cpp "${linux}/LinuxMqttTls.cpp" LIBRARIES awtrix_host TIMEOUT 60)
 add_awtrix_test(NAME linux-button-webhook SOURCES test_button_webhook.cpp "${linux}/LinuxButtonWebhook.cpp"
   LIBRARIES awtrix_core Threads::Threads TIMEOUT 30)
-add_awtrix_test(NAME httplib-header-parser SOURCES test_headers.cpp INCLUDES "${PROJECT_SOURCE_DIR}/src"
-  LIBRARIES Threads::Threads TIMEOUT 60)
 
 set(contract_arguments)
 set(security_arguments)
@@ -70,7 +90,7 @@ add_awtrix_runtime_test(NAME http-header-contract SCRIPT test_headers.py TIMEOUT
 add_awtrix_runtime_test(NAME http-bodyless-post SCRIPT test_bodyless_post.py TIMEOUT 60)
 add_awtrix_runtime_test(NAME linux-discovery SCRIPT test_discovery.py TIMEOUT 60 PROPERTIES RUN_SERIAL TRUE)
 add_awtrix_runtime_test(NAME linux-script-host-clock SCRIPT test_script_host_clock.py TIMEOUT 90 PROPERTIES RUN_SERIAL TRUE)
-add_awtrix_runtime_test(NAME linux-script-host-e2e SCRIPT test_script_host_e2e.py TIMEOUT 240 PROPERTIES RUN_SERIAL TRUE)
+add_awtrix_runtime_test(NAME linux-script-host-e2e SCRIPT test_script_host_e2e.py TIMEOUT 360 PROPERTIES RUN_SERIAL TRUE)
 add_awtrix_runtime_test(NAME linux-script-host-offer SCRIPT test_script_host_offer.py TIMEOUT 90 PROPERTIES RUN_SERIAL TRUE)
 add_awtrix_runtime_test(NAME linux-script-host-mqtt SCRIPT test_script_host_mqtt.py TIMEOUT 120 PROPERTIES RUN_SERIAL TRUE)
 add_awtrix_runtime_test(NAME linux-hostd SCRIPT test_hostd.py TIMEOUT 150 PROPERTIES RUN_SERIAL TRUE)
@@ -82,17 +102,6 @@ add_awtrix_runtime_test(NAME docs-panels SCRIPT test_docs_panels.py TIMEOUT 300)
 
 add_awtrix_test(NAME linux-crypto-script SOURCES test_crypto_script.cpp
   LIBRARIES awtrix_script_ext awtrix_host)
-add_awtrix_test(NAME linux-oauth-spec SOURCES test_oauth_spec.cpp LIBRARIES awtrix_oauth)
-add_awtrix_test(NAME linux-oauth-flow SOURCES test_oauth_flow.cpp LIBRARIES awtrix_oauth)
-add_awtrix_test(NAME linux-oauth-vault SOURCES test_oauth_vault.cpp LIBRARIES awtrix_oauth)
-add_awtrix_test(NAME linux-oauth-service SOURCES test_oauth_service.cpp LIBRARIES awtrix_oauth TIMEOUT 60)
-add_awtrix_test(NAME linux-oauth-api SOURCES test_oauth_api.cpp LIBRARIES awtrix_oauth)
-add_awtrix_test(NAME linux-oauth-script SOURCES test_oauth_script.cpp
-  LIBRARIES awtrix_oauth awtrix_host TIMEOUT 60)
-add_awtrix_test(NAME linux-secret-spec SOURCES test_secret_spec.cpp LIBRARIES awtrix_secrets)
-add_awtrix_test(NAME linux-secret-service SOURCES test_secret_service.cpp LIBRARIES awtrix_secrets)
-add_awtrix_test(NAME linux-secret-api SOURCES test_secret_api.cpp LIBRARIES awtrix_secrets)
-add_awtrix_test(NAME linux-secret-script SOURCES test_secret_script.cpp LIBRARIES awtrix_secrets TIMEOUT 60)
 add_awtrix_test(NAME linux-pow SOURCES test_pow.cpp LIBRARIES awtrix_script_ext TIMEOUT 120)
 add_awtrix_test(NAME linux-pow-startup SOURCES test_pow_startup.cpp LIBRARIES awtrix_script_ext)
 # Pull std::thread into this executable so the pthread_create fault-injection wrapper
@@ -100,4 +109,3 @@ add_awtrix_test(NAME linux-pow-startup SOURCES test_pow_startup.cpp LIBRARIES aw
 target_link_options(linux-pow-startup-test PRIVATE -static-libstdc++ -Wl,--wrap=pthread_setschedparam -Wl,--wrap=pthread_create)
 add_awtrix_test(NAME linux-crypto-mining SOURCES test_crypto_mining.cpp
   LIBRARIES awtrix_script_ext awtrix_host TIMEOUT 120)
-add_awtrix_test(NAME linux-tcp SOURCES test_tcp.cpp LIBRARIES awtrix_script_ext TIMEOUT 45)

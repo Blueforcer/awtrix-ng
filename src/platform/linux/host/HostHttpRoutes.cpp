@@ -428,7 +428,8 @@ bool HostHttpServer::Impl::serveState(const httplib::Request& req, const std::st
   if (method != "GET") return false;
   const api::StateReadContext context{*engine, *screen, capabilitiesJson, scripts,
                                       scriptSource, scriptStore, storedScripts, options.deviceState,
-                                      &deviceCapabilities, &options.scriptHost, options.scriptsOnHost,
+                                      deviceCapabilities ? &*deviceCapabilities : nullptr,
+                                      &options.scriptHost, options.scriptsOnHost,
                                       options.hostScriptsRun, req.has_param("secrets")};
   std::string body;
   const auto result = api::readState(method, req.path, context, body);

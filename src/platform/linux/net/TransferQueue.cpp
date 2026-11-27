@@ -1,14 +1,11 @@
 #include "platform/linux/net/TransferQueue.h"
 
-#include <fcntl.h>
-#include <unistd.h>
-
 #include <algorithm>
 #include <cerrno>
 #include <utility>
 
 #include "platform/linux/host/vendor/httplib.h"
-#include "platform/posix/Files.h"
+#include "platform/host/Files.h"
 #include "platform/posix/StartThread.h"
 
 namespace awtrix::net {
@@ -50,7 +47,7 @@ void TransferQueue::stop() {
   ready_.notify_all();
   if (worker_.joinable()) worker_.join();
   for (const TransferResult& result : results_)
-    if (!result.file.empty()) ::unlink(result.file.c_str());
+    if (!result.file.empty()) os::removeFile(result.file);
   results_.clear();
 }
 
@@ -75,7 +72,7 @@ std::vector<int> TransferQueue::cancel(const std::string& owner) {
   }
   dropOwned(queue_, owner, [&](const TransferRequest& request) { dropped.push_back(request.id); });
   dropOwned(results_, owner, [&](const TransferResult& result) {
-    if (!result.file.empty()) ::unlink(result.file.c_str());
+    if (!result.file.empty()) os::removeFile(result.file);
     dropped.push_back(result.id);
   });
   return dropped;
@@ -112,7 +109,7 @@ void TransferQueue::run() {
     std::lock_guard<std::mutex> lock(mutex_);
     running_ = false;
     if (cancelled_ || stopping_) {
-      if (!result.file.empty()) ::unlink(result.file.c_str());
+      if (!result.file.empty()) os::removeFile(result.file);
     } else {
       results_.push_back(std::move(result));
     }
@@ -139,16 +136,16 @@ TransferResult TransferQueue::perform(TransferRequest& request) {
     result.body = std::move(answer.body);
   });
   if (finished) return result;
-  if (request.download) ::unlink(request.download->path.c_str());
+  if (request.download) os::removeFile(request.download->path);
   return resultFor(request);
 }
 
 void TransferQueue::download(httplib::Client& client, const std::string& target, TransferRequest& request,
                              TransferResult& result) {
   const TransferDownload& wanted = *request.download;
-  posix::UniqueFd file(::open(wanted.path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600));
+  os::OutFile file = os::OutFile::create(wanted.path, false);
   if (!file.valid()) {
-    result.noRoom = errno == ENOSPC;
+    result.noRoom = file.full();
     return;
   }
   bool refused = false;
@@ -163,12 +160,12 @@ void TransferQueue::download(httplib::Client& client, const std::string& target,
                           [&](std::size_t more) { return room.fits(more); }};
   const auto response = exchange(client, request.method, target, std::move(request.body), request.headers,
                                  policy, state, [&](const char* bytes, std::size_t count) {
-    return room.write(file.get(), bytes, count);
+    return room.write(file, bytes, count);
   });
   result.noRoom = room.noRoom();
   if (response) result.status = response->status;
   else if (refused || state.tooLarge || result.noRoom) result.status = state.status;
-  const bool written = ::close(file.release()) == 0;
+  const bool written = file.close();
   std::string contentType = state.contentType;
   if (response && result.status == httplib::StatusCode::OK_200 && written &&
       (!wanted.verify || wanted.verify(wanted.path, contentType))) {
@@ -178,7 +175,7 @@ void TransferQueue::download(httplib::Client& client, const std::string& target,
     result.fileBytes = state.receivedBytes;
     return;
   }
-  ::unlink(wanted.path.c_str());
+  os::removeFile(wanted.path);
 }
 
 }

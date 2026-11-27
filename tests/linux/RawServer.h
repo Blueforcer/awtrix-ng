@@ -24,7 +24,7 @@ class RawServer {
 
   explicit RawServer(Serve serve) : serve_(std::move(serve)) {
     constexpr int kReceiveBufferBytes = 64 * 1024;
-    listener_ = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    listener_ = ::socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -43,6 +43,7 @@ class RawServer {
       stopping_ = true;
       if (peer_ >= 0) ::shutdown(peer_, SHUT_RDWR);
     }
+    wake();
     ::shutdown(listener_, SHUT_RDWR);
     thread_.join();
     ::close(listener_);
@@ -55,14 +56,28 @@ class RawServer {
   }
 
  private:
+  void wake() const {
+    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return;
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = htons(static_cast<uint16_t>(port_));
+    ::connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof address);
+    ::close(fd);
+  }
+
   void run() {
     for (;;) {
       const int peer = ::accept(listener_, nullptr, nullptr);
       if (peer < 0) return;
       {
         std::lock_guard<std::mutex> lock(mutex_);
+        if (stopping_) {
+          ::close(peer);
+          return;
+        }
         peer_ = peer;
-        if (stopping_) ::shutdown(peer, SHUT_RDWR);
       }
       serve_(peer);
       {

@@ -1,7 +1,5 @@
 #include "../../test/EngineFakes.h"
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include "../Sockets.h"
 
 #include <chrono>
 #include <cstdio>
@@ -23,23 +21,13 @@ using System = awtrix::test::NullSystem;
 
 constexpr int kRounds = 300;
 
-int availablePort() {
-  const int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-  if (fd < 0) return 0;
-  sockaddr_in address{};
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  socklen_t size = sizeof(address);
-  const bool okay = ::bind(fd, reinterpret_cast<sockaddr*>(&address), size) == 0 &&
-      ::getsockname(fd, reinterpret_cast<sockaddr*>(&address), &size) == 0;
-  ::close(fd);
-  return okay ? ntohs(address.sin_port) : 0;
-}
+int availablePort() { return awtrix::test::freePort(SOCK_STREAM); }
 
 }
 
 // A hang in either case ends in the test's timeout.
 int main() {
+  awtrix::os::startSockets();
   sound::AudioRouter audio;
   Display display;
   System system;

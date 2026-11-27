@@ -1,6 +1,5 @@
 #include "../support.h"
 
-#include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -11,18 +10,14 @@
 #include <vector>
 
 #include "platform/posix/Digest.h"
-#include "platform/posix/PrivateStore.h"
+#include "platform/host/PrivateStore.h"
 
-using awtrix::posix::PrivateStore;
+using awtrix::os::PrivateStore;
 using awtrix::test::check;
 namespace fs = std::filesystem;
 
 namespace {
 
-int mode(const fs::path& path) {
-  struct stat st {};
-  return ::stat(path.c_str(), &st) == 0 ? static_cast<int>(st.st_mode & 0777) : -1;
-}
 
 std::vector<std::string> names(const fs::path& dir) {
   std::vector<std::string> out;
@@ -46,11 +41,11 @@ int main() {
   check(store.erase("Spotify"), "erasing a missing name is fine");
 
   check(store.save("Spotify", "{\"app\":\"Spotify\"}"), "the first save creates the directory and its parents");
-  check(mode(dir) == 0700, "the directory is 0700");
+  check(awtrix::test::privateMode(dir, 0700), "the directory is 0700");
   check(store.load("Spotify", text) && text == "{\"app\":\"Spotify\"}", "load returns what was saved");
   const std::string file = awtrix::posix::sha256Hex("Spotify").substr(0, 32) + ".json";
   check(names(dir) == std::vector<std::string>{file}, "one file, named by the hash of the name");
-  check(mode(dir / file) == 0600, "the file is 0600");
+  check(awtrix::test::privateMode(dir / file, 0600), "the file is 0600");
 
   check(store.save("Spotify", "second") && store.load("Spotify", text) && text == "second", "a save replaces");
   check(names(dir).size() == 1, "a replace leaves no second file");

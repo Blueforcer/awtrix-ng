@@ -1,0 +1,82 @@
+#!/bin/sh
+set -u
+LABEL=de.blueforcer.awtrix.script-host
+ACCOUNT=_awtrixhost
+APP="/Library/Application Support/AWTRIX Script Host"
+DATA="$APP/data"
+LOGS="/Library/Logs/AWTRIX Script Host"
+PLIST="/Library/LaunchDaemons/$LABEL.plist"
+FIREWALL=/usr/libexec/ApplicationFirewall/socketfilterfw
+STATUS=http://localhost:8300/
+
+user_id_taken() { dscl . -list /Users UniqueID | awk '{print $2}' | grep -qx "$1"; }
+group_id_taken() { dscl . -list /Groups PrimaryGroupID | awk '{print $2}' | grep -qx "$1"; }
+
+free_id() {
+  id=300
+  while [ "$id" -lt 500 ]; do
+    user_id_taken "$id" || group_id_taken "$id" || { echo "$id"; return 0; }
+    id=$((id + 1))
+  done
+  echo "no free system account id" >&2
+  return 1
+}
+
+attribute() { dscl . -read "$1" "$2" 2>/dev/null | awk 'NR == 1 {print $2}'; }
+
+gid=$(attribute "/Groups/$ACCOUNT" PrimaryGroupID)
+uid=$(attribute "/Users/$ACCOUNT" UniqueID)
+if [ -z "$gid" ]; then
+  [ -n "$uid" ] && gid=$(attribute "/Users/$ACCOUNT" PrimaryGroupID)
+  if [ -z "$gid" ] || group_id_taken "$gid"; then gid=$(free_id) || exit 1; fi
+  dscl . -create "/Groups/$ACCOUNT"
+  dscl . -create "/Groups/$ACCOUNT" PrimaryGroupID "$gid"
+  dscl . -create "/Groups/$ACCOUNT" RealName "AWTRIX Script Host"
+  dscl . -create "/Groups/$ACCOUNT" Password "*"
+fi
+if [ -z "$uid" ]; then
+  uid=$gid
+  if user_id_taken "$uid"; then uid=$(free_id) || exit 1; fi
+  dscl . -create "/Users/$ACCOUNT"
+  dscl . -create "/Users/$ACCOUNT" UniqueID "$uid"
+  dscl . -create "/Users/$ACCOUNT" UserShell /usr/bin/false
+  dscl . -create "/Users/$ACCOUNT" NFSHomeDirectory /var/empty
+  dscl . -create "/Users/$ACCOUNT" RealName "AWTRIX Script Host"
+  dscl . -create "/Users/$ACCOUNT" Password "*"
+  dscl . -create "/Users/$ACCOUNT" IsHidden 1
+fi
+dscl . -create "/Users/$ACCOUNT" PrimaryGroupID "$gid"
+
+mkdir -p "$DATA" "$LOGS"
+chown "$ACCOUNT:$ACCOUNT" "$DATA" "$LOGS"
+chmod 700 "$DATA"
+chmod 755 "$LOGS"
+touch "$LOGS/awtrix-host.log"
+chown "$ACCOUNT:$ACCOUNT" "$LOGS/awtrix-host.log"
+chmod 644 "$LOGS/awtrix-host.log"
+
+if [ -x "$FIREWALL" ]; then
+  for program in awtrix-host awtrix-script-runner; do
+    "$FIREWALL" --add "$APP/bin/$program" >/dev/null 2>&1
+    "$FIREWALL" --unblockapp "$APP/bin/$program" >/dev/null 2>&1
+  done
+fi
+
+chown root:wheel "$PLIST"
+chmod 644 "$PLIST"
+launchctl bootout "system/$LABEL" >/dev/null 2>&1
+launchctl enable "system/$LABEL"
+launchctl bootstrap system "$PLIST" || { echo "cannot start $LABEL" >&2; exit 1; }
+
+tries=0
+until curl -fsS -m 2 -o /dev/null "http://127.0.0.1:8300/api/v1/status" 2>/dev/null; do
+  tries=$((tries + 1))
+  [ "$tries" -ge 15 ] && break
+  sleep 1
+done
+
+user=$(stat -f %Su /dev/console 2>/dev/null)
+if [ -n "$user" ] && [ "$user" != root ] && [ "$user" != loginwindow ]; then
+  launchctl asuser "$(id -u "$user")" sudo -u "$user" /usr/bin/open "$STATUS" >/dev/null 2>&1 || true
+fi
+exit 0

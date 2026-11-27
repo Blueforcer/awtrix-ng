@@ -5,7 +5,7 @@
 #include <string>
 #include <string_view>
 
-namespace awtrix::posix {
+namespace awtrix::os {
 
 class PrivateStore {
  public:
