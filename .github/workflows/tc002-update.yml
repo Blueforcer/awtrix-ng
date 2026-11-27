@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install build tools
@@ -28,7 +28,7 @@ jobs:
       # does not throw it away.
       - name: Restore the musl toolchain
         id: musl
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.MUSL_WORK }}/output/host
           key: tc002-musl-${{ hashFiles('tools/system/sources.lock.json', 'firmware/buildroot/configs/**', 'firmware/buildroot/patches/**', 'firmware/buildroot/external.mk', 'firmware/buildroot/external.desc') }}
@@ -39,13 +39,13 @@ jobs:
           rm -rf "$MUSL_WORK/output/build" "$MUSL_WORK/downloads" "$MUSL_WORK/buildroot"
       - name: Save the musl toolchain
         if: steps.musl.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.MUSL_WORK }}/output/host
           key: ${{ steps.musl.outputs.cache-primary-key }}
       # Every tarball is checked against its pinned SHA-256 on use, so an older cache is a safe start.
       - name: Restore the source downloads
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/awtrix-tc002/downloads
           key: tc002-downloads-${{ hashFiles('tools/tc002/**/*.sh') }}
@@ -87,7 +87,7 @@ jobs:
             --license LICENSE.md --notices THIRD-PARTY-NOTICES.md \
             --source-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/tc002-sources.tar.gz" \
             --source-sha256 "$sha"
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7
         with:
           name: tc002-update
           path: |
