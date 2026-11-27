@@ -264,8 +264,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Check the tag against the version and its release notes
-        # The release body only links the release notes page of the docs, so a
-        # tag without that page would publish a dead link.
+        # The release body is made from the release notes page of the docs and
+        # links it, so a tag without that page would publish an empty release.
         run: |
           version=$(tr -d '[:space:]' < version)
           [ "$GITHUB_REF_NAME" = "v$version" ] || { echo "::error::tag $GITHUB_REF_NAME does not match version $version"; exit 1; }
@@ -305,16 +305,9 @@ jobs:
         run: zip -r licenses-awtrix-ng.zip LICENSE.md THIRD-PARTY-NOTICES.md LICENSES/
       - name: Write the release body
         # The release notes live in the docs, one page per version, built per
-        # clock. The body only links them.
-        run: |
-          version=${GITHUB_REF_NAME#v}
-          docs=https://blueforcer.github.io/awtrix-ng
-          cat > release-body.md <<EOF
-          **[Full release notes]($docs/releases/$version/)** for your clock:
-          [ESP32 (Ulanzi TC001, DIY)]($docs/esp32/releases/$version/) ·
-          [ESP32-S3]($docs/esp32-s3/releases/$version/) ·
-          [Ulanzi TC002]($docs/tc002/releases/$version/)
-          EOF
+        # clock. The body carries all of them, each entry marked with its clocks,
+        # and links each clock's page.
+        run: python3 tools/docs/release_text.py github "docs/releases/${GITHUB_REF_NAME#v}.md" > release-body.md
       - name: Stage the release as a draft
         # Created as a draft on purpose. Publishing fires `release: published`,
         # which is what notifies Discord -- do that before the assets are

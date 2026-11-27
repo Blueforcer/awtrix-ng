@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import release_highlights  # noqa: E402
+import release_text  # noqa: E402
 
 PAGE = """# AWTRIX NG 9.9.9
 
@@ -42,7 +42,7 @@ Release of 2099-01-01.
 
 class Highlights(unittest.TestCase):
     def setUp(self):
-        self.lines = release_highlights.highlights(PAGE).splitlines()
+        self.lines = release_text.highlights(PAGE).splitlines()
 
     def test_heading_and_order(self):
         self.assertEqual("**Highlights**", self.lines[0])
@@ -71,7 +71,35 @@ class Highlights(unittest.TestCase):
         self.assertFalse(any("MQTT" in line for line in self.lines))
 
     def test_page_without_highlight_sections(self):
-        self.assertEqual("", release_highlights.highlights("# X\n\n### Fixed\n\n* **A:** b.\n"))
+        self.assertEqual("", release_text.highlights("# X\n\n### Fixed\n\n* **A:** b.\n"))
+
+
+class GitHubBody(unittest.TestCase):
+    def setUp(self):
+        self.text = release_text.github(PAGE, "9.9.9")
+
+    def test_intro_sections_in_page_order_and_links_at_the_end(self):
+        self.assertTrue(self.text.startswith("Release of 2099-01-01.\n\n### New\n\n"))
+        order = [self.text.index(h) for h in ("### New", "### For script developers", "### Fixed", "### Breaking changes")]
+        self.assertEqual(sorted(order), order)
+        self.assertTrue(self.text.endswith(release_text.links("9.9.9")))
+
+    def test_whole_entries_with_clocks_and_absolute_links(self):
+        self.assertIn("* **Everywhere**: every clock gets it. See "
+                      "[Guide](https://blueforcer.github.io/awtrix-ng/guides/x/).", self.text)
+        self.assertIn("* **AHT20 sensors** are found on the sensor bus. See [Sensor bus]"
+                      "(https://blueforcer.github.io/awtrix-ng/esp32/reference/gpio/). (ESP32 / TC001, ESP32-S3)",
+                      self.text)
+        self.assertIn("* **More free memory.** About 23 KB more stays free. (ESP32 / TC001)", self.text)
+
+    def test_fixes_are_included(self):
+        self.assertIn("### Fixed\n\n* **MQTT**: a slow broker connects.", self.text)
+
+    def test_links_name_every_clock(self):
+        links = release_text.links("9.9.9")
+        self.assertTrue(links.startswith("**[Full release notes](https://blueforcer.github.io/awtrix-ng/releases/9.9.9/)**"))
+        for page in ("esp32", "esp32-s3", "tc002"):
+            self.assertIn("https://blueforcer.github.io/awtrix-ng/%s/releases/9.9.9/" % page, links)
 
 
 if __name__ == "__main__":

@@ -412,8 +412,9 @@ successful run on `main` for the same commit and publishes every ESP32 update im
 install images for each supported flash size, the TC002 packages and the license notices. So push
 `main`, wait until its run is green, then tag. The TC002 desktop installers are not part of a
 release: they are released in [awtrix-ng-installer](https://github.com/Blueforcer/awtrix-ng-installer/releases).
-The tag must match `version`, and `docs/releases/<version>.md` must exist: the release body only
-links that page in each clock's documentation.
+The tag must match `version`, and `docs/releases/<version>.md` must exist: the release body holds
+that page's notes, each entry marked with its clocks, and links the page in each clock's
+documentation. The Discord post shows the first sentence of each new entry and the same links.
 
 Other workflows:
 

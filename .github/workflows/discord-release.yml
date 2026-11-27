@@ -22,8 +22,9 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
         run: |
           page="docs/releases/${RELEASE_TAG#v}.md"
-          if [ -f "$page" ]; then python3 tools/docs/release_highlights.py "$page" > highlights.md; else : > highlights.md; fi
-          cat highlights.md
+          if [ -f "$page" ]; then python3 tools/docs/release_text.py highlights "$page" > highlights.md; else : > highlights.md; fi
+          python3 tools/docs/release_text.py links "${RELEASE_TAG#v}" > links.md
+          cat highlights.md links.md
       - name: Send webhook
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -71,10 +72,11 @@ jobs:
           done
           echo "all assets present, announcing $RELEASE_TAG"
 
-          payload=$(jq -n --argjson r "$release" --rawfile highlights highlights.md \
+          payload=$(jq -n --argjson r "$release" --rawfile highlights highlights.md --rawfile links links.md \
             '($r.name // $r.tagName) as $name |
              ($highlights | rtrimstr("\n")) as $h |
-             (if $h == "" then $r.body else $h + "\n\n" + $r.body end) as $text |
+             ($links | rtrimstr("\n")) as $l |
+             (if $h == "" then $l else $h + "\n\n" + $l end) as $text |
              {
               content: ("@everyone New AWTRIX NG release: **\($name)**\n\($r.url)"),
               allowed_mentions: { parse: ["everyone"] },
