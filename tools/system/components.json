@@ -464,7 +464,7 @@
       "version": null
     },
     {
-      "files_sha256": "87160b22d5171060857f93bc1b2b054e51e7d52ed524047dbfc7e2827b3fc2ca",
+      "files_sha256": "bf5f42ac62f2a485343817412681db660d25ddfe70b3a327c2d6c3b4c696e4ed",
       "id": "cmudict-scowl",
       "license": {
         "file": "LICENSES/CMUdict-SCOWL.txt",
