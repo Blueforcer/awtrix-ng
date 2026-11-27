@@ -3,7 +3,7 @@
 const { boot, goto, flush } = require(process.env.HARNESS || './harness');
 const assert = require('node:assert/strict');
 
-const builtin = () => ({ name: 'Conny', language: 'en', version: '1', bytes: 1189344, uploaded: false, maxBytes: 2000000 });
+const builtin = () => ({ name: 'Lumi', language: 'en', version: '1', bytes: 1189344, uploaded: false, maxBytes: 2000000 });
 
 function mock(window, voice) {
   const device = window.fetch, log = [], faults = { rejectUpload: false };
@@ -20,7 +20,7 @@ function mock(window, voice) {
         faults.rejectUpload = false;
         return new Response('{"error":{"code":"validationFailed","message":"not an ATTS file"}}', { status: 400 });
       }
-      Object.assign(voice, { name: 'Conny', language: 'de', bytes: 790000, uploaded: true });
+      Object.assign(voice, { name: 'Lumi', language: 'de', bytes: 790000, uploaded: true });
     } else if (method === 'DELETE') Object.assign(voice, builtin());
     else if (method !== 'GET') return new Response('{}', { status: 405 });
     return new Response(JSON.stringify(voice));
@@ -56,7 +56,7 @@ function pick(window, input, name) {
 
   const c = await open(true, builtin());
   try {
-    assert.equal(c.badge.textContent, 'Conny · EN · ' + c.tr('svBuiltinTag'));
+    assert.equal(c.badge.textContent, 'Lumi · EN · ' + c.tr('svBuiltinTag'));
     const back = c.btn(c.tr('svBuiltin'));
     assert.equal(back.style.display, 'none', 'nothing to remove while the built-in voice speaks');
 
@@ -64,17 +64,17 @@ function pick(window, input, name) {
     assert.equal(input.accept, '.atts');
     c.faults.rejectUpload = true;
     pick(c.window, input, 'broken.atts'); await flush(80);
-    assert.equal(c.badge.textContent, 'Conny · EN · ' + c.tr('svBuiltinTag'), 'a refused pack changes nothing');
-    pick(c.window, input, 'conny-de.atts'); await flush(80);
+    assert.equal(c.badge.textContent, 'Lumi · EN · ' + c.tr('svBuiltinTag'), 'a refused pack changes nothing');
+    pick(c.window, input, 'lumi-de.atts'); await flush(80);
     assert.ok(c.log.some(l => l.method === 'POST' && l.form), 'the pack goes up as a form');
-    assert.equal(c.badge.textContent, 'Conny · DE');
+    assert.equal(c.badge.textContent, 'Lumi · DE');
     assert.equal(back.style.display, '');
 
     back.click(); await flush();
     assert.ok(!c.log.some(l => l.method === 'DELETE'), 'the first click only asks for confirmation');
     back.click(); await flush(80);
     assert.equal(c.log.filter(l => l.method === 'DELETE').length, 1);
-    assert.equal(c.badge.textContent, 'Conny · EN · ' + c.tr('svBuiltinTag'));
+    assert.equal(c.badge.textContent, 'Lumi · EN · ' + c.tr('svBuiltinTag'));
 
     c.btn(c.tr('svSay')).click(); await flush();
     assert.deepEqual(c.log.filter(l => l.path === '/api/v1/audio/play').pop().body, { speech: c.tr('svLineP') });
