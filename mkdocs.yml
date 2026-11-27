@@ -182,6 +182,7 @@ nav:
       - Limits: reference/limits.md
   - Release notes:
       - All releases: releases/index.md
+      - "1.3.0": releases/1.3.0.md
       - "1.2.3": releases/1.2.3.md
       - "1.2.2": releases/1.2.2.md
   - Under the hood:
