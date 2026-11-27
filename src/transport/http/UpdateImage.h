@@ -8,6 +8,8 @@ namespace awtrix {
 
 #if defined(AWTRIX_NATIVE)
 constexpr const char* kUpdateImageName = "";
+#elif defined(AWTRIX_DISPLAY_MAX7219)
+constexpr const char* kUpdateImageName = "firmware-awtrix-ng-mono.bin";
 #elif defined(AWTRIX_SOC_ESP32S3)
 #if defined(CONFIG_SPIRAM_MODE_QUAD)
 constexpr const char* kUpdateImageName = "firmware-awtrix-ng-s3-quad.bin";

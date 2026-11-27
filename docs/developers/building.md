@@ -123,7 +123,8 @@ SCK GPIO 18, DIN GPIO 23, CS GPIO 5 (`AWTRIX_MAX7219_CS_PIN`), one module per 8 
 is lit when the average of its red, green and blue is above 32. Brightness sets the modules'
 intensity in 16 steps, and 0 switches them off. `pinMatrix` is not used. Of the panel settings
 only `mirror` and `rotate` apply. The DFPlayer default pins are GPIO 18 and 23 as well, so keep
-`dfplayer` off or move its pins.
+`dfplayer` off or move its pins. The web UI's update offers no release image for this build;
+update it by building and flashing it again.
 
 ```bash
 pio run -e awtrix_mono -t upload
